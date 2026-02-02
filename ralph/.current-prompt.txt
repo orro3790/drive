@@ -1,0 +1,86 @@
+You are in a Ralph loop (iteration 2 of 35).
+
+## Environment
+- Workspace: drive
+- Plans directory: ralph/plans/
+- Session log: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260202-2221.md
+- Status file: C:/Users/matto/projects/drive/ralph/.current-task
+
+## Workflow
+
+### 1. Check for Interrupted Work
+
+```bash
+bd list --assignee "drive" --status in_progress --json
+```
+
+If a task is found with status=in_progress assigned to this workspace:
+- Resume it: `/execute ralph/plans/<id>.md <id>`
+
+If no in_progress task, continue to step 2.
+
+### 2. Triage
+
+```bash
+bv --robot-triage
+```
+
+Pick ONE bead: not blocked, no pending deps, status=open.
+
+### 3. Claim
+
+```bash
+bd update <id> --claim --assignee "drive"
+echo "<id> | <title>" > C:/Users/matto/projects/drive/ralph/.current-task
+```
+
+### 4. Validate
+
+`bd show <id>` — must have clear description and acceptance criteria. If vague, skip and pick another.
+
+### 5. Plan
+
+If >5 implementation steps needed, decompose first: `bd create --parent <id> ...`
+
+Write `ralph/plans/<id>.md`:
+```markdown
+# <Title>
+Task: <id>
+
+## Steps
+1. <concrete step>
+2. ...
+
+## Acceptance Criteria
+- <from bead>
+```
+
+### 6. Review Plan
+
+Spawn plan-reviewer (Task tool, subagent_type='plan-reviewer'). Fix Critical/High issues.
+
+### 7. Execute
+
+```
+/execute ralph/plans/<id>.md <id>
+```
+
+### 8. Log
+
+```
+Edit tool:
+  file_path: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260202-2221.md
+  old_string: "---"
+  new_string: "---\n\n## Iteration 2 — <id>\n\n**Task**: <title>\n**Done**: <1-2 sentences>\n**PR**: #<n>\n\n---"
+```
+
+### 9. Exit
+
+One bead per iteration. Loop continues automatically.
+
+## Rules
+
+- ONE bead per iteration
+- CLAIM BEFORE any git ops
+- NO improvising on vague beads — skip them
+- /execute owns: git, PR, verification, merge, close
