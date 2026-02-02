@@ -146,5 +146,37 @@
 	"pipeline_title": "Pipeline",
 	"empty": "",
 	"selected": "Selected",
-	"desc": "Description"
+	"desc": "Description",
+
+	"common_save": "Save",
+	"common_delete": "Delete",
+	"common_edit": "Edit",
+	"common_create": "Create",
+	"common_name": "Name",
+	"common_address": "Address",
+	"common_actions": "Actions",
+
+	"manager_access_denied": "Access denied",
+	"manager_access_denied_message": "You must be a manager to access this page.",
+
+	"warehouse_page_title": "Warehouses",
+	"warehouse_page_description": "Manage warehouse locations for route assignment.",
+	"warehouse_create_button": "Add Warehouse",
+	"warehouse_create_title": "Create Warehouse",
+	"warehouse_edit_title": "Edit Warehouse",
+	"warehouse_delete_title": "Delete Warehouse",
+	"warehouse_delete_confirm": "Are you sure you want to delete this warehouse? This action cannot be undone.",
+	"warehouse_delete_has_routes": "Cannot delete warehouse with assigned routes. Remove all routes first.",
+	"warehouse_name_label": "Warehouse name",
+	"warehouse_name_placeholder": "e.g. Downtown Hub",
+	"warehouse_address_label": "Address",
+	"warehouse_address_placeholder": "e.g. 123 Main St, Toronto, ON",
+	"warehouse_created_success": "Warehouse created successfully.",
+	"warehouse_updated_success": "Warehouse updated successfully.",
+	"warehouse_deleted_success": "Warehouse deleted successfully.",
+	"warehouse_create_error": "Failed to create warehouse.",
+	"warehouse_update_error": "Failed to update warehouse.",
+	"warehouse_delete_error": "Failed to delete warehouse.",
+	"warehouse_empty_state": "No warehouses yet",
+	"warehouse_empty_state_message": "Add your first warehouse to get started."
 }

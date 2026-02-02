@@ -2,14 +2,19 @@
 	InlineEditor - An inline editable text field.
 
 	Displays text that becomes editable on click/focus.
-	Used for inline editing patterns like phone numbers and time inputs.
+	Used for inline editing patterns like form inputs.
+
+	## Size Guide
+	- **small/sm**: Compact rows, data tables. Height: 32px.
+	- **base**: Form fields. Login, settings. Height: 36px.
+	- **large**: Emphasized inputs. Height: 44px.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
 	type EditorMode = 'inline' | 'form';
-	type EditorSize = 'sm' | 'md' | 'lg' | 'xl' | 'base' | 'small';
-	type EditorVariant = 'default' | 'bordered';
+	type EditorSize = 'sm' | 'small' | 'base' | 'large';
+	type EditorVariant = 'seamless' | 'bordered';
 
 	let {
 		value = '',
@@ -19,8 +24,8 @@
 		id,
 		name,
 		mode = 'inline',
-		size = 'md',
-		variant = 'default',
+		size = 'base',
+		variant = 'bordered',
 		inputmode,
 		inputType = 'text',
 		autocomplete,
@@ -31,6 +36,7 @@
 		onblur,
 		onKeyDown,
 		leadingIcon,
+		trailingIcon,
 		ariaLabel
 	} = $props<{
 		/** Current value */
@@ -71,6 +77,8 @@
 		onKeyDown?: (event: KeyboardEvent) => void;
 		/** Optional leading icon snippet */
 		leadingIcon?: Snippet;
+		/** Optional trailing icon snippet */
+		trailingIcon?: Snippet;
 		/** Aria label for accessibility */
 		ariaLabel?: string;
 	}>();
@@ -78,8 +86,8 @@
 	let inputElement = $state<HTMLInputElement | null>(null);
 	let localValue = $state('');
 
-	// Map size aliases
-	const normalizedSize = $derived(size === 'base' ? 'md' : size === 'small' ? 'sm' : size);
+	// Normalize size aliases
+	const normalizedSize = $derived(size === 'sm' ? 'small' : size);
 
 	// Sync external value to local state
 	$effect(() => {
@@ -122,18 +130,19 @@
 	}
 </script>
 
-<div class="inline-editor-wrapper" class:has-leading-icon={leadingIcon}>
+<div class="ie-row {normalizedSize} {variant}" class:disabled>
 	{#if leadingIcon}
-		<span class="leading-icon">
+		<div class="ie-leading">
 			{@render leadingIcon()}
-		</span>
+		</div>
 	{/if}
+
 	<input
 		bind:this={inputElement}
 		type={inputType}
 		{id}
 		{name}
-		class="inline-editor mode-{mode} size-{normalizedSize} variant-{variant} {className}"
+		class="editable-input {className}"
 		{placeholder}
 		{disabled}
 		{required}
@@ -145,99 +154,106 @@
 		onblur={handleBlur}
 		onkeydown={handleKeydown}
 	/>
+
+	{#if trailingIcon}
+		<div class="ie-trailing">
+			{@render trailingIcon()}
+		</div>
+	{/if}
 </div>
 
 <style>
-	.inline-editor-wrapper {
-		display: flex;
+	.ie-row {
+		display: grid;
+		grid-template-columns: auto 1fr auto;
 		align-items: center;
-		width: 100%;
-	}
-
-	.inline-editor-wrapper.has-leading-icon {
-		border: 1px solid var(--border-primary);
+		gap: var(--spacing-2);
 		border-radius: var(--radius-base);
-		background: var(--surface-base);
-	}
-
-	.inline-editor-wrapper.has-leading-icon .inline-editor {
-		border: none;
-	}
-
-	.leading-icon {
-		display: flex;
-		align-items: center;
-		padding-left: var(--spacing-2);
-	}
-
-	.inline-editor {
+		border: var(--border-width-thin) solid transparent;
+		background-color: transparent;
 		width: 100%;
-		border-radius: var(--radius-base);
-		font-family: inherit;
-		color: var(--text-normal);
-		transition: border-color 0.15s ease;
+		box-sizing: border-box;
 	}
 
-	/* Mode: inline (transparent background) */
-	.inline-editor.mode-inline {
-		padding: var(--spacing-1) var(--spacing-2);
-		border: 1px solid transparent;
-		background: transparent;
+	/* When no icons are present, collapse to single column */
+	.ie-row:not(:has(.ie-leading)):not(:has(.ie-trailing)) {
+		grid-template-columns: 1fr;
 	}
 
-	.inline-editor.mode-inline:hover:not(:disabled) {
+	/* Variant: seamless (transparent) */
+	.ie-row.seamless {
+		border-color: transparent;
+		background-color: transparent;
+	}
+
+	/* Variant: bordered (visible container) */
+	.ie-row.bordered {
 		border-color: var(--border-primary);
+		background-color: var(--surface-primary);
 	}
 
-	.inline-editor.mode-inline:focus {
-		outline: none;
-		border-color: var(--border-focus);
-		background: var(--surface-base);
+	/* Focus state */
+	.ie-row:focus-within {
+		border-color: var(--interactive-accent);
 	}
 
-	/* Mode: form (always bordered) */
-	.inline-editor.mode-form {
-		padding: var(--spacing-2);
-		border: 1px solid var(--border-primary);
-		background: var(--surface-base);
-	}
-
-	.inline-editor.mode-form:focus {
-		outline: none;
-		border-color: var(--border-focus);
-	}
-
-	/* Variant: bordered */
-	.inline-editor.variant-bordered {
-		border: 1px solid var(--border-primary);
-	}
-
-	/* Size variants */
-	.inline-editor.size-sm {
-		font-size: var(--font-size-sm);
-		padding: var(--spacing-1);
-	}
-
-	.inline-editor.size-md {
-		font-size: var(--font-size-base);
-	}
-
-	.inline-editor.size-lg {
-		font-size: var(--font-size-lg);
-		padding: var(--spacing-2) var(--spacing-3);
-	}
-
-	.inline-editor.size-xl {
-		font-size: var(--font-size-xl);
-		padding: var(--spacing-3);
-	}
-
-	.inline-editor:disabled {
-		opacity: 0.5;
+	/* Disabled state */
+	.ie-row.disabled {
 		cursor: not-allowed;
+		opacity: 0.7;
 	}
 
-	.inline-editor::placeholder {
+	/* Size: small (32px) */
+	.ie-row.small {
+		min-height: 32px;
+		padding: var(--spacing-1) var(--spacing-2);
+	}
+
+	/* Size: base (36px) - default for form fields */
+	.ie-row.base {
+		min-height: 36px;
+		padding: var(--spacing-2);
+	}
+
+	/* Size: large (44px) */
+	.ie-row.large {
+		min-height: 44px;
+		padding: var(--spacing-2);
+	}
+
+	/* Icon containers */
+	.ie-leading,
+	.ie-trailing {
+		display: grid;
+		place-items: center;
 		color: var(--text-muted);
+	}
+
+	/* Input element */
+	.editable-input {
+		width: 100%;
+		font-family: inherit;
+		font-size: var(--font-size-base);
+		color: var(--text-normal);
+		border: none;
+		background: transparent;
+		padding: 0;
+		margin: 0;
+		outline: none;
+	}
+
+	.editable-input::placeholder {
+		color: var(--text-muted);
+	}
+
+	.editable-input:disabled {
+		cursor: not-allowed;
+		color: var(--text-muted);
+	}
+
+	/* Seamless variant hover effect */
+	.ie-row.seamless:hover:not(.disabled):not(:focus-within) {
+		background-color: color-mix(in srgb, var(--interactive-hover) 50%, transparent);
+		cursor: text;
 	}
 </style>

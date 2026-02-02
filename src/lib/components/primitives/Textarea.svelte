@@ -111,7 +111,7 @@ Error message display is handled by parent form component.
 	.textarea.mode-inline:focus {
 		outline: none;
 		border-color: var(--interactive-accent);
-		background: var(--surface-base);
+		background: var(--form-background);
 	}
 
 	/* Mode: form (always bordered) */

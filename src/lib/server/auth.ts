@@ -8,6 +8,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { getRequestEvent } from '$app/server';
 import { db } from './db';
+import * as authSchema from './db/auth-schema';
 import { BETTER_AUTH_SECRET } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 
@@ -38,10 +39,8 @@ const inviteCodeGuard = createAuthMiddleware(async (ctx) => {
 		return;
 	}
 
-	const headerCode = ctx.headers?.get?.('x-invite-code')?.trim();
-	const body = ctx.body as { inviteCode?: string } | undefined;
-	const bodyCode = typeof body?.inviteCode === 'string' ? body.inviteCode.trim() : undefined;
-	const providedCode = headerCode || bodyCode;
+	// Check header only - the client sends invite code via x-invite-code header
+	const providedCode = ctx.headers?.get?.('x-invite-code')?.trim();
 
 	if (!providedCode || providedCode !== requiredCode) {
 		throw new APIError('BAD_REQUEST', { message: 'Invalid invite code' });
@@ -52,7 +51,7 @@ export const auth = betterAuth({
 	appName: 'Drive',
 	baseURL: authBaseUrl,
 	secret: BETTER_AUTH_SECRET,
-	database: drizzleAdapter(db, { provider: 'pg' }),
+	database: drizzleAdapter(db, { provider: 'pg', schema: authSchema }),
 	trustedOrigins: ['http://localhost:5173', 'https://*.vercel.app'],
 	emailAndPassword: {
 		enabled: true
@@ -60,7 +59,7 @@ export const auth = betterAuth({
 	user: {
 		additionalFields: {
 			role: {
-				type: ['driver', 'manager'],
+				type: 'string',
 				required: false,
 				defaultValue: 'driver',
 				input: false
