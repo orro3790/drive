@@ -48,7 +48,7 @@ const logger = pino({
 	},
 	timestamp: pino.stdTimeFunctions.isoTime,
 	base: {
-		service: 'driver-ops'
+		service: 'drive'
 	},
 	transport: getTransport()
 });

@@ -1,4 +1,9 @@
-# Driver Operations Platform
+# Drive
+
+Driver Operations Platform for delivery logistics.
+
+**App Name**: Drive
+**Repo**: `orro3790/drive`
 
 ## Project Status: Ready for Implementation
 

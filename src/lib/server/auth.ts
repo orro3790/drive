@@ -26,7 +26,7 @@ function getAuthBaseUrl(): string {
 const authBaseUrl = getAuthBaseUrl();
 
 export const auth = betterAuth({
-	appName: 'Driver Ops',
+	appName: 'Drive',
 	baseURL: authBaseUrl,
 	secret: BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg' }),
