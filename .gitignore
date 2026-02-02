@@ -30,3 +30,6 @@ vite.config.ts.timestamp-*
 
 # Local tooling
 .agent-browser/
+
+# bv (beads viewer) local config and caches
+.bv/

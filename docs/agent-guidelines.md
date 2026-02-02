@@ -43,6 +43,7 @@ src/
 ```
 
 **Rules:**
+
 - Flat component directories; NO barrel exports
 - Import directly from owning module
 - Use `lib/utils/` for non-UI logic only
@@ -69,18 +70,18 @@ src/
 
 ```svelte
 <div class="page-surface">
-  <div class="page-stage">
-    <div class="page-layout">
-      <aside class="page-card page-sidebar">
-        <!-- Sidebar content -->
-      </aside>
-      <main class="page-content">
-        <div class="page-card">
-          <!-- Main content -->
-        </div>
-      </main>
-    </div>
-  </div>
+	<div class="page-stage">
+		<div class="page-layout">
+			<aside class="page-card page-sidebar">
+				<!-- Sidebar content -->
+			</aside>
+			<main class="page-content">
+				<div class="page-card">
+					<!-- Main content -->
+				</div>
+			</main>
+		</div>
+	</div>
 </div>
 ```
 
@@ -95,10 +96,10 @@ src/
 import { z } from 'zod';
 
 export const userSchema = z.object({
-  id: z.string().uuid(),
-  email: z.string().email(),
-  role: z.enum(['driver', 'manager']),
-  weeklyCap: z.number().int().min(1).max(6).default(4)
+	id: z.string().uuid(),
+	email: z.string().email(),
+	role: z.enum(['driver', 'manager']),
+	weeklyCap: z.number().int().min(1).max(6).default(4)
 });
 
 export type User = z.infer<typeof userSchema>;
@@ -116,28 +117,29 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, url }) => {
-  // 1. Auth check (fail fast)
-  if (!locals.user) {
-    throw error(401, 'Unauthorized');
-  }
+	// 1. Auth check (fail fast)
+	if (!locals.user) {
+		throw error(401, 'Unauthorized');
+	}
 
-  // 2. Parse query params
-  const date = url.searchParams.get('date');
+	// 2. Parse query params
+	const date = url.searchParams.get('date');
 
-  try {
-    // 3. Fetch data via service
-    const assignments = await assignmentService.getByDate(date);
+	try {
+		// 3. Fetch data via service
+		const assignments = await assignmentService.getByDate(date);
 
-    // 4. Return JSON
-    return json({ assignments });
-  } catch (e) {
-    console.error('[GET /api/assignments] Error:', e);
-    throw error(500, 'Internal server error');
-  }
+		// 4. Return JSON
+		return json({ assignments });
+	} catch (e) {
+		console.error('[GET /api/assignments] Error:', e);
+		throw error(500, 'Internal server error');
+	}
 };
 ```
 
 **Status codes:**
+
 - `400` - Invalid input
 - `401` - Not authenticated
 - `403` - Not authorized
@@ -151,32 +153,37 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 ```typescript
 // src/lib/stores/scheduleStore.svelte.ts
 const scheduleState = $state({
-  // Data
-  assignments: [] as Assignment[],
-  selectedDate: new Date(),
+	// Data
+	assignments: [] as Assignment[],
+	selectedDate: new Date(),
 
-  // UI
-  isLoading: false,
-  view: 'week' as 'week' | 'day'
+	// UI
+	isLoading: false,
+	view: 'week' as 'week' | 'day'
 });
 
 export const scheduleStore = {
-  get assignments() { return scheduleState.assignments; },
-  get isLoading() { return scheduleState.isLoading; },
+	get assignments() {
+		return scheduleState.assignments;
+	},
+	get isLoading() {
+		return scheduleState.isLoading;
+	},
 
-  async loadAssignments(userId: string, date: Date) {
-    scheduleState.isLoading = true;
-    try {
-      const res = await fetch(`/api/assignments?date=${date.toISOString()}`);
-      scheduleState.assignments = await res.json();
-    } finally {
-      scheduleState.isLoading = false;
-    }
-  }
+	async loadAssignments(userId: string, date: Date) {
+		scheduleState.isLoading = true;
+		try {
+			const res = await fetch(`/api/assignments?date=${date.toISOString()}`);
+			scheduleState.assignments = await res.json();
+		} finally {
+			scheduleState.isLoading = false;
+		}
+	}
 };
 ```
 
 **Rules:**
+
 - Single `$state` object per store
 - Components only call store methods, never mutate directly
 - All API calls owned by store
@@ -191,9 +198,9 @@ export const scheduleStore = {
 import { toastStore } from '$lib/stores/toastStore.svelte';
 
 try {
-  await fetch('/api/...');
+	await fetch('/api/...');
 } catch (err) {
-  toastStore.error('Failed to save', err.message);
+	toastStore.error('Failed to save', err.message);
 }
 ```
 
@@ -206,7 +213,7 @@ try {
 ```typescript
 const result = schema.safeParse(data);
 if (!result.success) {
-  emailErrors = result.error.flatten().fieldErrors.email ?? [];
+	emailErrors = result.error.flatten().fieldErrors.email ?? [];
 }
 ```
 
@@ -216,20 +223,21 @@ if (!result.success) {
 
 ```svelte
 <script lang="ts">
-  // Local state
-  let count = $state(0);
+	// Local state
+	let count = $state(0);
 
-  // Computed
-  let doubled = $derived(count * 2);
+	// Computed
+	let doubled = $derived(count * 2);
 
-  // Side effects
-  $effect(() => {
-    console.log('Count changed:', count);
-  });
+	// Side effects
+	$effect(() => {
+		console.log('Count changed:', count);
+	});
 </script>
 ```
 
 **Rules:**
+
 - Use `$state` for local component state
 - Use `$derived` for computed values
 - Use `$effect` for side effects
@@ -244,36 +252,35 @@ const publicPaths = new Set(['/', '/sign-in', '/sign-up']);
 const publicPrefixes = ['/api/auth', '/_app', '/static'];
 
 export const handle: Handle = async ({ event, resolve }) => {
-  const { pathname } = event.url;
+	const { pathname } = event.url;
 
-  // Let Better Auth handle its routes
-  if (pathname.startsWith('/api/auth')) {
-    return resolve(event);
-  }
+	// Let Better Auth handle its routes
+	if (pathname.startsWith('/api/auth')) {
+		return resolve(event);
+	}
 
-  // Fetch session
-  const session = await auth.api.getSession({
-    headers: event.request.headers
-  });
+	// Fetch session
+	const session = await auth.api.getSession({
+		headers: event.request.headers
+	});
 
-  if (session) {
-    event.locals.session = session.session;
-    event.locals.user = session.user;
-  }
+	if (session) {
+		event.locals.session = session.session;
+		event.locals.user = session.user;
+	}
 
-  // Check if public
-  const isPublic = publicPaths.has(pathname) ||
-    publicPrefixes.some(p => pathname.startsWith(p));
+	// Check if public
+	const isPublic = publicPaths.has(pathname) || publicPrefixes.some((p) => pathname.startsWith(p));
 
-  // Redirect unauthenticated users
-  if (!session && !isPublic) {
-    if (pathname.startsWith('/api')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    throw redirect(302, `/sign-in?redirect=${encodeURIComponent(pathname)}`);
-  }
+	// Redirect unauthenticated users
+	if (!session && !isPublic) {
+		if (pathname.startsWith('/api')) {
+			return json({ error: 'Unauthorized' }, { status: 401 });
+		}
+		throw redirect(302, `/sign-in?redirect=${encodeURIComponent(pathname)}`);
+	}
 
-  return resolve(event);
+	return resolve(event);
 };
 ```
 
@@ -286,11 +293,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 - **Naming**: `{name}.test.ts`
 
 **Test:**
+
 - Business logic and services
 - Utility functions
 - Store actions
 
 **Don't test:**
+
 - UI primitives
 - Presentational components
 - Third-party library behavior
@@ -353,8 +362,8 @@ const expandedState = $derived.by(() => {
 ```typescript
 // GOOD: Subscribes to table updates
 const rows = $derived.by(() => {
-  table.track?.();
-  return table.getRowModel().rows;
+	table.track?.();
+	return table.getRowModel().rows;
 });
 ```
 
@@ -362,15 +371,15 @@ const rows = $derived.by(() => {
 
 ```svelte
 <script lang="ts">
-  import { createSvelteTable, createColumnHelper } from '$lib/components/data-table';
+	import { createSvelteTable, createColumnHelper } from '$lib/components/data-table';
 
-  let data = $state([]);
+	let data = $state([]);
 
-  const table = createSvelteTable(() => ({
-    data,
-    columns,
-    getCoreRowModel: getCoreRowModel()
-  }));
+	const table = createSvelteTable(() => ({
+		data,
+		columns,
+		getCoreRowModel: getCoreRowModel()
+	}));
 </script>
 ```
 
@@ -380,21 +389,21 @@ const rows = $derived.by(() => {
 const helper = createColumnHelper<Driver>();
 
 export const columns = [
-  helper.text('name', { header: 'Name', sortable: true }),
-  helper.accessor('metrics', (d) => d.metrics.completionRate, {
-    header: 'Completion %',
-    sortable: true
-  }),
-  helper.display({ id: 'actions', header: '' })
+	helper.text('name', { header: 'Name', sortable: true }),
+	helper.accessor('metrics', (d) => d.metrics.completionRate, {
+		header: 'Completion %',
+		sortable: true
+	}),
+	helper.display({ id: 'actions', header: '' })
 ];
 ```
 
 ### When to Use Wrapper vs Direct
 
-| Scenario | Pattern |
-|----------|---------|
-| Flat data, simple columns, < 300 lines | Direct `<DataTable>` in page |
-| Tree/hierarchical, multiple row types, > 500 lines | Wrapper component |
+| Scenario                                           | Pattern                      |
+| -------------------------------------------------- | ---------------------------- |
+| Flat data, simple columns, < 300 lines             | Direct `<DataTable>` in page |
+| Tree/hierarchical, multiple row types, > 500 lines | Wrapper component            |
 
 ---
 
@@ -407,34 +416,32 @@ export const columns = [
 ```typescript
 // 1. UI-Facing Action (no await)
 function addItemOptimistically() {
-  const tempId = `optimistic-${crypto.randomUUID()}`;
-  const newItem = { id: tempId, name: 'New Item' };
+	const tempId = `optimistic-${crypto.randomUUID()}`;
+	const newItem = { id: tempId, name: 'New Item' };
 
-  // Immediately update local state
-  state.items = [...state.items, newItem];
+	// Immediately update local state
+	state.items = [...state.items, newItem];
 
-  // Trigger background DB operation (don't await)
-  createItemInDb(newItem);
+	// Trigger background DB operation (don't await)
+	createItemInDb(newItem);
 }
 
 // 2. Background DB Action
 async function createItemInDb(tempItem: Item) {
-  try {
-    const response = await fetch('/api/items', {
-      method: 'POST',
-      body: JSON.stringify(tempItem)
-    });
-    const realItem = await response.json();
+	try {
+		const response = await fetch('/api/items', {
+			method: 'POST',
+			body: JSON.stringify(tempItem)
+		});
+		const realItem = await response.json();
 
-    // Replace temp item with real one
-    state.items = state.items.map(item =>
-      item.id === tempItem.id ? realItem : item
-    );
-  } catch (error) {
-    // Revert on failure
-    state.items = state.items.filter(item => item.id !== tempItem.id);
-    toastStore.error('Failed to create item');
-  }
+		// Replace temp item with real one
+		state.items = state.items.map((item) => (item.id === tempItem.id ? realItem : item));
+	} catch (error) {
+		// Revert on failure
+		state.items = state.items.filter((item) => item.id !== tempItem.id);
+		toastStore.error('Failed to create item');
+	}
 }
 ```
 
@@ -466,12 +473,14 @@ src/lib/schemas/
 
 ```typescript
 // For partial updates - NO .default()
-export const userUpdateSchema = z.object({
-  firstName: z.string().min(1).optional(),
-  lastName: z.string().min(1).optional(),
-  phone: z.string().optional(),
-  weeklyCap: z.number().int().min(1).max(6).optional()
-}).strict();
+export const userUpdateSchema = z
+	.object({
+		firstName: z.string().min(1).optional(),
+		lastName: z.string().min(1).optional(),
+		phone: z.string().optional(),
+		weeklyCap: z.number().int().min(1).max(6).optional()
+	})
+	.strict();
 
 export type UserUpdate = z.infer<typeof userUpdateSchema>;
 ```
@@ -482,8 +491,8 @@ export type UserUpdate = z.infer<typeof userUpdateSchema>;
 // Server-side
 const result = userSchema.safeParse(data);
 if (!result.success) {
-  const errors = toFieldErrors(result.error);
-  return fail(400, { errors });
+	const errors = toFieldErrors(result.error);
+	return fail(400, { errors });
 }
 
 // Client-side
@@ -491,7 +500,7 @@ let emailErrors = $state<string[]>([]);
 
 const result = schema.safeParse({ email });
 if (!result.success) {
-  emailErrors = result.error.flatten().fieldErrors.email ?? [];
+	emailErrors = result.error.flatten().fieldErrors.email ?? [];
 }
 ```
 
@@ -500,8 +509,8 @@ if (!result.success) {
 ```typescript
 // FORBIDDEN: Direct interface for domain objects
 interface User {
-  id: string;
-  role: 'driver' | 'manager';
+	id: string;
+	role: 'driver' | 'manager';
 }
 
 // FORBIDDEN: Direct type alias
@@ -512,17 +521,17 @@ type UserRole = 'driver' | 'manager';
 
 ## Quick Reference
 
-| Need | Pattern |
-|------|---------|
-| Define types | Zod schema in `lib/schemas/` |
-| Manage state | Smart Store in `lib/stores/` |
-| Create input | `InlineEditor` primitive |
-| Build API | Endpoint template in `routes/api/` |
-| Handle form errors | Inline display via component |
-| Handle server errors | Toast notification |
-| Protect routes | `hooks.server.ts` guards |
-| Data tables | TanStack + `createSvelteTable` |
-| Mutations | Optimistic update pattern |
+| Need                 | Pattern                            |
+| -------------------- | ---------------------------------- |
+| Define types         | Zod schema in `lib/schemas/`       |
+| Manage state         | Smart Store in `lib/stores/`       |
+| Create input         | `InlineEditor` primitive           |
+| Build API            | Endpoint template in `routes/api/` |
+| Handle form errors   | Inline display via component       |
+| Handle server errors | Toast notification                 |
+| Protect routes       | `hooks.server.ts` guards           |
+| Data tables          | TanStack + `createSvelteTable`     |
+| Mutations            | Optimistic update pattern          |
 
 ---
 

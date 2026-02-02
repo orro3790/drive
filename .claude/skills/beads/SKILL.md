@@ -31,7 +31,7 @@ On-demand algorithmic analysis of the beads backlog using `bv` (beads_viewer).
 **Important:** Always run `bv` and `bd.exe` commands from the main repo directory, not from worktrees:
 
 ```bash
-cd C:/Users/matto/projects/driver && bv --robot-triage
+cd C:/Users/matto/projects/drive && bv --robot-triage
 ```
 
 This ensures the daemon is active and `issues.jsonl` stays in sync. Worktrees use "direct mode" which bypasses the daemon.
@@ -39,7 +39,7 @@ This ensures the daemon is active and `issues.jsonl` stays in sync. Worktrees us
 ### 1. Get Unified Triage (Recommended First Step)
 
 ```bash
-cd C:/Users/matto/projects/driver && bv --robot-triage | jq '{
+cd C:/Users/matto/projects/drive && bv --robot-triage | jq '{
   recommendations: .triage.recommendations[:3],
   alerts: .triage.project_health,
   quick_wins: .triage.quick_wins
@@ -51,7 +51,7 @@ cd C:/Users/matto/projects/driver && bv --robot-triage | jq '{
 ### 2. Get Insights Overview
 
 ```bash
-cd C:/Users/matto/projects/driver && bv --robot-insights | jq '{
+cd C:/Users/matto/projects/drive && bv --robot-insights | jq '{
   bottlenecks: .Bottlenecks[:5],
   keystones: .Keystones[:5],
   cycles: .Cycles
@@ -64,7 +64,7 @@ cd C:/Users/matto/projects/driver && bv --robot-insights | jq '{
 ### 3. Get Execution Plan
 
 ```bash
-cd C:/Users/matto/projects/driver && bv --robot-plan
+cd C:/Users/matto/projects/drive && bv --robot-plan
 ```
 
 Shows parallelizable tracks — work that can be done simultaneously without conflicts.
@@ -72,14 +72,14 @@ Shows parallelizable tracks — work that can be done simultaneously without con
 ### 4. Visualize Dependencies
 
 ```bash
-cd C:/Users/matto/projects/driver && bv --robot-graph --format=ascii
-cd C:/Users/matto/projects/driver && bv --robot-graph --root=<epic-id> --format=ascii
+cd C:/Users/matto/projects/drive && bv --robot-graph --format=ascii
+cd C:/Users/matto/projects/drive && bv --robot-graph --root=<epic-id> --format=ascii
 ```
 
 ### 5. Check Priority Score (for specific bead)
 
 ```bash
-cd C:/Users/matto/projects/driver && bv --robot-priority <bead-id>
+cd C:/Users/matto/projects/drive && bv --robot-priority <bead-id>
 ```
 
 Graph-weighted priority that factors in blocking impact, not just P0-P4 label.
@@ -87,7 +87,7 @@ Graph-weighted priority that factors in blocking impact, not just P0-P4 label.
 ### 6. Check Alerts (proactive health)
 
 ```bash
-cd C:/Users/matto/projects/driver && bv --robot-alerts
+cd C:/Users/matto/projects/drive && bv --robot-alerts
 ```
 
 Surfaces stale issues, velocity drops, and blocking cascades.
@@ -95,8 +95,8 @@ Surfaces stale issues, velocity drops, and blocking cascades.
 ### 7. Bead-to-Commit History
 
 ```bash
-cd C:/Users/matto/projects/driver && bv --robot-history
-cd C:/Users/matto/projects/driver && bv --bead-history <bead-id>
+cd C:/Users/matto/projects/drive && bv --robot-history
+cd C:/Users/matto/projects/drive && bv --bead-history <bead-id>
 ```
 
 Correlates beads with git commits to understand code changes.

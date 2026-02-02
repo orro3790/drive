@@ -9,6 +9,7 @@
 ## Overview
 
 **Drive** is an event-driven operations automation platform for delivery logistics that:
+
 - Automatically schedules drivers to fixed routes
 - Detects availability failures and no-shows
 - Fills gaps through a bidding system (not FCFS)
@@ -23,18 +24,18 @@
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | SvelteKit + TypeScript |
-| Mobile | Capacitor (native push via FCM) |
-| Database | PostgreSQL (Neon) + Drizzle ORM |
-| Auth | Better Auth (session-based) |
-| Hosting | Vercel |
-| Push Notifications | Firebase Cloud Messaging |
-| Scheduled Jobs | Vercel Cron |
-| Real-time | Server-Sent Events (SSE) |
-| Observability | Pino + Axiom |
-| i18n | Paraglide (en, zh) |
+| Layer              | Technology                      |
+| ------------------ | ------------------------------- |
+| Frontend           | SvelteKit + TypeScript          |
+| Mobile             | Capacitor (native push via FCM) |
+| Database           | PostgreSQL (Neon) + Drizzle ORM |
+| Auth               | Better Auth (session-based)     |
+| Hosting            | Vercel                          |
+| Push Notifications | Firebase Cloud Messaging        |
+| Scheduled Jobs     | Vercel Cron                     |
+| Real-time          | Server-Sent Events (SSE)        |
+| Observability      | Pino + Axiom                    |
+| i18n               | Paraglide (en, zh)              |
 
 ---
 
@@ -42,19 +43,19 @@
 
 ### Entities
 
-| Entity | Description |
-|--------|-------------|
-| **User** | Driver or manager. Has role, weekly cap, flag status. |
-| **Warehouse** | Physical location where routes originate. |
-| **Route** | Fixed delivery route tied to a warehouse. Routes persist over time. |
-| **Assignment** | A route assigned to a driver for a specific date. |
-| **Shift** | Active work record when assignment becomes active (parcel counts, timestamps). |
-| **Bid** | Driver's expression of interest in an open assignment. |
-| **BidWindow** | Time-limited period during which drivers can bid on an unfilled assignment. |
-| **DriverMetrics** | Denormalized performance data (attendance rate, completion rate). |
-| **RouteCompletion** | Tracks driver familiarity with specific routes. |
-| **Notification** | In-app notification record. |
-| **AuditLog** | Change history for compliance and debugging. |
+| Entity              | Description                                                                    |
+| ------------------- | ------------------------------------------------------------------------------ |
+| **User**            | Driver or manager. Has role, weekly cap, flag status.                          |
+| **Warehouse**       | Physical location where routes originate.                                      |
+| **Route**           | Fixed delivery route tied to a warehouse. Routes persist over time.            |
+| **Assignment**      | A route assigned to a driver for a specific date.                              |
+| **Shift**           | Active work record when assignment becomes active (parcel counts, timestamps). |
+| **Bid**             | Driver's expression of interest in an open assignment.                         |
+| **BidWindow**       | Time-limited period during which drivers can bid on an unfilled assignment.    |
+| **DriverMetrics**   | Denormalized performance data (attendance rate, completion rate).              |
+| **RouteCompletion** | Tracks driver familiarity with specific routes.                                |
+| **Notification**    | In-app notification record.                                                    |
+| **AuditLog**        | Change history for compliance and debugging.                                   |
 
 ### Time Zone
 
@@ -68,17 +69,18 @@ All operations run in **Toronto/Eastern time**. Server time = local time. No mul
 
 The system maintains three schedule windows:
 
-| Week | State | Description |
-|------|-------|-------------|
-| Week N | Executing | Current week, shifts happening |
-| Week N+1 | Locked | Preferences frozen, schedule generated |
-| Week N+2 | Open | Drivers can edit preferences |
+| Week     | State     | Description                            |
+| -------- | --------- | -------------------------------------- |
+| Week N   | Executing | Current week, shifts happening         |
+| Week N+1 | Locked    | Preferences frozen, schedule generated |
+| Week N+2 | Open      | Drivers can edit preferences           |
 
 ### Preference Lock Cycle
 
 **Lock deadline**: Sunday 23:59:59 Toronto time
 
 When lock occurs:
+
 1. All driver preferences for Week N+2 are frozen
 2. Schedule generation runs for Week N+2
 3. Drivers notified of their assignments
@@ -86,6 +88,7 @@ When lock occurs:
 ### Schedule Generation Algorithm
 
 For each day in the target week, for each route:
+
 1. Find eligible drivers (prefer this day + prefer this route + under weekly cap + not flagged)
 2. Sort by: route familiarity → completion rate → attendance rate
 3. Assign top driver
@@ -106,21 +109,23 @@ For each day in the target week, for each route:
 ### Trigger
 
 A bid window opens when an assignment becomes unfilled due to:
+
 - Driver cancellation
 - No-show (failed to confirm)
 - No eligible driver at schedule generation
 
 ### Bid Window Duration
 
-| Condition | Window Duration |
-|-----------|-----------------|
-| Shift > 30 minutes away | 30 minutes |
-| Shift ≤ 30 minutes away | Until shift start time |
+| Condition                  | Window Duration                         |
+| -------------------------- | --------------------------------------- |
+| Shift > 30 minutes away    | 30 minutes                              |
+| Shift ≤ 30 minutes away    | Until shift start time                  |
 | No bids when window closes | Stays open indefinitely until first bid |
 
 ### Notification
 
 When a bid window opens:
+
 - Push notification sent to **all drivers** who are:
   - Under their weekly cap
   - Not flagged
@@ -166,15 +171,16 @@ Managers can **always** manually assign any driver, bypassing the bidding system
 
 ### Cancellation Rules
 
-| Timing | Allowed | Impact |
-|--------|---------|--------|
-| > 48 hours before shift | Yes | No penalty |
-| ≤ 48 hours before shift | Yes | Counts against attendance rate |
-| After shift start | N/A | Treated as no-show |
+| Timing                  | Allowed | Impact                         |
+| ----------------------- | ------- | ------------------------------ |
+| > 48 hours before shift | Yes     | No penalty                     |
+| ≤ 48 hours before shift | Yes     | Counts against attendance rate |
+| After shift start       | N/A     | Treated as no-show             |
 
 ### No-Show Definition
 
 A **no-show** occurs when a driver:
+
 - Did not start their shift, AND
 - Did not cancel before shift start time
 
@@ -186,18 +192,18 @@ No-shows count against attendance rate and may trigger flagging.
 
 ### Metrics Tracked
 
-| Metric | Calculation |
-|--------|-------------|
-| Attendance Rate | completed_shifts / total_assigned_shifts |
-| Completion Rate | avg(parcels_delivered / parcels_start) |
-| Route Familiarity | completion_count per route |
+| Metric            | Calculation                              |
+| ----------------- | ---------------------------------------- |
+| Attendance Rate   | completed_shifts / total_assigned_shifts |
+| Completion Rate   | avg(parcels_delivered / parcels_start)   |
+| Route Familiarity | completion_count per route               |
 
 ### Flag Thresholds
 
 | Experience Level | Flag If Attendance Below |
-|------------------|--------------------------|
-| Before 10 shifts | 80% |
-| After 10 shifts | 70% |
+| ---------------- | ------------------------ |
+| Before 10 shifts | 80%                      |
+| After 10 shifts  | 70%                      |
 
 ### Flag Consequences
 
@@ -218,12 +224,12 @@ After **20 confirmed shifts** with attendance **≥ 95%**: weekly cap increases 
 
 ## Weekly Caps
 
-| Status | Weekly Cap |
-|--------|------------|
-| Default | 4 days/week |
-| High performer (20+ shifts, 95%+ attendance) | 6 days/week |
-| Flagged (after grace period) | cap reduced by 1 |
-| Manager override | Any value 1-6 |
+| Status                                       | Weekly Cap       |
+| -------------------------------------------- | ---------------- |
+| Default                                      | 4 days/week      |
+| High performer (20+ shifts, 95%+ attendance) | 6 days/week      |
+| Flagged (after grace period)                 | cap reduced by 1 |
+| Manager override                             | Any value 1-6    |
 
 ---
 
@@ -231,26 +237,27 @@ After **20 confirmed shifts** with attendance **≥ 95%**: weekly cap increases 
 
 ### Driver App (Mobile-First)
 
-| Route | Description |
-|-------|-------------|
-| `/` | Dashboard: today's shift, this week, next week, metrics, pending bids |
-| `/schedule` | Full schedule view, mark unavailable |
-| `/settings` | Account info, preferences (work days, top 3 routes) |
-| `/notifications` | Inbox with notification history |
+| Route            | Description                                                           |
+| ---------------- | --------------------------------------------------------------------- |
+| `/`              | Dashboard: today's shift, this week, next week, metrics, pending bids |
+| `/schedule`      | Full schedule view, mark unavailable                                  |
+| `/settings`      | Account info, preferences (work days, top 3 routes)                   |
+| `/notifications` | Inbox with notification history                                       |
 
 ### Manager Dashboard (Web)
 
-| Route | Description |
-|-------|-------------|
-| `/` | Routes overview table with filters (warehouse, status, date) |
-| `/drivers` | Driver list with metrics, flag management, cap adjustment |
-| `/warehouses` | Warehouse CRUD |
-| `/notifications` | Alert inbox |
-| `/settings` | Account settings |
+| Route            | Description                                                  |
+| ---------------- | ------------------------------------------------------------ |
+| `/`              | Routes overview table with filters (warehouse, status, date) |
+| `/drivers`       | Driver list with metrics, flag management, cap adjustment    |
+| `/warehouses`    | Warehouse CRUD                                               |
+| `/notifications` | Alert inbox                                                  |
+| `/settings`      | Account settings                                             |
 
 ### Manager Capabilities
 
 Managers can:
+
 - View all routes, assignments, and coverage status
 - Manually assign any driver to any route (override bidding)
 - Unflag/reinstate flagged drivers
@@ -267,19 +274,20 @@ Managers can:
 
 Time-sensitive, critical notifications:
 
-| Type | Trigger | Recipients |
-|------|---------|------------|
-| `bid_open` | Bid window opens | Eligible drivers |
-| `bid_won` | Driver wins bid | Winner |
-| `bid_lost` | Bid window closes | Losers |
-| `shift_reminder` | Morning of shift | Assigned driver |
-| `shift_cancelled` | Assignment cancelled | Affected driver |
-| `warning` | Driver flagged | Flagged driver |
-| `urgent_unfilled` | No bids after escalation | Manager |
+| Type              | Trigger                  | Recipients       |
+| ----------------- | ------------------------ | ---------------- |
+| `bid_open`        | Bid window opens         | Eligible drivers |
+| `bid_won`         | Driver wins bid          | Winner           |
+| `bid_lost`        | Bid window closes        | Losers           |
+| `shift_reminder`  | Morning of shift         | Assigned driver  |
+| `shift_cancelled` | Assignment cancelled     | Affected driver  |
+| `warning`         | Driver flagged           | Flagged driver   |
+| `urgent_unfilled` | No bids after escalation | Manager          |
 
 ### In-App Notifications
 
 Persisted in database, shown in inbox:
+
 - Schedule confirmations
 - Metrics updates
 - Non-urgent system messages
@@ -288,24 +296,24 @@ Persisted in database, shown in inbox:
 
 ## Scheduled Jobs (Vercel Cron)
 
-| Job | Schedule | Description |
-|-----|----------|-------------|
-| Lock preferences | Sunday 23:59 Toronto | Freeze preferences, generate Week N+2 schedule |
-| Close bid windows | Every minute | Check for expired windows, run scoring, assign winners |
-| Performance check | Daily (time TBD) | Recalculate metrics, apply flag logic |
-| Send reminders | Daily (morning) | Shift reminders for today's assignments |
+| Job               | Schedule             | Description                                            |
+| ----------------- | -------------------- | ------------------------------------------------------ |
+| Lock preferences  | Sunday 23:59 Toronto | Freeze preferences, generate Week N+2 schedule         |
+| Close bid windows | Every minute         | Check for expired windows, run scoring, assign winners |
+| Performance check | Daily (time TBD)     | Recalculate metrics, apply flag logic                  |
+| Send reminders    | Daily (morning)      | Shift reminders for today's assignments                |
 
 ---
 
 ## Offline Strategy
 
-| Operation | Behavior |
-|-----------|----------|
-| View schedule | Cached locally |
-| View metrics | Cached locally |
-| Bid on shift | **Requires connectivity** |
+| Operation            | Behavior                  |
+| -------------------- | ------------------------- |
+| View schedule        | Cached locally            |
+| View metrics         | Cached locally            |
+| Bid on shift         | **Requires connectivity** |
 | Start/complete shift | **Requires connectivity** |
-| Submit cancellation | **Requires connectivity** |
+| Submit cancellation  | **Requires connectivity** |
 
 ### Implementation
 
@@ -326,12 +334,12 @@ Manager dashboard receives real-time updates via Server-Sent Events.
 
 ### Events
 
-| Event | Trigger | Payload |
-|-------|---------|---------|
-| `assignment:updated` | Assignment status changes | assignment ID, new status, driver info |
-| `bid_window:opened` | New bid window created | assignment ID, route, closes_at |
-| `bid_window:closed` | Bid resolved | assignment ID, winner info |
-| `driver:flagged` | Driver crosses flag threshold | driver ID, reason |
+| Event                | Trigger                       | Payload                                |
+| -------------------- | ----------------------------- | -------------------------------------- |
+| `assignment:updated` | Assignment status changes     | assignment ID, new status, driver info |
+| `bid_window:opened`  | New bid window created        | assignment ID, route, closes_at        |
+| `bid_window:closed`  | Bid resolved                  | assignment ID, winner info             |
+| `driver:flagged`     | Driver crosses flag threshold | driver ID, reason                      |
 
 ### Connection Handling
 

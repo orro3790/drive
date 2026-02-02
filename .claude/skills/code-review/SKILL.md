@@ -34,13 +34,13 @@ Read the file and evaluate against the checklist above.
 ```markdown
 ## Code Review Results
 
-| Category | Status | Notes |
-|----------|--------|-------|
+| Category               | Status   | Notes   |
+| ---------------------- | -------- | ------- |
 | Functional correctness | ✅/⚠️/❌ | Details |
-| Maintainability | ✅/⚠️/❌ | Details |
-| Security | ✅/⚠️/❌ | Details |
-| Architecture | ✅/⚠️/❌ | Details |
-| Error handling | ✅/⚠️/❌ | Details |
+| Maintainability        | ✅/⚠️/❌ | Details |
+| Security               | ✅/⚠️/❌ | Details |
+| Architecture           | ✅/⚠️/❌ | Details |
+| Error handling         | ✅/⚠️/❌ | Details |
 
 ### Issues Found
 

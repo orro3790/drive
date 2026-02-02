@@ -86,19 +86,24 @@ After completing your audit, report:
 ### Coverage Gaps
 
 **Modules:**
+
 - `{module}` — No documentation exists
 
 **Environment:**
+
 - `{VAR_NAME}` — Used in code but not documented
 
 ### Stale Documentation
+
 - `{module}` — Code updated {date}, docs last updated {date}
 
 ### Actions Taken
+
 - Created: `docs/{module}.md`
 - Updated: `.env.example` with new variables
 
 ### No Action Needed
+
 - All documentation is current (explain why)
 ```
 

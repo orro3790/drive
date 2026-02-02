@@ -1639,9 +1639,9 @@ class BrowserConfig:
 
 ```json
 {
-    "server": "http://proxy.example.com:8080",
-    "username": "...",
-    "password": "..."
+	"server": "http://proxy.example.com:8080",
+	"username": "...",
+	"password": "..."
 }
 ```
 
@@ -4973,18 +4973,18 @@ The `RegexExtractionStrategy` returns results in a consistent format:
 
 ```json
 [
-  {
-    "url": "https://example.com",
-    "label": "email",
-    "value": "contact@example.com",
-    "span": [145, 163]
-  },
-  {
-    "url": "https://example.com",
-    "label": "url",
-    "value": "https://support.example.com",
-    "span": [210, 235]
-  }
+	{
+		"url": "https://example.com",
+		"label": "email",
+		"value": "contact@example.com",
+		"span": [145, 163]
+	},
+	{
+		"url": "https://example.com",
+		"label": "url",
+		"value": "https://support.example.com",
+		"span": [210, 235]
+	}
 ]
 ```
 
@@ -5001,10 +5001,10 @@ It's easy to **extract attributes** (like `href`, `src`, or `data-xxx`) from you
 
 ```json
 {
-  "name": "href",
-  "type": "attribute",
-  "attribute": "href",
-  "default": null
+	"name": "href",
+	"type": "attribute",
+	"attribute": "href",
+	"default": null
 }
 ```
 

@@ -15,6 +15,7 @@
 		value = '',
 		placeholder = '',
 		disabled = false,
+		required = false,
 		id,
 		name,
 		mode = 'inline',
@@ -38,6 +39,8 @@
 		placeholder?: string;
 		/** Whether editing is disabled */
 		disabled?: boolean;
+		/** Whether the input is required */
+		required?: boolean;
 		/** Input ID for label association */
 		id?: string;
 		/** Input name attribute */
@@ -133,6 +136,7 @@
 		class="inline-editor mode-{mode} size-{normalizedSize} variant-{variant} {className}"
 		{placeholder}
 		{disabled}
+		{required}
 		{inputmode}
 		{autocomplete}
 		aria-label={ariaLabel}

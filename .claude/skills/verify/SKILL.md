@@ -119,26 +119,32 @@ For each issue found:
 ## Verification Result: [PASS | BLOCK | WARN]
 
 ### Summary
+
 [1-2 sentences on overall assessment]
 
 ### Functional Tests
+
 - [x] Item 1 — passed
 - [x] Item 2 — passed
 - [ ] Item 3 — FAILED: [reason]
 
 ### Quality Assessment
+
 **Visual Polish:** [Good | Needs Work | AI Slop]
 **UX Flow:** [Smooth | Acceptable | Confusing]
 **Mobile:** [Responsive | Broken | Not Tested]
 **Vibe Check:** [Would demo proudly | Hesitant | Embarrassing]
 
 ### Issues Found
+
 [List of issues with severity]
 
 ### Required Actions
+
 [What must be done before this can merge]
 
 ### Verdict Binding
+
 This verdict is BINDING. If BLOCK, the calling flow MUST NOT proceed to merge.
 Fix the issues and run /verify again.
 ```

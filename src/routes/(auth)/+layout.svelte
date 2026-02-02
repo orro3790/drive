@@ -2,13 +2,6 @@
 	let { children } = $props();
 </script>
 
-<svelte:head>
-	<link
-		rel="stylesheet"
-		href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap"
-	/>
-</svelte:head>
-
 <div class="auth-shell">
 	<div class="auth-panel">
 		{@render children()}
@@ -21,189 +14,149 @@
 	}
 
 	:global(.auth-shell) {
-		--ink: #18212a;
-		--muted: #53616d;
-		--accent: #d1762d;
-		--accent-strong: #f2a35c;
-		--surface: rgba(255, 255, 255, 0.9);
-		--border: rgba(121, 136, 150, 0.28);
 		min-height: 100vh;
-		display: grid;
-		place-items: center;
-		padding: 2.75rem 1.5rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: clamp(var(--spacing-3), 6vw, var(--spacing-7));
 		background:
-			radial-gradient(90% 90% at 15% 10%, rgba(248, 207, 158, 0.55), transparent 55%),
-			radial-gradient(90% 90% at 85% 0%, rgba(170, 210, 235, 0.55), transparent 60%),
-			linear-gradient(135deg, #f7f3ed, #e8eef5);
-		font-family: 'IBM Plex Sans', 'Helvetica Neue', sans-serif;
-		color: var(--ink);
+			radial-gradient(
+				620px 280px at 50% -10%,
+				rgba(var(--interactive-accent-rgb), 0.22),
+				transparent 60%
+			),
+			radial-gradient(
+				420px 260px at 12% 12%,
+				color-mix(in srgb, var(--text-normal) 8%, transparent),
+				transparent 65%
+			),
+			radial-gradient(
+				420px 260px at 88% 14%,
+				color-mix(in srgb, var(--text-normal) 6%, transparent),
+				transparent 65%
+			),
+			var(--surface-secondary);
 	}
 
 	:global(.auth-panel) {
-		width: min(480px, 100%);
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 24px;
-		padding: 2.5rem;
-		box-shadow: 0 24px 60px rgba(17, 25, 36, 0.18);
-		backdrop-filter: blur(10px);
+		width: min(420px, 100%);
 	}
 
-	:global(.auth-stack) {
-		display: grid;
-		gap: 1.6rem;
+	:global(.auth-card) {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
+		padding: clamp(var(--spacing-3), 4vw, var(--spacing-5));
+		border-radius: calc(var(--radius-lg) * 2);
+		background: var(--surface-primary);
+		border: var(--border-width-thin) solid var(--border-primary);
+		box-shadow: var(--shadow-lg);
+		color: var(--text-normal);
+		--surface-base: var(--form-background);
 	}
 
 	:global(.auth-header) {
+		text-align: center;
 		display: grid;
-		gap: 0.5rem;
+		gap: var(--spacing-2);
 	}
 
 	:global(.auth-eyebrow) {
 		text-transform: uppercase;
 		letter-spacing: 0.3em;
-		font-size: 0.65rem;
-		color: var(--muted);
-		font-weight: 600;
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+		font-weight: var(--font-weight-medium);
 	}
 
 	:global(.auth-title) {
-		font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
-		font-size: clamp(1.75rem, 3vw, 2.35rem);
 		margin: 0;
+		font-size: var(--font-size-lg);
+		font-weight: var(--font-weight-bold);
+		letter-spacing: -0.01em;
 	}
 
 	:global(.auth-subtitle) {
 		margin: 0;
-		color: var(--muted);
-		line-height: 1.5;
+		color: var(--text-muted);
+		font-size: var(--font-size-sm);
 	}
 
 	:global(.auth-form) {
-		display: grid;
-		gap: 1.1rem;
-	}
-
-	:global(.auth-field) {
-		display: grid;
-		gap: 0.45rem;
-	}
-
-	:global(.auth-label) {
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--muted);
-	}
-
-	:global(.auth-input) {
-		border: 1px solid rgba(130, 145, 160, 0.35);
-		background: rgba(248, 246, 243, 0.95);
-		border-radius: 14px;
-		padding: 0.75rem 0.9rem;
-		font-size: 1rem;
-		font-family: inherit;
-		color: var(--ink);
-		transition:
-			border 0.2s ease,
-			box-shadow 0.2s ease;
-	}
-
-	:global(.auth-input:focus) {
-		outline: none;
-		border-color: var(--accent);
-		box-shadow: 0 0 0 3px rgba(209, 118, 45, 0.22);
-	}
-
-	:global(.auth-input::placeholder) {
-		color: rgba(83, 97, 109, 0.65);
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
 	}
 
 	:global(.auth-row) {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 1rem;
+		gap: var(--spacing-2);
 	}
 
-	:global(.auth-checkbox) {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		color: var(--muted);
-		font-size: 0.85rem;
-	}
-
-	:global(.auth-checkbox input) {
-		accent-color: var(--accent);
-	}
-
-	:global(.btn.auth-button) {
-		border: none;
-		border-radius: 999px;
-		padding: 0.85rem 1.2rem;
-		font-weight: 600;
-		font-size: 1rem;
-		cursor: pointer;
-		background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-		color: #2c1d12;
-		transition:
-			transform 0.2s ease,
-			box-shadow 0.2s ease;
-		box-shadow: 0 12px 24px rgba(209, 118, 45, 0.25);
-	}
-
-	:global(.btn.auth-button:disabled) {
-		cursor: not-allowed;
-		opacity: 0.7;
-		box-shadow: none;
-	}
-
-	:global(.btn.auth-button:not(:disabled):hover) {
-		transform: translateY(-1px);
-		box-shadow: 0 16px 28px rgba(209, 118, 45, 0.3);
-	}
-
-	:global(.auth-meta) {
+	:global(.auth-footer) {
 		text-align: center;
-		margin: 0;
-		color: var(--muted);
-		font-size: 0.9rem;
+		font-size: var(--font-size-sm);
 	}
 
-	:global(.auth-link) {
-		color: var(--accent);
-		font-weight: 600;
-		text-decoration: none;
+	:global(.auth-footer span) {
+		color: var(--text-muted);
 	}
 
-	:global(.auth-error) {
-		padding: 0.8rem 0.95rem;
-		border-radius: 14px;
-		background: rgba(246, 214, 196, 0.7);
-		border: 1px solid rgba(215, 131, 87, 0.4);
-		color: #7a2b1c;
-		font-size: 0.9rem;
+	:global(.auth-footer a) {
+		margin-left: var(--spacing-1);
+		color: var(--text-accent);
 	}
 
 	:global(.auth-hint) {
 		margin: 0;
-		font-size: 0.8rem;
-		color: var(--muted);
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+	}
+
+	:global(.auth-card :global(.btn.primary)) {
+		--btn-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
+	}
+
+	:global(.auth-error :global(.notice-banner)) {
+		border-radius: var(--radius-base);
+	}
+
+	:global(.auth-error :global(.notice-banner.warning)) {
+		background: color-mix(in srgb, var(--status-error) 12%, transparent);
+		color: var(--status-error);
+	}
+
+	:global(.auth-error :global(.notice-banner.warning) :global(.notice-icon)) {
+		color: var(--status-error);
+	}
+
+	:global(.icon-toggle) {
+		appearance: none;
+		background: none;
+		border: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		color: var(--text-muted);
+		border-radius: var(--radius-base);
+	}
+
+	:global(.icon-toggle:hover) {
+		color: var(--text-normal);
+	}
+
+	:global(.icon-toggle:focus-visible) {
+		box-shadow: 0 0 0 2px var(--interactive-accent);
 	}
 
 	@media (max-width: 600px) {
-		:global(.auth-panel) {
-			padding: 2rem 1.6rem;
-			border-radius: 20px;
-		}
-
-		:global(.auth-row) {
-			flex-direction: column;
-			align-items: flex-start;
-		}
-
-		:global(.auth-button) {
-			width: 100%;
+		:global(.auth-shell) {
+			padding: var(--spacing-4) var(--spacing-3);
 		}
 	}
 </style>
