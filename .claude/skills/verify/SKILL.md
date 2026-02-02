@@ -32,6 +32,34 @@ Ask yourself at every step:
 
 **Reference quality bar:** Our landing page with animated lightning nodes, three.js, lenis smooth scrolling, and custom microinteractions. That level of craft.
 
+## CRITICAL: Mobile-First Verification
+
+**ALL verification MUST begin in mobile viewport.** This is non-negotiable.
+
+99% of driver usage is mobile. Desktop is secondary. If it doesn't work beautifully on mobile, it doesn't ship.
+
+### Mobile Viewport Requirements
+
+1. **Set mobile viewport BEFORE any navigation:**
+   ```bash
+   agent-browser --session driver-ops resize 390 844
+   ```
+   (iPhone 14 Pro dimensions — our reference device)
+
+2. **Complete ALL test items in mobile viewport first**
+3. **Only after mobile passes**, optionally verify desktop (1280x800)
+4. **If mobile fails, verdict is BLOCK** — don't even bother testing desktop
+
+### Mobile-Specific Quality Checks
+
+- [ ] Touch targets minimum 44x44px
+- [ ] No horizontal scroll on any screen
+- [ ] Text readable without zooming (min 16px body)
+- [ ] Forms usable with on-screen keyboard
+- [ ] Modals/dialogs fit in viewport
+- [ ] Tables scroll horizontally OR transform to cards
+- [ ] Bottom nav reachable with thumb (if applicable)
+
 ## Process
 
 ### 1. Setup
@@ -46,6 +74,14 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:5173 2>/dev/null || echo
 
 If not running, ask the user to start it (`pnpm dev` in a separate terminal).
 
+#### Set Mobile Viewport (MANDATORY)
+
+```bash
+agent-browser --session driver-ops resize 390 844
+```
+
+This MUST be done before any navigation. Verification without mobile viewport is invalid.
+
 #### Load Auth State (if route requires auth)
 
 ```bash
@@ -54,7 +90,7 @@ agent-browser --session driver-ops state load .agent-browser/driver-ops-auth.jso
 
 If no saved auth exists or it's stale, use `/dev-login` skill first.
 
-### 2. Navigate & Interact
+### 2. Navigate & Interact (Mobile First)
 
 Use **agent-browser** for all browser automation. Refer to the Agent Browser skill for technical details (commands, selectors, waiting strategies).
 
@@ -70,7 +106,7 @@ For each item in the test plan:
 4. **Wait** — for network/DOM to settle after actions
 5. **Evaluate quality** — not just "does it work" but "is it good?"
 
-**Quality checklist for EVERY screen:**
+**Quality checklist for EVERY screen (in mobile viewport):**
 
 - [ ] Visual hierarchy clear? Or flat wall of sameness?
 - [ ] Spacing consistent? Using design tokens or random values?
@@ -78,9 +114,11 @@ For each item in the test plan:
 - [ ] Colors correct? surface-inset vs surface-primary used properly?
 - [ ] Loading states? Or jarring empty→full jumps?
 - [ ] Error states? Or silent failures?
-- [ ] Mobile responsive? Or broken at narrow widths?
+- [ ] **Touch targets 44x44px minimum?** Or impossible to tap?
+- [ ] **No horizontal scroll?** Or content bleeding off-screen?
+- [ ] **Text readable without zoom?** Min 16px body text?
 - [ ] Microinteractions? Or static and lifeless?
-- [ ] **The vibe check:** Does this look expensive or cheap?
+- [ ] **The vibe check:** Does this look expensive or cheap ON A PHONE?
 
 ### 4. Document Findings
 
@@ -128,12 +166,14 @@ For each issue found:
 - [x] Item 2 — passed
 - [ ] Item 3 — FAILED: [reason]
 
-### Quality Assessment
+### Quality Assessment (Mobile First)
 
+**Mobile UX:** [Excellent | Acceptable | BLOCK - Unusable]
 **Visual Polish:** [Good | Needs Work | AI Slop]
+**Touch Targets:** [Proper 44px+ | Too Small | BLOCK]
 **UX Flow:** [Smooth | Acceptable | Confusing]
-**Mobile:** [Responsive | Broken | Not Tested]
-**Vibe Check:** [Would demo proudly | Hesitant | Embarrassing]
+**Desktop (if tested):** [Works | Minor Issues | Not Tested]
+**Vibe Check:** [Would demo proudly ON MOBILE | Hesitant | Embarrassing]
 
 ### Issues Found
 
@@ -170,20 +210,30 @@ When called from execute skill Phase 9:
 - No loading states (empty → full with no transition)
 - Generic placeholder text left in
 - Console errors visible
-- Broken mobile layouts
+- **Desktop-first layouts that break on mobile** (INSTANT BLOCK)
+- **Tiny touch targets** (buttons < 44px)
+- **Horizontal scroll on mobile** (content too wide)
+- **Text too small on mobile** (< 16px body)
 - No hover/focus states on interactive elements
-- Data tables that look like Excel dumps
+- Data tables that look like Excel dumps on mobile (should transform to cards)
 - Forms with no validation feedback
-- Modals that don't close properly
+- Modals that don't close properly or overflow viewport on mobile
 - Z-index wars (dropdowns behind other elements)
 
 ## Remember
 
-You're not verifying that code runs. You're verifying that we'd be proud to show this to:
+**MOBILE FIRST. ALWAYS.**
 
-- A potential investor
+99% of drivers use this app on their phones. Desktop is a nice-to-have for managers.
+
+You're not verifying that code runs. You're verifying that we'd be proud to show this ON A PHONE to:
+
+- A driver in their truck between stops
+- A potential investor watching a mobile demo
 - A logistics company partnership meeting
-- A delivery manager comparing us to competitors
+- A delivery manager comparing us to competitors on their phone
 - Ourselves in 6 months
 
-If the answer is "I'd want to apologize or explain it away" — that's a BLOCK.
+If it works on desktop but breaks on mobile — that's a **BLOCK**.
+If touch targets are too small — that's a **BLOCK**.
+If the answer is "I'd want to apologize or explain it away" — that's a **BLOCK**.
