@@ -4,10 +4,11 @@
 	import { authClient } from '$lib/auth-client';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
-	import Checkbox from '$lib/components/primitives/Checkbox.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
-	import Lock from '$lib/components/icons/Lock.svelte';
+	import Eye from '$lib/components/icons/Eye.svelte';
+	import EyeOff from '$lib/components/icons/EyeOff.svelte';
+	import Login from '$lib/components/icons/Login.svelte';
 	import Mail from '$lib/components/icons/Mail.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
@@ -15,9 +16,15 @@
 
 	let email = $state('');
 	let password = $state('');
-	let rememberMe = $state(true);
+	let showPassword = $state(false);
 	let errorMessage = $state<string | null>(null);
 	let isSubmitting = $state(false);
+
+	const PasswordToggleIcon = $derived(showPassword ? EyeOff : Eye);
+
+	function handlePasswordToggle() {
+		showPassword = !showPassword;
+	}
 
 	const handleSubmit = async () => {
 		if (isSubmitting) {
@@ -31,7 +38,7 @@
 			{
 				email,
 				password,
-				rememberMe,
+				rememberMe: true,
 				callbackURL: redirectTo
 			},
 			{
@@ -51,17 +58,12 @@
 
 <div class="auth-card">
 	<header class="auth-header">
-		<span class="auth-eyebrow">{m.auth_brand_eyebrow()}</span>
-		<h1 class="auth-title">{m.auth_sign_in_title()}</h1>
-		<p class="auth-subtitle">{m.auth_sign_in_subtitle()}</p>
+		<h2>{m.auth_sign_in_title()}</h2>
+		<p class="subtitle">{m.auth_sign_in_subtitle()}</p>
 	</header>
 
 	{#if errorMessage}
-		<div class="auth-error">
-			<NoticeBanner variant="warning">
-				<span>{errorMessage}</span>
-			</NoticeBanner>
-		</div>
+		<NoticeBanner variant="warning">{errorMessage}</NoticeBanner>
 	{/if}
 
 	<form
@@ -70,6 +72,7 @@
 			event.preventDefault();
 			handleSubmit();
 		}}
+		novalidate
 	>
 		<InlineEditor
 			id="email"
@@ -98,7 +101,7 @@
 		<InlineEditor
 			id="password"
 			name="password"
-			inputType="password"
+			inputType={showPassword ? 'text' : 'password'}
 			autocomplete="current-password"
 			placeholder={m.auth_password_placeholder()}
 			ariaLabel={m.auth_password_label()}
@@ -115,24 +118,34 @@
 			}}
 		>
 			{#snippet leadingIcon()}
-				<Icon><Lock /></Icon>
+				<button
+					type="button"
+					class="icon-toggle"
+					aria-label={showPassword ? m.auth_hide_password() : m.auth_show_password()}
+					aria-pressed={showPassword}
+					onclick={handlePasswordToggle}
+					tabindex="-1"
+				>
+					<Icon><PasswordToggleIcon /></Icon>
+				</button>
 			{/snippet}
 		</InlineEditor>
 
-		<div class="auth-row">
-			<Checkbox bind:checked={rememberMe} label={m.auth_sign_in_remember_me()} />
-		</div>
-
 		<Button
 			variant="primary"
-			size="large"
+			size="standard"
 			type="submit"
 			fill={true}
 			isLoading={isSubmitting}
 			disabled={isSubmitting}
 		>
+			<Icon><Login /></Icon>
 			{m.auth_sign_in_button()}
 		</Button>
+
+		<button type="button" class="forgot-password">
+			{m.auth_forgot_password()}
+		</button>
 	</form>
 
 	<div class="auth-footer">
@@ -140,3 +153,102 @@
 		<a href="/sign-up">{m.auth_sign_in_create_account()}</a>
 	</div>
 </div>
+
+<style>
+	.auth-card {
+		width: 100%;
+		max-width: 420px;
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
+		padding: clamp(24px, 4vw, 32px);
+		border-radius: var(--radius-lg);
+		background: var(--surface-primary);
+		border: var(--border-width-thin) solid var(--border-muted);
+		box-shadow: var(--shadow-lg);
+		color: var(--text-normal);
+	}
+
+	.auth-header {
+		text-align: center;
+	}
+
+	h2 {
+		margin: 0;
+		font-size: var(--font-size-lg);
+		font-weight: var(--font-weight-medium);
+		letter-spacing: -0.01em;
+		color: var(--text-normal);
+	}
+
+	.subtitle {
+		margin: var(--spacing-2) 0 0;
+		color: var(--text-muted);
+		font-size: var(--font-size-sm);
+	}
+
+	.auth-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+	}
+
+	.forgot-password {
+		display: inline-flex;
+		align-self: center;
+		font-family: inherit;
+		font-size: var(--font-size-base);
+		color: var(--text-accent);
+		text-decoration: none;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		transition:
+			color var(--transition-duration-200) var(--transition-ease),
+			text-decoration var(--transition-duration-200) var(--transition-ease);
+	}
+
+	.forgot-password:hover {
+		color: var(--interactive-accent-hover);
+		text-decoration: underline;
+	}
+
+	.auth-footer {
+		text-align: center;
+		font-size: var(--font-size-sm);
+		margin-top: var(--spacing-3);
+	}
+
+	.auth-footer span {
+		color: var(--text-muted);
+	}
+
+	.auth-footer a {
+		margin-left: 0.5rem;
+		color: var(--text-accent);
+	}
+
+	.icon-toggle {
+		appearance: none;
+		-webkit-appearance: none;
+		background: none;
+		border: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		color: var(--text-muted);
+		border-radius: var(--radius-base);
+		outline: none;
+	}
+
+	.icon-toggle:hover {
+		color: var(--text-normal);
+	}
+
+	.icon-toggle:focus-visible {
+		box-shadow: 0 0 0 2px var(--interactive-accent);
+	}
+</style>

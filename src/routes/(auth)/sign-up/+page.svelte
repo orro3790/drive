@@ -6,8 +6,9 @@
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
+	import Eye from '$lib/components/icons/Eye.svelte';
+	import EyeOff from '$lib/components/icons/EyeOff.svelte';
 	import Key from '$lib/components/icons/Key.svelte';
-	import Lock from '$lib/components/icons/Lock.svelte';
 	import Mail from '$lib/components/icons/Mail.svelte';
 	import User from '$lib/components/icons/User.svelte';
 	import * as m from '$lib/paraglide/messages.js';
@@ -19,8 +20,13 @@
 	let password = $state('');
 	let confirmPassword = $state('');
 	let inviteCode = $state('');
+	let showPassword = $state(false);
+	let showConfirmPassword = $state(false);
 	let errorMessage = $state<string | null>(null);
 	let isSubmitting = $state(false);
+
+	const PasswordToggleIcon = $derived(showPassword ? EyeOff : Eye);
+	const ConfirmPasswordToggleIcon = $derived(showConfirmPassword ? EyeOff : Eye);
 
 	const handleSubmit = async () => {
 		if (isSubmitting) {
@@ -61,17 +67,12 @@
 
 <div class="auth-card">
 	<header class="auth-header">
-		<span class="auth-eyebrow">{m.auth_brand_eyebrow()}</span>
-		<h1 class="auth-title">{m.auth_sign_up_title()}</h1>
-		<p class="auth-subtitle">{m.auth_sign_up_subtitle()}</p>
+		<h2>{m.auth_sign_up_title()}</h2>
+		<p class="subtitle">{m.auth_sign_up_subtitle()}</p>
 	</header>
 
 	{#if errorMessage}
-		<div class="auth-error">
-			<NoticeBanner variant="warning">
-				<span>{errorMessage}</span>
-			</NoticeBanner>
-		</div>
+		<NoticeBanner variant="warning">{errorMessage}</NoticeBanner>
 	{/if}
 
 	<form
@@ -80,6 +81,7 @@
 			event.preventDefault();
 			handleSubmit();
 		}}
+		novalidate
 	>
 		<InlineEditor
 			id="name"
@@ -132,7 +134,7 @@
 		<InlineEditor
 			id="password"
 			name="password"
-			inputType="password"
+			inputType={showPassword ? 'text' : 'password'}
 			autocomplete="new-password"
 			placeholder={m.auth_password_create_placeholder()}
 			ariaLabel={m.auth_password_label()}
@@ -149,14 +151,23 @@
 			}}
 		>
 			{#snippet leadingIcon()}
-				<Icon><Lock /></Icon>
+				<button
+					type="button"
+					class="icon-toggle"
+					aria-label={showPassword ? m.auth_hide_password() : m.auth_show_password()}
+					aria-pressed={showPassword}
+					onclick={() => (showPassword = !showPassword)}
+					tabindex="-1"
+				>
+					<Icon><PasswordToggleIcon /></Icon>
+				</button>
 			{/snippet}
 		</InlineEditor>
 
 		<InlineEditor
 			id="confirm-password"
 			name="confirmPassword"
-			inputType="password"
+			inputType={showConfirmPassword ? 'text' : 'password'}
 			autocomplete="new-password"
 			placeholder={m.auth_password_confirm_placeholder()}
 			ariaLabel={m.auth_password_confirm_label()}
@@ -173,7 +184,16 @@
 			}}
 		>
 			{#snippet leadingIcon()}
-				<Icon><Lock /></Icon>
+				<button
+					type="button"
+					class="icon-toggle"
+					aria-label={showConfirmPassword ? m.auth_hide_password() : m.auth_show_password()}
+					aria-pressed={showConfirmPassword}
+					onclick={() => (showConfirmPassword = !showConfirmPassword)}
+					tabindex="-1"
+				>
+					<Icon><ConfirmPasswordToggleIcon /></Icon>
+				</button>
 			{/snippet}
 		</InlineEditor>
 
@@ -200,12 +220,12 @@
 					<Icon><Key /></Icon>
 				{/snippet}
 			</InlineEditor>
-			<p class="auth-hint">{m.auth_invite_code_hint()}</p>
+			<p class="hint">{m.auth_invite_code_hint()}</p>
 		</div>
 
 		<Button
 			variant="primary"
-			size="large"
+			size="standard"
 			type="submit"
 			fill={true}
 			isLoading={isSubmitting}
@@ -220,3 +240,88 @@
 		<a href="/sign-in">{m.auth_sign_up_sign_in()}</a>
 	</div>
 </div>
+
+<style>
+	.auth-card {
+		width: 100%;
+		max-width: 420px;
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
+		padding: clamp(24px, 4vw, 32px);
+		border-radius: var(--radius-lg);
+		background: var(--surface-primary);
+		border: var(--border-width-thin) solid var(--border-muted);
+		box-shadow: var(--shadow-lg);
+		color: var(--text-normal);
+	}
+
+	.auth-header {
+		text-align: center;
+	}
+
+	h2 {
+		margin: 0;
+		font-size: var(--font-size-lg);
+		font-weight: var(--font-weight-medium);
+		letter-spacing: -0.01em;
+		color: var(--text-normal);
+	}
+
+	.subtitle {
+		margin: var(--spacing-2) 0 0;
+		color: var(--text-muted);
+		font-size: var(--font-size-sm);
+	}
+
+	.auth-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+	}
+
+	.hint {
+		margin: var(--spacing-1) 0 0;
+		font-size: var(--font-size-sm);
+		color: var(--text-faint);
+	}
+
+	.auth-footer {
+		text-align: center;
+		font-size: var(--font-size-sm);
+		margin-top: var(--spacing-3);
+	}
+
+	.auth-footer span {
+		color: var(--text-muted);
+	}
+
+	.auth-footer a {
+		margin-left: 0.5rem;
+		color: var(--text-accent);
+	}
+
+	.icon-toggle {
+		appearance: none;
+		-webkit-appearance: none;
+		background: none;
+		border: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		color: var(--text-muted);
+		border-radius: var(--radius-base);
+		outline: none;
+	}
+
+	.icon-toggle:hover {
+		color: var(--text-normal);
+	}
+
+	.icon-toggle:focus-visible {
+		box-shadow: 0 0 0 2px var(--interactive-accent);
+	}
+</style>
