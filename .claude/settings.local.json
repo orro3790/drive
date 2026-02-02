@@ -1,0 +1,53 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git rebase:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr create:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm validate:*)",
+      "Bash(pnpm format:*)",
+      "Bash(pnpm exec svelte-check:*)",
+      "Bash(pnpm exec eslint:*)",
+      "Bash(curl:*)",
+      "Bash(agent-browser:*)",
+      "Bash(bd.exe:*)",
+      "Bash(bv:*)",
+      "Skill(execute)",
+      "Skill(dev-server)",
+      "Skill(verify)",
+      "Skill(code-review)",
+      "Skill(component-audit)",
+      "Skill(dialectic)",
+      "Skill(beads)",
+      "Skill(interview)",
+      "Skill(spec-to-beads)",
+      "Skill(dev-login)",
+      "mcp__ragnet-mcp__query",
+      "mcp__ragnet-mcp__list_sources",
+      "mcp__ragnet-mcp__find_code_examples",
+      "mcp__ragnet-mcp__query_with_hyde",
+      "mcp__ragnet-mcp__query_complex",
+      "mcp__svelte__list-sections",
+      "mcp__svelte__get-documentation",
+      "mcp__svelte__svelte-autofixer",
+      "mcp__svelte__playground-link",
+      "WebSearch"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "svelte",
+    "ragnet-mcp"
+  ],
+  "disabledMcpjsonServers": []
+}

@@ -1,0 +1,21 @@
+{
+	"mcpServers": {
+		"ragnet-mcp": {
+			"type": "sse",
+			"url": "http://localhost:8000/sse",
+			"alwaysAllow": [
+				"find_code_examples",
+				"get_context_chain",
+				"list_sources",
+				"query",
+				"query_with_hyde",
+				"query_complex"
+			]
+		},
+		"svelte": {
+			"type": "http",
+			"url": "https://mcp.svelte.dev/mcp",
+			"alwaysAllow": ["list-sections", "get-documentation", "svelte-autofixer"]
+		}
+	}
+}
