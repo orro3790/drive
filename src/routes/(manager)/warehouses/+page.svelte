@@ -152,10 +152,7 @@
 
 {#snippet actionsCell(ctx: CellRendererContext<WarehouseWithRouteCount>)}
 	<div class="cell-actions">
-		<IconButton
-			onclick={() => openEditModal(ctx.row)}
-			tooltip={m.common_edit()}
-		>
+		<IconButton onclick={() => openEditModal(ctx.row)} tooltip={m.common_edit()}>
 			<Icon><Pencil /></Icon>
 		</IconButton>
 		<IconButton
@@ -203,7 +200,13 @@
 <!-- Create Modal -->
 {#if showCreateModal}
 	<Modal title={m.warehouse_create_title()} onClose={closeModals}>
-		<form class="modal-form" onsubmit={(e) => { e.preventDefault(); handleCreate(); }}>
+		<form
+			class="modal-form"
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleCreate();
+			}}
+		>
 			<div class="form-field">
 				<label for="create-name">{m.warehouse_name_label()}</label>
 				<InlineEditor
@@ -247,7 +250,13 @@
 <!-- Edit Modal -->
 {#if editingWarehouse}
 	<Modal title={m.warehouse_edit_title()} onClose={closeModals}>
-		<form class="modal-form" onsubmit={(e) => { e.preventDefault(); handleUpdate(); }}>
+		<form
+			class="modal-form"
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleUpdate();
+			}}
+		>
 			<div class="form-field">
 				<label for="edit-name">{m.warehouse_name_label()}</label>
 				<InlineEditor

@@ -30,22 +30,26 @@ Drive is an event-driven operations automation platform that manages driver sche
 ### Setup
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/orro3790/drive.git
 cd drive
 ```
 
 2. Install dependencies:
+
 ```bash
 pnpm install
 ```
 
 3. Configure environment variables:
+
 ```bash
 cp .env.example .env
 ```
 
 Edit `.env` with your credentials:
+
 - `DATABASE_URL` - Neon PostgreSQL connection string (pooled)
 - `BETTER_AUTH_SECRET` - Random secret for session signing (generate with `openssl rand -base64 32`)
 - `BETTER_AUTH_URL` - `http://localhost:5173` for local dev
@@ -54,6 +58,7 @@ Edit `.env` with your credentials:
 See `.env.example` for full documentation.
 
 4. Set up the database:
+
 ```bash
 # Push schema to database
 pnpm drizzle-kit push
@@ -64,6 +69,7 @@ pnpm drizzle-kit migrate
 ```
 
 5. Start development server:
+
 ```bash
 pnpm dev
 ```
@@ -95,27 +101,30 @@ src/
 
 ## Documentation
 
-| Document            | Location                      |
-| ------------------- | ----------------------------- |
-| Technical Spec      | `docs/specs/SPEC.md`          |
-| Data Model          | `docs/specs/data-model.md`    |
-| Agent Guidelines    | `docs/agent-guidelines.md`    |
-| Project Instructions| `CLAUDE.md`                   |
+| Document               | Location                   |
+| ---------------------- | -------------------------- |
+| Technical Spec         | `docs/specs/SPEC.md`       |
+| Data Model             | `docs/specs/data-model.md` |
+| Agent Guidelines       | `docs/agent-guidelines.md` |
+| Project Instructions   | `CLAUDE.md`                |
 | Architecture Decisions | `docs/adr/`                |
 
 ## Key Concepts
 
 ### Scheduling
+
 - **2-week lookahead**: Drivers set preferences for Week N+2 while Week N+1 is locked
 - **Sunday lock**: Preferences lock at 23:59 Toronto time every Sunday
 - **Auto-assignment**: Algorithm assigns routes based on preferences + performance
 
 ### Bidding System
+
 - **Not FCFS**: Algorithm-based scoring when assignments become unfilled
 - **Scoring factors**: Completion rate (40%), route familiarity (30%), attendance (20%), preferences (10%)
 - **Notifications**: Push alerts sent to all eligible drivers when bid windows open
 
 ### Performance Tracking
+
 - **Weekly caps**: Default 4 days/week, increases to 6 after 20 shifts with 95%+ attendance
 - **Flagging**: Drivers below attendance thresholds get 1 week grace period, then lose 1 day from cap
 - **Metrics**: Attendance rate, completion rate, route familiarity
