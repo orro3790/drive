@@ -13,7 +13,8 @@
 		getCoreRowModel,
 		getSortedRowModel,
 		createColumnHelper,
-		type SortingState
+		type SortingState,
+		type CellRendererContext
 	} from '$lib/components/data-table';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
@@ -149,6 +150,24 @@
 	}
 </script>
 
+{#snippet actionsCell(ctx: CellRendererContext<WarehouseWithRouteCount>)}
+	<div class="cell-actions">
+		<IconButton
+			onclick={() => openEditModal(ctx.row)}
+			tooltip={m.common_edit()}
+		>
+			<Icon><Pencil /></Icon>
+		</IconButton>
+		<IconButton
+			onclick={(e) => openDeleteConfirm(ctx.row, e)}
+			tooltip={m.common_delete()}
+			disabled={ctx.row.routeCount > 0}
+		>
+			<Icon><Trash /></Icon>
+		</IconButton>
+	</div>
+{/snippet}
+
 <svelte:head>
 	<title>{m.warehouse_page_title()} | Drive</title>
 </svelte:head>
@@ -173,29 +192,10 @@
 				emptyTitle={m.warehouse_empty_state()}
 				emptyMessage={m.warehouse_empty_state_message()}
 				showPagination={false}
-			>
-				{#snippet cells(columnId, row)}
-					{#if columnId === 'actions'}
-						<div class="cell-actions">
-							<IconButton
-								onclick={() => openEditModal(row)}
-								tooltip={m.common_edit()}
-								size="small"
-							>
-								<Icon><Pencil /></Icon>
-							</IconButton>
-							<IconButton
-								onclick={(e) => openDeleteConfirm(row, e)}
-								tooltip={m.common_delete()}
-								size="small"
-								disabled={row.routeCount > 0}
-							>
-								<Icon><Trash /></Icon>
-							</IconButton>
-						</div>
-					{/if}
-				{/snippet}
-			</DataTable>
+				cellComponents={{
+					actions: actionsCell
+				}}
+			/>
 		</div>
 	</div>
 </div>
@@ -208,7 +208,8 @@
 				<label for="create-name">{m.warehouse_name_label()}</label>
 				<InlineEditor
 					id="create-name"
-					bind:value={formName}
+					value={formName}
+					onInput={(v) => (formName = v)}
 					placeholder={m.warehouse_name_placeholder()}
 					required
 				/>
@@ -221,7 +222,8 @@
 				<label for="create-address">{m.warehouse_address_label()}</label>
 				<InlineEditor
 					id="create-address"
-					bind:value={formAddress}
+					value={formAddress}
+					onInput={(v) => (formAddress = v)}
 					placeholder={m.warehouse_address_placeholder()}
 					required
 				/>
@@ -250,7 +252,8 @@
 				<label for="edit-name">{m.warehouse_name_label()}</label>
 				<InlineEditor
 					id="edit-name"
-					bind:value={formName}
+					value={formName}
+					onInput={(v) => (formName = v)}
 					placeholder={m.warehouse_name_placeholder()}
 					required
 				/>
@@ -263,7 +266,8 @@
 				<label for="edit-address">{m.warehouse_address_label()}</label>
 				<InlineEditor
 					id="edit-address"
-					bind:value={formAddress}
+					value={formAddress}
+					onInput={(v) => (formAddress = v)}
 					placeholder={m.warehouse_address_placeholder()}
 					required
 				/>

@@ -52,7 +52,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const result = warehouseCreateSchema.safeParse(body);
 
 	if (!result.success) {
-		throw error(400, { message: 'Validation failed', errors: result.error.flatten().fieldErrors });
+		throw error(400, 'Validation failed');
 	}
 
 	const { name, address } = result.data;

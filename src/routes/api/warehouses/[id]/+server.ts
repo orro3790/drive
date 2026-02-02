@@ -60,7 +60,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 	const result = warehouseUpdateSchema.safeParse(body);
 
 	if (!result.success) {
-		throw error(400, { message: 'Validation failed', errors: result.error.flatten().fieldErrors });
+		throw error(400, 'Validation failed');
 	}
 
 	// Check warehouse exists
