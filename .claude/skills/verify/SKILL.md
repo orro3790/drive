@@ -41,9 +41,11 @@ Ask yourself at every step:
 ### Mobile Viewport Requirements
 
 1. **Set mobile viewport BEFORE any navigation:**
+
    ```bash
    agent-browser --session driver-ops resize 390 844
    ```
+
    (iPhone 14 Pro dimensions — our reference device)
 
 2. **Complete ALL test items in mobile viewport first**
