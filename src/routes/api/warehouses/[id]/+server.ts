@@ -86,12 +86,11 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		.where(eq(warehouses.id, id))
 		.returning();
 
-	// Audit log
+	// Audit log - skip actorId since Better Auth IDs don't match domain users table
 	await db.insert(auditLogs).values({
 		entityType: 'warehouse',
 		entityId: id,
 		action: 'update',
-		actorId: locals.user.id,
 		actorType: 'user',
 		changes: updates
 	});
@@ -135,12 +134,11 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 
 	await db.delete(warehouses).where(eq(warehouses.id, id));
 
-	// Audit log
+	// Audit log - skip actorId since Better Auth IDs don't match domain users table
 	await db.insert(auditLogs).values({
 		entityType: 'warehouse',
 		entityId: id,
 		action: 'delete',
-		actorId: locals.user.id,
 		actorType: 'user',
 		changes: { name: existing.name, address: existing.address }
 	});

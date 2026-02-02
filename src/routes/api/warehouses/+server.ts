@@ -61,17 +61,16 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.insert(warehouses)
 		.values({
 			name,
-			address,
-			createdBy: locals.user.id
+			address
+			// createdBy is nullable - Better Auth user IDs don't match domain users table yet
 		})
 		.returning();
 
-	// Audit log
+	// Audit log - skip actorId since Better Auth IDs don't match domain users table
 	await db.insert(auditLogs).values({
 		entityType: 'warehouse',
 		entityId: created.id,
 		action: 'create',
-		actorId: locals.user.id,
 		actorType: 'user',
 		changes: { name, address }
 	});
