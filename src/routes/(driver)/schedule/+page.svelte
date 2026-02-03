@@ -181,18 +181,7 @@
 										/>
 									</div>
 
-									<div class="meta-grid">
-										<div class="meta-item">
-											<span class="meta-label">{m.schedule_assignment_route()}</span>
-											<span class="meta-value">{assignment.routeName}</span>
-										</div>
-										<div class="meta-item">
-											<span class="meta-label">{m.schedule_assignment_warehouse()}</span>
-											<span class="meta-value">{assignment.warehouseName}</span>
-										</div>
-									</div>
-
-									{#if assignment.isCancelable}
+										{#if assignment.isCancelable}
 										<div class="card-actions">
 											<Button
 												variant="danger"
@@ -242,18 +231,7 @@
 										/>
 									</div>
 
-									<div class="meta-grid">
-										<div class="meta-item">
-											<span class="meta-label">{m.schedule_assignment_route()}</span>
-											<span class="meta-value">{assignment.routeName}</span>
-										</div>
-										<div class="meta-item">
-											<span class="meta-label">{m.schedule_assignment_warehouse()}</span>
-											<span class="meta-value">{assignment.warehouseName}</span>
-										</div>
-									</div>
-
-									{#if assignment.isCancelable}
+										{#if assignment.isCancelable}
 										<div class="card-actions">
 											<Button
 												variant="danger"
@@ -459,31 +437,6 @@
 		color: var(--text-muted);
 	}
 
-	.meta-grid {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: var(--spacing-2);
-	}
-
-	.meta-item {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-1);
-	}
-
-	.meta-label {
-		font-size: var(--font-size-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-faint);
-	}
-
-	.meta-value {
-		font-size: var(--font-size-sm);
-		color: var(--text-normal);
-		font-weight: var(--font-weight-medium);
-	}
-
 	.card-actions {
 		display: flex;
 		justify-content: flex-end;
@@ -522,9 +475,6 @@
 	}
 
 	@media (max-width: 600px) {
-		.meta-grid {
-			grid-template-columns: 1fr;
-		}
 		.modal-actions {
 			flex-direction: column;
 		}
