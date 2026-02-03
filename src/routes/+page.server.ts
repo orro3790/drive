@@ -2,10 +2,10 @@
  * Root Page Server - Role-based Redirect
  *
  * Redirects authenticated users to their appropriate dashboard:
- * - Drivers → /schedule
+ * - Drivers → /dashboard
  * - Managers → /routes
  *
- * Unauthenticated users see the public landing page.
+ * Unauthenticated users are redirected to sign-in.
  */
 
 import { redirect } from '@sveltejs/kit';
@@ -23,5 +23,5 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	// Default for drivers (and any other role)
-	throw redirect(302, '/schedule');
+	throw redirect(302, '/dashboard');
 };
