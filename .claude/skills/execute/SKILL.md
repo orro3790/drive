@@ -7,6 +7,8 @@ description: Complete implementation lifecycle for executing a plan file. Handle
 
 The complete implementation lifecycle for executing a plan file. Handles fresh starts AND resuming partially completed work.
 
+**Important:** This skill must be run directly by the primary agent. Do not delegate execution to subagents or use the Task tool to run a plan.
+
 ## Usage
 
 ```

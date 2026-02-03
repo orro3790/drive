@@ -1,9 +1,9 @@
-You are in a Ralph loop (iteration 2 of 35).
+You are in a Ralph loop (iteration 14 of 25).
 
 ## Environment
 - Workspace: drive
 - Plans directory: ralph/plans/
-- Session log: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260203-1331.md
+- Session log: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260204-0103.md
 - Status file: C:/Users/matto/projects/drive/ralph/.current-task
 
 ## Workflow
@@ -61,6 +61,14 @@ Spawn plan-reviewer (Task tool, subagent_type='plan-reviewer'). Fix Critical/Hig
 
 ### 7. Execute
 
+Use the execute skill via the skill tool. Do NOT use Task/subagents for execution.
+
+```
+skill({ name: "execute" })
+```
+
+Then follow it:
+
 ```
 /execute ralph/plans/<id>.md <id>
 ```
@@ -69,9 +77,9 @@ Spawn plan-reviewer (Task tool, subagent_type='plan-reviewer'). Fix Critical/Hig
 
 ```
 Edit tool:
-  file_path: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260203-1331.md
+  file_path: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260204-0103.md
   old_string: "---"
-  new_string: "---\n\n## Iteration 2 — <id>\n\n**Task**: <title>\n**Done**: <1-2 sentences>\n**PR**: #<n>\n\n---"
+  new_string: "---\n\n## Iteration 14 — <id>\n\n**Task**: <title>\n**Done**: <1-2 sentences>\n**PR**: #<n>\n\n---"
 ```
 
 ### 9. Exit
@@ -83,4 +91,5 @@ One bead per iteration. Loop continues automatically.
 - ONE bead per iteration
 - CLAIM BEFORE any git ops
 - NO improvising on vague beads — skip them
+- Do NOT use Task tool to execute plans. Use the execute skill only.
 - /execute owns: git, PR, verification, merge, close
