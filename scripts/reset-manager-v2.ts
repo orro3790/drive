@@ -76,7 +76,10 @@ async function main() {
 
 	// Ensure role is manager
 	if (targetUser.role !== 'manager') {
-		await db.update(user).set({ role: 'manager', updatedAt: new Date() }).where(eq(user.id, targetUser.id));
+		await db
+			.update(user)
+			.set({ role: 'manager', updatedAt: new Date() })
+			.where(eq(user.id, targetUser.id));
 		console.log('Updated role to: manager');
 	}
 

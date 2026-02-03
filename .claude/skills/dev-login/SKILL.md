@@ -85,11 +85,13 @@ powershell -Command "Remove-Item '.agent-browser/driver-ops-auth.json' -ErrorAct
 ## Credentials
 
 ### Manager Credentials
+
 - Email: `justin.myddp@proton.me`
 - Password: `jeF4g9mrCd1hPsDn!`
 - Invite code (for sign-up): `drive-2026`
 
 ### Driver Credentials
+
 - Email: `driver@drive.com`
 - Password: `test1234`
 - Invite code (for sign-up): `drive-2026`
