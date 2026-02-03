@@ -1,7 +1,7 @@
 <!--
 	Driver Schedule Page
 
-	Displays current and next week assignments with cancellation flow.
+	Displays current and next week assignments with shift start/complete flow.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
@@ -20,9 +20,21 @@
 	} from '$lib/schemas/assignment';
 	import type { SelectOption } from '$lib/schemas/ui/select';
 
+	// Cancel modal state
 	let cancelTarget = $state<ScheduleAssignment | null>(null);
 	let cancelReason = $state<CancelReason | ''>('');
 	let cancelError = $state<string | null>(null);
+
+	// Shift start modal state
+	let startTarget = $state<ScheduleAssignment | null>(null);
+	let parcelsStart = $state<number | ''>('');
+	let startError = $state<string | null>(null);
+
+	// Shift complete modal state
+	let completeTarget = $state<ScheduleAssignment | null>(null);
+	let parcelsDelivered = $state<number | ''>('');
+	let parcelsReturned = $state<number | ''>(0);
+	let completeError = $state<string | null>(null);
 
 	const statusLabels: Record<AssignmentStatus, string> = {
 		scheduled: m.schedule_status_scheduled(),
@@ -127,6 +139,65 @@
 		}
 	}
 
+	// Shift start modal functions
+	function openStartModal(assignment: ScheduleAssignment) {
+		startTarget = assignment;
+		parcelsStart = '';
+		startError = null;
+	}
+
+	function closeStartModal() {
+		startTarget = null;
+		parcelsStart = '';
+		startError = null;
+	}
+
+	async function submitStartShift() {
+		if (!startTarget) return;
+		if (parcelsStart === '' || parcelsStart < 0) {
+			startError = m.shift_start_parcels_required();
+			return;
+		}
+
+		const success = await scheduleStore.startShift(startTarget.id, parcelsStart);
+		if (success) {
+			closeStartModal();
+		}
+	}
+
+	// Shift complete modal functions
+	function openCompleteModal(assignment: ScheduleAssignment) {
+		completeTarget = assignment;
+		parcelsDelivered = '';
+		parcelsReturned = 0;
+		completeError = null;
+	}
+
+	function closeCompleteModal() {
+		completeTarget = null;
+		parcelsDelivered = '';
+		parcelsReturned = 0;
+		completeError = null;
+	}
+
+	async function submitCompleteShift() {
+		if (!completeTarget) return;
+		if (parcelsDelivered === '' || parcelsDelivered < 0) {
+			completeError = m.shift_complete_delivered_required();
+			return;
+		}
+
+		const returnedValue = parcelsReturned === '' ? 0 : parcelsReturned;
+		const success = await scheduleStore.completeShift(
+			completeTarget.id,
+			parcelsDelivered,
+			returnedValue
+		);
+		if (success) {
+			closeCompleteModal();
+		}
+	}
+
 	onMount(() => {
 		scheduleStore.load();
 	});
@@ -184,15 +255,35 @@
 										/>
 									</div>
 
-									{#if assignment.isCancelable}
+									{#if assignment.isStartable || assignment.isCompletable || assignment.isCancelable}
 										<div class="card-actions">
-											<Button
-												variant="danger"
-												size="small"
-												onclick={() => openCancelModal(assignment)}
-											>
-												{m.schedule_cancel_button()}
-											</Button>
+											{#if assignment.isStartable}
+												<Button
+													variant="primary"
+													size="small"
+													onclick={() => openStartModal(assignment)}
+												>
+													{m.shift_start_button()}
+												</Button>
+											{/if}
+											{#if assignment.isCompletable}
+												<Button
+													variant="primary"
+													size="small"
+													onclick={() => openCompleteModal(assignment)}
+												>
+													{m.shift_complete_button()}
+												</Button>
+											{/if}
+											{#if assignment.isCancelable}
+												<Button
+													variant="danger"
+													size="small"
+													onclick={() => openCancelModal(assignment)}
+												>
+													{m.schedule_cancel_button()}
+												</Button>
+											{/if}
 										</div>
 									{/if}
 								</div>
@@ -258,7 +349,7 @@
 {#if cancelTarget}
 	<Modal title={m.schedule_cancel_modal_title()} onClose={closeCancelModal}>
 		<form
-			class="cancel-form"
+			class="modal-form"
 			onsubmit={(event) => {
 				event.preventDefault();
 				submitCancellation();
@@ -286,6 +377,97 @@
 				</Button>
 				<Button variant="danger" type="submit" fill isLoading={scheduleStore.isCancelling}>
 					{m.schedule_cancel_confirm_button()}
+				</Button>
+			</div>
+		</form>
+	</Modal>
+{/if}
+
+{#if startTarget}
+	<Modal title={m.shift_start_modal_title()} onClose={closeStartModal}>
+		<form
+			class="modal-form"
+			onsubmit={(event) => {
+				event.preventDefault();
+				submitStartShift();
+			}}
+		>
+			<div class="form-field">
+				<label for="parcels-start">{m.shift_start_parcels_label()}</label>
+				<input
+					id="parcels-start"
+					type="number"
+					class="number-input"
+					class:has-error={startError}
+					min="0"
+					max="999"
+					placeholder={m.shift_start_parcels_placeholder()}
+					bind:value={parcelsStart}
+					oninput={() => (startError = null)}
+				/>
+				{#if startError}
+					<p class="field-error">{startError}</p>
+				{/if}
+			</div>
+
+			<div class="modal-actions">
+				<Button variant="secondary" onclick={closeStartModal} fill>
+					{m.common_cancel()}
+				</Button>
+				<Button variant="primary" type="submit" fill isLoading={scheduleStore.isStartingShift}>
+					{m.shift_start_confirm_button()}
+				</Button>
+			</div>
+		</form>
+	</Modal>
+{/if}
+
+{#if completeTarget}
+	<Modal title={m.shift_complete_modal_title()} onClose={closeCompleteModal}>
+		<form
+			class="modal-form"
+			onsubmit={(event) => {
+				event.preventDefault();
+				submitCompleteShift();
+			}}
+		>
+			<div class="form-field">
+				<label for="parcels-delivered">{m.shift_complete_delivered_label()}</label>
+				<input
+					id="parcels-delivered"
+					type="number"
+					class="number-input"
+					class:has-error={completeError}
+					min="0"
+					max="999"
+					placeholder={m.shift_complete_delivered_placeholder()}
+					bind:value={parcelsDelivered}
+					oninput={() => (completeError = null)}
+				/>
+				{#if completeError}
+					<p class="field-error">{completeError}</p>
+				{/if}
+			</div>
+
+			<div class="form-field">
+				<label for="parcels-returned">{m.shift_complete_returned_label()}</label>
+				<input
+					id="parcels-returned"
+					type="number"
+					class="number-input"
+					min="0"
+					max="999"
+					placeholder={m.shift_complete_returned_placeholder()}
+					bind:value={parcelsReturned}
+				/>
+			</div>
+
+			<div class="modal-actions">
+				<Button variant="secondary" onclick={closeCompleteModal} fill>
+					{m.common_cancel()}
+				</Button>
+				<Button variant="primary" type="submit" fill isLoading={scheduleStore.isCompletingShift}>
+					{m.shift_complete_confirm_button()}
 				</Button>
 			</div>
 		</form>
@@ -438,9 +620,10 @@
 	.card-actions {
 		display: flex;
 		justify-content: flex-end;
+		gap: var(--spacing-2);
 	}
 
-	.cancel-form {
+	.modal-form {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-3);
@@ -456,6 +639,36 @@
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
+	}
+
+	.number-input {
+		width: 100%;
+		padding: var(--spacing-2) var(--spacing-3);
+		font-size: var(--font-size-base);
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-base);
+		background: var(--surface-primary);
+		color: var(--text-normal);
+		transition: border-color 0.15s ease;
+	}
+
+	.number-input:focus {
+		outline: none;
+		border-color: var(--accent-primary);
+	}
+
+	.number-input.has-error {
+		border-color: var(--status-error);
+	}
+
+	.number-input::placeholder {
+		color: var(--text-muted);
+	}
+
+	.field-error {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--status-error);
 	}
 
 	.late-warning {
