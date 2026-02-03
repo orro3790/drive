@@ -14,7 +14,7 @@ import {
 	routes,
 	user
 } from '$lib/server/db/schema';
-import { and, eq, gte, lt, ne, sql, inArray, isNull, desc } from 'drizzle-orm';
+import { and, eq, gte, lt, ne, sql } from 'drizzle-orm';
 import { toZonedTime, format } from 'date-fns-tz';
 import { addDays, startOfDay } from 'date-fns';
 import logger from '$lib/server/logger';
