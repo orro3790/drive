@@ -8,6 +8,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, shifts, auditLogs } from '$lib/server/db/schema';
+import { recordRouteCompletion, updateDriverMetrics } from '$lib/server/services/metrics';
 import { shiftCompleteSchema } from '$lib/schemas/shift';
 import { eq } from 'drizzle-orm';
 import logger from '$lib/server/logger';
@@ -35,6 +36,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.select({
 			id: assignments.id,
 			userId: assignments.userId,
+			routeId: assignments.routeId,
 			status: assignments.status
 		})
 		.from(assignments)
@@ -42,6 +44,10 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	if (!assignment) {
 		throw error(404, 'Assignment not found');
+	}
+
+	if (!assignment.userId) {
+		throw error(409, 'Assignment has no assigned driver');
 	}
 
 	// Verify ownership
@@ -87,13 +93,15 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		);
 	}
 
+	const completedAt = new Date();
+
 	// Update shift record
 	const [updatedShift] = await db
 		.update(shifts)
 		.set({
 			parcelsDelivered,
 			parcelsReturned,
-			completedAt: new Date()
+			completedAt
 		})
 		.where(eq(shifts.id, shift.id))
 		.returning({
@@ -123,6 +131,15 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		actorId: locals.user.id,
 		changes: { parcelsDelivered, parcelsReturned }
 	});
+
+	await Promise.all([
+		recordRouteCompletion({
+			userId: assignment.userId,
+			routeId: assignment.routeId,
+			completedAt
+		}),
+		updateDriverMetrics(assignment.userId)
+	]);
 
 	return json({
 		shift: updatedShift,
