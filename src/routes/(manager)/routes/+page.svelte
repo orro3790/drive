@@ -333,22 +333,22 @@
 
 <div class="page-surface">
 	<DataTable
-	{table}
-	loading={routeStore.isLoading}
-	emptyTitle={m.route_empty_state()}
-	emptyMessage={m.route_empty_state_message()}
-	showPagination
-	showColumnVisibility
-	showExport
-	exportFilename="routes"
-	tabs={tabsSnippet}
-	toolbar={toolbarSnippet}
-	cellComponents={{
-		driver: driverCell,
-		status: statusCell,
-		actions: actionsCell
-	}}
-	onRowClick={handleRowClick}
+		{table}
+		loading={routeStore.isLoading}
+		emptyTitle={m.route_empty_state()}
+		emptyMessage={m.route_empty_state_message()}
+		showPagination
+		showColumnVisibility
+		showExport
+		exportFilename="routes"
+		tabs={tabsSnippet}
+		toolbar={toolbarSnippet}
+		cellComponents={{
+			driver: driverCell,
+			status: statusCell,
+			actions: actionsCell
+		}}
+		onRowClick={handleRowClick}
 	/>
 </div>
 

@@ -70,10 +70,7 @@ async function clearData() {
 
 	// Delete driver/manager accounts but keep existing managers if they have a different email domain
 	// For simplicity, we'll delete all seeded users (test domains)
-	const seededUsers = await db
-		.select({ id: user.id })
-		.from(user)
-		.where(eq(user.role, 'driver'));
+	const seededUsers = await db.select({ id: user.id }).from(user).where(eq(user.role, 'driver'));
 
 	if (seededUsers.length > 0) {
 		const userIds = seededUsers.map((u) => u.id);

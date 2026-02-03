@@ -12,10 +12,10 @@ const WAREHOUSE_PREFIXES: Record<string, string> = {
 	'Scarborough East': 'SE',
 	'Brampton North': 'BN',
 	'Vaughan Central': 'VC',
-	'Markham': 'MK',
-	'Etobicoke': 'ET',
+	Markham: 'MK',
+	Etobicoke: 'ET',
 	'North York': 'NY',
-	'Ajax': 'AJ'
+	Ajax: 'AJ'
 };
 
 export interface GeneratedRoute {
@@ -23,10 +23,7 @@ export interface GeneratedRoute {
 	warehouseIndex: number; // Index into warehouses array for linking
 }
 
-export function generateRoutes(
-	config: SeedConfig,
-	warehouseNames: string[]
-): GeneratedRoute[] {
+export function generateRoutes(config: SeedConfig, warehouseNames: string[]): GeneratedRoute[] {
 	const routes: GeneratedRoute[] = [];
 	const routesPerWarehouse = Math.ceil(config.routes / config.warehouses);
 
