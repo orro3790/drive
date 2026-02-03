@@ -114,11 +114,6 @@
 		{ value: 'bidding', label: statusLabels.bidding }
 	];
 
-	// Count active filters for badge display
-	const activeFilterCount = $derived(
-		[warehouseFilter, statusFilter, dateFilter].filter(Boolean).length
-	);
-
 	function toLocalYmd(date = new Date()) {
 		const year = date.getFullYear();
 		const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -262,11 +257,7 @@
 {/snippet}
 
 {#snippet toolbarSnippet()}
-	<IconButton
-		tooltip={m.table_filter_label()}
-		onclick={() => (showFilterDrawer = true)}
-		attention={activeFilterCount > 0}
-	>
+	<IconButton tooltip={m.table_filter_label()} onclick={() => (showFilterDrawer = true)}>
 		<Icon><Filter /></Icon>
 	</IconButton>
 
