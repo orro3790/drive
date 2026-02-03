@@ -97,10 +97,12 @@ Run `pnpm seed:staging` to populate the database with 100 drivers and 5 managers
 **All seeded users share the same password:** `test1234`
 
 Seeded emails use test domains:
+
 - Drivers: `*@driver.test`
 - Managers: `*@drivermanager.test`
 
 To find seeded user emails, query the database:
+
 ```sql
 SELECT email FROM "user" WHERE email LIKE '%@driver.test' LIMIT 5;
 SELECT email FROM "user" WHERE email LIKE '%@drivermanager.test';

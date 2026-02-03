@@ -157,7 +157,7 @@ Use `<DataTable>` directly in the page when the table is structurally simple:
 ```svelte
 <!-- src/routes/(manager)/warehouses/+page.svelte -->
 <script>
-	const table = createSvelteTable(() => ({ data, columns, ... }));
+	const table = createSvelteTable(() => ({ data, columns }));
 </script>
 
 <DataTable {table} tabs={tabsSnippet} toolbar={toolbarSnippet} />
@@ -179,10 +179,10 @@ Encapsulate in a domain-specific component when the table has significant comple
 <!-- src/lib/components/<feature>/<FeatureTable>.svelte -->
 <script>
 	// All column definitions, custom row types, cell rendering, state management
-	const table = createSvelteTable(() => ({ ... }));
+	const table = createSvelteTable(() => ({ data, columns }));
 </script>
 
-<DataTable {table} {tabs} {toolbar} ... />
+<DataTable {table} {tabs} {toolbar} />
 ```
 
 ```svelte

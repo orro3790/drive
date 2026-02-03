@@ -45,9 +45,7 @@ export function generateBidding(
 	const bids: GeneratedBid[] = [];
 
 	// Get eligible drivers for bidding
-	const eligibleDrivers = drivers.filter(
-		(d) => d.role === 'driver' && !d.isFlagged
-	);
+	const eligibleDrivers = drivers.filter((d) => d.role === 'driver' && !d.isFlagged);
 
 	if (eligibleDrivers.length === 0) {
 		return { bidWindows, bids };
@@ -71,12 +69,10 @@ export function generateBidding(
 		const bidders = selectRandomDrivers(eligibleDrivers, numBids);
 
 		// Calculate scores and determine winner
-		const bidScores: Array<{ userId: string; score: number }> = bidders.map(
-			(driver) => ({
-				userId: driver.id,
-				score: calculateBidScore()
-			})
-		);
+		const bidScores: Array<{ userId: string; score: number }> = bidders.map((driver) => ({
+			userId: driver.id,
+			score: calculateBidScore()
+		}));
 
 		// Sort by score descending to find winner
 		bidScores.sort((a, b) => b.score - a.score);
@@ -150,10 +146,7 @@ function calculateBidScore(): number {
 	const preferenceBonus = Math.random(); // 0-100%
 
 	const score =
-		completionRate * 0.4 +
-		routeFamiliarity * 0.3 +
-		attendanceRate * 0.2 +
-		preferenceBonus * 0.1;
+		completionRate * 0.4 + routeFamiliarity * 0.3 + attendanceRate * 0.2 + preferenceBonus * 0.1;
 
 	return Math.round(score * 100) / 100;
 }
