@@ -241,13 +241,17 @@ Register or update user's FCM token for push notifications.
 **Request:**
 
 ```typescript
-{ token: string }
+{
+	token: string;
+}
 ```
 
 **Response:**
 
 ```typescript
-{ success: true }
+{
+	success: true;
+}
 ```
 
 **Auth:** Required
@@ -259,7 +263,9 @@ Remove user's FCM token (e.g., on logout or app uninstall).
 **Response:**
 
 ```typescript
-{ success: true }
+{
+	success: true;
+}
 ```
 
 **Auth:** Required
