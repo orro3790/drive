@@ -2,7 +2,7 @@
 	Route Management Page
 
 	Manager-only page for CRUD operations on routes.
-	Uses DataTable with optimistic updates via routeStore.
+	Uses DataTable with tabs/toolbar pattern matching Snapgrade design.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
@@ -16,18 +16,21 @@
 		type SortingState,
 		type CellRendererContext
 	} from '$lib/components/data-table';
-	import Button from '$lib/components/primitives/Button.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
-	import ConfirmationDialog from '$lib/components/ConfirmationDialog.svelte';
+	import Button from '$lib/components/primitives/Button.svelte';
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import DatePicker from '$lib/components/DatePicker.svelte';
+	import ConfirmationDialog from '$lib/components/ConfirmationDialog.svelte';
+	import Drawer from '$lib/components/primitives/Drawer.svelte';
 	import Pencil from '$lib/components/icons/Pencil.svelte';
 	import Trash from '$lib/components/icons/Trash.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
+	import Filter from '$lib/components/icons/Filter.svelte';
+	import Reset from '$lib/components/icons/Reset.svelte';
 	import { routeStore, type RouteWithWarehouse } from '$lib/stores/routeStore.svelte';
 	import { warehouseStore } from '$lib/stores/warehouseStore.svelte';
 	import { routeCreateSchema, routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
@@ -37,6 +40,7 @@
 	let showCreateModal = $state(false);
 	let editingRoute = $state<RouteWithWarehouse | null>(null);
 	let deleteConfirm = $state<{ route: RouteWithWarehouse; x: number; y: number } | null>(null);
+	let showFilterDrawer = $state(false);
 
 	// Form state
 	let formName = $state('');
@@ -110,6 +114,11 @@
 		{ value: 'bidding', label: statusLabels.bidding }
 	];
 
+	// Count active filters for badge display
+	const activeFilterCount = $derived(
+		[warehouseFilter, statusFilter, dateFilter].filter(Boolean).length
+	);
+
 	function toLocalYmd(date = new Date()) {
 		const year = date.getFullYear();
 		const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -123,6 +132,13 @@
 			status: statusFilter || undefined,
 			date: dateFilter || undefined
 		});
+	}
+
+	function resetFilters() {
+		warehouseFilter = '';
+		statusFilter = '';
+		dateFilter = toLocalYmd();
+		applyFilters();
 	}
 
 	function openCreateModal() {
@@ -237,41 +253,68 @@
 	</div>
 {/snippet}
 
+{#snippet tabsSnippet()}
+	<div class="tab-bar" role="tablist">
+		<button type="button" class="tab active" role="tab" aria-selected="true" tabindex="0">
+			{m.route_page_title()}
+		</button>
+	</div>
+{/snippet}
+
+{#snippet toolbarSnippet()}
+	<IconButton
+		tooltip={m.table_filter_label()}
+		onclick={() => (showFilterDrawer = true)}
+		attention={activeFilterCount > 0}
+	>
+		<Icon><Filter /></Icon>
+	</IconButton>
+
+	<IconButton tooltip={m.route_create_button()} onclick={openCreateModal}>
+		<Icon><Plus /></Icon>
+	</IconButton>
+
+	<IconButton tooltip={m.table_columns_reset_sizes()} onclick={resetFilters}>
+		<Icon><Reset /></Icon>
+	</IconButton>
+{/snippet}
+
 <svelte:head>
 	<title>{m.route_page_title()} | Drive</title>
 </svelte:head>
 
-<div class="page-surface">
-	<div class="page-stage">
-		<div class="page-header">
-			<div class="header-text">
-				<h1>{m.route_page_title()}</h1>
-				<p>{m.route_page_description()}</p>
-			</div>
-			<Button onclick={openCreateModal}>
-				<Icon><Plus /></Icon>
-				{m.route_create_button()}
-			</Button>
-		</div>
+<DataTable
+	{table}
+	loading={routeStore.isLoading}
+	emptyTitle={m.route_empty_state()}
+	emptyMessage={m.route_empty_state_message()}
+	showPagination={false}
+	showColumnVisibility
+	showExport
+	exportFilename="routes"
+	tabs={tabsSnippet}
+	toolbar={toolbarSnippet}
+	cellComponents={{
+		status: statusCell,
+		actions: actionsCell
+	}}
+/>
 
-		<div class="filters">
+<!-- Filter Drawer -->
+{#if showFilterDrawer}
+	<Drawer title={m.table_filter_title()} onClose={() => (showFilterDrawer = false)}>
+		<div class="filter-form">
 			<div class="filter-field">
 				<label for="route-warehouse-filter">{m.route_filter_warehouse_label()}</label>
 				<Select
 					id="route-warehouse-filter"
 					options={warehouseFilterOptions}
 					bind:value={warehouseFilter}
-					onChange={applyFilters}
 				/>
 			</div>
 			<div class="filter-field">
 				<label for="route-status-filter">{m.route_filter_status_label()}</label>
-				<Select
-					id="route-status-filter"
-					options={statusOptions}
-					bind:value={statusFilter}
-					onChange={applyFilters}
-				/>
+				<Select id="route-status-filter" options={statusOptions} bind:value={statusFilter} />
 			</div>
 			<div class="filter-field">
 				<label for="route-date-filter">{m.route_filter_date_label()}</label>
@@ -279,26 +322,25 @@
 					id="route-date-filter"
 					bind:value={dateFilter}
 					placeholder={m.route_filter_date_placeholder()}
-					onchange={applyFilters}
 				/>
 			</div>
+			<div class="filter-actions">
+				<Button variant="secondary" onclick={resetFilters} fill>
+					{m.table_filter_clear_all()}
+				</Button>
+				<Button
+					onclick={() => {
+						applyFilters();
+						showFilterDrawer = false;
+					}}
+					fill
+				>
+					{m.common_confirm()}
+				</Button>
+			</div>
 		</div>
-
-		<div class="page-content">
-			<DataTable
-				{table}
-				loading={routeStore.isLoading}
-				emptyTitle={m.route_empty_state()}
-				emptyMessage={m.route_empty_state_message()}
-				showPagination={false}
-				cellComponents={{
-					status: statusCell,
-					actions: actionsCell
-				}}
-			/>
-		</div>
-	</div>
-</div>
+	</Drawer>
+{/if}
 
 <!-- Create Modal -->
 {#if showCreateModal}
@@ -409,43 +451,91 @@
 {/if}
 
 <style>
-	.page-surface {
-		min-height: 100vh;
-		background: var(--surface-secondary);
-	}
-
-	.page-stage {
-		max-width: 1200px;
-		margin: 0 auto;
-		padding: var(--spacing-4);
-	}
-
-	.page-header {
+	.cell-actions {
 		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		gap: var(--spacing-4);
-		margin-bottom: var(--spacing-4);
+		gap: var(--spacing-1);
 	}
 
-	.header-text h1 {
-		margin: 0;
-		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
+	/* Tab bar styling - matching Snapgrade pattern */
+	.tab-bar {
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		height: 48px;
+		flex-shrink: 0;
+		padding-bottom: 1px;
+		margin-bottom: -1px;
+	}
+
+	.tab {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 var(--spacing-3);
+		height: 32px;
+		border: none;
+		border-radius: var(--radius-lg);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--font-size-base);
+		font-weight: var(--font-weight-medium);
+		cursor: pointer;
+		z-index: 1;
+		transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+	}
+
+	.tab:not(.active):hover {
+		background: var(--interactive-hover);
 		color: var(--text-normal);
 	}
 
-	.header-text p {
-		margin: var(--spacing-1) 0 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-muted);
+	.tab.active {
+		align-self: flex-end;
+		height: 48px;
+		background: var(--surface-primary);
+		color: var(--text-normal);
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+		margin-bottom: -1px;
+		z-index: 10;
 	}
 
-	.filters {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: var(--spacing-3);
-		margin-bottom: var(--spacing-4);
+	.tab.active::before,
+	.tab.active::after {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		width: var(--radius-lg);
+		height: var(--radius-lg);
+		pointer-events: none;
+		z-index: 1;
+	}
+
+	.tab.active::before {
+		left: calc(var(--radius-lg) * -1);
+		background: radial-gradient(
+			circle at 0 0,
+			transparent var(--radius-lg),
+			var(--surface-primary) calc(var(--radius-lg) + 0.5px)
+		);
+	}
+
+	.tab.active::after {
+		right: calc(var(--radius-lg) * -1);
+		background: radial-gradient(
+			circle at 100% 0,
+			transparent var(--radius-lg),
+			var(--surface-primary) calc(var(--radius-lg) + 0.5px)
+		);
+	}
+
+	/* Filter drawer form */
+	.filter-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
+		padding: var(--spacing-4);
 	}
 
 	.filter-field {
@@ -460,17 +550,13 @@
 		color: var(--text-normal);
 	}
 
-	.page-content {
-		background: var(--surface-primary);
-		border-radius: var(--radius-lg);
-		overflow: hidden;
-	}
-
-	.cell-actions {
+	.filter-actions {
 		display: flex;
-		gap: var(--spacing-1);
+		gap: var(--spacing-2);
+		margin-top: var(--spacing-2);
 	}
 
+	/* Modal form */
 	.modal-form {
 		display: flex;
 		flex-direction: column;
@@ -499,11 +585,5 @@
 		display: flex;
 		gap: var(--spacing-2);
 		margin-top: var(--spacing-2);
-	}
-
-	@media (max-width: 900px) {
-		.filters {
-			grid-template-columns: 1fr;
-		}
 	}
 </style>
