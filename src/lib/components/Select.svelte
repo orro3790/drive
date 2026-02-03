@@ -19,7 +19,7 @@ The select border turns red when errors are present.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
-	import { onMount, onDestroy, tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import type { SelectOption } from '$lib/schemas/ui/select';
@@ -80,12 +80,9 @@ The select border turns red when errors are present.
 	onMount(() => {
 		id = idProp || `select-${window.crypto.randomUUID()}`;
 		document.addEventListener('click', handleClickOutside, true);
-	});
-
-	onDestroy(() => {
-		if (typeof document !== 'undefined') {
+		return () => {
 			document.removeEventListener('click', handleClickOutside, true);
-		}
+		};
 	});
 
 	function toggleDropdown() {
