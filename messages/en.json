@@ -379,7 +379,7 @@
 
 	"dashboard_week_section_this": "This Week",
 	"dashboard_week_section_next": "Next Week",
-	"dashboard_week_days_assigned": "{count} {count, plural, one {day} other {days}} scheduled",
+	"dashboard_week_days_assigned": "{count} days scheduled",
 	"dashboard_week_no_shifts": "No shifts scheduled",
 
 	"dashboard_metrics_section": "Your Metrics",
