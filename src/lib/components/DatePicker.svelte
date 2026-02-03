@@ -31,7 +31,7 @@
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
 	import Calendar from '$lib/components/icons/Calendar.svelte';
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte';
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte';
@@ -358,10 +358,9 @@
 
 	onMount(() => {
 		document.addEventListener('click', handleClickOutside, true);
-	});
-
-	onDestroy(() => {
-		document.removeEventListener('click', handleClickOutside, true);
+		return () => {
+			document.removeEventListener('click', handleClickOutside, true);
+		};
 	});
 
 	function parseDate(str: string): Date | null {

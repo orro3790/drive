@@ -4,6 +4,8 @@ Collapsible navigation sidebar for the app shell.
 
 Desktop: Persistent sidebar, 220px expanded / ~50px collapsed
 Mobile: Hidden by default, hamburger in header opens overlay
+
+@prop role - User role ('driver' | 'manager') determines which nav items display
 -->
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
@@ -14,13 +16,20 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import { authClient } from '$lib/auth-client';
 
 	// Import icons
-	import Analytics from '$lib/components/icons/Analytics.svelte';
-	import Kanban from '$lib/components/icons/Kanban.svelte';
+	import Calendar from '$lib/components/icons/Calendar.svelte';
+	import CalendarCog from '$lib/components/icons/CalendarCog.svelte';
 	import MapPin from '$lib/components/icons/MapPin.svelte';
+	import Building from '$lib/components/icons/Building.svelte';
+	import Avatar from '$lib/components/icons/Avatar.svelte';
+	import Settings from '$lib/components/icons/Settings.svelte';
 	import Logout from '$lib/components/icons/Logout.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import SidebarItem from './SidebarItem.svelte';
 	import type { Component } from 'svelte';
+
+	type UserRole = 'driver' | 'manager';
+
+	let { role }: { role: UserRole } = $props();
 
 	let isLoggingOut = $state(false);
 
@@ -35,26 +44,37 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	const isMobile = $derived(appSidebarStore.state.isMobile);
 	let currentPath = $derived($page.url.pathname);
 
-	const navItems: NavItem[] = [
+	const driverNavItems: NavItem[] = [
 		{
-			id: 'pipeline',
-			label: () => m.pipeline_title(),
-			Icon: Kanban,
-			path: '/pipeline'
-		},
-		{
-			id: 'explorer',
-			label: () => m.explorer_title(),
-			Icon: MapPin,
-			path: '/explorer'
-		},
-		{
-			id: 'analytics',
-			label: () => m.analytics_title(),
-			Icon: Analytics,
-			path: '/analytics'
+			id: 'schedule',
+			label: () => m.nav_schedule(),
+			Icon: Calendar,
+			path: '/schedule'
 		}
 	];
+
+	const managerNavItems: NavItem[] = [
+		{
+			id: 'drivers',
+			label: () => m.nav_drivers(),
+			Icon: Avatar,
+			path: '/drivers'
+		},
+		{
+			id: 'routes',
+			label: () => m.nav_routes(),
+			Icon: MapPin,
+			path: '/routes'
+		},
+		{
+			id: 'warehouses',
+			label: () => m.nav_warehouses(),
+			Icon: Building,
+			path: '/warehouses'
+		}
+	];
+
+	const navItems = $derived(role === 'manager' ? managerNavItems : driverNavItems);
 
 	function isSelected(path: string) {
 		return currentPath.startsWith(path);
@@ -135,8 +155,18 @@ Mobile: Hidden by default, hamburger in header opens overlay
 			{/each}
 		</div>
 
-		<!-- Footer: language toggle + logout -->
+		<!-- Footer: settings, language toggle, logout -->
 		<div class="nav-group nav-bottom">
+			<SidebarItem
+				label={m.nav_settings()}
+				onClick={() => handleNavClick('/settings')}
+				selected={isSelected('/settings')}
+			>
+				{#snippet icon()}
+					<Icon><Settings /></Icon>
+				{/snippet}
+			</SidebarItem>
+
 			{#if SHOW_LANGUAGE_TOGGLE}
 				<button
 					class="lang-toggle"

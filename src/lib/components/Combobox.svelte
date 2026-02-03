@@ -139,6 +139,9 @@ The combobox border turns red when errors are present.
 	onMount(() => {
 		id = idProp || `combobox-${window.crypto.randomUUID()}`;
 		document.addEventListener('click', handleClickOutside, true);
+		return () => {
+			document.removeEventListener('click', handleClickOutside, true);
+		};
 	});
 
 	onDestroy(() => {
@@ -146,9 +149,6 @@ The combobox border turns red when errors are present.
 			activeFetchAbort?.abort();
 		} catch {
 			/* noop */
-		}
-		if (typeof document !== 'undefined') {
-			document.removeEventListener('click', handleClickOutside, true);
 		}
 	});
 

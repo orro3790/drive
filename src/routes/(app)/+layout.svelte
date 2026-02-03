@@ -1,19 +1,23 @@
 <!--
-	Manager Layout
+	App Layout
 
-	Provides the app shell for manager-only pages.
-	Role guard is enforced in +layout.server.ts.
+	Provides the app shell for shared pages accessible to any authenticated user.
+	Auth guard is enforced in +layout.server.ts.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import AppSidebar from '$lib/components/app-shell/AppSidebar.svelte';
 	import PageHeader from '$lib/components/app-shell/PageHeader.svelte';
+	import type { LayoutData } from './$types';
 
-	let { children }: { children: Snippet } = $props();
+	let { children, data }: { children: Snippet; data: LayoutData } = $props();
+
+	// Determine role from user data
+	const role = $derived((data.user?.role as 'driver' | 'manager') ?? 'driver');
 </script>
 
 <div class="app-shell">
-	<AppSidebar role="manager" />
+	<AppSidebar {role} />
 	<div class="main-area">
 		<PageHeader />
 		<main class="content">

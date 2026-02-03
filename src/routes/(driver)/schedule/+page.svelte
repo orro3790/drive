@@ -295,7 +295,7 @@
 <style>
 	.page-surface {
 		min-height: 100vh;
-		background: var(--surface-secondary);
+		background: var(--surface-inset);
 	}
 
 	.page-stage {
