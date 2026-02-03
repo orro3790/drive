@@ -131,7 +131,6 @@
 		width: 100%;
 		height: 100%;
 		display: flex;
-		justify-content: center;
 		padding: var(--spacing-4) 0 var(--spacing-4) var(--spacing-4);
 		min-height: 0;
 	}
@@ -139,8 +138,7 @@
 	.settings-unified-card {
 		display: flex;
 		flex-direction: row;
-		width: 100%;
-		max-width: 1200px;
+		flex: 1;
 		height: 100%;
 		overflow: hidden;
 		background: var(--surface-primary);
