@@ -24,6 +24,7 @@ export const user = pgTable('user', {
 	weeklyCap: integer('weekly_cap').notNull().default(4),
 	isFlagged: boolean('is_flagged').notNull().default(false),
 	flagWarningDate: timestamp('flag_warning_date', { withTimezone: true }),
+	fcmToken: text('fcm_token'),
 	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
