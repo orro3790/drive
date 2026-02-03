@@ -345,5 +345,26 @@
 	"shift_complete_confirm_button": "Complete Shift",
 	"shift_complete_success": "Shift completed.",
 	"shift_complete_error": "Unable to complete shift.",
-	"shift_complete_warning_exceeds": "Total exceeds starting parcel count."
+	"shift_complete_warning_exceeds": "Total exceeds starting parcel count.",
+
+	"nav_bids": "Bids",
+
+	"bids_page_title": "Bids",
+	"bids_page_description": "View available shifts and submit bids.",
+	"bids_loading_label": "Loading bids...",
+	"bids_available_section": "Available Shifts",
+	"bids_available_empty_title": "No shifts available",
+	"bids_available_empty_message": "Check back later for open bidding windows.",
+	"bids_my_section": "My Bids",
+	"bids_my_empty_title": "No bids yet",
+	"bids_my_empty_message": "Submit a bid on an available shift to see it here.",
+	"bids_submit_button": "Bid",
+	"bids_submit_success": "Bid submitted successfully.",
+	"bids_load_available_error": "Failed to load available bids.",
+	"bids_load_mine_error": "Failed to load your bids.",
+	"bids_window_closes": "Closes {time}",
+	"bids_status_pending": "Pending",
+	"bids_status_won": "Won",
+	"bids_status_lost": "Lost",
+	"bids_submitted_at": "Submitted {time}"
 }
