@@ -2,7 +2,7 @@
 	Settings Page
 
 	Full-page settings with category nav on left and content on right.
-	Matches Snapgrade's SettingsShell pattern exactly.
+	Matches the Drive settings shell pattern.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';

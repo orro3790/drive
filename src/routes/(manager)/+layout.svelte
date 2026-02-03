@@ -25,8 +25,9 @@
 <style>
 	.app-shell {
 		display: flex;
-		min-height: 100vh;
+		height: 100vh;
 		background: var(--surface-inset);
+		overflow: hidden;
 	}
 
 	.main-area {
@@ -34,10 +35,14 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
+		min-height: 0;
 	}
 
 	.content {
 		flex: 1;
-		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
 	}
 </style>

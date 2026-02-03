@@ -2,6 +2,8 @@
 
 Development patterns and conventions for the Driver Operations Platform.
 
+Deep-dive index: `documentation/agent-guidelines/index.md`.
+
 ---
 
 ## Project Organization
@@ -9,23 +11,16 @@ Development patterns and conventions for the Driver Operations Platform.
 ```
 src/
 ├── routes/
-│   ├── (auth)/              # Auth pages (sign-in, sign-up)
-│   ├── (app)/               # Protected app routes
-│   │   ├── +layout.svelte   # App shell with sidebar
-│   │   ├── +page.svelte     # Dashboard
-│   │   ├── schedule/        # Schedule management
-│   │   ├── settings/        # User settings
-│   │   └── notifications/   # Notification inbox
-│   ├── (manager)/           # Manager-only routes
-│   │   ├── routes/          # Route management
-│   │   ├── drivers/         # Driver management
-│   │   └── warehouses/      # Warehouse management
-│   └── api/
-│       ├── auth/[...all]/   # Better Auth handler
-│       ├── assignments/     # Assignment CRUD
-│       ├── bids/            # Bidding system
+│   ├── (auth)/              # Auth pages (sign-in/sign-up/reset)
+│   ├── (app)/               # Shared authenticated pages (e.g., settings)
+│   ├── (driver)/            # Driver-only pages (dashboard/schedule/bids)
+│   ├── (manager)/           # Manager-only pages (warehouses/routes/admin)
+│   └── api/                 # JSON endpoints (auth handled in hooks)
+│       ├── assignments/     # Assignment endpoints
+│       ├── bids/            # Bidding endpoints
 │       ├── routes/          # Route CRUD
-│       └── users/           # User management
+│       ├── warehouses/      # Warehouse CRUD
+│       └── users/           # User management (FCM token)
 ├── lib/
 │   ├── components/
 │   │   ├── primitives/      # Button, Input, Modal, etc.
@@ -338,7 +333,7 @@ export const scheduleStore = {
 ### API/Server Errors → Toast
 
 ```typescript
-import { toastStore } from '$lib/stores/toastStore.svelte';
+import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 
 try {
 	await fetch('/api/...');
@@ -431,9 +426,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 ## Testing Standards
 
-- **Runner**: Vitest
-- **Location**: `tests/`
-- **Naming**: `{name}.test.ts`
+Current state:
+
+- No standardized unit-test runner is configured yet in this repo.
+- `@playwright/test` is installed for future E2E coverage.
+
+If you add tests:
+
+- Prefer Vitest for unit/integration tests.
+- Use a single `tests/` folder.
+- Naming: `{name}.test.ts`.
 
 **Test:**
 

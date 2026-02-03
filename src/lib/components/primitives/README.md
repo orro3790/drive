@@ -8,7 +8,7 @@ Primitives are:
 
 - **Foundational**: Used as building blocks by higher-level composites in `lib/components/`.
 - **Consistent**: Follow uniform prop/event naming and accessibility patterns.
-- **Tested**: Each primitive includes accessibility tests (keyboard, screen-reader, ARIA).
+- **Testable**: Keep behavior small and deterministic so tests are easy to add when needed.
 
 ## Accessibility Requirements
 
@@ -40,13 +40,13 @@ All primitives in this folder MUST:
 
 ## Testing
 
-Each primitive should include:
+When adding non-trivial behavior to a primitive, prefer to include:
 
 - **Unit tests**: Core logic (validation, state transitions).
 - **Accessibility tests**: Keyboard navigation, focus management, ARIA roles/states.
 - **Visual regression**: Snapshot tests for variants/sizes (if applicable).
 
-See `documentation/agent-guidelines/testing-standards.md` for full standards.
+See `docs/agent-guidelines.md` for current project conventions. `documentation/agent-guidelines/testing-standards.md` is legacy reference material.
 
 ## Examples
 
@@ -72,6 +72,7 @@ See `documentation/agent-guidelines/testing-standards.md` for full standards.
 
 ## References
 
-- [client-ui-conventions.mdc](../../../.cursor/rules/client-ui-conventions.mdc) — Icons, forms, design tokens
-- [testing-standards.md](../../../documentation/agent-guidelines/testing-standards.md) — Test structure and coverage
-- [project-organization.md](../../../documentation/agent-guidelines/project-organization.md) — Module structure
+- [design-system.md](../../../../documentation/agent-guidelines/design-system.md) — Icons, forms, design tokens
+- [accessibility-patterns.md](../../../../documentation/agent-guidelines/accessibility-patterns.md) — Keyboard, ARIA, focus management
+- [agent-guidelines.md](../../../../docs/agent-guidelines.md) — Project organization and module structure
+- [testing-standards.md](../../../../documentation/agent-guidelines/testing-standards.md) — Legacy test standards (not Drive-specific)

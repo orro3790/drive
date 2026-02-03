@@ -38,15 +38,16 @@ Tech stack interview **completed**. Specifications documented in `docs/specs/`. 
 
 ## Key Documents
 
-| Document            | Location                                                 |
-| ------------------- | -------------------------------------------------------- |
-| Technical Spec      | `docs/specs/tech-stack.md`                               |
-| Data Model          | `docs/specs/data-model.md`                               |
-| Agent Guidelines    | `docs/agent-guidelines.md`                               |
-| Domain Context      | `non-technical-specs.md`, `project-summary-condensed.md` |
-| ADR: Tech Stack     | `docs/adr/001-tech-stack.md`                             |
-| ADR: Bidding System | `docs/adr/002-replacement-bidding-system.md`             |
-| ADR: Scheduling     | `docs/adr/003-scheduling-model.md`                       |
+| Document               | Location                                                 |
+| ---------------------- | -------------------------------------------------------- |
+| Technical Spec         | `docs/specs/tech-stack.md`                               |
+| Data Model             | `docs/specs/data-model.md`                               |
+| Agent Guidelines       | `docs/agent-guidelines.md`                               |
+| Agent Guidelines Index | `documentation/agent-guidelines/index.md`                |
+| Domain Context         | `non-technical-specs.md`, `project-summary-condensed.md` |
+| ADR: Tech Stack        | `docs/adr/001-tech-stack.md`                             |
+| ADR: Bidding System    | `docs/adr/002-replacement-bidding-system.md`             |
+| ADR: Scheduling        | `docs/adr/003-scheduling-model.md`                       |
 
 ## Server Services
 
@@ -56,6 +57,8 @@ Business logic in `src/lib/server/services/`:
 - `notifications.ts` - Push notifications via FCM (`sendNotification`, `sendBulkNotifications`)
 
 See `docs/agent-guidelines.md` for detailed usage patterns.
+
+For deeper conventions and patterns, start at `documentation/agent-guidelines/index.md`.
 
 ## Driver API Endpoints
 

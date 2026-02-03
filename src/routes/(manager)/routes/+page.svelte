@@ -6,7 +6,7 @@
 	- CRUD operations on routes
 	- Row click shows assignment details in side panel
 
-	Uses DataTable with tabs/toolbar pattern matching Snapgrade design.
+	Uses DataTable with Drive tabs/toolbar pattern.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
@@ -16,8 +16,10 @@
 		createSvelteTable,
 		getCoreRowModel,
 		getSortedRowModel,
+		getPaginationRowModel,
 		createColumnHelper,
 		type SortingState,
+		type PaginationState,
 		type CellRendererContext
 	} from '$lib/components/data-table';
 	import Modal from '$lib/components/primitives/Modal.svelte';
@@ -59,6 +61,7 @@
 
 	// Table state
 	let sorting = $state<SortingState>([]);
+	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
 
 	const helper = createColumnHelper<RouteWithWarehouse>();
 
@@ -96,13 +99,18 @@
 		data: routeStore.routes,
 		columns,
 		state: {
-			sorting
+			sorting,
+			pagination
 		},
 		onSortingChange: (updater) => {
 			sorting = typeof updater === 'function' ? updater(sorting) : updater;
 		},
+		onPaginationChange: (updater) => {
+			pagination = typeof updater === 'function' ? updater(pagination) : updater;
+		},
 		getCoreRowModel: getCoreRowModel(),
-		getSortedRowModel: getSortedRowModel()
+		getSortedRowModel: getSortedRowModel(),
+		getPaginationRowModel: getPaginationRowModel()
 	}));
 
 	const statusLabels: Record<RouteStatus, string> = {
@@ -323,12 +331,13 @@
 	<title>{m.route_page_title()} | Drive</title>
 </svelte:head>
 
-<DataTable
+<div class="page-surface">
+	<DataTable
 	{table}
 	loading={routeStore.isLoading}
 	emptyTitle={m.route_empty_state()}
 	emptyMessage={m.route_empty_state_message()}
-	showPagination={false}
+	showPagination
 	showColumnVisibility
 	showExport
 	exportFilename="routes"
@@ -340,7 +349,8 @@
 		actions: actionsCell
 	}}
 	onRowClick={handleRowClick}
-/>
+	/>
+</div>
 
 <!-- Filter Drawer -->
 {#if showFilterDrawer}
@@ -621,7 +631,7 @@
 		text-align: center;
 	}
 
-	/* Tab bar styling - matching Snapgrade pattern */
+	/* Tab bar styling - matching Drive pattern */
 	.tab-bar {
 		position: relative;
 		display: flex;

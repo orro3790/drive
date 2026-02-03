@@ -9,7 +9,7 @@
 </div>
 
 <style>
-	/* Auth shell - matches Snapgrade's AuthLayout.svelte login variant */
+	/* Auth shell layout */
 	.auth-shell {
 		min-height: 100vh;
 		display: flex;
