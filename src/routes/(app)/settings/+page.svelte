@@ -175,9 +175,10 @@
 		margin-inline: auto;
 	}
 
-	/* Constrain sections */
+	/* Constrain sections and add right padding since card extends to edge */
 	.settings-content-area > :global(*) {
 		width: 100%;
+		padding-right: var(--spacing-4);
 	}
 
 	/* Mobile responsive - drill-down navigation */
