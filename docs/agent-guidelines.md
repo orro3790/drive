@@ -78,6 +78,56 @@ const result = await generateWeekSchedule(mondayDate);
 console.log(`Created: ${result.created}, Unfilled: ${result.unfilled}`);
 ```
 
+#### `notifications.ts`
+
+Push notification service using Firebase Cloud Messaging (FCM) for sending time-sensitive alerts to drivers.
+
+**Key Functions:**
+
+- `sendNotification(userId, type, options?)` - Send notification to a single user (creates in-app record + FCM push)
+- `sendBulkNotifications(userIds, type, options?)` - Send same notification to multiple users with batching
+
+**Notification Types:**
+
+- `shift_reminder` - Morning of shift
+- `bid_open` - Bid window opens
+- `bid_won` / `bid_lost` - Bid results
+- `shift_cancelled` - Assignment cancelled
+- `warning` - Driver flagged
+- `manual` - Manager message
+- `schedule_locked` - Preferences locked
+- `assignment_confirmed` - New shift assigned
+
+**Usage:**
+
+```typescript
+import { sendNotification, sendBulkNotifications } from '$lib/server/services/notifications';
+
+// Single notification
+await sendNotification(userId, 'shift_reminder', {
+	data: { shiftId: '123', routeName: 'Route A' }
+});
+
+// Custom message
+await sendNotification(userId, 'manual', {
+	customTitle: 'Schedule Change',
+	customBody: 'Your route has been updated for tomorrow.'
+});
+
+// Bulk notification to eligible drivers
+const driverIds = ['id1', 'id2', 'id3'];
+await sendBulkNotifications(driverIds, 'bid_open', {
+	data: { bidId: '456', routeName: 'Route B' }
+});
+```
+
+**Behavior:**
+
+- Always creates in-app notification record in database
+- Sends FCM push if user has registered token
+- Gracefully handles missing FCM credentials or invalid tokens
+- Returns `{ inAppCreated, pushSent, pushError? }` for observability
+
 **Implementation Details:**
 
 - Idempotent: Checks for existing assignments before creating new ones
@@ -181,6 +231,38 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 - `403` - Not authorized
 - `404` - Not found
 - `500` - Server error
+
+### Available API Endpoints
+
+#### `POST /api/users/fcm-token`
+
+Register or update user's FCM token for push notifications.
+
+**Request:**
+
+```typescript
+{ token: string }
+```
+
+**Response:**
+
+```typescript
+{ success: true }
+```
+
+**Auth:** Required
+
+#### `DELETE /api/users/fcm-token`
+
+Remove user's FCM token (e.g., on logout or app uninstall).
+
+**Response:**
+
+```typescript
+{ success: true }
+```
+
+**Auth:** Required
 
 ---
 
