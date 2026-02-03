@@ -1,14 +1,21 @@
 /**
  * Route API - List & Create
  *
- * GET  /api/routes - List all routes (with warehouse + status)
+ * GET  /api/routes - List all routes (with warehouse + status + driver info)
  * POST /api/routes - Create a new route
  */
 
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, auditLogs, bidWindows, routes, warehouses } from '$lib/server/db/schema';
+import {
+	assignments,
+	auditLogs,
+	bidWindows,
+	routes,
+	user,
+	warehouses
+} from '$lib/server/db/schema';
 import { routeCreateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, eq, inArray } from 'drizzle-orm';
 
@@ -25,10 +32,16 @@ function isValidDate(value: string) {
 	return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-function resolveStatus(assignment?: {
+type AssignmentInfo = {
+	assignmentId: string;
 	status: string;
+	userId: string | null;
+	driverName: string | null;
 	bidWindowStatus: string | null;
-}): RouteStatus {
+	bidWindowClosesAt: Date | null;
+};
+
+function resolveStatus(assignment?: AssignmentInfo): RouteStatus {
 	if (!assignment) return 'unfilled';
 	if (assignment.status === 'unfilled') {
 		return assignment.bidWindowStatus === 'open' ? 'bidding' : 'unfilled';
@@ -76,25 +89,51 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		: await baseQuery;
 	const routeIds = routeRows.map((route) => route.id);
 
+	// Fetch assignments with driver info and bid window details
 	const assignmentRows = routeIds.length
 		? await db
 				.select({
 					routeId: assignments.routeId,
+					assignmentId: assignments.id,
 					status: assignments.status,
-					bidWindowStatus: bidWindows.status
+					userId: assignments.userId,
+					driverName: user.name,
+					bidWindowStatus: bidWindows.status,
+					bidWindowClosesAt: bidWindows.closesAt
 				})
 				.from(assignments)
+				.leftJoin(user, eq(user.id, assignments.userId))
 				.leftJoin(bidWindows, eq(bidWindows.assignmentId, assignments.id))
 				.where(and(eq(assignments.date, date), inArray(assignments.routeId, routeIds)))
 		: [];
 
-	const assignmentMap = new Map(assignmentRows.map((row) => [row.routeId, row]));
+	const assignmentMap = new Map(
+		assignmentRows.map((row) => [
+			row.routeId,
+			{
+				assignmentId: row.assignmentId,
+				status: row.status,
+				userId: row.userId,
+				driverName: row.driverName,
+				bidWindowStatus: row.bidWindowStatus,
+				bidWindowClosesAt: row.bidWindowClosesAt
+			}
+		])
+	);
 
 	const routesWithStatus = routeRows
-		.map((route) => ({
-			...route,
-			status: resolveStatus(assignmentMap.get(route.id))
-		}))
+		.map((route) => {
+			const assignment = assignmentMap.get(route.id);
+			const status = resolveStatus(assignment);
+			return {
+				...route,
+				status,
+				assignmentId: assignment?.assignmentId ?? null,
+				driverName: status === 'assigned' ? (assignment?.driverName ?? null) : null,
+				bidWindowClosesAt:
+					status === 'bidding' ? (assignment?.bidWindowClosesAt?.toISOString() ?? null) : null
+			};
+		})
 		.filter((route) => (statusFilter ? route.status === statusFilter : true));
 
 	return json({ routes: routesWithStatus, date });
