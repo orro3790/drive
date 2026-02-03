@@ -104,7 +104,8 @@
 											variant="primary"
 											size="small"
 											onclick={() => handleSubmitBid(window.assignmentId)}
-											isLoading={bidsStore.isSubmitting}
+											isLoading={bidsStore.isSubmitting(window.assignmentId)}
+											disabled={bidsStore.submittingAssignmentId !== null}
 										>
 											{m.bids_submit_button()}
 										</Button>

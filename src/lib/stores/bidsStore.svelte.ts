@@ -37,14 +37,14 @@ const state = $state<{
 	myBids: DriverBid[];
 	isLoadingAvailable: boolean;
 	isLoadingMyBids: boolean;
-	isSubmitting: boolean;
+	submittingAssignmentId: string | null;
 	error: string | null;
 }>({
 	availableWindows: [],
 	myBids: [],
 	isLoadingAvailable: false,
 	isLoadingMyBids: false,
-	isSubmitting: false,
+	submittingAssignmentId: null,
 	error: null
 });
 
@@ -61,8 +61,11 @@ export const bidsStore = {
 	get isLoadingMyBids() {
 		return state.isLoadingMyBids;
 	},
-	get isSubmitting() {
-		return state.isSubmitting;
+	get submittingAssignmentId() {
+		return state.submittingAssignmentId;
+	},
+	isSubmitting(assignmentId: string) {
+		return state.submittingAssignmentId === assignmentId;
 	},
 	get error() {
 		return state.error;
@@ -113,7 +116,7 @@ export const bidsStore = {
 	},
 
 	async submitBid(assignmentId: string) {
-		state.isSubmitting = true;
+		state.submittingAssignmentId = assignmentId;
 
 		try {
 			const res = await fetch('/api/bids', {
@@ -137,7 +140,7 @@ export const bidsStore = {
 			toastStore.error(message);
 			return false;
 		} finally {
-			state.isSubmitting = false;
+			state.submittingAssignmentId = null;
 		}
 	}
 };

@@ -24,8 +24,14 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	const log = logger.child({ operation: 'submitBid', userId: locals.user.id });
 
-	const body = await request.json();
-	const { assignmentId } = body;
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
+	const { assignmentId } = body as { assignmentId?: unknown };
 
 	if (!assignmentId || typeof assignmentId !== 'string') {
 		throw error(400, 'assignmentId is required');
