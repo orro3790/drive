@@ -2,7 +2,8 @@
 	"crons": [
 		{
 			"path": "/api/cron/lock-preferences",
-			"schedule": "59 23 * * 0"
+			"schedule": "59 23 * * 0",
+			"timezone": "America/Toronto"
 		},
 		{
 			"path": "/api/cron/close-bid-windows",
