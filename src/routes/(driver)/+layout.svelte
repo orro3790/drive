@@ -38,13 +38,6 @@
 
 	.content {
 		flex: 1;
-		padding: var(--spacing-4);
 		overflow-y: auto;
-	}
-
-	@media (max-width: 767px) {
-		.content {
-			padding: var(--spacing-3);
-		}
 	}
 </style>
