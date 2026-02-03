@@ -8,7 +8,14 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, auditLogs, bidWindows, routes, warehouses } from '$lib/server/db/schema';
+import {
+	assignments,
+	auditLogs,
+	bidWindows,
+	routes,
+	user,
+	warehouses
+} from '$lib/server/db/schema';
 import { routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, eq, ne, gt, count } from 'drizzle-orm';
 
@@ -23,10 +30,15 @@ function isValidDate(value: string) {
 	return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-function resolveStatus(assignment?: {
+type AssignmentDetails = {
+	assignmentId: string;
 	status: string;
+	driverName: string | null;
 	bidWindowStatus: string | null;
-}): RouteStatus {
+	bidWindowClosesAt: Date | null;
+};
+
+function resolveStatus(assignment: AssignmentDetails | null): RouteStatus {
 	if (!assignment) return 'unfilled';
 	if (assignment.status === 'unfilled') {
 		return assignment.bidWindowStatus === 'open' ? 'bidding' : 'unfilled';
@@ -34,17 +46,24 @@ function resolveStatus(assignment?: {
 	return 'assigned';
 }
 
-async function getRouteStatus(routeId: string, date: string): Promise<RouteStatus> {
+async function getRouteAssignmentDetails(
+	routeId: string,
+	date: string
+): Promise<AssignmentDetails | null> {
 	const [assignment] = await db
 		.select({
+			assignmentId: assignments.id,
 			status: assignments.status,
-			bidWindowStatus: bidWindows.status
+			driverName: user.name,
+			bidWindowStatus: bidWindows.status,
+			bidWindowClosesAt: bidWindows.closesAt
 		})
 		.from(assignments)
+		.leftJoin(user, eq(user.id, assignments.userId))
 		.leftJoin(bidWindows, eq(bidWindows.assignmentId, assignments.id))
 		.where(and(eq(assignments.routeId, routeId), eq(assignments.date, date)));
 
-	return resolveStatus(assignment);
+	return assignment ?? null;
 }
 
 export const PATCH: RequestHandler = async ({ locals, params, request, url }) => {
@@ -90,8 +109,18 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 	}
 
 	if (Object.keys(updates).length === 0) {
-		const status = await getRouteStatus(id, date);
-		return json({ route: { ...existing, status } });
+		const assignment = await getRouteAssignmentDetails(id, date);
+		const status = resolveStatus(assignment);
+		return json({
+			route: {
+				...existing,
+				status,
+				assignmentId: assignment?.assignmentId ?? null,
+				driverName: status === 'assigned' ? (assignment?.driverName ?? null) : null,
+				bidWindowClosesAt:
+					status === 'bidding' ? (assignment?.bidWindowClosesAt?.toISOString() ?? null) : null
+			}
+		});
 	}
 
 	const nextName = updates.name ?? existing.name;
@@ -141,13 +170,18 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 		changes: updates
 	});
 
-	const status = await getRouteStatus(id, date);
+	const assignment = await getRouteAssignmentDetails(id, date);
+	const status = resolveStatus(assignment);
 
 	return json({
 		route: {
 			...updated,
 			warehouseName: nextWarehouseName,
-			status
+			status,
+			assignmentId: assignment?.assignmentId ?? null,
+			driverName: status === 'assigned' ? (assignment?.driverName ?? null) : null,
+			bidWindowClosesAt:
+				status === 'bidding' ? (assignment?.bidWindowClosesAt?.toISOString() ?? null) : null
 		}
 	});
 };

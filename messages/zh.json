@@ -159,5 +159,20 @@
 	"settings_session_section": "会话",
 	"settings_sign_out_button": "退出登录",
 	"settings_sign_out_confirm_title": "退出登录",
-	"settings_sign_out_confirm_message": "确定要退出登录吗？"
+	"settings_sign_out_confirm_message": "确定要退出登录吗？",
+
+	"manager_dashboard_page_title": "路线概览",
+	"manager_dashboard_page_description": "监控路线覆盖和分配状态。",
+	"manager_dashboard_driver_header": "司机",
+	"manager_dashboard_driver_unassigned": "未分配",
+	"manager_dashboard_bid_closes": "{time} 后结束",
+	"manager_dashboard_detail_title": "分配详情",
+	"manager_dashboard_detail_route": "路线",
+	"manager_dashboard_detail_warehouse": "仓库",
+	"manager_dashboard_detail_date": "日期",
+	"manager_dashboard_detail_status": "状态",
+	"manager_dashboard_detail_driver": "司机",
+	"manager_dashboard_detail_bid_window": "竞标窗口",
+	"manager_dashboard_detail_no_assignment": "该日期无分配",
+	"manager_dashboard_assign_button": "分配司机"
 }

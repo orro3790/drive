@@ -394,5 +394,20 @@
 	"dashboard_bids_view_all": "View all bids",
 
 	"dashboard_new_driver_title": "Welcome to Drive!",
-	"dashboard_new_driver_message": "Your first scheduled shifts will appear in approximately 2 weeks. In the meantime, you can bid on available shifts to start working sooner."
+	"dashboard_new_driver_message": "Your first scheduled shifts will appear in approximately 2 weeks. In the meantime, you can bid on available shifts to start working sooner.",
+
+	"manager_dashboard_page_title": "Routes Overview",
+	"manager_dashboard_page_description": "Monitor route coverage and assignment status.",
+	"manager_dashboard_driver_header": "Driver",
+	"manager_dashboard_driver_unassigned": "Unassigned",
+	"manager_dashboard_bid_closes": "Closes {time}",
+	"manager_dashboard_detail_title": "Assignment Details",
+	"manager_dashboard_detail_route": "Route",
+	"manager_dashboard_detail_warehouse": "Warehouse",
+	"manager_dashboard_detail_date": "Date",
+	"manager_dashboard_detail_status": "Status",
+	"manager_dashboard_detail_driver": "Driver",
+	"manager_dashboard_detail_bid_window": "Bid Window",
+	"manager_dashboard_detail_no_assignment": "No assignment for this date",
+	"manager_dashboard_assign_button": "Assign Driver"
 }

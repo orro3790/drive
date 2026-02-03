@@ -1,7 +1,11 @@
 <!--
-	Route Management Page
+	Route Management Page (Manager Dashboard)
 
-	Manager-only page for CRUD operations on routes.
+	Manager's main dashboard showing:
+	- Route coverage status with assignment details
+	- CRUD operations on routes
+	- Row click shows assignment details in side panel
+
 	Uses DataTable with tabs/toolbar pattern matching Snapgrade design.
 -->
 <script lang="ts">
@@ -41,6 +45,7 @@
 	let editingRoute = $state<RouteWithWarehouse | null>(null);
 	let deleteConfirm = $state<{ route: RouteWithWarehouse; x: number; y: number } | null>(null);
 	let showFilterDrawer = $state(false);
+	let selectedRoute = $state<RouteWithWarehouse | null>(null);
 
 	// Form state
 	let formName = $state('');
@@ -69,6 +74,11 @@
 			sortable: true,
 			mobileVisible: true,
 			mobilePriority: 2
+		}),
+		helper.display({
+			id: 'driver',
+			header: m.manager_dashboard_driver_header(),
+			width: 160
 		}),
 		helper.display({
 			id: 'status',
@@ -134,6 +144,33 @@
 		statusFilter = '';
 		dateFilter = toLocalYmd();
 		applyFilters();
+	}
+
+	function formatDate(dateStr: string) {
+		const date = new Date(dateStr + 'T00:00:00');
+		return date.toLocaleDateString(undefined, {
+			weekday: 'short',
+			month: 'short',
+			day: 'numeric'
+		});
+	}
+
+	function formatRelativeTime(isoString: string) {
+		const date = new Date(isoString);
+		const now = new Date();
+		const diffMs = date.getTime() - now.getTime();
+		const diffMins = Math.round(diffMs / 60000);
+
+		if (diffMins < 0) return 'Closed';
+		if (diffMins < 60) return `${diffMins}m`;
+		const diffHours = Math.round(diffMins / 60);
+		if (diffHours < 24) return `${diffHours}h`;
+		const diffDays = Math.round(diffHours / 24);
+		return `${diffDays}d`;
+	}
+
+	function handleRowClick(route: RouteWithWarehouse, _event: MouseEvent) {
+		selectedRoute = route;
 	}
 
 	function openCreateModal() {
@@ -228,6 +265,18 @@
 	});
 </script>
 
+{#snippet driverCell(ctx: CellRendererContext<RouteWithWarehouse>)}
+	{#if ctx.row.status === 'assigned' && ctx.row.driverName}
+		<span class="driver-name">{ctx.row.driverName}</span>
+	{:else if ctx.row.status === 'bidding' && ctx.row.bidWindowClosesAt}
+		<span class="bid-closes">
+			{m.manager_dashboard_bid_closes({ time: formatRelativeTime(ctx.row.bidWindowClosesAt) })}
+		</span>
+	{:else}
+		<span class="driver-unassigned">{m.manager_dashboard_driver_unassigned()}</span>
+	{/if}
+{/snippet}
+
 {#snippet statusCell(ctx: CellRendererContext<RouteWithWarehouse>)}
 	<Chip
 		variant="status"
@@ -286,9 +335,11 @@
 	tabs={tabsSnippet}
 	toolbar={toolbarSnippet}
 	cellComponents={{
+		driver: driverCell,
 		status: statusCell,
 		actions: actionsCell
 	}}
+	onRowClick={handleRowClick}
 />
 
 <!-- Filter Drawer -->
@@ -441,10 +492,133 @@
 	/>
 {/if}
 
+<!-- Detail Drawer -->
+{#if selectedRoute}
+	<Drawer title={m.manager_dashboard_detail_title()} onClose={() => (selectedRoute = null)}>
+		<div class="detail-content">
+			<dl class="detail-list">
+				<div class="detail-row">
+					<dt>{m.manager_dashboard_detail_route()}</dt>
+					<dd>{selectedRoute.name}</dd>
+				</div>
+				<div class="detail-row">
+					<dt>{m.manager_dashboard_detail_warehouse()}</dt>
+					<dd>{selectedRoute.warehouseName}</dd>
+				</div>
+				<div class="detail-row">
+					<dt>{m.manager_dashboard_detail_date()}</dt>
+					<dd>{formatDate(dateFilter)}</dd>
+				</div>
+				<div class="detail-row">
+					<dt>{m.manager_dashboard_detail_status()}</dt>
+					<dd>
+						<Chip
+							variant="status"
+							status={statusChip[selectedRoute.status]}
+							label={statusLabels[selectedRoute.status]}
+							size="xs"
+						/>
+					</dd>
+				</div>
+				{#if selectedRoute.status === 'assigned' && selectedRoute.driverName}
+					<div class="detail-row">
+						<dt>{m.manager_dashboard_detail_driver()}</dt>
+						<dd>{selectedRoute.driverName}</dd>
+					</div>
+				{/if}
+				{#if selectedRoute.status === 'bidding' && selectedRoute.bidWindowClosesAt}
+					<div class="detail-row">
+						<dt>{m.manager_dashboard_detail_bid_window()}</dt>
+						<dd>
+							{m.manager_dashboard_bid_closes({
+								time: formatRelativeTime(selectedRoute.bidWindowClosesAt)
+							})}
+						</dd>
+					</div>
+				{/if}
+			</dl>
+
+			{#if selectedRoute.status === 'unfilled'}
+				<div class="detail-actions">
+					<Button fill disabled>
+						{m.manager_dashboard_assign_button()}
+					</Button>
+					<p class="detail-hint">Manual assignment coming soon (DRV-5iz)</p>
+				</div>
+			{/if}
+		</div>
+	</Drawer>
+{/if}
+
 <style>
 	.cell-actions {
 		display: flex;
 		gap: var(--spacing-1);
+	}
+
+	/* Driver cell styling */
+	.driver-name {
+		color: var(--text-normal);
+	}
+
+	.driver-unassigned {
+		color: var(--text-muted);
+		font-style: italic;
+	}
+
+	.bid-closes {
+		color: var(--status-info);
+		font-size: var(--font-size-sm);
+	}
+
+	/* Detail drawer */
+	.detail-content {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-6);
+	}
+
+	.detail-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+		margin: 0;
+	}
+
+	.detail-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: var(--spacing-2) 0;
+		border-bottom: 1px solid var(--border-muted);
+	}
+
+	.detail-row:last-child {
+		border-bottom: none;
+	}
+
+	.detail-row dt {
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+	}
+
+	.detail-row dd {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--text-normal);
+	}
+
+	.detail-actions {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+	}
+
+	.detail-hint {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--text-muted);
+		text-align: center;
 	}
 
 	/* Tab bar styling - matching Snapgrade pattern */

@@ -12,6 +12,9 @@ import * as m from '$lib/paraglide/messages.js';
 export type RouteWithWarehouse = Route & {
 	warehouseName: string;
 	status: RouteStatus;
+	assignmentId: string | null;
+	driverName: string | null;
+	bidWindowClosesAt: string | null;
 };
 
 export type RouteFilters = {
@@ -100,7 +103,10 @@ export const routeStore = {
 			createdBy: null,
 			createdAt: now,
 			updatedAt: now,
-			status: 'unfilled'
+			status: 'unfilled',
+			assignmentId: null,
+			driverName: null,
+			bidWindowClosesAt: null
 		};
 
 		if (matchesFilters(optimisticRoute, state.filters)) {
