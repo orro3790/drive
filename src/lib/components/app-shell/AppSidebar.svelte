@@ -19,6 +19,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import Award from '$lib/components/icons/Award.svelte';
 	import Calendar from '$lib/components/icons/Calendar.svelte';
 	import CalendarCog from '$lib/components/icons/CalendarCog.svelte';
+	import Home from '$lib/components/icons/Home.svelte';
 	import MapPin from '$lib/components/icons/MapPin.svelte';
 	import Building from '$lib/components/icons/Building.svelte';
 	import Avatar from '$lib/components/icons/Avatar.svelte';
@@ -46,6 +47,12 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	let currentPath = $derived($page.url.pathname);
 
 	const driverNavItems: NavItem[] = [
+		{
+			id: 'dashboard',
+			label: () => m.nav_dashboard(),
+			Icon: Home,
+			path: '/dashboard'
+		},
 		{
 			id: 'schedule',
 			label: () => m.nav_schedule(),

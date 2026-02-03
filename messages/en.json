@@ -366,5 +366,33 @@
 	"bids_status_pending": "Pending",
 	"bids_status_won": "Won",
 	"bids_status_lost": "Lost",
-	"bids_submitted_at": "Submitted {time}"
+	"bids_submitted_at": "Submitted {time}",
+
+	"dashboard_page_title": "Dashboard",
+	"dashboard_page_description": "Your daily overview and upcoming shifts.",
+	"dashboard_loading_label": "Loading dashboard...",
+	"dashboard_load_error": "Failed to load dashboard.",
+
+	"dashboard_today_section": "Today's Shift",
+	"dashboard_today_no_shift": "No shift today",
+	"dashboard_today_no_shift_message": "Check your schedule for upcoming assignments.",
+
+	"dashboard_week_section_this": "This Week",
+	"dashboard_week_section_next": "Next Week",
+	"dashboard_week_days_assigned": "{count} days scheduled",
+	"dashboard_week_no_shifts": "No shifts scheduled",
+
+	"dashboard_metrics_section": "Your Metrics",
+	"dashboard_metrics_attendance": "Attendance",
+	"dashboard_metrics_completion": "Completion",
+	"dashboard_metrics_total_shifts": "Total shifts",
+	"dashboard_metrics_completed_shifts": "Completed",
+
+	"dashboard_bids_section": "Pending Bids",
+	"dashboard_bids_empty": "No pending bids",
+	"dashboard_bids_empty_message": "Visit the Bids page to see available shifts.",
+	"dashboard_bids_view_all": "View all bids",
+
+	"dashboard_new_driver_title": "Welcome to Drive!",
+	"dashboard_new_driver_message": "Your first scheduled shifts will appear in approximately 2 weeks. In the meantime, you can bid on available shifts to start working sooner."
 }

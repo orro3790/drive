@@ -57,6 +57,12 @@ Business logic in `src/lib/server/services/`:
 
 See `docs/agent-guidelines.md` for detailed usage patterns.
 
+## Driver API Endpoints
+
+Driver-facing endpoints in `src/routes/api/`:
+
+- `GET /api/dashboard` - Driver dashboard overview (today's shift, week summaries, metrics, pending bids)
+
 ## UI Components
 
 Available in `src/lib/components/`:
@@ -66,6 +72,12 @@ Available in `src/lib/components/`:
 - `data-table/` - Full TanStack table system with filtering, pagination
 - `icons/` - Icon components
 - Combobox, Select, DatePicker, ConfirmationDialog, ToastContainer
+
+## State Stores
+
+Svelte 5 stores in `src/lib/stores/`:
+
+- `dashboardStore.svelte.ts` - Driver dashboard state (shift data, metrics, pending bids)
 
 ## Assets
 
@@ -77,7 +89,7 @@ Available in `src/lib/components/`:
 2. **Core data model**: Users, Routes, Warehouses, Assignments ✓
 3. **Auth flow**: Better Auth setup ✓
 4. **Manager dashboard**: Routes CRUD ✓, Warehouses CRUD ✓
-5. **Driver app**: Preferences UI ✓, Dashboard (in progress), schedule view with shift lifecycle ✓
+5. **Driver app**: Preferences UI ✓, Dashboard ✓, schedule view with shift lifecycle ✓
 6. **Scheduling engine**: Core algorithm ✓ (`services/scheduling.ts`), cron integration pending
 7. **Bidding system**: Bid windows, scoring algorithm, resolution
 8. **Capacitor wrapper**: Push notifications

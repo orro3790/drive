@@ -234,6 +234,25 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 ### Available API Endpoints
 
+#### `GET /api/dashboard`
+
+Get driver dashboard overview data.
+
+**Response:**
+
+```typescript
+{
+	todayShift: DashboardAssignment | null;
+	thisWeek: { weekStart: string; assignedDays: number; assignments: DashboardAssignment[] };
+	nextWeek: { weekStart: string; assignedDays: number; assignments: DashboardAssignment[] };
+	metrics: { totalShifts: number; completedShifts: number; attendanceRate: number; completionRate: number };
+	pendingBids: PendingBid[];
+	isNewDriver: boolean;
+}
+```
+
+**Auth:** Required (driver role only)
+
 #### `POST /api/users/fcm-token`
 
 Register or update user's FCM token for push notifications.

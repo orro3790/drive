@@ -82,11 +82,14 @@ Visit `http://localhost:5173`
 src/
 ├── routes/
 │   ├── (auth)/              # Authentication pages
+│   ├── (driver)/            # Driver-only routes
+│   │   └── +page.svelte     # Driver dashboard
 │   ├── (manager)/           # Manager-only dashboard
 │   │   ├── warehouses/      # Warehouse CRUD
 │   │   ├── drivers/         # Driver management (planned)
 │   │   └── routes/          # Route management (planned)
 │   └── api/                 # API endpoints
+│       ├── dashboard/       # Driver dashboard data
 │       └── users/
 │           └── fcm-token/   # FCM token registration
 ├── lib/
@@ -95,6 +98,7 @@ src/
 │   │   └── data-table/      # TanStack table wrapper
 │   ├── schemas/             # Zod schemas (source of truth for types)
 │   ├── stores/              # Svelte 5 state stores
+│   │   └── dashboardStore.svelte.ts  # Driver dashboard state
 │   └── server/              # Server-side code
 │       ├── db/              # Drizzle schema & client
 │       ├── services/        # Business logic (scheduling, notifications)

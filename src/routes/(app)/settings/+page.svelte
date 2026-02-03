@@ -55,7 +55,7 @@
 	}
 
 	function goHome() {
-		const home = user?.role === 'manager' ? '/routes' : '/schedule';
+		const home = user?.role === 'manager' ? '/routes' : '/dashboard';
 		goto(home);
 	}
 
