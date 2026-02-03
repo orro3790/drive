@@ -14,13 +14,11 @@ import {
 	FIREBASE_CLIENT_EMAIL,
 	FIREBASE_PRIVATE_KEY
 } from '$env/static/private';
+import type { App } from 'firebase-admin/app';
+import type { Messaging } from 'firebase-admin/messaging';
 
 // Lazy-initialized Firebase Admin app
-let firebaseApp: FirebaseApp | null = null;
-
-// Firebase Admin SDK types (imported dynamically)
-type FirebaseApp = Awaited<ReturnType<typeof import('firebase-admin')>>['app']['App'];
-type Messaging = Awaited<ReturnType<typeof import('firebase-admin')>>['messaging']['Messaging'];
+let firebaseApp: App | null = null;
 
 /**
  * Notification types as defined in the spec.
@@ -90,20 +88,21 @@ async function getMessaging(): Promise<Messaging | null> {
 
 	if (!firebaseApp) {
 		try {
-			const admin = await import('firebase-admin');
+			const { initializeApp, getApps, cert } = await import('firebase-admin/app');
 
 			// Check if already initialized
-			if (admin.getApps().length > 0) {
-				firebaseApp = admin.getApps()[0] as unknown as FirebaseApp;
+			const apps = getApps();
+			if (apps.length > 0) {
+				firebaseApp = apps[0];
 			} else {
-				firebaseApp = admin.initializeApp({
-					credential: admin.credential.cert({
+				firebaseApp = initializeApp({
+					credential: cert({
 						projectId: FIREBASE_PROJECT_ID,
 						clientEmail: FIREBASE_CLIENT_EMAIL,
 						// Private key comes with escaped newlines, need to unescape
 						privateKey: FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
 					})
-				}) as unknown as FirebaseApp;
+				});
 			}
 
 			logger.info('Firebase Admin SDK initialized');
@@ -113,8 +112,8 @@ async function getMessaging(): Promise<Messaging | null> {
 		}
 	}
 
-	const admin = await import('firebase-admin');
-	return admin.getMessaging() as unknown as Messaging;
+	const { getMessaging } = await import('firebase-admin/messaging');
+	return getMessaging(firebaseApp);
 }
 
 export interface SendNotificationOptions {
