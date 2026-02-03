@@ -87,6 +87,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		entityId: existing.id,
 		action: 'cancel',
 		actorType: 'user',
+		actorId: locals.user.id,
 		changes: {
 			reason: result.data.reason,
 			lateCancel: isLateCancel
