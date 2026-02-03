@@ -7,6 +7,8 @@ description: Converts specifications or implementation plans into actionable BEA
 
 Convert product specifications or implementation plans into actionable BEADS.
 
+Note (Windows): Use `bd.exe` (not `bd`).
+
 ## Usage
 
 ```
@@ -34,7 +36,14 @@ Accepts:
 For each unit of work, create a bead with:
 
 ```bash
-bd.exe add --title "<clear title>" --body "<detailed body>"
+# Create a bead (task by default). Use stdin for a multi-line body.
+bd.exe create --type task --priority 2 --title "<clear title>" --body-file - <<'EOF'
+Source: <path-to-spec-or-plan-file> (<section if applicable>)
+
+<rest of bead body>
+EOF
+
+# Tip: add --silent to output only the issue ID (useful for scripting)
 ```
 
 ### Source Traceability (REQUIRED)
@@ -83,12 +92,26 @@ Each bead MUST include:
    - Compatibility requirements
    - Security considerations
 
-### 3. Set Up Dependencies
+### 3. Set Up Structure & Dependencies
 
-Link related beads:
+Parent/child hierarchy (epic -> tasks):
 
 ```bash
-bd.exe link <child-id> <parent-id>
+# Create a child under an epic
+bd.exe create --type task --parent <epic-id> --title "<title>" --body-file -
+
+# Or re-parent later
+bd.exe update <child-id> --parent <parent-id>
+```
+
+Dependencies (blocked depends on blocker):
+
+```bash
+# blocked depends on blocker
+bd.exe dep add <blocked-id> <blocker-id>
+
+# Shorthand: blocker --blocks blocked
+bd.exe dep <blocker-id> --blocks <blocked-id>
 ```
 
 ### 4. Validate Completeness

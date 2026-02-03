@@ -32,7 +32,10 @@
 		unfilled: m.schedule_status_unfilled()
 	};
 
-	const statusChips: Record<AssignmentStatus, 'info' | 'success' | 'warning' | 'error' | 'neutral'> = {
+	const statusChips: Record<
+		AssignmentStatus,
+		'info' | 'success' | 'warning' | 'error' | 'neutral'
+	> = {
 		scheduled: 'info',
 		active: 'warning',
 		completed: 'success',
@@ -78,9 +81,7 @@
 	const nextWeekAssignments = $derived.by(() => {
 		const nextWeekStart = scheduleStore.nextWeekStart;
 		if (!nextWeekStart) return [];
-		return sortedAssignments.filter(
-			(assignment) => assignment.date >= nextWeekStart
-		);
+		return sortedAssignments.filter((assignment) => assignment.date >= nextWeekStart);
 	});
 
 	function formatAssignmentDate(dateString: string) {
@@ -96,7 +97,9 @@
 
 	function formatWeekLabel(startDate: Date, isNext: boolean) {
 		const weekNumber = getWeek(startDate, { weekStartsOn: 1 });
-		return isNext ? m.schedule_week_next({ week: weekNumber }) : m.schedule_week_current({ week: weekNumber });
+		return isNext
+			? m.schedule_week_next({ week: weekNumber })
+			: m.schedule_week_current({ week: weekNumber });
 	}
 
 	function openCancelModal(assignment: ScheduleAssignment) {
@@ -181,7 +184,7 @@
 										/>
 									</div>
 
-										{#if assignment.isCancelable}
+									{#if assignment.isCancelable}
 										<div class="card-actions">
 											<Button
 												variant="danger"
@@ -231,7 +234,7 @@
 										/>
 									</div>
 
-										{#if assignment.isCancelable}
+									{#if assignment.isCancelable}
 										<div class="card-actions">
 											<Button
 												variant="danger"
@@ -281,12 +284,7 @@
 				<Button variant="secondary" onclick={closeCancelModal} fill>
 					{m.common_cancel()}
 				</Button>
-				<Button
-					variant="danger"
-					type="submit"
-					fill
-					isLoading={scheduleStore.isCancelling}
-				>
+				<Button variant="danger" type="submit" fill isLoading={scheduleStore.isCancelling}>
 					{m.schedule_cancel_confirm_button()}
 				</Button>
 			</div>

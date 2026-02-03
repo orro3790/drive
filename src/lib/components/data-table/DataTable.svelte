@@ -676,12 +676,7 @@ Designed to work with the Driver Ops design system.
 		/* Footer handles bottom border radius when present */
 	}
 
-	/* Mobile: disable horizontal scroll since we show fewer columns */
-	@media (max-width: 600px) {
-		.data-table-scroll-area {
-			overflow-x: hidden;
-		}
-	}
+	/* Mobile: horizontal scroll enabled for full table access */
 
 	.data-table {
 		--data-table-row-min-height: 40px;

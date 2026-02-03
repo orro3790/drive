@@ -3,7 +3,7 @@ You are in a Ralph loop (iteration 2 of 35).
 ## Environment
 - Workspace: drive
 - Plans directory: ralph/plans/
-- Session log: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260203-0237.md
+- Session log: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260203-1331.md
 - Status file: C:/Users/matto/projects/drive/ralph/.current-task
 
 ## Workflow
@@ -69,7 +69,7 @@ Spawn plan-reviewer (Task tool, subagent_type='plan-reviewer'). Fix Critical/Hig
 
 ```
 Edit tool:
-  file_path: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260203-0237.md
+  file_path: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260203-1331.md
   old_string: "---"
   new_string: "---\n\n## Iteration 2 — <id>\n\n**Task**: <title>\n**Done**: <1-2 sentences>\n**PR**: #<n>\n\n---"
 ```
