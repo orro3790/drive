@@ -5,12 +5,13 @@
  * Keep separate from domain schema (schema.ts).
  */
 
-import { boolean, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 
 /**
  * Better Auth User table
- * Note: This is separate from our domain `users` table.
- * We'll link them via email or create a mapping.
+ *
+ * Single source of truth for user data. Domain tables reference this table.
+ * Includes domain fields (phone, weeklyCap, isFlagged, flagWarningDate).
  */
 export const user = pgTable('user', {
 	id: text('id').primaryKey(),
@@ -19,6 +20,10 @@ export const user = pgTable('user', {
 	emailVerified: boolean('email_verified').notNull().default(false),
 	image: text('image'),
 	role: text('role').notNull().default('driver'),
+	phone: text('phone'),
+	weeklyCap: integer('weekly_cap').notNull().default(4),
+	isFlagged: boolean('is_flagged').notNull().default(false),
+	flagWarningDate: timestamp('flag_warning_date', { withTimezone: true }),
 	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
