@@ -8,12 +8,7 @@ Displays user's name, email, and role.
 	import SettingsGrid from './SettingsGrid.svelte';
 	import SettingsRow from './SettingsRow.svelte';
 	import * as m from '$lib/paraglide/messages.js';
-
-	interface User {
-		name: string | null;
-		email: string;
-		role: 'driver' | 'manager';
-	}
+	import type { User } from '$lib/types/user';
 
 	let { user }: { user: User | null } = $props();
 

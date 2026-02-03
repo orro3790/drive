@@ -14,10 +14,11 @@
 	import AccountSection from '$lib/components/settings/AccountSection.svelte';
 	import type { PageData } from './$types';
 	import type { Breadcrumb } from '$lib/schemas/ui/breadcrumb';
+	import { asUser } from '$lib/types/user';
 
 	let { data }: { data: PageData } = $props();
 
-	const user = $derived(data.user);
+	const user = $derived(data.user ? asUser(data.user) : null);
 
 	let activeCategory = $state<Category | null>(null);
 
