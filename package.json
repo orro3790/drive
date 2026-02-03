@@ -17,6 +17,7 @@
 		"db:studio": "drizzle-kit studio"
 	},
 	"devDependencies": {
+		"@noble/hashes": "^2.0.1",
 		"@playwright/test": "^1.58.1",
 		"@sveltejs/adapter-vercel": "^6.3.1",
 		"@sveltejs/kit": "^2.50.1",
