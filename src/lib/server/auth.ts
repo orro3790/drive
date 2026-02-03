@@ -79,6 +79,30 @@ export const auth = betterAuth({
 				required: false,
 				defaultValue: 'driver',
 				input: false
+			},
+			phone: {
+				type: 'string',
+				required: false,
+				defaultValue: null,
+				input: true
+			},
+			weeklyCap: {
+				type: 'number',
+				required: false,
+				defaultValue: 4,
+				input: false
+			},
+			isFlagged: {
+				type: 'boolean',
+				required: false,
+				defaultValue: false,
+				input: false
+			},
+			flagWarningDate: {
+				type: 'date',
+				required: false,
+				defaultValue: null,
+				input: false
 			}
 		}
 	},

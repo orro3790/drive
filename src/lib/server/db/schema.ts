@@ -2,6 +2,9 @@
  * Database Schema - Driver Operations Platform
  *
  * See docs/specs/data-model.md for full documentation.
+ *
+ * Note: User data is managed by Better Auth in auth-schema.ts.
+ * Domain tables reference the auth user table via text user_id columns.
  */
 
 import {
@@ -19,9 +22,12 @@ import {
 	uuid
 } from 'drizzle-orm/pg-core';
 import { desc, relations } from 'drizzle-orm';
+import { user } from './auth-schema';
+
+// Re-export auth user for convenience
+export { user } from './auth-schema';
 
 // Enums
-export const userRoleEnum = pgEnum('user_role', ['driver', 'manager']);
 export const assignmentStatusEnum = pgEnum('assignment_status', [
 	'scheduled',
 	'active',
@@ -54,28 +60,12 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 ]);
 export const actorTypeEnum = pgEnum('actor_type', ['user', 'system']);
 
-// Users
-export const users = pgTable('users', {
-	id: uuid('id').primaryKey().defaultRandom(),
-	email: text('email').notNull().unique(),
-	passwordHash: text('password_hash').notNull(),
-	firstName: text('first_name').notNull(),
-	lastName: text('last_name').notNull(),
-	phone: text('phone').notNull(),
-	role: userRoleEnum('role').notNull().default('driver'),
-	weeklyCap: integer('weekly_cap').notNull().default(4),
-	isFlagged: boolean('is_flagged').notNull().default(false),
-	flagWarningDate: timestamp('flag_warning_date', { withTimezone: true }),
-	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
-});
-
 // Warehouses
 export const warehouses = pgTable('warehouses', {
 	id: uuid('id').primaryKey().defaultRandom(),
 	name: text('name').notNull(),
 	address: text('address').notNull(),
-	createdBy: uuid('created_by').references(() => users.id),
+	createdBy: text('created_by').references(() => user.id),
 	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
@@ -87,7 +77,7 @@ export const routes = pgTable('routes', {
 	warehouseId: uuid('warehouse_id')
 		.notNull()
 		.references(() => warehouses.id),
-	createdBy: uuid('created_by').references(() => users.id),
+	createdBy: text('created_by').references(() => user.id),
 	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
@@ -95,9 +85,9 @@ export const routes = pgTable('routes', {
 // Driver Preferences
 export const driverPreferences = pgTable('driver_preferences', {
 	id: uuid('id').primaryKey().defaultRandom(),
-	userId: uuid('user_id')
+	userId: text('user_id')
 		.notNull()
-		.references(() => users.id, { onDelete: 'cascade' })
+		.references(() => user.id, { onDelete: 'cascade' })
 		.unique(),
 	preferredDays: integer('preferred_days').array().notNull().default([]),
 	preferredRoutes: uuid('preferred_routes').array().notNull().default([]),
@@ -113,7 +103,7 @@ export const assignments = pgTable(
 		routeId: uuid('route_id')
 			.notNull()
 			.references(() => routes.id),
-		userId: uuid('user_id').references(() => users.id),
+		userId: text('user_id').references(() => user.id),
 		warehouseId: uuid('warehouse_id')
 			.notNull()
 			.references(() => warehouses.id),
@@ -157,9 +147,9 @@ export const bids = pgTable(
 		assignmentId: uuid('assignment_id')
 			.notNull()
 			.references(() => assignments.id, { onDelete: 'cascade' }),
-		userId: uuid('user_id')
+		userId: text('user_id')
 			.notNull()
-			.references(() => users.id),
+			.references(() => user.id),
 		score: real('score'),
 		status: bidStatusEnum('status').notNull().default('pending'),
 		bidAt: timestamp('bid_at', { withTimezone: true }).notNull().defaultNow(),
@@ -183,7 +173,7 @@ export const bidWindows = pgTable(
 		opensAt: timestamp('opens_at', { withTimezone: true }).notNull().defaultNow(),
 		closesAt: timestamp('closes_at', { withTimezone: true }).notNull(),
 		status: bidWindowStatusEnum('status').notNull().default('open'),
-		winnerId: uuid('winner_id').references(() => users.id)
+		winnerId: text('winner_id').references(() => user.id)
 	},
 	(table) => ({
 		statusClosesIdx: index('idx_bid_windows_status_closes').on(table.status, table.closesAt)
@@ -192,9 +182,9 @@ export const bidWindows = pgTable(
 
 // Driver Metrics (denormalized for performance)
 export const driverMetrics = pgTable('driver_metrics', {
-	userId: uuid('user_id')
+	userId: text('user_id')
 		.primaryKey()
-		.references(() => users.id, { onDelete: 'cascade' }),
+		.references(() => user.id, { onDelete: 'cascade' }),
 	totalShifts: integer('total_shifts').notNull().default(0),
 	completedShifts: integer('completed_shifts').notNull().default(0),
 	attendanceRate: real('attendance_rate').notNull().default(0),
@@ -206,9 +196,9 @@ export const driverMetrics = pgTable('driver_metrics', {
 export const routeCompletions = pgTable(
 	'route_completions',
 	{
-		userId: uuid('user_id')
+		userId: text('user_id')
 			.notNull()
-			.references(() => users.id, { onDelete: 'cascade' }),
+			.references(() => user.id, { onDelete: 'cascade' }),
 		routeId: uuid('route_id')
 			.notNull()
 			.references(() => routes.id, { onDelete: 'cascade' }),
@@ -226,9 +216,9 @@ export const notifications = pgTable(
 	'notifications',
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
-		userId: uuid('user_id')
+		userId: text('user_id')
 			.notNull()
-			.references(() => users.id, { onDelete: 'cascade' }),
+			.references(() => user.id, { onDelete: 'cascade' }),
 		type: notificationTypeEnum('type').notNull(),
 		title: text('title').notNull(),
 		body: text('body').notNull(),
@@ -253,7 +243,7 @@ export const auditLogs = pgTable(
 		entityType: text('entity_type').notNull(),
 		entityId: uuid('entity_id').notNull(),
 		action: text('action').notNull(),
-		actorId: uuid('actor_id').references(() => users.id),
+		actorId: text('actor_id').references(() => user.id),
 		actorType: actorTypeEnum('actor_type').notNull(),
 		changes: jsonb('changes'),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
@@ -268,13 +258,13 @@ export const auditLogs = pgTable(
 );
 
 // Relations
-export const usersRelations = relations(users, ({ one, many }) => ({
+export const userRelations = relations(user, ({ one, many }) => ({
 	preferences: one(driverPreferences, {
-		fields: [users.id],
+		fields: [user.id],
 		references: [driverPreferences.userId]
 	}),
 	metrics: one(driverMetrics, {
-		fields: [users.id],
+		fields: [user.id],
 		references: [driverMetrics.userId]
 	}),
 	assignments: many(assignments),
@@ -302,9 +292,9 @@ export const assignmentsRelations = relations(assignments, ({ one, many }) => ({
 		fields: [assignments.routeId],
 		references: [routes.id]
 	}),
-	user: one(users, {
+	user: one(user, {
 		fields: [assignments.userId],
-		references: [users.id]
+		references: [user.id]
 	}),
 	warehouse: one(warehouses, {
 		fields: [assignments.warehouseId],
@@ -319,4 +309,47 @@ export const assignmentsRelations = relations(assignments, ({ one, many }) => ({
 		references: [bidWindows.assignmentId]
 	}),
 	bids: many(bids)
+}));
+
+export const driverPreferencesRelations = relations(driverPreferences, ({ one }) => ({
+	user: one(user, {
+		fields: [driverPreferences.userId],
+		references: [user.id]
+	})
+}));
+
+export const bidsRelations = relations(bids, ({ one }) => ({
+	assignment: one(assignments, {
+		fields: [bids.assignmentId],
+		references: [assignments.id]
+	}),
+	user: one(user, {
+		fields: [bids.userId],
+		references: [user.id]
+	})
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+	user: one(user, {
+		fields: [notifications.userId],
+		references: [user.id]
+	})
+}));
+
+export const driverMetricsRelations = relations(driverMetrics, ({ one }) => ({
+	user: one(user, {
+		fields: [driverMetrics.userId],
+		references: [user.id]
+	})
+}));
+
+export const routeCompletionsRelations = relations(routeCompletions, ({ one }) => ({
+	user: one(user, {
+		fields: [routeCompletions.userId],
+		references: [user.id]
+	}),
+	route: one(routes, {
+		fields: [routeCompletions.routeId],
+		references: [routes.id]
+	})
 }));
