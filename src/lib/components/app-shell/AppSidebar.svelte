@@ -16,6 +16,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import { authClient } from '$lib/auth-client';
 
 	// Import icons
+	import Award from '$lib/components/icons/Award.svelte';
 	import Calendar from '$lib/components/icons/Calendar.svelte';
 	import CalendarCog from '$lib/components/icons/CalendarCog.svelte';
 	import MapPin from '$lib/components/icons/MapPin.svelte';
@@ -50,6 +51,12 @@ Mobile: Hidden by default, hamburger in header opens overlay
 			label: () => m.nav_schedule(),
 			Icon: Calendar,
 			path: '/schedule'
+		},
+		{
+			id: 'bids',
+			label: () => m.nav_bids(),
+			Icon: Award,
+			path: '/bids'
 		}
 	];
 
