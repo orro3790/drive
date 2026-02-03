@@ -56,13 +56,19 @@ export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: 'pg', schema: authSchema }),
 	trustedOrigins: ['http://localhost:5173', 'https://*.vercel.app'],
 	emailAndPassword: {
-		enabled: true,
-		sendResetPassword: async ({ user, url }) => {
-			sendPasswordResetEmail(user.email, url).catch((err) => {
-				logger.error({ email: user.email, error: err.message }, 'Password reset email failed');
-			});
-		},
-		resetPasswordTokenExpiresIn: 60 * 60 // 1 hour in seconds
+		enabled: true
+		// NOTE: Email-based password reset is disabled until a domain is configured in Resend.
+		// When ready to enable:
+		// 1. Add verified domain in Resend dashboard
+		// 2. Set RESEND_API_KEY and EMAIL_FROM in Vercel env vars
+		// 3. Uncomment the sendResetPassword hook below
+		//
+		// sendResetPassword: async ({ user, url }) => {
+		// 	sendPasswordResetEmail(user.email, url).catch((err) => {
+		// 		logger.error({ email: user.email, error: err.message }, 'Password reset email failed');
+		// 	});
+		// },
+		// resetPasswordTokenExpiresIn: 60 * 60 // 1 hour in seconds
 	},
 	user: {
 		additionalFields: {

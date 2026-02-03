@@ -55,6 +55,13 @@
 	"auth_reset_password_min_length": "密码长度至少为8个字符。",
 	"auth_password_new_placeholder": "输入您的新密码",
 
+	"admin_reset_password_title": "重置用户密码",
+	"admin_reset_password_subtitle": "输入用户邮箱并为其设置新密码。",
+	"admin_reset_password_button": "重置密码",
+	"admin_reset_password_success": "已成功重置 {email} 的密码。",
+	"admin_reset_password_user_email_label": "用户邮箱",
+	"admin_reset_password_user_email_placeholder": "user@example.com",
+
 	"route_page_title": "路线",
 	"route_page_description": "管理路线并查看每日覆盖状态。",
 	"route_create_button": "添加路线",

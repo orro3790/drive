@@ -58,6 +58,13 @@
 	"auth_reset_password_min_length": "Password must be at least 8 characters.",
 	"auth_password_new_placeholder": "Enter your new password",
 
+	"admin_reset_password_title": "Reset User Password",
+	"admin_reset_password_subtitle": "Enter the user's email and set a new password for them.",
+	"admin_reset_password_button": "Reset Password",
+	"admin_reset_password_success": "Password has been reset successfully for {email}.",
+	"admin_reset_password_user_email_label": "User's Email",
+	"admin_reset_password_user_email_placeholder": "user@example.com",
+
 	"sidebar_close": "Close sidebar",
 	"sidebar_open": "Open sidebar",
 	"sidebar_collapse": "Collapse",
