@@ -127,5 +127,22 @@
 	"schedule_cancel_reason_traffic_accident": "交通事故",
 	"schedule_cancel_reason_weather_conditions": "恶劣天气",
 	"schedule_cancel_reason_personal_emergency": "个人紧急情况",
-	"schedule_cancel_reason_other": "其他"
+	"schedule_cancel_reason_other": "其他",
+
+	"sidebar_close": "关闭侧边栏",
+	"sidebar_open": "打开侧边栏",
+	"sidebar_collapse": "收起",
+	"sidebar_expand": "展开",
+	"sidebar_main_nav": "主导航",
+	"sidebar_logout": "退出登录",
+	"sidebar_logging_out": "正在退出...",
+	"sidebar_toggle_language": "切换语言",
+
+	"nav_dashboard": "仪表盘",
+	"nav_schedule": "排班",
+	"nav_settings": "设置",
+	"nav_notifications": "通知",
+	"nav_routes": "路线",
+	"nav_drivers": "司机",
+	"nav_warehouses": "仓库"
 }

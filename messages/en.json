@@ -74,6 +74,14 @@
 	"sidebar_logging_out": "Logging out...",
 	"sidebar_toggle_language": "Toggle language",
 
+	"nav_dashboard": "Dashboard",
+	"nav_schedule": "Schedule",
+	"nav_settings": "Settings",
+	"nav_notifications": "Notifications",
+	"nav_routes": "Routes",
+	"nav_drivers": "Drivers",
+	"nav_warehouses": "Warehouses",
+
 	"date_picker_clear": "Clear",
 	"date_picker_placeholder_single": "Select date",
 	"date_picker_placeholder_range": "Select date range",
