@@ -48,6 +48,15 @@ Tech stack interview **completed**. Specifications documented in `docs/specs/`. 
 | ADR: Bidding System | `docs/adr/002-replacement-bidding-system.md`             |
 | ADR: Scheduling     | `docs/adr/003-scheduling-model.md`                       |
 
+## Server Services
+
+Business logic in `src/lib/server/services/`:
+
+- `scheduling.ts` - Schedule generation algorithm (`generateWeekSchedule`)
+- `notifications.ts` - Push notifications via FCM (`sendNotification`, `sendBulkNotifications`)
+
+See `docs/agent-guidelines.md` for detailed usage patterns.
+
 ## UI Components
 
 Available in `src/lib/components/`:

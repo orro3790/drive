@@ -87,6 +87,8 @@ src/
 │   │   ├── drivers/         # Driver management (planned)
 │   │   └── routes/          # Route management (planned)
 │   └── api/                 # API endpoints
+│       └── users/
+│           └── fcm-token/   # FCM token registration
 ├── lib/
 │   ├── components/          # UI components
 │   │   ├── primitives/      # Design system components
@@ -95,6 +97,8 @@ src/
 │   ├── stores/              # Svelte 5 state stores
 │   └── server/              # Server-side code
 │       ├── db/              # Drizzle schema & client
+│       ├── services/        # Business logic (scheduling, notifications)
+│       ├── emails/          # Email templates (Resend)
 │       └── auth.ts          # Better Auth config
 └── app.css                  # Design tokens
 ```
