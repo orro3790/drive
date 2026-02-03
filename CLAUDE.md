@@ -65,11 +65,11 @@ Available in `src/lib/components/`:
 ## Implementation Order (Suggested)
 
 1. **Project setup**: SvelteKit + Drizzle + Neon + Better Auth + Observability ✓
-2. **Core data model**: Users, Routes, Warehouses, Assignments
+2. **Core data model**: Users, Routes, Warehouses, Assignments ✓
 3. **Auth flow**: Better Auth setup ✓
-4. **Manager dashboard**: Route table with filters, CRUD
-5. **Driver app**: Dashboard, preferences, schedule view
-6. **Scheduling engine**: Preference lock, auto-assignment
+4. **Manager dashboard**: Routes CRUD ✓, Warehouses CRUD ✓
+5. **Driver app**: Preferences UI ✓, Dashboard (in progress), schedule view
+6. **Scheduling engine**: Core algorithm ✓ (`services/scheduling.ts`), cron integration pending
 7. **Bidding system**: Bid windows, scoring algorithm, resolution
 8. **Capacitor wrapper**: Push notifications
 9. **Cron jobs**: Lock preferences, close bid windows, metrics

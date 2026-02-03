@@ -36,7 +36,8 @@ src/
 │   ├── server/
 │   │   ├── db/              # Drizzle schema & client
 │   │   ├── auth.ts          # Better Auth config
-│   │   └── services/        # Business logic
+│   │   ├── logger.ts        # Pino logger instance
+│   │   └── services/        # Business logic (scheduling.ts)
 │   └── utils/               # Framework-agnostic helpers
 ├── hooks.server.ts          # Auth guards
 └── app.css                  # Design tokens
@@ -48,6 +49,41 @@ src/
 - Import directly from owning module
 - Use `lib/utils/` for non-UI logic only
 - Co-locate related files
+
+---
+
+## Business Logic Services
+
+Server-side business logic lives in `src/lib/server/services/`. Each service encapsulates a specific domain operation.
+
+### Available Services
+
+#### `scheduling.ts`
+
+Schedule generation algorithm for automatic driver-to-route assignment.
+
+**Key Functions:**
+
+- `generateWeekSchedule(targetWeekStart: Date)` - Generates schedule for a target week using locked preferences
+- `getDriverWeeklyAssignmentCount(userId: string, weekStart: Date)` - Gets count of non-cancelled assignments for a driver
+- `canDriverTakeAssignment(userId: string, weekStart: Date)` - Checks if driver is under weekly cap and not flagged
+
+**Usage:**
+
+```typescript
+import { generateWeekSchedule } from '$lib/server/services/scheduling';
+
+// In cron job or API endpoint
+const result = await generateWeekSchedule(mondayDate);
+console.log(`Created: ${result.created}, Unfilled: ${result.unfilled}`);
+```
+
+**Implementation Details:**
+
+- Idempotent: Checks for existing assignments before creating new ones
+- Time zone aware: All operations use Toronto/Eastern time
+- Scoring: Routes familiarity → completion rate → attendance rate
+- Creates `unfilled` assignments when no eligible driver found
 
 ---
 
