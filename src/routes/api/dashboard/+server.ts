@@ -17,8 +17,7 @@ import {
 	warehouses,
 	shifts,
 	driverMetrics,
-	bids,
-	bidWindows
+	bids
 } from '$lib/server/db/schema';
 import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import { addDays, parseISO, differenceInCalendarDays } from 'date-fns';
