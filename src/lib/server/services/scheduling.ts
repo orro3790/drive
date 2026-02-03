@@ -263,7 +263,10 @@ export async function generateWeekSchedule(
 			} catch (error) {
 				const message = error instanceof Error ? error.message : 'Unknown error';
 				result.errors.push(`Route ${route.id} on ${dateString}: ${message}`);
-				log.error({ routeId: route.id, date: dateString, error: message }, 'Failed to create assignment');
+				log.error(
+					{ routeId: route.id, date: dateString, error: message },
+					'Failed to create assignment'
+				);
 			}
 		}
 	}
