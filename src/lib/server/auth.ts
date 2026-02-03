@@ -9,6 +9,8 @@ import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { getRequestEvent } from '$app/server';
 import { db } from './db';
 import * as authSchema from './db/auth-schema';
+import { sendPasswordResetEmail } from './email';
+import logger from './logger';
 import { BETTER_AUTH_SECRET } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 
@@ -54,7 +56,13 @@ export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: 'pg', schema: authSchema }),
 	trustedOrigins: ['http://localhost:5173', 'https://*.vercel.app'],
 	emailAndPassword: {
-		enabled: true
+		enabled: true,
+		sendResetPassword: async ({ user, url }) => {
+			sendPasswordResetEmail(user.email, url).catch((err) => {
+				logger.error({ email: user.email, error: err.message }, 'Password reset email failed');
+			});
+		},
+		resetPasswordTokenExpiresIn: 60 * 60 // 1 hour in seconds
 	},
 	user: {
 		additionalFields: {
