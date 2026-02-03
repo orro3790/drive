@@ -84,17 +84,29 @@ powershell -Command "Remove-Item '.agent-browser/driver-ops-auth.json' -ErrorAct
 
 ## Credentials
 
-### Manager Credentials
+### Manager Credentials (Real)
 
 - Email: `justin.myddp@proton.me`
 - Password: `jeF4g9mrCd1hPsDn!`
 - Invite code (for sign-up): `drive-2026`
 
-### Driver Credentials
+### Seeded Test Users
 
-- Email: `driver@drive.com`
-- Password: `test1234`
-- Invite code (for sign-up): `drive-2026`
+Run `pnpm seed:staging` to populate the database with 100 drivers and 5 managers.
+
+**All seeded users share the same password:** `test1234`
+
+Seeded emails use test domains:
+- Drivers: `*@driver.test`
+- Managers: `*@drivermanager.test`
+
+To find seeded user emails, query the database:
+```sql
+SELECT email FROM "user" WHERE email LIKE '%@driver.test' LIMIT 5;
+SELECT email FROM "user" WHERE email LIKE '%@drivermanager.test';
+```
+
+Or check the seed script output after running `pnpm seed` or `pnpm seed:staging`.
 
 **Development only** — not real user data.
 
