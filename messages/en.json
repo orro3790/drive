@@ -324,5 +324,26 @@
 	"settings_session_section": "Session",
 	"settings_sign_out_button": "Sign out",
 	"settings_sign_out_confirm_title": "Sign out",
-	"settings_sign_out_confirm_message": "Are you sure you want to sign out?"
+	"settings_sign_out_confirm_message": "Are you sure you want to sign out?",
+
+	"shift_start_button": "Start Shift",
+	"shift_start_modal_title": "Start Shift",
+	"shift_start_parcels_label": "Number of parcels",
+	"shift_start_parcels_placeholder": "Enter parcel count",
+	"shift_start_parcels_required": "Parcel count is required.",
+	"shift_start_confirm_button": "Start Shift",
+	"shift_start_success": "Shift started.",
+	"shift_start_error": "Unable to start shift.",
+
+	"shift_complete_button": "Complete Shift",
+	"shift_complete_modal_title": "Complete Shift",
+	"shift_complete_delivered_label": "Parcels delivered",
+	"shift_complete_delivered_placeholder": "Enter delivered count",
+	"shift_complete_delivered_required": "Delivered count is required.",
+	"shift_complete_returned_label": "Parcels returned",
+	"shift_complete_returned_placeholder": "Enter returned count (optional)",
+	"shift_complete_confirm_button": "Complete Shift",
+	"shift_complete_success": "Shift completed.",
+	"shift_complete_error": "Unable to complete shift.",
+	"shift_complete_warning_exceeds": "Total exceeds starting parcel count."
 }

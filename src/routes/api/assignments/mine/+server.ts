@@ -7,7 +7,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, routes, warehouses } from '$lib/server/db/schema';
+import { assignments, routes, warehouses, shifts } from '$lib/server/db/schema';
 import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import { addDays, differenceInCalendarDays, parseISO } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
@@ -50,11 +50,18 @@ export const GET: RequestHandler = async ({ locals }) => {
 			date: assignments.date,
 			status: assignments.status,
 			routeName: routes.name,
-			warehouseName: warehouses.name
+			warehouseName: warehouses.name,
+			shiftId: shifts.id,
+			parcelsStart: shifts.parcelsStart,
+			parcelsDelivered: shifts.parcelsDelivered,
+			parcelsReturned: shifts.parcelsReturned,
+			shiftStartedAt: shifts.startedAt,
+			shiftCompletedAt: shifts.completedAt
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.leftJoin(shifts, eq(assignments.id, shifts.assignmentId))
 		.where(
 			and(
 				eq(assignments.userId, locals.user.id),
@@ -69,10 +76,37 @@ export const GET: RequestHandler = async ({ locals }) => {
 		const hoursUntilShift = getHoursUntilShift(assignment.date, torontoNow);
 		const isLateCancel = isCancelable && hoursUntilShift <= 48;
 
+		// Shift can be started if: today's date, status is scheduled, no shift exists
+		const isToday = assignment.date === torontoToday;
+		const isStartable =
+			isToday && assignment.status === 'scheduled' && assignment.shiftStartedAt === null;
+
+		// Shift can be completed if: status is active, shift exists but not completed
+		const isCompletable =
+			assignment.status === 'active' &&
+			assignment.shiftStartedAt !== null &&
+			assignment.shiftCompletedAt === null;
+
 		return {
-			...assignment,
+			id: assignment.id,
+			date: assignment.date,
+			status: assignment.status,
+			routeName: assignment.routeName,
+			warehouseName: assignment.warehouseName,
 			isCancelable,
-			isLateCancel
+			isLateCancel,
+			isStartable,
+			isCompletable,
+			shift: assignment.shiftId
+				? {
+						id: assignment.shiftId,
+						parcelsStart: assignment.parcelsStart,
+						parcelsDelivered: assignment.parcelsDelivered,
+						parcelsReturned: assignment.parcelsReturned,
+						startedAt: assignment.shiftStartedAt,
+						completedAt: assignment.shiftCompletedAt
+					}
+				: null
 		};
 	});
 
