@@ -117,13 +117,15 @@
 		{role}
 		{tabindex}
 	>
-		<div class="content-wrapper">
+		<div class="content-wrapper" class:loading={isLoading}>
+			<!-- Keep children for sizing, hide when loading -->
+			<span class="content" class:hidden={isLoading}>
+				{@render children()}
+			</span>
 			{#if isLoading}
-				<div class="spinner-container">
+				<div class="spinner-overlay">
 					<div class="spinner"></div>
 				</div>
-			{:else}
-				{@render children()}
 			{/if}
 		</div>
 	</a>
@@ -141,13 +143,15 @@
 		{role}
 		{tabindex}
 	>
-		<div class="content-wrapper">
+		<div class="content-wrapper" class:loading={isLoading}>
+			<!-- Keep children for sizing, hide when loading -->
+			<span class="content" class:hidden={isLoading}>
+				{@render children()}
+			</span>
 			{#if isLoading}
-				<div class="spinner-container">
+				<div class="spinner-overlay">
 					<div class="spinner"></div>
 				</div>
-			{:else}
-				{@render children()}
 			{/if}
 		</div>
 	</button>
@@ -216,6 +220,20 @@
 		justify-content: center;
 		gap: var(--spacing-1);
 		min-width: max-content; /* Prevent content collapse */
+		position: relative;
+	}
+
+	/* Content container - stays in flow for sizing */
+	.content {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-1);
+	}
+
+	/* Hide content visually but keep for sizing */
+	.content.hidden {
+		visibility: hidden;
 	}
 
 	/* Size variants - min dimensions prevent collapse when showing spinner */
@@ -336,8 +354,10 @@
 		flex: 1 1 0%;
 	}
 
-	/* Loading spinner - maintains button dimensions during loading */
-	.spinner-container {
+	/* Loading spinner - positioned absolutely to not affect button size */
+	.spinner-overlay {
+		position: absolute;
+		inset: 0;
 		display: flex;
 		justify-content: center;
 		align-items: center;

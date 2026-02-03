@@ -84,20 +84,38 @@ powershell -Command "Remove-Item '.agent-browser/driver-ops-auth.json' -ErrorAct
 
 ## Credentials
 
+### Manager Credentials
 - Email: `justin.myddp@proton.me`
 - Password: `jeF4g9mrCd1hPsDn!`
+- Invite code (for sign-up): `drive-2026`
+
+### Driver Credentials
+- Email: `driver@drive.com`
+- Password: `test1234`
 - Invite code (for sign-up): `drive-2026`
 
 **Development only** — not real user data.
 
 ## Creating a Test User
 
-If no user exists, sign up first:
+If no user exists, sign up first. **Note:** The invite code must be sent as a header, not in the body.
 
 ```bash
 curl -X POST http://localhost:5173/api/auth/sign-up/email \
   -H "Content-Type: application/json" \
-  -d '{"email":"justin.myddp@proton.me","password":"jeF4g9mrCd1hPsDn!","name":"Test User","inviteCode":"drive-2026"}'
+  -H "x-invite-code: drive-2026" \
+  -d '{"email":"justin.myddp@proton.me","password":"jeF4g9mrCd1hPsDn!","name":"Test Manager"}'
+```
+
+If the user already exists and you need to reset the password, update directly in the database:
+
+```bash
+# Generate a new hash (using better-auth's expected format)
+# Or delete and recreate the user:
+curl -X POST http://localhost:5173/api/auth/sign-up/email \
+  -H "Content-Type: application/json" \
+  -H "x-invite-code: drive-2026" \
+  -d '{"email":"NEW_EMAIL","password":"NEW_PASSWORD","name":"Test Manager"}'
 ```
 
 ## Prerequisites
