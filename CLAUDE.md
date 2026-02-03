@@ -68,7 +68,7 @@ Available in `src/lib/components/`:
 2. **Core data model**: Users, Routes, Warehouses, Assignments ✓
 3. **Auth flow**: Better Auth setup ✓
 4. **Manager dashboard**: Routes CRUD ✓, Warehouses CRUD ✓
-5. **Driver app**: Preferences UI ✓, Dashboard (in progress), schedule view
+5. **Driver app**: Preferences UI ✓, Dashboard (in progress), schedule view ✓
 6. **Scheduling engine**: Core algorithm ✓ (`services/scheduling.ts`), cron integration pending
 7. **Bidding system**: Bid windows, scoring algorithm, resolution
 8. **Capacitor wrapper**: Push notifications
