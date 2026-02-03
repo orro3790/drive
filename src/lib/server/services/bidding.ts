@@ -6,8 +6,19 @@
  */
 
 import { db } from '$lib/server/db';
-import { assignments, bidWindows, notifications, routes, user } from '$lib/server/db/schema';
-import { and, eq, lt, sql } from 'drizzle-orm';
+import {
+	assignments,
+	bids,
+	bidWindows,
+	driverMetrics,
+	driverPreferences,
+	notifications,
+	routeCompletions,
+	routes,
+	user
+} from '$lib/server/db/schema';
+import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
+import { and, eq, lt } from 'drizzle-orm';
 import { toZonedTime } from 'date-fns-tz';
 import { addMinutes, parseISO, startOfDay } from 'date-fns';
 import logger from '$lib/server/logger';
@@ -21,6 +32,13 @@ export interface CreateBidWindowResult {
 	bidWindowId?: string;
 	reason?: string;
 	notifiedCount?: number;
+}
+
+export interface ResolveBidWindowResult {
+	resolved: boolean;
+	bidCount: number;
+	winnerId?: string;
+	reason?: string;
 }
 
 /**
@@ -229,6 +247,168 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 	// For now, we create in-app notifications that drivers can see in the app
 
 	return eligibleDriverIds.length;
+}
+
+async function calculateBidScore(userId: string, routeId: string): Promise<number> {
+	const [metrics] = await db
+		.select({
+			completionRate: driverMetrics.completionRate,
+			attendanceRate: driverMetrics.attendanceRate
+		})
+		.from(driverMetrics)
+		.where(eq(driverMetrics.userId, userId));
+
+	const [routeFamiliarity] = await db
+		.select({ completionCount: routeCompletions.completionCount })
+		.from(routeCompletions)
+		.where(and(eq(routeCompletions.userId, userId), eq(routeCompletions.routeId, routeId)));
+
+	const [preferences] = await db
+		.select({ preferredRoutes: driverPreferences.preferredRoutes })
+		.from(driverPreferences)
+		.where(eq(driverPreferences.userId, userId));
+
+	const completionRate = metrics?.completionRate ?? 0;
+	const attendanceRate = metrics?.attendanceRate ?? 0;
+	const familiarityNormalized = Math.min((routeFamiliarity?.completionCount ?? 0) / 20, 1);
+	const preferredRoutes = preferences?.preferredRoutes ?? [];
+	const preferenceBonus = preferredRoutes.slice(0, 3).includes(routeId) ? 1 : 0;
+
+	return (
+		completionRate * 0.4 +
+		familiarityNormalized * 0.3 +
+		attendanceRate * 0.2 +
+		preferenceBonus * 0.1
+	);
+}
+
+/**
+ * Resolve a bid window by scoring bids and selecting a winner.
+ */
+export async function resolveBidWindow(bidWindowId: string): Promise<ResolveBidWindowResult> {
+	const log = logger.child({ operation: 'resolveBidWindow', bidWindowId });
+
+	const [window] = await db
+		.select({
+			id: bidWindows.id,
+			assignmentId: bidWindows.assignmentId,
+			status: bidWindows.status
+		})
+		.from(bidWindows)
+		.where(eq(bidWindows.id, bidWindowId));
+
+	if (!window) {
+		log.warn('Bid window not found');
+		return { resolved: false, bidCount: 0, reason: 'not_found' };
+	}
+
+	if (window.status !== 'open') {
+		log.info({ status: window.status }, 'Bid window not open');
+		return { resolved: false, bidCount: 0, reason: 'not_open' };
+	}
+
+	const [assignment] = await db
+		.select({
+			id: assignments.id,
+			date: assignments.date,
+			routeId: assignments.routeId,
+			routeName: routes.name
+		})
+		.from(assignments)
+		.innerJoin(routes, eq(assignments.routeId, routes.id))
+		.where(eq(assignments.id, window.assignmentId));
+
+	if (!assignment) {
+		log.warn({ assignmentId: window.assignmentId }, 'Assignment not found');
+		return { resolved: false, bidCount: 0, reason: 'assignment_not_found' };
+	}
+
+	const pendingBids = await db
+		.select({
+			id: bids.id,
+			userId: bids.userId,
+			bidAt: bids.bidAt
+		})
+		.from(bids)
+		.where(and(eq(bids.assignmentId, assignment.id), eq(bids.status, 'pending')));
+
+	if (pendingBids.length === 0) {
+		log.info({ assignmentId: assignment.id }, 'No bids to resolve');
+		return { resolved: false, bidCount: 0, reason: 'no_bids' };
+	}
+
+	const scoredBids = await Promise.all(
+		pendingBids.map(async (bid) => ({
+			...bid,
+			score: await calculateBidScore(bid.userId, assignment.routeId)
+		}))
+	);
+
+	scoredBids.sort((a, b) => {
+		if (b.score !== a.score) {
+			return b.score - a.score;
+		}
+		return a.bidAt.getTime() - b.bidAt.getTime();
+	});
+
+	const winner = scoredBids[0];
+	const resolvedAt = new Date();
+
+	await db.transaction(async (tx) => {
+		await tx
+			.update(bidWindows)
+			.set({ status: 'resolved', winnerId: winner.userId })
+			.where(eq(bidWindows.id, bidWindowId));
+
+		await tx
+			.update(assignments)
+			.set({
+				userId: winner.userId,
+				status: 'scheduled',
+				assignedBy: 'bid',
+				assignedAt: resolvedAt,
+				updatedAt: resolvedAt
+			})
+			.where(eq(assignments.id, assignment.id));
+
+		for (const bid of scoredBids) {
+			await tx
+				.update(bids)
+				.set({
+					score: bid.score,
+					status: bid.id === winner.id ? 'won' : 'lost',
+					resolvedAt
+				})
+				.where(eq(bids.id, bid.id));
+		}
+	});
+
+	const formattedDate = assignment.date;
+	const winnerBody = `You won ${assignment.routeName} for ${formattedDate}`;
+	const loserBody = `${assignment.routeName} assigned to another driver`;
+	const notificationData = {
+		assignmentId: assignment.id,
+		bidWindowId,
+		routeName: assignment.routeName,
+		assignmentDate: formattedDate
+	};
+
+	await sendNotification(winner.userId, 'bid_won', {
+		customBody: winnerBody,
+		data: notificationData
+	});
+
+	if (scoredBids.length > 1) {
+		const loserIds = scoredBids.slice(1).map((bid) => bid.userId);
+		await sendBulkNotifications(loserIds, 'bid_lost', {
+			customBody: loserBody,
+			data: notificationData
+		});
+	}
+
+	log.info({ winnerId: winner.userId, bidCount: scoredBids.length }, 'Bid window resolved');
+
+	return { resolved: true, bidCount: scoredBids.length, winnerId: winner.userId };
 }
 
 /**
