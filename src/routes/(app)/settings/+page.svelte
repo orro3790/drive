@@ -131,18 +131,20 @@
 		width: 100%;
 		height: 100%;
 		display: flex;
-		padding: var(--spacing-4) 0 var(--spacing-4) var(--spacing-4);
+		justify-content: center;
+		padding: var(--spacing-4);
 		min-height: 0;
 	}
 
 	.settings-unified-card {
 		display: flex;
 		flex-direction: row;
-		flex: 1;
+		width: 100%;
+		max-width: 1200px;
 		height: 100%;
 		overflow: hidden;
 		background: var(--surface-primary);
-		border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+		border-radius: var(--radius-lg);
 		box-shadow: var(--shadow-base);
 	}
 
@@ -175,10 +177,9 @@
 		margin-inline: auto;
 	}
 
-	/* Constrain sections and add right padding since card extends to edge */
+	/* Constrain sections */
 	.settings-content-area > :global(*) {
 		width: 100%;
-		padding-right: var(--spacing-4);
 	}
 
 	/* Mobile responsive - drill-down navigation */
