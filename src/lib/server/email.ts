@@ -41,13 +41,19 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
 
 		if (!response.ok) {
 			const errorText = await response.text().catch(() => 'unknown error');
-			logger.error({ email: to, status: response.status, error: errorText }, 'Password reset email failed');
+			logger.error(
+				{ email: to, status: response.status, error: errorText },
+				'Password reset email failed'
+			);
 			return;
 		}
 
 		const result = (await response.json()) as { id?: string };
 		logger.info({ email: to, emailId: result.id }, 'Password reset email sent');
 	} catch (err) {
-		logger.error({ email: to, error: err instanceof Error ? err.message : 'unknown' }, 'Password reset email failed');
+		logger.error(
+			{ email: to, error: err instanceof Error ? err.message : 'unknown' },
+			'Password reset email failed'
+		);
 	}
 }
