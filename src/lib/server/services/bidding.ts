@@ -6,13 +6,7 @@
  */
 
 import { db } from '$lib/server/db';
-import {
-	assignments,
-	bidWindows,
-	notifications,
-	routes,
-	user
-} from '$lib/server/db/schema';
+import { assignments, bidWindows, notifications, routes, user } from '$lib/server/db/schema';
 import { and, eq, lt, sql } from 'drizzle-orm';
 import { toZonedTime } from 'date-fns-tz';
 import { addMinutes, parseISO, startOfDay } from 'date-fns';
@@ -241,9 +235,7 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
  * Get all open bid windows that have passed their closesAt time.
  * Used by the cron job to resolve expired windows.
  */
-export async function getExpiredBidWindows(): Promise<
-	Array<{ id: string; assignmentId: string }>
-> {
+export async function getExpiredBidWindows(): Promise<Array<{ id: string; assignmentId: string }>> {
 	const now = new Date();
 
 	return db

@@ -10,7 +10,10 @@
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
 	import { pageHeaderStore } from '$lib/stores/app-shell/pageHeaderStore.svelte';
-	import SettingsNav, { type Category, type NavGroup } from '$lib/components/settings/SettingsNav.svelte';
+	import SettingsNav, {
+		type Category,
+		type NavGroup
+	} from '$lib/components/settings/SettingsNav.svelte';
 	import AccountSection from '$lib/components/settings/AccountSection.svelte';
 	import type { PageData } from './$types';
 	import type { Breadcrumb } from '$lib/schemas/ui/breadcrumb';
