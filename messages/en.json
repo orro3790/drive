@@ -5,6 +5,7 @@
 	"common_done": "Done",
 	"common_on": "On",
 	"common_off": "Off",
+	"common_home": "Home",
 
 	"auth_phone_label": "Phone",
 	"auth_phone_placeholder": "Enter phone number",
@@ -309,5 +310,19 @@
 	"preferences_day_fri": "Fri",
 	"preferences_day_sat": "Sat",
 	"preferences_no_routes": "No routes selected",
-	"preferences_remove_route": "Remove route"
+	"preferences_remove_route": "Remove route",
+
+	"settings_page_title": "Settings",
+	"settings_page_description": "Manage your account and preferences.",
+	"settings_group_personal": "Personal",
+	"settings_account_section": "Account",
+	"settings_account_name_label": "Name",
+	"settings_account_email_label": "Email",
+	"settings_account_role_label": "Role",
+	"settings_account_role_driver": "Driver",
+	"settings_account_role_manager": "Manager",
+	"settings_session_section": "Session",
+	"settings_sign_out_button": "Sign out",
+	"settings_sign_out_confirm_title": "Sign out",
+	"settings_sign_out_confirm_message": "Are you sure you want to sign out?"
 }

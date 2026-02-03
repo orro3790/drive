@@ -1,27 +1,36 @@
 <!--
 @component
 PageHeader - The main header bar for app pages.
-Displays page title, optional sidebar toggle, mobile hamburger, and action buttons.
+Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamburger, and action buttons.
 -->
 <script lang="ts">
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import Menu from '$lib/components/icons/Menu.svelte';
 	import SidebarToggle from '$lib/components/icons/SidebarToggle.svelte';
+	import ChevronRight from '$lib/components/icons/ChevronRight.svelte';
 	import { appSidebarStore } from '$lib/stores/app-shell/appSidebarStore.svelte';
 	import { pageHeaderStore } from '$lib/stores/app-shell/pageHeaderStore.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
-	let { showSidebarToggle = true } = $props<{
-		showSidebarToggle?: boolean;
-	}>();
+	let { showSidebarToggle = true }: { showSidebarToggle?: boolean } = $props();
 
 	const isSidebarExpanded = $derived(appSidebarStore.state.state === 'expanded');
 	const isMobile = $derived(appSidebarStore.state.isMobile);
 
 	// Read from store
 	const title = $derived(pageHeaderStore.state.title);
+	const breadcrumbs = $derived(pageHeaderStore.state.breadcrumbs);
 	const actionsSnippet = $derived(pageHeaderStore.state.actionsSnippet);
+
+	// Derived breadcrumb parts
+	const hasBreadcrumbs = $derived(breadcrumbs.length > 0);
+	const leaf = $derived(breadcrumbs[breadcrumbs.length - 1]);
+	const parents = $derived(breadcrumbs.slice(0, -1));
+
+	function handleCrumbSelect(cb: (() => void) | undefined) {
+		cb?.();
+	}
 </script>
 
 <header class="page-header">
@@ -46,7 +55,31 @@ Displays page title, optional sidebar toggle, mobile hamburger, and action butto
 			</IconButton>
 		{/if}
 
-		<h1 id="page-title">{title}</h1>
+		{#if hasBreadcrumbs}
+			<nav class="breadcrumb" aria-label="Breadcrumb">
+				<ol>
+					{#each parents as crumb, i (i)}
+						<li class="crumb parent">
+							{#if crumb.onSelect}
+								<button type="button" onclick={() => handleCrumbSelect(crumb.onSelect)}>
+									{crumb.label}
+								</button>
+							{:else}
+								<span>{crumb.label}</span>
+							{/if}
+						</li>
+						<span class="sep" aria-hidden="true">
+							<Icon size="small"><ChevronRight /></Icon>
+						</span>
+					{/each}
+					<li class="crumb leaf">
+						<h1 id="page-title" aria-current="page">{leaf?.label || title}</h1>
+					</li>
+				</ol>
+			</nav>
+		{:else}
+			<h1 id="page-title">{title}</h1>
+		{/if}
 	</div>
 
 	<div class="header-right">
@@ -64,8 +97,7 @@ Displays page title, optional sidebar toggle, mobile hamburger, and action butto
 		gap: var(--spacing-3);
 		padding: var(--spacing-2) var(--spacing-3);
 		background: var(--surface-primary);
-		border-bottom: none;
-		box-shadow: none;
+		box-shadow: var(--shadow-base);
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 		z-index: 2;
@@ -93,5 +125,57 @@ Displays page title, optional sidebar toggle, mobile hamburger, and action butto
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	/* Breadcrumb styles */
+	.breadcrumb {
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	.breadcrumb ol {
+		display: flex;
+		align-items: center;
+		gap: 0;
+		padding: 0;
+		margin: 0;
+		list-style: none;
+		white-space: nowrap;
+	}
+
+	.crumb {
+		display: flex;
+		align-items: center;
+	}
+
+	.crumb button {
+		background: none;
+		border: none;
+		padding: 0;
+		font: inherit;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+
+	.crumb button:hover {
+		color: var(--text-normal);
+	}
+
+	.crumb span {
+		color: var(--text-muted);
+	}
+
+	.sep {
+		color: var(--text-faint);
+		margin: 0 var(--spacing-1);
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.leaf h1 {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-normal);
+		margin: 0;
 	}
 </style>

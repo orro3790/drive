@@ -3,6 +3,7 @@
 	"common_cancel": "取消",
 	"common_confirm": "确认",
 	"common_done": "完成",
+	"common_home": "首页",
 	"auth_phone_label": "电话",
 	"auth_phone_placeholder": "输入电话号码",
 	"auth_brand_eyebrow": "Drive Ops",
@@ -144,5 +145,19 @@
 	"nav_notifications": "通知",
 	"nav_routes": "路线",
 	"nav_drivers": "司机",
-	"nav_warehouses": "仓库"
+	"nav_warehouses": "仓库",
+
+	"settings_page_title": "设置",
+	"settings_page_description": "管理您的账户和偏好。",
+	"settings_group_personal": "个人",
+	"settings_account_section": "账户",
+	"settings_account_name_label": "姓名",
+	"settings_account_email_label": "邮箱",
+	"settings_account_role_label": "角色",
+	"settings_account_role_driver": "司机",
+	"settings_account_role_manager": "管理员",
+	"settings_session_section": "会话",
+	"settings_sign_out_button": "退出登录",
+	"settings_sign_out_confirm_title": "退出登录",
+	"settings_sign_out_confirm_message": "确定要退出登录吗？"
 }

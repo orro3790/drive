@@ -21,6 +21,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import MapPin from '$lib/components/icons/MapPin.svelte';
 	import Building from '$lib/components/icons/Building.svelte';
 	import Avatar from '$lib/components/icons/Avatar.svelte';
+	import Settings from '$lib/components/icons/Settings.svelte';
 	import Logout from '$lib/components/icons/Logout.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import SidebarItem from './SidebarItem.svelte';
@@ -49,16 +50,16 @@ Mobile: Hidden by default, hamburger in header opens overlay
 			label: () => m.nav_schedule(),
 			Icon: Calendar,
 			path: '/schedule'
-		},
-		{
-			id: 'settings',
-			label: () => m.nav_settings(),
-			Icon: CalendarCog,
-			path: '/settings'
 		}
 	];
 
 	const managerNavItems: NavItem[] = [
+		{
+			id: 'drivers',
+			label: () => m.nav_drivers(),
+			Icon: Avatar,
+			path: '/drivers'
+		},
 		{
 			id: 'routes',
 			label: () => m.nav_routes(),
@@ -70,12 +71,6 @@ Mobile: Hidden by default, hamburger in header opens overlay
 			label: () => m.nav_warehouses(),
 			Icon: Building,
 			path: '/warehouses'
-		},
-		{
-			id: 'drivers',
-			label: () => m.nav_drivers(),
-			Icon: Avatar,
-			path: '/drivers'
 		}
 	];
 
@@ -160,8 +155,18 @@ Mobile: Hidden by default, hamburger in header opens overlay
 			{/each}
 		</div>
 
-		<!-- Footer: language toggle + logout -->
+		<!-- Footer: settings, language toggle, logout -->
 		<div class="nav-group nav-bottom">
+			<SidebarItem
+				label={m.nav_settings()}
+				onClick={() => handleNavClick('/settings')}
+				selected={isSelected('/settings')}
+			>
+				{#snippet icon()}
+					<Icon><Settings /></Icon>
+				{/snippet}
+			</SidebarItem>
+
 			{#if SHOW_LANGUAGE_TOGGLE}
 				<button
 					class="lang-toggle"

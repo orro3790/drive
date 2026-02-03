@@ -26,7 +26,7 @@
 	.app-shell {
 		display: flex;
 		min-height: 100vh;
-		background: var(--surface-secondary);
+		background: var(--surface-inset);
 	}
 
 	.main-area {
