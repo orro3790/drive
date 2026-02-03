@@ -143,9 +143,9 @@
 			{m.auth_sign_in_button()}
 		</Button>
 
-		<button type="button" class="forgot-password">
+		<a href="/forgot-password" class="forgot-password">
 			{m.auth_forgot_password()}
-		</button>
+		</a>
 	</form>
 
 	<div class="auth-footer">
