@@ -4,13 +4,14 @@
 	Manager's main dashboard showing:
 	- Route coverage status with assignment details
 	- CRUD operations on routes
-	- Row click shows assignment details in side panel
+	- Bid windows tab with polling-based refresh
+	- Row click shows details in side panel
 
 	Uses DataTable with Drive tabs/toolbar pattern.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import {
 		DataTable,
 		createSvelteTable,
@@ -23,6 +24,7 @@
 		type CellRendererContext
 	} from '$lib/components/data-table';
 	import PageWithDetailPanel from '$lib/components/PageWithDetailPanel.svelte';
+	import BidWindowsTable from '$lib/components/BidWindowsTable.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
@@ -38,14 +40,20 @@
 	import Reset from '$lib/components/icons/Reset.svelte';
 	import { routeStore, type RouteWithWarehouse } from '$lib/stores/routeStore.svelte';
 	import { warehouseStore } from '$lib/stores/warehouseStore.svelte';
+	import { bidWindowStore, type BidWindow } from '$lib/stores/bidWindowStore.svelte';
 	import { routeCreateSchema, routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
 	import type { SelectOption } from '$lib/schemas/ui/select';
+
+	// Tab state
+	type TabId = 'routes' | 'bidWindows';
+	let activeTab = $state<TabId>('routes');
 
 	// State
 	let showCreateModal = $state(false);
 	let deleteConfirm = $state<{ route: RouteWithWarehouse; x: number; y: number } | null>(null);
 	let showFilterDrawer = $state(false);
 	let selectedRouteId = $state<string | null>(null);
+	let selectedBidWindowId = $state<string | null>(null);
 	let isEditing = $state(false);
 
 	// Form state
@@ -314,11 +322,55 @@
 			(formName !== selectedRoute.name || formWarehouseId !== selectedRoute.warehouseId)
 	);
 
+	// Tab switching logic
+	function switchTab(tab: TabId) {
+		if (tab === activeTab) return;
+
+		// Clear selections when switching
+		if (activeTab === 'routes') {
+			clearSelection();
+		} else {
+			clearBidWindowSelection();
+		}
+
+		// Stop/start polling based on tab
+		if (tab === 'bidWindows') {
+			bidWindowStore.startPolling(30000);
+		} else {
+			bidWindowStore.stopPolling();
+		}
+
+		activeTab = tab;
+	}
+
+	// Bid window selection
+	function syncSelectedBidWindow(window: BidWindow) {
+		if (selectedBidWindowId === window.id) return;
+		selectedBidWindowId = window.id;
+	}
+
+	function clearBidWindowSelection() {
+		selectedBidWindowId = null;
+	}
+
+	function handleBidWindowRowClick(window: BidWindow, _event: MouseEvent) {
+		syncSelectedBidWindow(window);
+	}
+
+	const selectedBidWindow = $derived.by(
+		() => bidWindowStore.bidWindows.find((w) => w.id === selectedBidWindowId) ?? null
+	);
+
 	// Load data on mount
 	onMount(() => {
 		warehouseStore.load();
 		dateFilter = toLocalYmd();
 		applyFilters();
+	});
+
+	// Cleanup on destroy
+	onDestroy(() => {
+		bidWindowStore.stopPolling();
 	});
 </script>
 
@@ -343,8 +395,27 @@
 
 {#snippet tabsSnippet()}
 	<div class="tab-bar" role="tablist">
-		<button type="button" class="tab active" role="tab" aria-selected="true" tabindex="0">
+		<button
+			type="button"
+			class="tab"
+			class:active={activeTab === 'routes'}
+			role="tab"
+			aria-selected={activeTab === 'routes'}
+			tabindex={activeTab === 'routes' ? 0 : -1}
+			onclick={() => switchTab('routes')}
+		>
 			{m.route_page_title()}
+		</button>
+		<button
+			type="button"
+			class="tab"
+			class:active={activeTab === 'bidWindows'}
+			role="tab"
+			aria-selected={activeTab === 'bidWindows'}
+			tabindex={activeTab === 'bidWindows' ? 0 : -1}
+			onclick={() => switchTab('bidWindows')}
+		>
+			{m.bid_windows_tab()}
 		</button>
 	</div>
 {/snippet}
@@ -485,36 +556,143 @@
 	</div>
 {/snippet}
 
+{#snippet bidWindowDetailInfo(window: BidWindow)}
+	<dl class="detail-list">
+		<div class="detail-row">
+			<dt>{m.bid_windows_detail_route()}</dt>
+			<dd>{window.routeName}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.bid_windows_detail_warehouse()}</dt>
+			<dd>{window.warehouseName}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.bid_windows_detail_date()}</dt>
+			<dd>{formatDate(window.assignmentDate)}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.bid_windows_detail_status()}</dt>
+			<dd>
+				{#if window.status === 'open'}
+					<Chip variant="status" status="info" label={m.bid_windows_status_open()} size="xs" />
+				{:else}
+					<Chip variant="status" status="neutral" label={m.bid_windows_status_resolved()} size="xs" />
+				{/if}
+			</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.bid_windows_detail_bids()}</dt>
+			<dd>{window.bidCount}</dd>
+		</div>
+		{#if window.status === 'resolved'}
+			<div class="detail-row">
+				<dt>{m.bid_windows_detail_winner()}</dt>
+				<dd>
+					{#if window.winnerName}
+						{window.winnerName}
+					{:else}
+						<span class="winner-unfilled">{m.bid_windows_winner_unfilled()}</span>
+					{/if}
+				</dd>
+			</div>
+		{/if}
+		{#if window.status === 'open'}
+			<div class="detail-row">
+				<dt>{m.bid_windows_detail_closes()}</dt>
+				<dd>{new Date(window.closesAt).toLocaleTimeString()}</dd>
+			</div>
+		{/if}
+	</dl>
+{/snippet}
+
+{#snippet bidWindowDetailView(window: BidWindow)}
+	<div class="detail-content">
+		{@render bidWindowDetailInfo(window)}
+	</div>
+{/snippet}
+
+{#snippet bidWindowMobileDetail(window: BidWindow)}
+	<div class="detail-content">
+		{@render bidWindowDetailInfo(window)}
+	</div>
+{/snippet}
+
+{#snippet bidWindowsToolbarSnippet()}
+	<IconButton tooltip={m.table_columns_reset_sizes()} onclick={() => bidWindowStore.load()}>
+		<Icon><Reset /></Icon>
+	</IconButton>
+{/snippet}
+
+{#snippet bidWindowsTabsSnippet()}
+	<div class="tab-bar" role="tablist">
+		<button
+			type="button"
+			class="tab"
+			class:active={activeTab === 'routes'}
+			role="tab"
+			aria-selected={activeTab === 'routes'}
+			tabindex={activeTab === 'routes' ? 0 : -1}
+			onclick={() => switchTab('routes')}
+		>
+			{m.route_page_title()}
+		</button>
+		<button
+			type="button"
+			class="tab"
+			class:active={activeTab === 'bidWindows'}
+			role="tab"
+			aria-selected={activeTab === 'bidWindows'}
+			tabindex={activeTab === 'bidWindows' ? 0 : -1}
+			onclick={() => switchTab('bidWindows')}
+		>
+			{m.bid_windows_tab()}
+		</button>
+	</div>
+{/snippet}
+
 {#snippet tableContent(ctx: {
 	isWideMode: boolean;
 	onWideModeChange: (value: boolean) => void;
 	isMobile: boolean;
 })}
-	<DataTable
-		{table}
-		loading={routeStore.isLoading}
-		emptyTitle={m.route_empty_state()}
-		emptyMessage={m.route_empty_state_message()}
-		showPagination
-		showSelection={false}
-		showColumnVisibility
-		showExport
-		showWideModeToggle
-		isWideMode={ctx.isWideMode}
-		onWideModeChange={ctx.onWideModeChange}
-		onMobileDetailOpen={syncSelectedRoute}
-		exportFilename="routes"
-		tabs={tabsSnippet}
-		toolbar={toolbarSnippet}
-		cellComponents={{
-			driver: driverCell,
-			status: statusCell
-		}}
-		activeRowId={selectedRouteId ?? undefined}
-		onRowClick={handleRowClick}
-		mobileDetailContent={mobileDetail}
-		mobileDetailTitle={m.manager_dashboard_detail_title()}
-	/>
+	{#if activeTab === 'routes'}
+		<DataTable
+			{table}
+			loading={routeStore.isLoading}
+			emptyTitle={m.route_empty_state()}
+			emptyMessage={m.route_empty_state_message()}
+			showPagination
+			showSelection={false}
+			showColumnVisibility
+			showExport
+			showWideModeToggle
+			isWideMode={ctx.isWideMode}
+			onWideModeChange={ctx.onWideModeChange}
+			onMobileDetailOpen={syncSelectedRoute}
+			exportFilename="routes"
+			tabs={tabsSnippet}
+			toolbar={toolbarSnippet}
+			cellComponents={{
+				driver: driverCell,
+				status: statusCell
+			}}
+			activeRowId={selectedRouteId ?? undefined}
+			onRowClick={handleRowClick}
+			mobileDetailContent={mobileDetail}
+			mobileDetailTitle={m.manager_dashboard_detail_title()}
+		/>
+	{:else}
+		<BidWindowsTable
+			onRowClick={handleBidWindowRowClick}
+			activeRowId={selectedBidWindowId}
+			isWideMode={ctx.isWideMode}
+			onWideModeChange={ctx.onWideModeChange}
+			mobileDetailContent={bidWindowMobileDetail}
+			onMobileDetailOpen={syncSelectedBidWindow}
+			tabs={bidWindowsTabsSnippet}
+			toolbar={bidWindowsToolbarSnippet}
+		/>
+	{/if}
 {/snippet}
 
 <svelte:head>
@@ -522,21 +700,35 @@
 </svelte:head>
 
 <div class="page-surface">
-	<PageWithDetailPanel
-		item={selectedRoute}
-		title={m.manager_dashboard_detail_title()}
-		open={!!selectedRoute}
-		onClose={clearSelection}
-		{isEditing}
-		{hasChanges}
-		onEditToggle={handleEditToggle}
-		onSave={handleSave}
-		viewContent={routeDetailView}
-		editContent={routeDetailEdit}
-		viewActions={routeDetailActions}
-		{tableContent}
-		storageKey="routes"
-	/>
+	{#if activeTab === 'routes'}
+		<PageWithDetailPanel
+			item={selectedRoute}
+			title={m.manager_dashboard_detail_title()}
+			open={!!selectedRoute}
+			onClose={clearSelection}
+			{isEditing}
+			{hasChanges}
+			onEditToggle={handleEditToggle}
+			onSave={handleSave}
+			viewContent={routeDetailView}
+			editContent={routeDetailEdit}
+			viewActions={routeDetailActions}
+			{tableContent}
+			storageKey="routes"
+		/>
+	{:else}
+		<PageWithDetailPanel
+			item={selectedBidWindow}
+			title={m.bid_windows_detail_title()}
+			open={!!selectedBidWindow}
+			onClose={clearBidWindowSelection}
+			isEditing={false}
+			hasChanges={false}
+			viewContent={bidWindowDetailView}
+			{tableContent}
+			storageKey="bid-windows"
+		/>
+	{/if}
 </div>
 
 <!-- Filter Drawer -->
@@ -838,5 +1030,11 @@
 		display: flex;
 		gap: var(--spacing-2);
 		margin-top: var(--spacing-2);
+	}
+
+	/* Bid window detail styling */
+	.winner-unfilled {
+		color: var(--status-warning);
+		font-style: italic;
 	}
 </style>
