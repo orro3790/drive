@@ -668,6 +668,8 @@ Designed to work with the Driver Ops design system.
 		border-collapse: separate;
 		border-spacing: 0;
 		font-size: var(--font-size-base);
+		user-select: none;
+		-webkit-user-select: none;
 	}
 
 	/* Fixed table layout for column resizing - allows columns to be resized

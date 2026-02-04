@@ -305,7 +305,9 @@
 
 {#snippet warehouseDetailActions(warehouse: WarehouseWithRouteCount)}
 	<Button
-		variant="danger"
+		variant="secondary"
+		size="small"
+		fill
 		onclick={(e) => openDeleteConfirm(warehouse, e)}
 		disabled={warehouse.routeCount > 0}
 	>
@@ -334,7 +336,8 @@
 					{m.common_edit()}
 				</Button>
 				<Button
-					variant="danger"
+					variant="secondary"
+					size="small"
 					fill
 					onclick={(e) => openDeleteConfirm(warehouse, e)}
 					disabled={warehouse.routeCount > 0}
@@ -570,7 +573,7 @@
 	.detail-list {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-3);
+		gap: 0;
 		margin: 0;
 	}
 
@@ -578,8 +581,9 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--spacing-2) 0;
-		border-bottom: 1px solid var(--border-muted);
+		padding: var(--spacing-3) 0;
+		border-bottom: var(--border-width-thin) solid var(--border-primary);
+		min-height: 44px;
 	}
 
 	.detail-row:last-child {

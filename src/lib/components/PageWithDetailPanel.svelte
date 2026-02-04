@@ -1,8 +1,8 @@
 <script lang="ts" generics="ItemType">
 	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
+	import { portal } from '$lib/actions/portal';
 	import DetailPanel from '$lib/components/DetailPanel.svelte';
-	import Modal from '$lib/components/primitives/Modal.svelte';
 
 	type TableContext = {
 		isWideMode: boolean;
@@ -77,6 +77,19 @@
 	const showPanel = $derived(isOpen && !isMobile && !isWideMode);
 	const showModal = $derived(isOpen && !isMobile && isWideMode);
 
+	let isBackdropPointerDown = false;
+
+	function handleBackdropPointerDown(event: PointerEvent) {
+		isBackdropPointerDown = event.target === event.currentTarget;
+	}
+
+	function handleBackdropPointerUp(event: PointerEvent) {
+		if (isBackdropPointerDown && event.target === event.currentTarget) {
+			onClose();
+		}
+		isBackdropPointerDown = false;
+	}
+
 	function handleWideModeChange(next: boolean) {
 		if (next === isWideMode) return;
 		isWideMode = next;
@@ -122,23 +135,36 @@
 </div>
 
 {#if showModal}
-	<Modal {title} {onClose} maxWidth="clamp(320px, 90vw, 720px)">
-		<DetailPanel
-			{item}
-			{title}
-			open={isOpen}
-			{width}
-			{isEditing}
-			{hasChanges}
-			{onClose}
-			{onEditToggle}
-			{onSave}
-			{viewContent}
-			{editContent}
-			{viewActions}
-			variant="modal"
-		/>
-	</Modal>
+	<div
+		class="detail-modal-backdrop"
+		use:portal
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="detail-panel-title"
+		tabindex="-1"
+		onpointerdown={handleBackdropPointerDown}
+		onpointerup={handleBackdropPointerUp}
+		onpointercancel={() => (isBackdropPointerDown = false)}
+		onkeydown={(event) => event.key === 'Escape' && onClose()}
+	>
+		<div class="detail-modal-card" style={`--detail-modal-width: ${width}px;`}>
+			<DetailPanel
+				{item}
+				{title}
+				open={isOpen}
+				{width}
+				{isEditing}
+				{hasChanges}
+				{onClose}
+				{onEditToggle}
+				{onSave}
+				{viewContent}
+				{editContent}
+				{viewActions}
+				variant="modal"
+			/>
+		</div>
+	</div>
 {/if}
 
 <style>
@@ -153,7 +179,7 @@
 	.detail-layout {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: var(--spacing-4);
+		gap: 0;
 		width: 100%;
 		height: 100%;
 		min-height: 0;
@@ -178,9 +204,45 @@
 		flex-direction: column;
 	}
 
-	@media (max-width: 767px) {
-		.detail-layout {
-			gap: var(--spacing-3);
+	.detail-modal-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: var(--z-modal);
+		background: var(--overlay-backdrop);
+		backdrop-filter: blur(4px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--spacing-4);
+		animation: fadeIn 150ms ease-out;
+	}
+
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+
+	.detail-modal-card {
+		width: 100%;
+		max-width: var(--detail-modal-width, 520px);
+		max-height: 85vh;
+		display: flex;
+		flex-direction: column;
+		animation: slideUp 200ms ease-out;
+	}
+
+	@keyframes slideUp {
+		from {
+			opacity: 0;
+			transform: translateY(16px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
 		}
 	}
 </style>

@@ -168,6 +168,7 @@
 	"manager_dashboard_driver_header": "司机",
 	"manager_dashboard_driver_unassigned": "未分配",
 	"manager_dashboard_bid_closes": "{time} 后结束",
+	"manager_dashboard_bid_closed": "已结束",
 	"manager_dashboard_detail_title": "分配详情",
 	"manager_dashboard_detail_route": "路线",
 	"manager_dashboard_detail_warehouse": "仓库",
