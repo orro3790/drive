@@ -57,7 +57,10 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 	'warning',
 	'manual',
 	'schedule_locked',
-	'assignment_confirmed'
+	'assignment_confirmed',
+	'route_unfilled',
+	'route_cancelled',
+	'driver_no_show'
 ]);
 export const actorTypeEnum = pgEnum('actor_type', ['user', 'system']);
 
