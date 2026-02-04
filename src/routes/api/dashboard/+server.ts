@@ -6,6 +6,8 @@
  * - This week and next week schedule summaries
  * - Driver metrics (attendance, completion rates)
  * - Pending bids with countdown
+ *
+ * Also performs event-driven bid resolution to ensure data is fresh.
  */
 
 import { json, error } from '@sveltejs/kit';
@@ -23,6 +25,8 @@ import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import { addDays, parseISO, differenceInCalendarDays } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
 import { getWeekStart } from '$lib/server/services/scheduling';
+import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
+import logger from '$lib/server/logger';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -44,6 +48,19 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 	if (locals.user.role !== 'driver') {
 		throw error(403, 'Only drivers can access dashboard');
+	}
+
+	// Event-driven resolution: resolve any expired bid windows before fetching data
+	const expiredWindows = await getExpiredBidWindows();
+	if (expiredWindows.length > 0) {
+		const log = logger.child({ operation: 'event-driven-resolution', userId: locals.user.id });
+		for (const window of expiredWindows) {
+			try {
+				await resolveBidWindow(window.id);
+			} catch (err) {
+				log.error({ windowId: window.id, error: err }, 'Failed to resolve expired window');
+			}
+		}
 	}
 
 	const weekStart = getWeekStart(new Date());
