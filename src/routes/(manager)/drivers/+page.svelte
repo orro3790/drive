@@ -293,14 +293,11 @@
 
 		<div class="detail-actions">
 			<Button fill onclick={() => openEditModal(driver)}>
-				{m.common_edit()} {m.drivers_header_weekly_cap()}
+				{m.common_edit()}
+				{m.drivers_header_weekly_cap()}
 			</Button>
 			{#if driver.isFlagged}
-				<Button
-					variant="secondary"
-					fill
-					onclick={(e) => openUnflagConfirm(driver, e)}
-				>
+				<Button variant="secondary" fill onclick={(e) => openUnflagConfirm(driver, e)}>
 					{m.drivers_unflag_button()}
 				</Button>
 			{/if}
