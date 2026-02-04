@@ -7,11 +7,12 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, auditLogs, bidWindows } from '$lib/server/db/schema';
+import { assignments, auditLogs, bidWindows, routes } from '$lib/server/db/schema';
 import { assignmentCancelSchema } from '$lib/schemas/assignment';
 import { and, eq } from 'drizzle-orm';
 import { addMinutes, differenceInCalendarDays, parseISO } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
+import { sendManagerAlert } from '$lib/server/services/notifications';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -43,6 +44,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		.select({
 			id: assignments.id,
 			userId: assignments.userId,
+			routeId: assignments.routeId,
 			date: assignments.date,
 			status: assignments.status
 		})
@@ -93,6 +95,22 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			lateCancel: isLateCancel
 		}
 	});
+
+	// Send alert to route manager (best-effort, don't fail if alert fails)
+	try {
+		const [route] = await db
+			.select({ name: routes.name })
+			.from(routes)
+			.where(eq(routes.id, existing.routeId));
+
+		await sendManagerAlert(existing.routeId, 'route_cancelled', {
+			driverName: locals.user.name ?? 'A driver',
+			date: existing.date,
+			routeName: route?.name
+		});
+	} catch {
+		// Manager alert is best-effort, don't fail cancellation
+	}
 
 	const [existingWindow] = await db
 		.select({ id: bidWindows.id })
