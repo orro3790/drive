@@ -19,6 +19,7 @@ import {
 	real,
 	text,
 	timestamp,
+	unique,
 	uuid
 } from 'drizzle-orm/pg-core';
 import { desc, relations } from 'drizzle-orm';
@@ -71,16 +72,42 @@ export const warehouses = pgTable('warehouses', {
 });
 
 // Routes (one-to-one with warehouse)
-export const routes = pgTable('routes', {
-	id: uuid('id').primaryKey().defaultRandom(),
-	name: text('name').notNull(),
-	warehouseId: uuid('warehouse_id')
-		.notNull()
-		.references(() => warehouses.id),
-	createdBy: text('created_by').references(() => user.id),
-	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
-});
+export const routes = pgTable(
+	'routes',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		name: text('name').notNull(),
+		warehouseId: uuid('warehouse_id')
+			.notNull()
+			.references(() => warehouses.id),
+		managerId: text('manager_id').references(() => user.id, { onDelete: 'set null' }),
+		createdBy: text('created_by').references(() => user.id),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => ({
+		idxRouteManager: index('idx_routes_manager').on(table.managerId)
+	})
+);
+
+// Warehouse Managers (many-to-many junction table)
+export const warehouseManagers = pgTable(
+	'warehouse_managers',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		warehouseId: uuid('warehouse_id')
+			.notNull()
+			.references(() => warehouses.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => ({
+		uniquePair: unique().on(table.warehouseId, table.userId),
+		idxWarehouse: index('idx_warehouse_managers_warehouse').on(table.warehouseId)
+	})
+);
 
 // Driver Preferences
 export const driverPreferences = pgTable('driver_preferences', {
@@ -278,13 +305,29 @@ export const routesRelations = relations(routes, ({ one, many }) => ({
 		fields: [routes.warehouseId],
 		references: [warehouses.id]
 	}),
+	manager: one(user, {
+		fields: [routes.managerId],
+		references: [user.id]
+	}),
 	assignments: many(assignments),
 	completions: many(routeCompletions)
 }));
 
 export const warehousesRelations = relations(warehouses, ({ many }) => ({
 	routes: many(routes),
-	assignments: many(assignments)
+	assignments: many(assignments),
+	managers: many(warehouseManagers)
+}));
+
+export const warehouseManagersRelations = relations(warehouseManagers, ({ one }) => ({
+	warehouse: one(warehouses, {
+		fields: [warehouseManagers.warehouseId],
+		references: [warehouses.id]
+	}),
+	user: one(user, {
+		fields: [warehouseManagers.userId],
+		references: [user.id]
+	})
 }));
 
 export const assignmentsRelations = relations(assignments, ({ one, many }) => ({
