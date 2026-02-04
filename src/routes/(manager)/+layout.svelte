@@ -7,8 +7,6 @@
 	import MapPin from '$lib/components/icons/MapPin.svelte';
 	import Users from '$lib/components/icons/Users.svelte';
 	import Warehouse from '$lib/components/icons/Warehouse.svelte';
-	import BellRinging from '$lib/components/icons/BellRinging.svelte';
-	import Settings from '$lib/components/icons/Settings.svelte';
 
 	let { children } = $props();
 
@@ -30,18 +28,6 @@
 			label: () => m.nav_warehouses(),
 			Icon: Warehouse,
 			path: '/warehouses'
-		},
-		{
-			id: 'notifications',
-			label: () => m.nav_notifications(),
-			Icon: BellRinging,
-			path: '/notifications'
-		},
-		{
-			id: 'settings',
-			label: () => m.nav_settings(),
-			Icon: Settings,
-			path: '/settings'
 		}
 	];
 </script>
