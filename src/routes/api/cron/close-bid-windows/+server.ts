@@ -1,9 +1,11 @@
 /**
  * Close Bid Windows Cron Job
  *
- * Scheduled: Every 15 minutes (*/15 * * * *)
- * Finds expired bid windows and resolves them via resolveBidWindow().
+ * Scheduled: Daily at midnight UTC (0 0 * * *)
+ * Note: Vercel Hobby plan limits cron to once daily. Upgrade to Pro for
+ * more frequent execution (e.g., every 15 minutes for faster bid resolution).
  *
+ * Finds expired bid windows and resolves them via resolveBidWindow().
  * Windows without bids remain open (per spec: stays open indefinitely).
  * Each window is processed independently - errors don't block others.
  *
