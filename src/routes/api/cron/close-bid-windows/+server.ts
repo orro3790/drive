@@ -1,8 +1,11 @@
 /**
  * Close Bid Windows Cron Job
  *
- * Runs every 15 minutes.
- * Closes expired bid windows and resolves winners.
+ * Scheduled: Every 15 minutes (0,15,30,45 * * * *)
+ * Finds expired bid windows and resolves them via resolveBidWindow().
+ *
+ * Windows without bids remain open (per spec: stays open indefinitely).
+ * Each window is processed independently - errors don't block others.
  *
  * @see DRV-5eo
  */
@@ -10,6 +13,16 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import logger from '$lib/server/logger';
+import {
+	getExpiredBidWindows,
+	resolveBidWindow,
+	type ResolveBidWindowResult
+} from '$lib/server/services/bidding';
+
+interface ProcessingResult {
+	windowId: string;
+	result: ResolveBidWindowResult | { error: string };
+}
 
 export const GET: RequestHandler = async ({ request }) => {
 	// Verify cron secret to prevent unauthorized access
@@ -21,21 +34,53 @@ export const GET: RequestHandler = async ({ request }) => {
 	const log = logger.child({ cron: 'close-bid-windows' });
 	log.info('Starting bid window closure cron job');
 
-	try {
-		// TODO: Implement bid window closure logic
-		// 1. Find all bid windows where closesAt <= now AND status = 'open'
-		// 2. For each window:
-		//    a. Calculate scores for all bids
-		//    b. Select winner (highest score)
-		//    c. Update window status to 'resolved', set winnerId
-		//    d. Update winning bid status to 'won', others to 'lost'
-		//    e. Assign winner to the assignment
-		//    f. Send notifications
+	const expiredWindows = await getExpiredBidWindows();
 
-		log.info('Bid window closure cron job completed');
-		return json({ success: true });
-	} catch (error) {
-		log.error({ error }, 'Bid window closure cron job failed');
-		return json({ error: 'Internal server error' }, { status: 500 });
+	if (expiredWindows.length === 0) {
+		log.info('No expired bid windows to process');
+		return json({ success: true, processed: 0, resolved: 0, errors: 0 });
 	}
+
+	log.info({ count: expiredWindows.length }, 'Found expired bid windows');
+
+	const results: ProcessingResult[] = [];
+	let resolvedCount = 0;
+	let errorCount = 0;
+
+	// Process each window independently
+	for (const window of expiredWindows) {
+		try {
+			const result = await resolveBidWindow(window.id);
+			results.push({ windowId: window.id, result });
+
+			if (result.resolved) {
+				resolvedCount++;
+				log.info(
+					{ windowId: window.id, winnerId: result.winnerId, bidCount: result.bidCount },
+					'Bid window resolved'
+				);
+			} else {
+				// Window stayed open (no bids or already resolved)
+				log.info({ windowId: window.id, reason: result.reason }, 'Bid window not resolved');
+			}
+		} catch (error) {
+			errorCount++;
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+			results.push({ windowId: window.id, result: { error: errorMessage } });
+			log.error({ windowId: window.id, error: errorMessage }, 'Failed to process bid window');
+		}
+	}
+
+	log.info(
+		{ processed: expiredWindows.length, resolved: resolvedCount, errors: errorCount },
+		'Bid window closure cron job completed'
+	);
+
+	return json({
+		success: true,
+		processed: expiredWindows.length,
+		resolved: resolvedCount,
+		errors: errorCount,
+		results
+	});
 };
