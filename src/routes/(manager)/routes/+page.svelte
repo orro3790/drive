@@ -22,6 +22,7 @@
 		type PaginationState,
 		type CellRendererContext
 	} from '$lib/components/data-table';
+	import PageWithDetailPanel from '$lib/components/PageWithDetailPanel.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
@@ -32,8 +33,6 @@
 	import DatePicker from '$lib/components/DatePicker.svelte';
 	import ConfirmationDialog from '$lib/components/ConfirmationDialog.svelte';
 	import Drawer from '$lib/components/primitives/Drawer.svelte';
-	import Pencil from '$lib/components/icons/Pencil.svelte';
-	import Trash from '$lib/components/icons/Trash.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Filter from '$lib/components/icons/Filter.svelte';
 	import Reset from '$lib/components/icons/Reset.svelte';
@@ -44,10 +43,10 @@
 
 	// State
 	let showCreateModal = $state(false);
-	let editingRoute = $state<RouteWithWarehouse | null>(null);
 	let deleteConfirm = $state<{ route: RouteWithWarehouse; x: number; y: number } | null>(null);
 	let showFilterDrawer = $state(false);
-	let selectedRoute = $state<RouteWithWarehouse | null>(null);
+	let selectedRouteId = $state<string | null>(null);
+	let isEditing = $state(false);
 
 	// Form state
 	let formName = $state('');
@@ -87,17 +86,13 @@
 			id: 'status',
 			header: m.route_status_header(),
 			width: 140
-		}),
-		helper.display({
-			id: 'actions',
-			header: m.common_actions(),
-			width: 100
 		})
 	];
 
 	const table = createSvelteTable<RouteWithWarehouse>(() => ({
 		data: routeStore.routes,
 		columns,
+		getRowId: (row) => row.id,
 		state: {
 			sorting,
 			pagination
@@ -177,8 +172,23 @@
 		return `${diffDays}d`;
 	}
 
+	function syncSelectedRoute(route: RouteWithWarehouse) {
+		if (selectedRouteId === route.id) return;
+		selectedRouteId = route.id;
+		formName = route.name;
+		formWarehouseId = route.warehouseId;
+		formErrors = {};
+		isEditing = false;
+	}
+
+	function clearSelection() {
+		selectedRouteId = null;
+		formErrors = {};
+		isEditing = false;
+	}
+
 	function handleRowClick(route: RouteWithWarehouse, _event: MouseEvent) {
-		selectedRoute = route;
+		syncSelectedRoute(route);
 	}
 
 	function openCreateModal() {
@@ -188,16 +198,36 @@
 		showCreateModal = true;
 	}
 
-	function openEditModal(route: RouteWithWarehouse) {
+	function startEditing(route: RouteWithWarehouse) {
+		if (selectedRouteId !== route.id) {
+			selectedRouteId = route.id;
+		}
 		formName = route.name;
 		formWarehouseId = route.warehouseId;
 		formErrors = {};
-		editingRoute = route;
+		isEditing = true;
+	}
+
+	function cancelEditing() {
+		if (selectedRoute) {
+			formName = selectedRoute.name;
+			formWarehouseId = selectedRoute.warehouseId;
+		}
+		formErrors = {};
+		isEditing = false;
+	}
+
+	function handleEditToggle(editing: boolean) {
+		if (!selectedRoute) return;
+		if (editing) {
+			startEditing(selectedRoute);
+			return;
+		}
+		cancelEditing();
 	}
 
 	function closeModals() {
 		showCreateModal = false;
-		editingRoute = null;
 		formErrors = {};
 	}
 
@@ -218,8 +248,8 @@
 		closeModals();
 	}
 
-	function handleUpdate() {
-		if (!editingRoute) return;
+	function handleSave() {
+		if (!selectedRoute) return;
 
 		const result = routeUpdateSchema.safeParse({
 			name: formName,
@@ -232,9 +262,10 @@
 
 		const warehouseName =
 			warehouseStore.warehouses.find((warehouse) => warehouse.id === result.data.warehouseId)
-				?.name ?? editingRoute.warehouseName;
-		routeStore.update(editingRoute.id, result.data, warehouseName);
-		closeModals();
+				?.name ?? selectedRoute.warehouseName;
+		routeStore.update(selectedRoute.id, result.data, warehouseName);
+		formErrors = {};
+		isEditing = false;
 	}
 
 	function openDeleteConfirm(route: RouteWithWarehouse, event: MouseEvent) {
@@ -265,6 +296,14 @@
 
 	const warehouseFormOptions = $derived(warehouseOptions);
 
+	const selectedRoute = $derived.by(
+		() => routeStore.routes.find((route) => route.id === selectedRouteId) ?? null
+	);
+	const hasChanges = $derived(
+		!!selectedRoute &&
+			(formName !== selectedRoute.name || formWarehouseId !== selectedRoute.warehouseId)
+	);
+
 	// Load data on mount
 	onMount(() => {
 		warehouseStore.load();
@@ -294,17 +333,6 @@
 	/>
 {/snippet}
 
-{#snippet actionsCell(ctx: CellRendererContext<RouteWithWarehouse>)}
-	<div class="cell-actions">
-		<IconButton onclick={() => openEditModal(ctx.row)} tooltip={m.common_edit()}>
-			<Icon><Pencil /></Icon>
-		</IconButton>
-		<IconButton onclick={(e) => openDeleteConfirm(ctx.row, e)} tooltip={m.common_delete()}>
-			<Icon><Trash /></Icon>
-		</IconButton>
-	</div>
-{/snippet}
-
 {#snippet tabsSnippet()}
 	<div class="tab-bar" role="tablist">
 		<button type="button" class="tab active" role="tab" aria-selected="true" tabindex="0">
@@ -327,28 +355,183 @@
 	</IconButton>
 {/snippet}
 
-<svelte:head>
-	<title>{m.route_page_title()} | Drive</title>
-</svelte:head>
+{#snippet routeDetailInfo(route: RouteWithWarehouse)}
+	<dl class="detail-list">
+		<div class="detail-row">
+			<dt>{m.manager_dashboard_detail_route()}</dt>
+			<dd>{route.name}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.manager_dashboard_detail_warehouse()}</dt>
+			<dd>{route.warehouseName}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.manager_dashboard_detail_date()}</dt>
+			<dd>{formatDate(dateFilter)}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.manager_dashboard_detail_status()}</dt>
+			<dd>
+				<Chip
+					variant="status"
+					status={statusChip[route.status]}
+					label={statusLabels[route.status]}
+					size="xs"
+				/>
+			</dd>
+		</div>
+		{#if route.status === 'assigned' && route.driverName}
+			<div class="detail-row">
+				<dt>{m.manager_dashboard_detail_driver()}</dt>
+				<dd>{route.driverName}</dd>
+			</div>
+		{/if}
+		{#if route.status === 'bidding' && route.bidWindowClosesAt}
+			<div class="detail-row">
+				<dt>{m.manager_dashboard_detail_bid_window()}</dt>
+				<dd>
+					{m.manager_dashboard_bid_closes({
+						time: formatRelativeTime(route.bidWindowClosesAt)
+					})}
+				</dd>
+			</div>
+		{/if}
+	</dl>
 
-<div class="page-surface">
+	{#if route.status === 'unfilled'}
+		<div class="detail-actions">
+			<Button fill disabled>
+				{m.manager_dashboard_assign_button()}
+			</Button>
+			<p class="detail-hint">Manual assignment coming soon (DRV-5iz)</p>
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet routeDetailView(route: RouteWithWarehouse)}
+	<div class="detail-content">
+		{@render routeDetailInfo(route)}
+	</div>
+{/snippet}
+
+{#snippet routeDetailEditFields(route: RouteWithWarehouse)}
+	<div class="form-field">
+		<label for="route-edit-name">{m.route_name_label()}</label>
+		<InlineEditor
+			id="route-edit-name"
+			value={formName}
+			onInput={(v) => (formName = v)}
+			placeholder={m.route_name_placeholder()}
+			required
+		/>
+		{#if formErrors.name}
+			<p class="field-error">{formErrors.name[0]}</p>
+		{/if}
+	</div>
+
+	<div class="form-field">
+		<label for="route-edit-warehouse">{m.route_warehouse_label()}</label>
+		<Select
+			id="route-edit-warehouse"
+			options={warehouseFormOptions}
+			bind:value={formWarehouseId}
+			placeholder={m.route_warehouse_placeholder()}
+			errors={formErrors.warehouseId}
+		/>
+	</div>
+{/snippet}
+
+{#snippet routeDetailEdit(route: RouteWithWarehouse)}
+	<div class="detail-content">
+		{@render routeDetailEditFields(route)}
+	</div>
+{/snippet}
+
+{#snippet routeDetailActions(route: RouteWithWarehouse)}
+	<Button variant="danger" onclick={(e) => openDeleteConfirm(route, e)}>
+		{m.common_delete()}
+	</Button>
+{/snippet}
+
+{#snippet mobileDetail(route: RouteWithWarehouse)}
+	<div class="detail-content">
+		{#if isEditing}
+			{@render routeDetailEditFields(route)}
+		{:else}
+			{@render routeDetailInfo(route)}
+		{/if}
+
+		<div class="detail-actions">
+			{#if isEditing}
+				<Button variant="secondary" fill onclick={cancelEditing}>
+					{m.common_cancel()}
+				</Button>
+				<Button fill disabled={!hasChanges} onclick={handleSave}>
+					{m.common_save()}
+				</Button>
+			{:else}
+				<Button fill onclick={() => startEditing(route)}>
+					{m.common_edit()}
+				</Button>
+				<Button variant="danger" fill onclick={(e) => openDeleteConfirm(route, e)}>
+					{m.common_delete()}
+				</Button>
+			{/if}
+		</div>
+	</div>
+{/snippet}
+
+{#snippet tableContent(ctx: {
+	isWideMode: boolean;
+	onWideModeChange: (value: boolean) => void;
+	isMobile: boolean;
+})}
 	<DataTable
 		{table}
 		loading={routeStore.isLoading}
 		emptyTitle={m.route_empty_state()}
 		emptyMessage={m.route_empty_state_message()}
 		showPagination
+		showSelection={false}
 		showColumnVisibility
 		showExport
+		showWideModeToggle
+		isWideMode={ctx.isWideMode}
+		onWideModeChange={ctx.onWideModeChange}
+		onMobileDetailOpen={syncSelectedRoute}
 		exportFilename="routes"
 		tabs={tabsSnippet}
 		toolbar={toolbarSnippet}
 		cellComponents={{
 			driver: driverCell,
-			status: statusCell,
-			actions: actionsCell
+			status: statusCell
 		}}
+		activeRowId={selectedRouteId ?? undefined}
 		onRowClick={handleRowClick}
+		mobileDetailContent={mobileDetail}
+		mobileDetailTitle={m.manager_dashboard_detail_title()}
+	/>
+{/snippet}
+
+<svelte:head>
+	<title>{m.route_page_title()} | Drive</title>
+</svelte:head>
+
+<div class="page-surface">
+	<PageWithDetailPanel
+		item={selectedRoute}
+		title={m.manager_dashboard_detail_title()}
+		open={!!selectedRoute}
+		onClose={clearSelection}
+		{isEditing}
+		{hasChanges}
+		onEditToggle={handleEditToggle}
+		onSave={handleSave}
+		viewContent={routeDetailView}
+		editContent={routeDetailEdit}
+		viewActions={routeDetailActions}
+		{tableContent}
+		storageKey="routes"
 	/>
 </div>
 
@@ -441,53 +624,6 @@
 	</Modal>
 {/if}
 
-<!-- Edit Modal -->
-{#if editingRoute}
-	<Modal title={m.route_edit_title()} onClose={closeModals}>
-		<form
-			class="modal-form"
-			onsubmit={(e) => {
-				e.preventDefault();
-				handleUpdate();
-			}}
-		>
-			<div class="form-field">
-				<label for="edit-name">{m.route_name_label()}</label>
-				<InlineEditor
-					id="edit-name"
-					value={formName}
-					onInput={(v) => (formName = v)}
-					placeholder={m.route_name_placeholder()}
-					required
-				/>
-				{#if formErrors.name}
-					<p class="field-error">{formErrors.name[0]}</p>
-				{/if}
-			</div>
-
-			<div class="form-field">
-				<label for="edit-warehouse">{m.route_warehouse_label()}</label>
-				<Select
-					id="edit-warehouse"
-					options={warehouseFormOptions}
-					bind:value={formWarehouseId}
-					placeholder={m.route_warehouse_placeholder()}
-					errors={formErrors.warehouseId}
-				/>
-			</div>
-
-			<div class="modal-actions">
-				<Button variant="secondary" onclick={closeModals} fill>
-					{m.common_cancel()}
-				</Button>
-				<Button type="submit" fill>
-					{m.common_save()}
-				</Button>
-			</div>
-		</form>
-	</Modal>
-{/if}
-
 <!-- Delete Confirmation -->
 {#if deleteConfirm}
 	<ConfirmationDialog
@@ -502,70 +638,7 @@
 	/>
 {/if}
 
-<!-- Detail Drawer -->
-{#if selectedRoute}
-	<Drawer title={m.manager_dashboard_detail_title()} onClose={() => (selectedRoute = null)}>
-		<div class="detail-content">
-			<dl class="detail-list">
-				<div class="detail-row">
-					<dt>{m.manager_dashboard_detail_route()}</dt>
-					<dd>{selectedRoute.name}</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.manager_dashboard_detail_warehouse()}</dt>
-					<dd>{selectedRoute.warehouseName}</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.manager_dashboard_detail_date()}</dt>
-					<dd>{formatDate(dateFilter)}</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.manager_dashboard_detail_status()}</dt>
-					<dd>
-						<Chip
-							variant="status"
-							status={statusChip[selectedRoute.status]}
-							label={statusLabels[selectedRoute.status]}
-							size="xs"
-						/>
-					</dd>
-				</div>
-				{#if selectedRoute.status === 'assigned' && selectedRoute.driverName}
-					<div class="detail-row">
-						<dt>{m.manager_dashboard_detail_driver()}</dt>
-						<dd>{selectedRoute.driverName}</dd>
-					</div>
-				{/if}
-				{#if selectedRoute.status === 'bidding' && selectedRoute.bidWindowClosesAt}
-					<div class="detail-row">
-						<dt>{m.manager_dashboard_detail_bid_window()}</dt>
-						<dd>
-							{m.manager_dashboard_bid_closes({
-								time: formatRelativeTime(selectedRoute.bidWindowClosesAt)
-							})}
-						</dd>
-					</div>
-				{/if}
-			</dl>
-
-			{#if selectedRoute.status === 'unfilled'}
-				<div class="detail-actions">
-					<Button fill disabled>
-						{m.manager_dashboard_assign_button()}
-					</Button>
-					<p class="detail-hint">Manual assignment coming soon (DRV-5iz)</p>
-				</div>
-			{/if}
-		</div>
-	</Drawer>
-{/if}
-
 <style>
-	.cell-actions {
-		display: flex;
-		gap: var(--spacing-1);
-	}
-
 	/* Driver cell styling */
 	.driver-name {
 		color: var(--text-normal);
@@ -581,7 +654,7 @@
 		font-size: var(--font-size-sm);
 	}
 
-	/* Detail drawer */
+	/* Detail panel */
 	.detail-content {
 		display: flex;
 		flex-direction: column;

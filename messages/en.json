@@ -165,6 +165,8 @@
 	"table_export_large_dataset_warning": "Large dataset - export may take a moment",
 
 	"table_mobile_detail_title": "Details",
+	"table_wide_mode_maximize": "Maximize table",
+	"table_wide_mode_restore": "Show side panel",
 
 	"toast_dismiss_tooltip": "Dismiss",
 	"toast_title_success": "Success",

@@ -4,6 +4,8 @@
 	"common_confirm": "确认",
 	"common_done": "完成",
 	"common_home": "首页",
+	"table_wide_mode_maximize": "最大化表格",
+	"table_wide_mode_restore": "显示侧边栏",
 	"auth_phone_label": "电话",
 	"auth_phone_placeholder": "输入电话号码",
 	"auth_brand_eyebrow": "Drive Ops",
