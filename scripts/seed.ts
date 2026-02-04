@@ -18,6 +18,7 @@ import { config } from 'dotenv';
 import { user, account } from '../src/lib/server/db/auth-schema';
 import {
 	warehouses,
+	warehouseManagers,
 	routes,
 	driverPreferences,
 	driverMetrics,
@@ -65,6 +66,7 @@ async function clearData() {
 	await db.delete(assignments);
 	await db.delete(driverMetrics);
 	await db.delete(driverPreferences);
+	await db.delete(warehouseManagers);
 	await db.delete(routes);
 	await db.delete(warehouses);
 
@@ -153,6 +155,54 @@ async function seed(seedConfig: SeedConfig) {
 	const drivers = userData.users.filter((u) => u.role === 'driver');
 	const managers = userData.users.filter((u) => u.role === 'manager');
 	console.log(`   Created ${drivers.length} drivers, ${managers.length} managers`);
+
+	// 3b. Assign managers to warehouses
+	console.log('\n3b. Assigning managers to warehouses...');
+	const warehouseManagerAssignments: { warehouseId: string; userId: string }[] = [];
+
+	// Assign each seeded manager to 1-2 warehouses
+	managers.forEach((manager, idx) => {
+		// Assign to primary warehouse (round-robin)
+		const primaryWarehouseIdx = idx % insertedWarehouses.length;
+		warehouseManagerAssignments.push({
+			warehouseId: insertedWarehouses[primaryWarehouseIdx].id,
+			userId: manager.id
+		});
+
+		// Some managers get a second warehouse
+		if (idx % 3 === 0 && insertedWarehouses.length > 1) {
+			const secondaryIdx = (primaryWarehouseIdx + 1) % insertedWarehouses.length;
+			warehouseManagerAssignments.push({
+				warehouseId: insertedWarehouses[secondaryIdx].id,
+				userId: manager.id
+			});
+		}
+	});
+
+	// Also add the test user (from .env) to all warehouses if they exist
+	const testUserEmail = process.env.TEST_USER_EMAIL;
+	if (testUserEmail) {
+		const [testUser] = await db
+			.select({ id: user.id })
+			.from(user)
+			.where(eq(user.email, testUserEmail));
+
+		if (testUser) {
+			// Add test user to all warehouses so they can see everything
+			for (const warehouse of insertedWarehouses) {
+				warehouseManagerAssignments.push({
+					warehouseId: warehouse.id,
+					userId: testUser.id
+				});
+			}
+			console.log(`   Added test user ${testUserEmail} to all ${insertedWarehouses.length} warehouses`);
+		}
+	}
+
+	if (warehouseManagerAssignments.length > 0) {
+		await db.insert(warehouseManagers).values(warehouseManagerAssignments);
+	}
+	console.log(`   Created ${warehouseManagerAssignments.length} warehouse-manager assignments`);
 
 	// 4. Generate preferences
 	console.log('\n4. Creating preferences...');
