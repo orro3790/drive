@@ -4,6 +4,8 @@ Collapsible navigation sidebar for the app shell.
 
 Desktop: Persistent sidebar, 220px expanded / ~50px collapsed
 Mobile: Hidden by default, hamburger in header opens overlay
+
+@prop navItems - Array of navigation items to display
 -->
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
@@ -13,48 +15,25 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import * as m from '$lib/paraglide/messages.js';
 	import { authClient } from '$lib/auth-client';
 
-	// Import icons
-	import Analytics from '$lib/components/icons/Analytics.svelte';
-	import Kanban from '$lib/components/icons/Kanban.svelte';
-	import MapPin from '$lib/components/icons/MapPin.svelte';
 	import Logout from '$lib/components/icons/Logout.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import SidebarItem from './SidebarItem.svelte';
 	import type { Component } from 'svelte';
 
-	let isLoggingOut = $state(false);
-
-	type NavItem = {
+	export type NavItem = {
 		id: string;
 		label: () => string;
 		Icon: Component;
 		path: string;
 	};
 
+	let { navItems = [] }: { navItems: NavItem[] } = $props();
+
+	let isLoggingOut = $state(false);
+
 	const isExpanded = $derived(appSidebarStore.state.state === 'expanded');
 	const isMobile = $derived(appSidebarStore.state.isMobile);
 	let currentPath = $derived($page.url.pathname);
-
-	const navItems: NavItem[] = [
-		{
-			id: 'pipeline',
-			label: () => m.pipeline_title(),
-			Icon: Kanban,
-			path: '/pipeline'
-		},
-		{
-			id: 'explorer',
-			label: () => m.explorer_title(),
-			Icon: MapPin,
-			path: '/explorer'
-		},
-		{
-			id: 'analytics',
-			label: () => m.analytics_title(),
-			Icon: Analytics,
-			path: '/analytics'
-		}
-	];
 
 	function isSelected(path: string) {
 		return currentPath.startsWith(path);
