@@ -393,7 +393,7 @@
 
 {#snippet driverDetailActions(driver: Driver)}
 	{#if driver.isFlagged}
-		<Button variant="secondary" onclick={(e) => openUnflagConfirm(driver, e)}>
+		<Button variant="secondary" size="small" fill onclick={(e) => openUnflagConfirm(driver, e)}>
 			{m.drivers_unflag_button()}
 		</Button>
 	{/if}
@@ -479,7 +479,7 @@
 		onSave={handleSave}
 		viewContent={driverDetailView}
 		editContent={driverDetailEdit}
-		viewActions={driverDetailActions}
+		viewActions={selectedDriver?.isFlagged ? driverDetailActions : undefined}
 		{tableContent}
 		storageKey="drivers"
 	/>
@@ -535,7 +535,7 @@
 	.detail-list {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-3);
+		gap: 0;
 		margin: 0;
 	}
 
@@ -543,8 +543,9 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--spacing-2) 0;
-		border-bottom: 1px solid var(--border-muted);
+		padding: var(--spacing-3) 0;
+		border-bottom: var(--border-width-thin) solid var(--border-primary);
+		min-height: 44px;
 	}
 
 	.detail-row:last-child {

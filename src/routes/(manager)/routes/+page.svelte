@@ -158,18 +158,28 @@
 		});
 	}
 
-	function formatRelativeTime(isoString: string) {
+	function formatBidWindowLabel(isoString: string) {
 		const date = new Date(isoString);
 		const now = new Date();
 		const diffMs = date.getTime() - now.getTime();
 		const diffMins = Math.round(diffMs / 60000);
 
-		if (diffMins < 0) return 'Closed';
-		if (diffMins < 60) return `${diffMins}m`;
-		const diffHours = Math.round(diffMins / 60);
-		if (diffHours < 24) return `${diffHours}h`;
-		const diffDays = Math.round(diffHours / 24);
-		return `${diffDays}d`;
+		if (diffMins < 0) return m.manager_dashboard_bid_closed();
+
+		let timeLabel = '';
+		if (diffMins < 60) {
+			timeLabel = `${diffMins}m`;
+		} else {
+			const diffHours = Math.round(diffMins / 60);
+			if (diffHours < 24) {
+				timeLabel = `${diffHours}h`;
+			} else {
+				const diffDays = Math.round(diffHours / 24);
+				timeLabel = `${diffDays}d`;
+			}
+		}
+
+		return m.manager_dashboard_bid_closes({ time: timeLabel });
 	}
 
 	function syncSelectedRoute(route: RouteWithWarehouse) {
@@ -316,9 +326,7 @@
 	{#if ctx.row.status === 'assigned' && ctx.row.driverName}
 		<span class="driver-name">{ctx.row.driverName}</span>
 	{:else if ctx.row.status === 'bidding' && ctx.row.bidWindowClosesAt}
-		<span class="bid-closes">
-			{m.manager_dashboard_bid_closes({ time: formatRelativeTime(ctx.row.bidWindowClosesAt) })}
-		</span>
+		<span class="bid-closes">{formatBidWindowLabel(ctx.row.bidWindowClosesAt)}</span>
 	{:else}
 		<span class="driver-unassigned">{m.manager_dashboard_driver_unassigned()}</span>
 	{/if}
@@ -389,11 +397,7 @@
 		{#if route.status === 'bidding' && route.bidWindowClosesAt}
 			<div class="detail-row">
 				<dt>{m.manager_dashboard_detail_bid_window()}</dt>
-				<dd>
-					{m.manager_dashboard_bid_closes({
-						time: formatRelativeTime(route.bidWindowClosesAt)
-					})}
-				</dd>
+				<dd>{formatBidWindowLabel(route.bidWindowClosesAt)}</dd>
 			</div>
 		{/if}
 	</dl>
@@ -448,7 +452,7 @@
 {/snippet}
 
 {#snippet routeDetailActions(route: RouteWithWarehouse)}
-	<Button variant="danger" onclick={(e) => openDeleteConfirm(route, e)}>
+	<Button variant="secondary" size="small" fill onclick={(e) => openDeleteConfirm(route, e)}>
 		{m.common_delete()}
 	</Button>
 {/snippet}
@@ -469,14 +473,14 @@
 				<Button fill disabled={!hasChanges} onclick={handleSave}>
 					{m.common_save()}
 				</Button>
-			{:else}
-				<Button fill onclick={() => startEditing(route)}>
-					{m.common_edit()}
-				</Button>
-				<Button variant="danger" fill onclick={(e) => openDeleteConfirm(route, e)}>
-					{m.common_delete()}
-				</Button>
-			{/if}
+		{:else}
+			<Button fill onclick={() => startEditing(route)}>
+				{m.common_edit()}
+			</Button>
+			<Button variant="secondary" size="small" fill onclick={(e) => openDeleteConfirm(route, e)}>
+				{m.common_delete()}
+			</Button>
+		{/if}
 		</div>
 	</div>
 {/snippet}
@@ -664,7 +668,7 @@
 	.detail-list {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-3);
+		gap: 0;
 		margin: 0;
 	}
 
@@ -672,8 +676,9 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--spacing-2) 0;
-		border-bottom: 1px solid var(--border-muted);
+		padding: var(--spacing-3) 0;
+		border-bottom: var(--border-width-thin) solid var(--border-primary);
+		min-height: 44px;
 	}
 
 	.detail-row:last-child {

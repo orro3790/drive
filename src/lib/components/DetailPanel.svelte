@@ -52,6 +52,9 @@
 	}: Props<ItemType> = $props();
 
 	const canEdit = $derived(!!editContent && !!onEditToggle);
+	const hasViewActions = $derived(!!viewActions);
+	const footerButtonSize = 'small';
+	const splitActions = $derived(!isEditing && hasViewActions);
 </script>
 
 <div
@@ -60,44 +63,54 @@
 	style:width={variant === 'panel' ? `${width}px` : undefined}
 	aria-hidden={!open}
 >
-	{#if variant === 'panel'}
+	<div class="detail-card">
 		<header class="detail-header">
-			<h2>{title}</h2>
+			<h2 id="detail-panel-title">{title}</h2>
 			<IconButton onclick={onClose} tooltip={m.common_close()}>
 				<Icon><XIcon /></Icon>
 			</IconButton>
 		</header>
-	{/if}
 
-	<div class="detail-body">
-		{#if item}
-			{#if isEditing && editContent}
-				{@render editContent(item)}
-			{:else}
-				{@render viewContent(item)}
-			{/if}
-		{/if}
-	</div>
-
-	{#if item}
-		<footer class="detail-footer" class:is-editing={isEditing}>
-			{#if isEditing}
-				<Button variant="secondary" fill onclick={() => onEditToggle?.(false)}>
-					{m.common_cancel()}
-				</Button>
-				<Button fill disabled={!hasChanges || !onSave} onclick={onSave}>
-					{m.common_save()}
-				</Button>
-			{:else}
-				<Button onclick={() => onEditToggle?.(true)} disabled={!canEdit}>
-					{m.common_edit()}
-				</Button>
-				{#if viewActions}
-					{@render viewActions(item)}
+		<div class="detail-body">
+			{#if item}
+				{#if isEditing && editContent}
+					{@render editContent(item)}
+				{:else}
+					{@render viewContent(item)}
 				{/if}
 			{/if}
-		</footer>
-	{/if}
+		</div>
+
+		{#if item}
+			<footer class="detail-footer" class:is-editing={isEditing} class:split-actions={splitActions}>
+				{#if isEditing}
+					<Button
+						variant="secondary"
+						size={footerButtonSize}
+						fill
+						onclick={() => onEditToggle?.(false)}
+					>
+						{m.common_cancel()}
+					</Button>
+					<Button size={footerButtonSize} fill disabled={!hasChanges || !onSave} onclick={onSave}>
+						{m.common_save()}
+					</Button>
+				{:else}
+					<Button
+						size={footerButtonSize}
+						fill={splitActions}
+						onclick={() => onEditToggle?.(true)}
+						disabled={!canEdit}
+					>
+						{m.common_edit()}
+					</Button>
+					{#if viewActions}
+						{@render viewActions(item)}
+					{/if}
+				{/if}
+			</footer>
+		{/if}
+	</div>
 </div>
 
 <style>
@@ -106,33 +119,40 @@
 		flex-direction: column;
 		min-height: 0;
 		height: 100%;
-		background: var(--surface-primary);
-		border-radius: var(--radius-lg);
-		border: 1px solid var(--border-muted);
-		box-shadow: var(--shadow-sm);
+		padding: var(--spacing-4);
+		padding-left: 0;
+		overflow: hidden;
 	}
 
 	.detail-panel.modal {
-		border: none;
-		box-shadow: none;
-		border-radius: 0;
+		padding: 0;
+	}
+
+	.detail-card {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
+		background: var(--surface-primary);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow-base);
 	}
 
 	.detail-header {
-		position: sticky;
-		top: 0;
-		z-index: 1;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: var(--spacing-3) var(--spacing-4);
-		border-bottom: 1px solid var(--border-muted);
-		background: var(--surface-primary);
+		gap: var(--spacing-3);
+		min-height: 52px;
+		padding: 0 var(--spacing-4);
+		background: var(--surface-secondary);
+		flex-shrink: 0;
 	}
 
 	.detail-header h2 {
 		margin: 0;
-		font-size: var(--font-size-lg);
+		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
@@ -146,21 +166,16 @@
 		gap: var(--spacing-4);
 	}
 
-	.detail-panel.modal .detail-body {
-		overflow: visible;
-		padding: 0;
-	}
-
 	.detail-footer {
-		position: sticky;
-		bottom: 0;
-		z-index: 1;
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-2);
 		padding: var(--spacing-3) var(--spacing-4);
-		border-top: 1px solid var(--border-muted);
-		background: var(--surface-primary);
+		flex-shrink: 0;
+	}
+
+	.detail-panel.modal .detail-footer {
+		padding: var(--spacing-3) var(--spacing-4) var(--spacing-4);
 	}
 
 	.detail-footer.is-editing {
@@ -168,8 +183,18 @@
 		grid-template-columns: 1fr 1fr;
 	}
 
-	.detail-panel.modal .detail-footer {
-		border-top: none;
-		padding: var(--spacing-4) 0 0 0;
+	.detail-footer.split-actions {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.detail-footer.split-actions :global(.btn) {
+		width: 100%;
+	}
+
+	@media (max-width: 767px) {
+		.detail-panel {
+			padding: 0;
+		}
 	}
 </style>
