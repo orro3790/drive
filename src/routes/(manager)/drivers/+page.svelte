@@ -277,7 +277,7 @@
 					id="edit-cap"
 					options={weeklyCapOptions}
 					value={String(formWeeklyCap)}
-					onselect={(v) => (formWeeklyCap = Number(v))}
+					onChange={(v) => (formWeeklyCap = Number(v))}
 				/>
 				<p class="field-hint">{m.drivers_cap_description()}</p>
 			</div>
