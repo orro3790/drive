@@ -29,7 +29,8 @@ export type Route = z.infer<typeof routeSchema>;
  */
 export const routeCreateSchema = z.object({
 	name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
-	warehouseId: z.string().uuid('Warehouse is required')
+	warehouseId: z.string().uuid('Warehouse is required'),
+	managerId: z.string().optional()
 });
 
 export type RouteCreate = z.infer<typeof routeCreateSchema>;

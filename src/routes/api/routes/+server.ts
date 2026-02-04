@@ -18,6 +18,7 @@ import {
 } from '$lib/server/db/schema';
 import { routeCreateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, eq, inArray } from 'drizzle-orm';
+import { getManagerWarehouseIds, canManagerAccessWarehouse } from '$lib/server/services/managers';
 
 const VALID_STATUSES: RouteStatus[] = ['assigned', 'unfilled', 'bidding'];
 
@@ -58,6 +59,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		throw error(403, 'Forbidden');
 	}
 
+	const currentUserId = locals.user.id;
 	const warehouseId = url.searchParams.get('warehouseId');
 	const statusFilter = url.searchParams.get('status');
 	const dateParam = url.searchParams.get('date');
@@ -71,22 +73,31 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		throw error(400, 'Invalid status');
 	}
 
-	const baseQuery = db
+	// Get warehouses this manager can access
+	const accessibleWarehouses = await getManagerWarehouseIds(currentUserId);
+	if (accessibleWarehouses.length === 0) {
+		return json({ routes: [], date });
+	}
+
+	// Build base query with warehouse access filter
+	const whereConditions = warehouseId
+		? and(eq(routes.warehouseId, warehouseId), inArray(routes.warehouseId, accessibleWarehouses))
+		: inArray(routes.warehouseId, accessibleWarehouses);
+
+	const routeRows = await db
 		.select({
 			id: routes.id,
 			name: routes.name,
 			warehouseId: warehouses.id,
 			warehouseName: warehouses.name,
+			managerId: routes.managerId,
 			createdAt: routes.createdAt,
 			updatedAt: routes.updatedAt
 		})
 		.from(routes)
 		.innerJoin(warehouses, eq(routes.warehouseId, warehouses.id))
+		.where(whereConditions)
 		.orderBy(routes.name);
-
-	const routeRows = warehouseId
-		? await baseQuery.where(eq(routes.warehouseId, warehouseId))
-		: await baseQuery;
 	const routeIds = routeRows.map((route) => route.id);
 
 	// Fetch assignments with driver info and bid window details
@@ -128,6 +139,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 			return {
 				...route,
 				status,
+				isMyRoute: route.managerId === currentUserId,
 				assignmentId: assignment?.assignmentId ?? null,
 				driverName: status === 'assigned' ? (assignment?.driverName ?? null) : null,
 				bidWindowClosesAt:
@@ -155,7 +167,13 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'Validation failed');
 	}
 
-	const { name, warehouseId } = result.data;
+	const { name, warehouseId, managerId } = result.data;
+
+	// Validate manager has access to this warehouse
+	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
+	if (!canAccess) {
+		throw error(403, 'No access to this warehouse');
+	}
 
 	const [warehouse] = await db
 		.select({ id: warehouses.id, name: warehouses.name })
@@ -179,7 +197,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.insert(routes)
 		.values({
 			name,
-			warehouseId
+			warehouseId,
+			managerId: managerId ?? locals.user.id
 		})
 		.returning();
 
