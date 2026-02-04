@@ -222,17 +222,18 @@ Priority: cellComponents > cells > columnDef.cell > default rendering
 		{@const rowDepth = row.depth ?? 0}
 		{@const canExpand = row.getCanExpand?.() ?? false}
 		{@const isExpanded = expandedState[row.id] ?? false}
+		{@const isRowClickable = !!onRowClick || !!(isMobile && onMobileRowTap)}
 		<tr
 			class="data-table-row {extraClass}"
-			class:clickable={!!onRowClick}
+			class:clickable={isRowClickable}
 			class:row-active={activeRowId === row.id}
 			data-depth={rowDepth}
-			onclick={(e) => onRowClick && handleRowClick(rowData, e)}
-			onkeydown={(e) => onRowClick && handleRowKeyDown(rowData, e)}
+			onclick={(e) => isRowClickable && handleRowClick(rowData, e)}
+			onkeydown={(e) => isRowClickable && handleRowKeyDown(rowData, e)}
 			onmouseenter={() => onRowHover?.(rowData)}
 			onmouseleave={() => onRowHover?.(null)}
-			tabindex={onRowClick ? 0 : undefined}
-			role={onRowClick ? 'button' : undefined}
+			tabindex={isRowClickable ? 0 : undefined}
+			role={isRowClickable ? 'button' : undefined}
 		>
 			{#if selectionEnabled}
 				<td class="col-select">

@@ -17,7 +17,11 @@ import {
 	routes,
 	user
 } from '$lib/server/db/schema';
-import { sendBulkNotifications, sendManagerAlert, sendNotification } from '$lib/server/services/notifications';
+import {
+	sendBulkNotifications,
+	sendManagerAlert,
+	sendNotification
+} from '$lib/server/services/notifications';
 import { and, eq, lt } from 'drizzle-orm';
 import { toZonedTime } from 'date-fns-tz';
 import { addMinutes, parseISO, startOfDay } from 'date-fns';

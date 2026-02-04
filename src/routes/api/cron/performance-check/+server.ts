@@ -47,10 +47,7 @@ export const GET: RequestHandler = async ({ request }) => {
 
 	try {
 		// Get all drivers
-		const drivers = await db
-			.select({ id: user.id })
-			.from(user)
-			.where(eq(user.role, 'driver'));
+		const drivers = await db.select({ id: user.id }).from(user).where(eq(user.role, 'driver'));
 
 		log.info({ driverCount: drivers.length }, 'Found drivers to process');
 
@@ -86,7 +83,10 @@ export const GET: RequestHandler = async ({ request }) => {
 				}
 			}
 
-			log.debug({ batch: Math.floor(i / BATCH_SIZE) + 1, processed: i + batch.length }, 'Batch processed');
+			log.debug(
+				{ batch: Math.floor(i / BATCH_SIZE) + 1, processed: i + batch.length },
+				'Batch processed'
+			);
 		}
 
 		const elapsedMs = Date.now() - startedAt;

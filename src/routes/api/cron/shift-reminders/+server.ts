@@ -68,9 +68,7 @@ export const GET: RequestHandler = async ({ request }) => {
 		);
 
 		// Filter out assignments with started shifts
-		const toNotify = todayAssignments.filter(
-			(a) => !startedShiftAssignmentIds.has(a.assignmentId)
-		);
+		const toNotify = todayAssignments.filter((a) => !startedShiftAssignmentIds.has(a.assignmentId));
 
 		log.info(
 			{
