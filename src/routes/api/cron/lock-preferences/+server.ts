@@ -2,7 +2,7 @@
  * Lock Preferences Cron Job
  *
  * Runs Sunday 23:59 Toronto time.
- * Locks driver preferences for the upcoming schedule generation.
+ * Locks driver preferences for week N+2 and triggers schedule generation.
  *
  * @see DRV-e30
  */
