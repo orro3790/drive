@@ -93,10 +93,29 @@ export const routes = pgTable('routes', {
 	warehouseId: uuid('warehouse_id')
 		.notNull()
 		.references(() => warehouses.id),
+	managerId: uuid('manager_id').references(() => users.id, { onDelete: 'set null' }),
 	createdBy: uuid('created_by').references(() => users.id),
 	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
+
+// Warehouse Managers (many-to-many junction table)
+export const warehouseManagers = pgTable(
+	'warehouse_managers',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		warehouseId: uuid('warehouse_id')
+			.notNull()
+			.references(() => warehouses.id, { onDelete: 'cascade' }),
+		userId: uuid('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => ({
+		uniqWarehouseUser: unique('uniq_warehouse_user').on(table.warehouseId, table.userId)
+	})
+);
 
 // Driver Preferences
 export const driverPreferences = pgTable('driver_preferences', {
@@ -245,7 +264,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	assignments: many(assignments),
 	bids: many(bids),
 	notifications: many(notifications),
-	routeCompletions: many(routeCompletions)
+	routeCompletions: many(routeCompletions),
+	managedWarehouses: many(warehouseManagers)
 }));
 
 export const routesRelations = relations(routes, ({ one, many }) => ({
@@ -253,13 +273,29 @@ export const routesRelations = relations(routes, ({ one, many }) => ({
 		fields: [routes.warehouseId],
 		references: [warehouses.id]
 	}),
+	manager: one(users, {
+		fields: [routes.managerId],
+		references: [users.id]
+	}),
 	assignments: many(assignments),
 	completions: many(routeCompletions)
 }));
 
 export const warehousesRelations = relations(warehouses, ({ many }) => ({
 	routes: many(routes),
-	assignments: many(assignments)
+	assignments: many(assignments),
+	managers: many(warehouseManagers)
+}));
+
+export const warehouseManagersRelations = relations(warehouseManagers, ({ one }) => ({
+	warehouse: one(warehouses, {
+		fields: [warehouseManagers.warehouseId],
+		references: [warehouses.id]
+	}),
+	user: one(users, {
+		fields: [warehouseManagers.userId],
+		references: [users.id]
+	})
 }));
 
 export const assignmentsRelations = relations(assignments, ({ one, many }) => ({
@@ -378,6 +414,52 @@ async function canDriverBid(userId: string, weekStart: Date): Promise<boolean> {
 }
 ```
 
+### Manager warehouse access control
+
+```typescript
+// Get all warehouses a manager can access
+async function getManagerWarehouses(managerId: string) {
+	return await db
+		.select({
+			id: warehouses.id,
+			name: warehouses.name,
+			address: warehouses.address
+		})
+		.from(warehouses)
+		.innerJoin(warehouseManagers, eq(warehouseManagers.warehouseId, warehouses.id))
+		.where(eq(warehouseManagers.userId, managerId));
+}
+
+// Check if manager can access a specific warehouse
+async function canManagerAccessWarehouse(managerId: string, warehouseId: string): Promise<boolean> {
+	const [result] = await db
+		.select({ id: warehouseManagers.id })
+		.from(warehouseManagers)
+		.where(
+			and(eq(warehouseManagers.userId, managerId), eq(warehouseManagers.warehouseId, warehouseId))
+		)
+		.limit(1);
+
+	return !!result;
+}
+
+// Get routes with manager info
+async function getRoutesWithManagers(warehouseId: string) {
+	return await db
+		.select({
+			route: routes,
+			manager: {
+				id: users.id,
+				firstName: users.firstName,
+				lastName: users.lastName
+			}
+		})
+		.from(routes)
+		.leftJoin(users, eq(routes.managerId, users.id))
+		.where(eq(routes.warehouseId, warehouseId));
+}
+```
+
 ---
 
 ## Indexes
@@ -392,6 +474,8 @@ CREATE INDEX idx_bid_windows_status_closes ON bid_windows(status, closes_at);
 CREATE INDEX idx_notifications_user_read ON notifications(user_id, read, created_at DESC);
 CREATE INDEX idx_route_completions_user ON route_completions(user_id);
 CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id, created_at DESC);
+CREATE INDEX idx_routes_manager ON routes(manager_id);
+CREATE INDEX idx_warehouse_managers_warehouse ON warehouse_managers(warehouse_id);
 ```
 
 ---

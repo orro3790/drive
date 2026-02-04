@@ -130,6 +130,109 @@ await sendBulkNotifications(driverIds, 'bid_open', {
 - Scoring: Routes familiarity → completion rate → attendance rate
 - Creates `unfilled` assignments when no eligible driver found
 
+#### `bidding.ts`
+
+Bid window management for unfilled assignments. See `docs/adr/002-replacement-bidding-system.md` for full rationale.
+
+**Key Functions:**
+
+- `createBidWindow(assignmentId: string)` - Opens bid window for unfilled assignment (30 min or until shift start)
+- `resolveBidWindow(windowId: string)` - Closes window, scores bids, assigns winner
+- `getEligibleDriversForBid(assignmentId: string)` - Returns drivers eligible to bid (under weekly cap, not flagged)
+
+**Usage:**
+
+```typescript
+import { createBidWindow, resolveBidWindow } from '$lib/server/services/bidding';
+
+// Open bid window for unfilled assignment
+const result = await createBidWindow(assignmentId);
+if (result.success) {
+	console.log(`Bid window opened, notified ${result.notifiedCount} drivers`);
+}
+
+// Close and resolve window (typically via cron)
+const resolved = await resolveBidWindow(windowId);
+if (resolved.winnerId) {
+	console.log(`Bid awarded to driver ${resolved.winnerId}`);
+}
+```
+
+**Behavior:**
+
+- Automatically notifies eligible drivers when window opens
+- Window closes after 30 minutes OR at shift start time (whichever comes first)
+- Scores bids using: completion rate (40%), route familiarity (30%), attendance (20%), preference bonus (10%)
+- Assignment remains unfilled if no bids received
+
+#### `flagging.ts`
+
+Driver performance flagging based on attendance thresholds.
+
+**Key Functions:**
+
+- `checkDriverForFlagging(userId: string)` - Evaluates driver metrics, applies flag if below threshold
+- Thresholds: <80% before 10 shifts, <70% after 10 shifts
+- 1-week grace period to improve before weekly cap reduction
+
+**Usage:**
+
+```typescript
+import { checkDriverForFlagging } from '$lib/server/services/flagging';
+
+// Run after metrics recalculation
+await checkDriverForFlagging(driverId);
+```
+
+#### `metrics.ts`
+
+Driver performance metrics calculation (denormalized for query performance).
+
+**Key Functions:**
+
+- `recalculateDriverMetrics(userId: string)` - Recomputes attendance rate, completion rate, shift counts
+- Should be called after shift completion or cancellation
+
+**Usage:**
+
+```typescript
+import { recalculateDriverMetrics } from '$lib/server/services/metrics';
+
+// After shift completion
+await recalculateDriverMetrics(driverId);
+```
+
+#### `managers.ts`
+
+Manager access control helpers for warehouse scoping.
+
+**Key Functions:**
+
+- `getManagerWarehouseIds(userId: string)` - Returns array of warehouse IDs manager can access
+- `canManagerAccessWarehouse(userId: string, warehouseId: string)` - Permission check for warehouse operations
+- `getRouteManager(routeId: string)` - Returns primary manager ID for a route (if assigned)
+
+**Usage:**
+
+```typescript
+import { canManagerAccessWarehouse, getManagerWarehouseIds } from '$lib/server/services/managers';
+
+// Check permission before route/warehouse operation
+const canAccess = await canManagerAccessWarehouse(managerId, warehouseId);
+if (!canAccess) {
+	throw error(403, 'Access denied');
+}
+
+// Scope query to manager's warehouses
+const warehouseIds = await getManagerWarehouseIds(managerId);
+const routes = await db.select().from(routes).where(inArray(routes.warehouseId, warehouseIds));
+```
+
+**Data Model:**
+
+- Managers ↔ Warehouses: many-to-many via `warehouseManagers` junction table
+- Routes → Manager: optional one-to-many via `routes.managerId` (primary manager for a route)
+
 ---
 
 ## Component Patterns
