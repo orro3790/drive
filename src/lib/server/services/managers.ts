@@ -39,7 +39,9 @@ export async function canManagerAccessWarehouse(
 	const [result] = await db
 		.select({ id: warehouseManagers.id })
 		.from(warehouseManagers)
-		.where(and(eq(warehouseManagers.userId, userId), eq(warehouseManagers.warehouseId, warehouseId)))
+		.where(
+			and(eq(warehouseManagers.userId, userId), eq(warehouseManagers.warehouseId, warehouseId))
+		)
 		.limit(1);
 
 	return !!result;
