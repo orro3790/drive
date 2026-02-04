@@ -55,6 +55,10 @@ Business logic in `src/lib/server/services/`:
 
 - `scheduling.ts` - Schedule generation algorithm (`generateWeekSchedule`)
 - `notifications.ts` - Push notifications via FCM (`sendNotification`, `sendBulkNotifications`)
+- `bidding.ts` - Bid window management (`createBidWindow`, `resolveBidWindow`)
+- `flagging.ts` - Driver performance flagging (`checkDriverForFlagging`)
+- `metrics.ts` - Driver metrics calculation (`recalculateDriverMetrics`)
+- `managers.ts` - Manager access control (`getManagerWarehouseIds`, `canManagerAccessWarehouse`, `getRouteManager`)
 
 See `docs/agent-guidelines.md` for detailed usage patterns.
 
