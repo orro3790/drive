@@ -149,6 +149,8 @@
 		{:else}
 			<span class="winner-unfilled">{m.bid_windows_winner_unfilled()}</span>
 		{/if}
+	{:else if ctx.row.bidCount === 0}
+		<span class="winner-unfilled">{m.bid_windows_winner_unfilled()}</span>
 	{:else}
 		<span class="winner-pending">—</span>
 	{/if}

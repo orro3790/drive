@@ -54,7 +54,8 @@
 	const canEdit = $derived(!!editContent && !!onEditToggle);
 	const hasViewActions = $derived(!!viewActions);
 	const footerButtonSize = 'small';
-	const splitActions = $derived(!isEditing && hasViewActions);
+	const splitActions = $derived(!isEditing && canEdit && hasViewActions);
+	const showFooter = $derived(!!item && (isEditing || canEdit || hasViewActions));
 </script>
 
 <div
@@ -81,7 +82,7 @@
 			{/if}
 		</div>
 
-		{#if item}
+		{#if showFooter}
 			<footer class="detail-footer" class:is-editing={isEditing} class:split-actions={splitActions}>
 				{#if isEditing}
 					<Button
@@ -96,14 +97,15 @@
 						{m.common_save()}
 					</Button>
 				{:else}
-					<Button
-						size={footerButtonSize}
-						fill={splitActions}
-						onclick={() => onEditToggle?.(true)}
-						disabled={!canEdit}
-					>
-						{m.common_edit()}
-					</Button>
+					{#if canEdit}
+						<Button
+							size={footerButtonSize}
+							fill={!hasViewActions}
+							onclick={() => onEditToggle?.(true)}
+						>
+							{m.common_edit()}
+						</Button>
+					{/if}
 					{#if viewActions}
 						{@render viewActions(item)}
 					{/if}

@@ -7,6 +7,7 @@
 
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import * as m from '$lib/paraglide/messages.js';
+import { routeStore, type RouteWithWarehouse } from '$lib/stores/routeStore.svelte';
 
 export type BidWindowStatus = 'open' | 'resolved';
 
@@ -37,13 +38,17 @@ const state = $state<{
 	filters: BidWindowFilters;
 	lastUpdated: string | null;
 	pollingInterval: ReturnType<typeof setInterval> | null;
+	assigningWindowId: string | null;
+	closingWindowId: string | null;
 }>({
 	bidWindows: [],
 	isLoading: false,
 	error: null,
 	filters: {},
 	lastUpdated: null,
-	pollingInterval: null
+	pollingInterval: null,
+	assigningWindowId: null,
+	closingWindowId: null
 });
 
 function buildQuery(filters: BidWindowFilters) {
@@ -74,6 +79,12 @@ export const bidWindowStore = {
 	get isPolling() {
 		return state.pollingInterval !== null;
 	},
+	get assigningWindowId() {
+		return state.assigningWindowId;
+	},
+	get closingWindowId() {
+		return state.closingWindowId;
+	},
 
 	/**
 	 * Derived: open bid windows only
@@ -87,6 +98,14 @@ export const bidWindowStore = {
 	 */
 	get resolvedWindows() {
 		return state.bidWindows.filter((w) => w.status === 'resolved');
+	},
+
+	isAssigning(windowId: string) {
+		return state.assigningWindowId === windowId;
+	},
+
+	isClosing(windowId: string) {
+		return state.closingWindowId === windowId;
 	},
 
 	/**
@@ -113,6 +132,125 @@ export const bidWindowStore = {
 			toastStore.error(m.bid_windows_load_error());
 		} finally {
 			state.isLoading = false;
+		}
+	},
+
+	manualAssign(window: BidWindow, driver: { id: string; name: string }) {
+		const original = state.bidWindows.find((w) => w.id === window.id);
+		if (!original) return;
+
+		const optimisticWindow: BidWindow = {
+			...original,
+			status: 'resolved',
+			winnerId: driver.id,
+			winnerName: driver.name
+		};
+
+		state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? optimisticWindow : w));
+
+		const originalRoute = routeStore.applyAssignmentUpdate(window.assignmentId, {
+			status: 'assigned',
+			driverName: driver.name,
+			bidWindowClosesAt: null
+		});
+
+		this._assignInDb(window, driver, original, originalRoute);
+	},
+
+	async _assignInDb(
+		window: BidWindow,
+		driver: { id: string; name: string },
+		original: BidWindow,
+		originalRoute: RouteWithWarehouse | null
+	) {
+		state.assigningWindowId = window.id;
+		try {
+			const res = await fetch(`/api/bid-windows/${window.id}/assign`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ driverId: driver.id })
+			});
+
+			if (!res.ok) {
+				throw new Error('Failed to assign driver');
+			}
+
+			const data = await res.json();
+			if (data?.bidWindow) {
+				state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? data.bidWindow : w));
+				routeStore.applyAssignmentUpdate(window.assignmentId, {
+					status: data.bidWindow.winnerName ? 'assigned' : 'unfilled',
+					driverName: data.bidWindow.winnerName ?? null,
+					bidWindowClosesAt: null
+				});
+			}
+			toastStore.success(m.bid_windows_assign_success());
+		} catch {
+			state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? original : w));
+			routeStore.rollbackAssignmentUpdate(originalRoute);
+			toastStore.error(m.bid_windows_assign_error());
+		} finally {
+			if (state.assigningWindowId === window.id) {
+				state.assigningWindowId = null;
+			}
+		}
+	},
+
+	closeWindow(window: BidWindow) {
+		const original = state.bidWindows.find((w) => w.id === window.id);
+		if (!original) return;
+
+		const optimisticWindow: BidWindow = {
+			...original,
+			status: 'resolved',
+			winnerId: null,
+			winnerName: null
+		};
+
+		state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? optimisticWindow : w));
+
+		const originalRoute = routeStore.applyAssignmentUpdate(window.assignmentId, {
+			status: 'unfilled',
+			driverName: null,
+			bidWindowClosesAt: null
+		});
+
+		this._closeInDb(window, original, originalRoute);
+	},
+
+	async _closeInDb(
+		window: BidWindow,
+		original: BidWindow,
+		originalRoute: RouteWithWarehouse | null
+	) {
+		state.closingWindowId = window.id;
+		try {
+			const res = await fetch(`/api/bid-windows/${window.id}/close`, {
+				method: 'POST'
+			});
+
+			if (!res.ok) {
+				throw new Error('Failed to close bid window');
+			}
+
+			const data = await res.json();
+			if (data?.bidWindow) {
+				state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? data.bidWindow : w));
+				routeStore.applyAssignmentUpdate(window.assignmentId, {
+					status: data.bidWindow.winnerName ? 'assigned' : 'unfilled',
+					driverName: data.bidWindow.winnerName ?? null,
+					bidWindowClosesAt: null
+				});
+			}
+			toastStore.success(m.bid_windows_close_success());
+		} catch {
+			state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? original : w));
+			routeStore.rollbackAssignmentUpdate(originalRoute);
+			toastStore.error(m.bid_windows_close_error());
+		} finally {
+			if (state.closingWindowId === window.id) {
+				state.closingWindowId = null;
+			}
 		}
 	},
 
@@ -155,5 +293,7 @@ export const bidWindowStore = {
 		state.error = null;
 		state.filters = {};
 		state.lastUpdated = null;
+		state.assigningWindowId = null;
+		state.closingWindowId = null;
 	}
 };

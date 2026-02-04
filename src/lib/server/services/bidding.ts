@@ -15,14 +15,15 @@ import {
 	notifications,
 	routeCompletions,
 	routes,
-	user
+	user,
+	warehouses
 } from '$lib/server/db/schema';
 import {
 	sendBulkNotifications,
 	sendManagerAlert,
 	sendNotification
 } from '$lib/server/services/notifications';
-import { and, eq, lt } from 'drizzle-orm';
+import { and, eq, lt, sql } from 'drizzle-orm';
 import { toZonedTime } from 'date-fns-tz';
 import { addMinutes, parseISO, startOfDay } from 'date-fns';
 import logger from '$lib/server/logger';
@@ -441,4 +442,53 @@ export async function getExpiredBidWindows(): Promise<Array<{ id: string; assign
 		})
 		.from(bidWindows)
 		.where(and(eq(bidWindows.status, 'open'), lt(bidWindows.closesAt, now)));
+}
+
+export async function getBidWindowDetail(windowId: string) {
+	const bidCountSubquery = db
+		.select({
+			assignmentId: bids.assignmentId,
+			count: sql<number>`count(*)`.as('count')
+		})
+		.from(bids)
+		.groupBy(bids.assignmentId)
+		.as('bid_counts');
+
+	const [row] = await db
+		.select({
+			id: bidWindows.id,
+			assignmentId: bidWindows.assignmentId,
+			assignmentDate: assignments.date,
+			routeName: routes.name,
+			warehouseName: warehouses.name,
+			opensAt: bidWindows.opensAt,
+			closesAt: bidWindows.closesAt,
+			status: bidWindows.status,
+			winnerId: bidWindows.winnerId,
+			winnerName: user.name,
+			bidCount: sql<number>`coalesce(${bidCountSubquery.count}, 0)`
+		})
+		.from(bidWindows)
+		.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
+		.innerJoin(routes, eq(assignments.routeId, routes.id))
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.leftJoin(user, eq(bidWindows.winnerId, user.id))
+		.leftJoin(bidCountSubquery, eq(bidCountSubquery.assignmentId, bidWindows.assignmentId))
+		.where(eq(bidWindows.id, windowId));
+
+	if (!row) return null;
+
+	return {
+		id: row.id,
+		assignmentId: row.assignmentId,
+		assignmentDate: row.assignmentDate,
+		routeName: row.routeName,
+		warehouseName: row.warehouseName,
+		opensAt: row.opensAt.toISOString(),
+		closesAt: row.closesAt.toISOString(),
+		status: row.status === 'open' ? 'open' : 'resolved',
+		winnerId: row.winnerId,
+		winnerName: row.winnerName,
+		bidCount: Number(row.bidCount)
+	};
 }

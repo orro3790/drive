@@ -64,9 +64,10 @@ export function generateBidding(
 		const closesAt = addHours(opensAt, 4); // 4-hour window
 		const isPast = isPastDate(assignment.date);
 
-		// Generate 3-8 bids from random eligible drivers
-		const numBids = 3 + Math.floor(Math.random() * 6);
-		const bidders = selectRandomDrivers(eligibleDrivers, numBids);
+		// Generate 3-8 bids from random eligible drivers (some future windows have none)
+		const shouldHaveNoBids = !isPast && i % 7 === 0;
+		const numBids = shouldHaveNoBids ? 0 : 3 + Math.floor(Math.random() * 6);
+		const bidders = numBids === 0 ? [] : selectRandomDrivers(eligibleDrivers, numBids);
 
 		// Calculate scores and determine winner
 		const bidScores: Array<{ userId: string; score: number }> = bidders.map((driver) => ({
