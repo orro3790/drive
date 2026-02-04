@@ -74,11 +74,13 @@ export type {
 	HeaderSnippets,
 	HeaderRendererContext,
 	RowClickHandler,
+	MobileDetailOpenHandler,
 	RowClassFn,
 	RowSelectableFn,
 	ColumnSizing,
 	ColumnAlignment,
 	SortDirection,
+	WideModeChangeHandler,
 	FilterType
 } from './types.js';
 

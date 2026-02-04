@@ -15,9 +15,9 @@
 		getPaginationRowModel,
 		createColumnHelper,
 		type SortingState,
-		type PaginationState,
-		type CellRendererContext
+		type PaginationState
 	} from '$lib/components/data-table';
+	import PageWithDetailPanel from '$lib/components/PageWithDetailPanel.svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
@@ -25,8 +25,6 @@
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import Drawer from '$lib/components/primitives/Drawer.svelte';
-	import Pencil from '$lib/components/icons/Pencil.svelte';
-	import Trash from '$lib/components/icons/Trash.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Filter from '$lib/components/icons/Filter.svelte';
 	import Reset from '$lib/components/icons/Reset.svelte';
@@ -36,7 +34,8 @@
 	// State
 	let showCreateModal = $state(false);
 	let showFilterDrawer = $state(false);
-	let editingWarehouse = $state<WarehouseWithRouteCount | null>(null);
+	let selectedWarehouseId = $state<string | null>(null);
+	let isEditing = $state(false);
 	let deleteConfirm = $state<{ warehouse: WarehouseWithRouteCount; x: number; y: number } | null>(
 		null
 	);
@@ -73,11 +72,6 @@
 			header: m.warehouse_routes_header(),
 			sortable: true,
 			width: 100
-		}),
-		helper.display({
-			id: 'actions',
-			header: m.common_actions(),
-			width: 100
 		})
 	];
 
@@ -90,10 +84,20 @@
 			: warehouseStore.warehouses
 	);
 
+	const selectedWarehouse = $derived.by(
+		() =>
+			warehouseStore.warehouses.find((warehouse) => warehouse.id === selectedWarehouseId) ?? null
+	);
+	const hasChanges = $derived(
+		!!selectedWarehouse &&
+			(formName !== selectedWarehouse.name || formAddress !== selectedWarehouse.address)
+	);
+
 	// Create table instance
 	const table = createSvelteTable<WarehouseWithRouteCount>(() => ({
 		data: filteredData,
 		columns,
+		getRowId: (row) => row.id,
 		state: {
 			sorting,
 			pagination
@@ -126,16 +130,51 @@
 		showCreateModal = true;
 	}
 
-	function openEditModal(warehouse: WarehouseWithRouteCount) {
+	function syncSelectedWarehouse(warehouse: WarehouseWithRouteCount) {
+		if (selectedWarehouseId === warehouse.id) return;
+		selectedWarehouseId = warehouse.id;
 		formName = warehouse.name;
 		formAddress = warehouse.address;
 		formErrors = {};
-		editingWarehouse = warehouse;
+		isEditing = false;
+	}
+
+	function clearSelection() {
+		selectedWarehouseId = null;
+		formErrors = {};
+		isEditing = false;
+	}
+
+	function startEditing(warehouse: WarehouseWithRouteCount) {
+		if (selectedWarehouseId !== warehouse.id) {
+			selectedWarehouseId = warehouse.id;
+		}
+		formName = warehouse.name;
+		formAddress = warehouse.address;
+		formErrors = {};
+		isEditing = true;
+	}
+
+	function cancelEditing() {
+		if (selectedWarehouse) {
+			formName = selectedWarehouse.name;
+			formAddress = selectedWarehouse.address;
+		}
+		formErrors = {};
+		isEditing = false;
+	}
+
+	function handleEditToggle(editing: boolean) {
+		if (!selectedWarehouse) return;
+		if (editing) {
+			startEditing(selectedWarehouse);
+			return;
+		}
+		cancelEditing();
 	}
 
 	function closeModals() {
 		showCreateModal = false;
-		editingWarehouse = null;
 		formErrors = {};
 	}
 
@@ -150,8 +189,8 @@
 		closeModals();
 	}
 
-	function handleUpdate() {
-		if (!editingWarehouse) return;
+	function handleSave() {
+		if (!selectedWarehouse) return;
 
 		const result = warehouseUpdateSchema.safeParse({ name: formName, address: formAddress });
 		if (!result.success) {
@@ -159,8 +198,9 @@
 			return;
 		}
 
-		warehouseStore.update(editingWarehouse.id, result.data);
-		closeModals();
+		warehouseStore.update(selectedWarehouse.id, result.data);
+		formErrors = {};
+		isEditing = false;
 	}
 
 	function openDeleteConfirm(warehouse: WarehouseWithRouteCount, event: MouseEvent) {
@@ -176,22 +216,11 @@
 		warehouseStore.delete(deleteConfirm.warehouse.id);
 		deleteConfirm = null;
 	}
-</script>
 
-{#snippet actionsCell(ctx: CellRendererContext<WarehouseWithRouteCount>)}
-	<div class="cell-actions">
-		<IconButton onclick={() => openEditModal(ctx.row)} tooltip={m.common_edit()}>
-			<Icon><Pencil /></Icon>
-		</IconButton>
-		<IconButton
-			onclick={(e) => openDeleteConfirm(ctx.row, e)}
-			tooltip={m.common_delete()}
-			disabled={ctx.row.routeCount > 0}
-		>
-			<Icon><Trash /></Icon>
-		</IconButton>
-	</div>
-{/snippet}
+	function handleRowClick(warehouse: WarehouseWithRouteCount, _event: MouseEvent) {
+		syncSelectedWarehouse(warehouse);
+	}
+</script>
 
 {#snippet tabsSnippet()}
 	<div class="tab-bar" role="tablist">
@@ -215,25 +244,155 @@
 	</IconButton>
 {/snippet}
 
-<svelte:head>
-	<title>{m.warehouse_page_title()} | Drive</title>
-</svelte:head>
+{#snippet warehouseDetailInfo(warehouse: WarehouseWithRouteCount)}
+	<dl class="detail-list">
+		<div class="detail-row">
+			<dt>{m.common_name()}</dt>
+			<dd>{warehouse.name}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.common_address()}</dt>
+			<dd>{warehouse.address}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.warehouse_routes_header()}</dt>
+			<dd>{warehouse.routeCount}</dd>
+		</div>
+	</dl>
+{/snippet}
 
-<div class="page-surface">
+{#snippet warehouseDetailView(warehouse: WarehouseWithRouteCount)}
+	<div class="detail-content">
+		{@render warehouseDetailInfo(warehouse)}
+	</div>
+{/snippet}
+
+{#snippet warehouseDetailEditFields(warehouse: WarehouseWithRouteCount)}
+	<div class="form-field">
+		<label for="warehouse-edit-name">{m.warehouse_name_label()}</label>
+		<InlineEditor
+			id="warehouse-edit-name"
+			value={formName}
+			onInput={(v) => (formName = v)}
+			placeholder={m.warehouse_name_placeholder()}
+			required
+		/>
+		{#if formErrors.name}
+			<p class="field-error">{formErrors.name[0]}</p>
+		{/if}
+	</div>
+
+	<div class="form-field">
+		<label for="warehouse-edit-address">{m.warehouse_address_label()}</label>
+		<InlineEditor
+			id="warehouse-edit-address"
+			value={formAddress}
+			onInput={(v) => (formAddress = v)}
+			placeholder={m.warehouse_address_placeholder()}
+			required
+		/>
+		{#if formErrors.address}
+			<p class="field-error">{formErrors.address[0]}</p>
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet warehouseDetailEdit(warehouse: WarehouseWithRouteCount)}
+	<div class="detail-content">
+		{@render warehouseDetailEditFields(warehouse)}
+	</div>
+{/snippet}
+
+{#snippet warehouseDetailActions(warehouse: WarehouseWithRouteCount)}
+	<Button
+		variant="danger"
+		onclick={(e) => openDeleteConfirm(warehouse, e)}
+		disabled={warehouse.routeCount > 0}
+	>
+		{m.common_delete()}
+	</Button>
+{/snippet}
+
+{#snippet mobileDetail(warehouse: WarehouseWithRouteCount)}
+	<div class="detail-content">
+		{#if isEditing}
+			{@render warehouseDetailEditFields(warehouse)}
+		{:else}
+			{@render warehouseDetailInfo(warehouse)}
+		{/if}
+
+		<div class="detail-actions">
+			{#if isEditing}
+				<Button variant="secondary" fill onclick={cancelEditing}>
+					{m.common_cancel()}
+				</Button>
+				<Button fill disabled={!hasChanges} onclick={handleSave}>
+					{m.common_save()}
+				</Button>
+			{:else}
+				<Button fill onclick={() => startEditing(warehouse)}>
+					{m.common_edit()}
+				</Button>
+				<Button
+					variant="danger"
+					fill
+					onclick={(e) => openDeleteConfirm(warehouse, e)}
+					disabled={warehouse.routeCount > 0}
+				>
+					{m.common_delete()}
+				</Button>
+			{/if}
+		</div>
+	</div>
+{/snippet}
+
+{#snippet tableContent(ctx: {
+	isWideMode: boolean;
+	onWideModeChange: (value: boolean) => void;
+	isMobile: boolean;
+})}
 	<DataTable
 		{table}
 		loading={warehouseStore.isLoading}
 		emptyTitle={m.warehouse_empty_state()}
 		emptyMessage={m.warehouse_empty_state_message()}
 		showPagination
+		showSelection={false}
 		showColumnVisibility
 		showExport
+		showWideModeToggle
+		isWideMode={ctx.isWideMode}
+		onWideModeChange={ctx.onWideModeChange}
+		onMobileDetailOpen={syncSelectedWarehouse}
 		exportFilename="warehouses"
 		tabs={tabsSnippet}
 		toolbar={toolbarSnippet}
-		cellComponents={{
-			actions: actionsCell
-		}}
+		activeRowId={selectedWarehouseId ?? undefined}
+		onRowClick={handleRowClick}
+		mobileDetailContent={mobileDetail}
+		mobileDetailTitle={m.warehouse_page_title()}
+	/>
+{/snippet}
+
+<svelte:head>
+	<title>{m.warehouse_page_title()} | Drive</title>
+</svelte:head>
+
+<div class="page-surface">
+	<PageWithDetailPanel
+		item={selectedWarehouse}
+		title={m.warehouse_page_title()}
+		open={!!selectedWarehouse}
+		onClose={clearSelection}
+		{isEditing}
+		{hasChanges}
+		onEditToggle={handleEditToggle}
+		onSave={handleSave}
+		viewContent={warehouseDetailView}
+		editContent={warehouseDetailEdit}
+		viewActions={warehouseDetailActions}
+		{tableContent}
+		storageKey="warehouses"
 	/>
 </div>
 
@@ -312,56 +471,6 @@
 	</Modal>
 {/if}
 
-<!-- Edit Modal -->
-{#if editingWarehouse}
-	<Modal title={m.warehouse_edit_title()} onClose={closeModals}>
-		<form
-			class="modal-form"
-			onsubmit={(e) => {
-				e.preventDefault();
-				handleUpdate();
-			}}
-		>
-			<div class="form-field">
-				<label for="edit-name">{m.warehouse_name_label()}</label>
-				<InlineEditor
-					id="edit-name"
-					value={formName}
-					onInput={(v) => (formName = v)}
-					placeholder={m.warehouse_name_placeholder()}
-					required
-				/>
-				{#if formErrors.name}
-					<p class="field-error">{formErrors.name[0]}</p>
-				{/if}
-			</div>
-
-			<div class="form-field">
-				<label for="edit-address">{m.warehouse_address_label()}</label>
-				<InlineEditor
-					id="edit-address"
-					value={formAddress}
-					onInput={(v) => (formAddress = v)}
-					placeholder={m.warehouse_address_placeholder()}
-					required
-				/>
-				{#if formErrors.address}
-					<p class="field-error">{formErrors.address[0]}</p>
-				{/if}
-			</div>
-
-			<div class="modal-actions">
-				<Button variant="secondary" onclick={closeModals} fill>
-					{m.common_cancel()}
-				</Button>
-				<Button type="submit" fill>
-					{m.common_save()}
-				</Button>
-			</div>
-		</form>
-	</Modal>
-{/if}
-
 <!-- Delete Confirmation -->
 {#if deleteConfirm}
 	<ConfirmationDialog
@@ -377,11 +486,6 @@
 {/if}
 
 <style>
-	.cell-actions {
-		display: flex;
-		gap: var(--spacing-1);
-	}
-
 	/* Tab bar styling - matching Drive pattern */
 	.tab-bar {
 		position: relative;
@@ -454,6 +558,49 @@
 			transparent var(--radius-lg),
 			var(--surface-primary) calc(var(--radius-lg) + 0.5px)
 		);
+	}
+
+	/* Detail panel */
+	.detail-content {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-6);
+	}
+
+	.detail-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+		margin: 0;
+	}
+
+	.detail-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: var(--spacing-2) 0;
+		border-bottom: 1px solid var(--border-muted);
+	}
+
+	.detail-row:last-child {
+		border-bottom: none;
+	}
+
+	.detail-row dt {
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+	}
+
+	.detail-row dd {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--text-normal);
+	}
+
+	.detail-actions {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
 	}
 
 	/* Filter drawer form */

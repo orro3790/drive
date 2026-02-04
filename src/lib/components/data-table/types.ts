@@ -130,6 +130,11 @@ export type CellRenderer<TData extends RowData, TValue = unknown> = (
 export type RowClickHandler<TData extends RowData> = (row: TData, event: MouseEvent) => void;
 
 /**
+ * Mobile detail panel open handler
+ */
+export type MobileDetailOpenHandler<TData extends RowData> = (row: TData) => void;
+
+/**
  * Row class function type - returns CSS classes for a row
  */
 export type RowClassFn<TData extends RowData> = (row: TData, index: number) => string;
@@ -144,6 +149,11 @@ export type RowSelectableFn<TData extends RowData> = (row: TData) => boolean;
  * Returns a string message if disabled, or undefined if selectable.
  */
 export type DisabledSelectionReasonFn<TData extends RowData> = (row: TData) => string | undefined;
+
+/**
+ * Callback when the wide mode toggle changes
+ */
+export type WideModeChangeHandler = (isWide: boolean) => void;
 
 /**
  * Sorting direction

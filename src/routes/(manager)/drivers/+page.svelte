@@ -23,21 +23,18 @@
 		type PaginationState,
 		type CellRendererContext
 	} from '$lib/components/data-table';
-	import Modal from '$lib/components/primitives/Modal.svelte';
+	import PageWithDetailPanel from '$lib/components/PageWithDetailPanel.svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
-	import IconButton from '$lib/components/primitives/IconButton.svelte';
-	import Icon from '$lib/components/primitives/Icon.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import ConfirmationDialog from '$lib/components/ConfirmationDialog.svelte';
-	import Pencil from '$lib/components/icons/Pencil.svelte';
-	import ShieldMinus from '$lib/components/icons/ShieldMinus.svelte';
 	import { driverStore } from '$lib/stores/driverStore.svelte';
 	import type { Driver } from '$lib/schemas/driver';
 	import type { SelectOption } from '$lib/schemas/ui/select';
 
 	// State
-	let editingDriver = $state<Driver | null>(null);
+	let selectedDriverId = $state<string | null>(null);
+	let isEditing = $state(false);
 	let unflagConfirm = $state<{ driver: Driver; x: number; y: number } | null>(null);
 
 	// Form state
@@ -85,17 +82,13 @@
 			id: 'flagStatus',
 			header: m.drivers_header_flag_status(),
 			width: 120
-		}),
-		helper.display({
-			id: 'actions',
-			header: m.common_actions(),
-			width: 100
 		})
 	];
 
 	const table = createSvelteTable<Driver>(() => ({
 		data: driverStore.drivers,
 		columns,
+		getRowId: (row) => row.id,
 		state: {
 			sorting,
 			pagination
@@ -120,6 +113,11 @@
 		{ value: '6', label: '6 days' }
 	];
 
+	const selectedDriver = $derived.by(
+		() => driverStore.drivers.find((driver) => driver.id === selectedDriverId) ?? null
+	);
+	const hasChanges = $derived(!!selectedDriver && formWeeklyCap !== selectedDriver.weeklyCap);
+
 	function formatPercent(rate: number) {
 		return `${Math.round(rate * 100)}%`;
 	}
@@ -133,19 +131,54 @@
 		});
 	}
 
-	function openEditModal(driver: Driver) {
+	function syncSelectedDriver(driver: Driver) {
+		if (selectedDriverId === driver.id) return;
+		selectedDriverId = driver.id;
 		formWeeklyCap = driver.weeklyCap;
-		editingDriver = driver;
+		isEditing = false;
 	}
 
-	function closeModals() {
-		editingDriver = null;
+	function clearSelection() {
+		selectedDriverId = null;
+		isEditing = false;
 	}
 
-	function handleUpdate() {
-		if (!editingDriver) return;
-		driverStore.updateCap(editingDriver.id, formWeeklyCap);
-		closeModals();
+	function startEditing(driver: Driver) {
+		if (selectedDriverId !== driver.id) {
+			selectedDriverId = driver.id;
+		}
+		formWeeklyCap = driver.weeklyCap;
+		isEditing = true;
+	}
+
+	function cancelEditing() {
+		if (selectedDriver) {
+			formWeeklyCap = selectedDriver.weeklyCap;
+		}
+		isEditing = false;
+	}
+
+	function handleSave() {
+		if (!selectedDriver) return;
+		if (!hasChanges) {
+			isEditing = false;
+			return;
+		}
+		driverStore.updateCap(selectedDriver.id, formWeeklyCap);
+		isEditing = false;
+	}
+
+	function handleEditToggle(editing: boolean) {
+		if (!selectedDriver) return;
+		if (editing) {
+			startEditing(selectedDriver);
+			return;
+		}
+		cancelEditing();
+	}
+
+	function handleRowClick(driver: Driver, _event: MouseEvent) {
+		syncSelectedDriver(driver);
 	}
 
 	function openUnflagConfirm(driver: Driver, event: MouseEvent) {
@@ -202,22 +235,6 @@
 	{/if}
 {/snippet}
 
-{#snippet actionsCell(ctx: CellRendererContext<Driver>)}
-	<div class="cell-actions">
-		<IconButton onclick={() => openEditModal(ctx.row)} tooltip={m.common_edit()}>
-			<Icon><Pencil /></Icon>
-		</IconButton>
-		{#if ctx.row.isFlagged}
-			<IconButton
-				onclick={(e) => openUnflagConfirm(ctx.row, e)}
-				tooltip={m.drivers_unflag_button()}
-			>
-				<Icon><ShieldMinus /></Icon>
-			</IconButton>
-		{/if}
-	</div>
-{/snippet}
-
 {#snippet tabsSnippet()}
 	<div class="tab-bar" role="tablist">
 		<button type="button" class="tab active" role="tab" aria-selected="true" tabindex="0">
@@ -226,98 +243,210 @@
 	</div>
 {/snippet}
 
+{#snippet driverDetailList(driver: Driver)}
+	<dl class="detail-list">
+		<div class="detail-row">
+			<dt>{m.common_name()}</dt>
+			<dd>{driver.name}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_email()}</dt>
+			<dd>{driver.email}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_phone()}</dt>
+			<dd>{driver.phone || m.drivers_detail_no_phone()}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_total_shifts()}</dt>
+			<dd>{driver.totalShifts}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_completed_shifts()}</dt>
+			<dd>{driver.completedShifts}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_attendance()}</dt>
+			<dd class:low={driver.attendanceRate < 0.7}>
+				{formatPercent(driver.attendanceRate)}
+			</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_completion()}</dt>
+			<dd class:low={driver.completionRate < 0.7}>
+				{formatPercent(driver.completionRate)}
+			</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_weekly_cap()}</dt>
+			<dd>{driver.weeklyCap} days</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_flag_status()}</dt>
+			<dd>
+				{#if driver.isFlagged}
+					<Chip variant="status" status="error" label={m.drivers_flag_flagged()} size="xs" />
+				{:else if driver.flagWarningDate}
+					<Chip variant="status" status="warning" label={m.drivers_flag_warning()} size="xs" />
+				{:else}
+					<Chip variant="status" status="success" label={m.drivers_flag_good()} size="xs" />
+				{/if}
+			</dd>
+		</div>
+		{#if driver.flagWarningDate}
+			<div class="detail-row">
+				<dt></dt>
+				<dd class="warning-date">
+					{m.drivers_flag_warning_date({ date: formatDate(driver.flagWarningDate) })}
+				</dd>
+			</div>
+		{/if}
+		<div class="detail-row">
+			<dt>{m.drivers_detail_member_since()}</dt>
+			<dd>{formatDate(driver.createdAt)}</dd>
+		</div>
+	</dl>
+{/snippet}
+
+{#snippet driverDetailEditList(driver: Driver)}
+	<dl class="detail-list">
+		<div class="detail-row">
+			<dt>{m.common_name()}</dt>
+			<dd>{driver.name}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_email()}</dt>
+			<dd>{driver.email}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_phone()}</dt>
+			<dd>{driver.phone || m.drivers_detail_no_phone()}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_total_shifts()}</dt>
+			<dd>{driver.totalShifts}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_completed_shifts()}</dt>
+			<dd>{driver.completedShifts}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_attendance()}</dt>
+			<dd class:low={driver.attendanceRate < 0.7}>
+				{formatPercent(driver.attendanceRate)}
+			</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_completion()}</dt>
+			<dd class:low={driver.completionRate < 0.7}>
+				{formatPercent(driver.completionRate)}
+			</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_weekly_cap()}</dt>
+			<dd class="detail-field">
+				<Select
+					options={weeklyCapOptions}
+					value={String(formWeeklyCap)}
+					onChange={(v) => (formWeeklyCap = Number(v))}
+				/>
+			</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_flag_status()}</dt>
+			<dd>
+				{#if driver.isFlagged}
+					<Chip variant="status" status="error" label={m.drivers_flag_flagged()} size="xs" />
+				{:else if driver.flagWarningDate}
+					<Chip variant="status" status="warning" label={m.drivers_flag_warning()} size="xs" />
+				{:else}
+					<Chip variant="status" status="success" label={m.drivers_flag_good()} size="xs" />
+				{/if}
+			</dd>
+		</div>
+		{#if driver.flagWarningDate}
+			<div class="detail-row">
+				<dt></dt>
+				<dd class="warning-date">
+					{m.drivers_flag_warning_date({ date: formatDate(driver.flagWarningDate) })}
+				</dd>
+			</div>
+		{/if}
+		<div class="detail-row">
+			<dt>{m.drivers_detail_member_since()}</dt>
+			<dd>{formatDate(driver.createdAt)}</dd>
+		</div>
+	</dl>
+{/snippet}
+
+{#snippet driverDetailView(driver: Driver)}
+	<div class="detail-content">
+		{@render driverDetailList(driver)}
+	</div>
+{/snippet}
+
+{#snippet driverDetailEdit(driver: Driver)}
+	<div class="detail-content">
+		{@render driverDetailEditList(driver)}
+	</div>
+{/snippet}
+
+{#snippet driverDetailActions(driver: Driver)}
+	{#if driver.isFlagged}
+		<Button variant="secondary" onclick={(e) => openUnflagConfirm(driver, e)}>
+			{m.drivers_unflag_button()}
+		</Button>
+	{/if}
+{/snippet}
+
 {#snippet mobileDetail(driver: Driver)}
 	<div class="detail-content">
-		<dl class="detail-list">
-			<div class="detail-row">
-				<dt>{m.common_name()}</dt>
-				<dd>{driver.name}</dd>
-			</div>
-			<div class="detail-row">
-				<dt>{m.drivers_detail_email()}</dt>
-				<dd>{driver.email}</dd>
-			</div>
-			<div class="detail-row">
-				<dt>{m.drivers_detail_phone()}</dt>
-				<dd>{driver.phone || m.drivers_detail_no_phone()}</dd>
-			</div>
-			<div class="detail-row">
-				<dt>{m.drivers_detail_total_shifts()}</dt>
-				<dd>{driver.totalShifts}</dd>
-			</div>
-			<div class="detail-row">
-				<dt>{m.drivers_detail_completed_shifts()}</dt>
-				<dd>{driver.completedShifts}</dd>
-			</div>
-			<div class="detail-row">
-				<dt>{m.drivers_detail_attendance()}</dt>
-				<dd class:low={driver.attendanceRate < 0.7}>
-					{formatPercent(driver.attendanceRate)}
-				</dd>
-			</div>
-			<div class="detail-row">
-				<dt>{m.drivers_detail_completion()}</dt>
-				<dd class:low={driver.completionRate < 0.7}>
-					{formatPercent(driver.completionRate)}
-				</dd>
-			</div>
-			<div class="detail-row">
-				<dt>{m.drivers_detail_weekly_cap()}</dt>
-				<dd>{driver.weeklyCap} days</dd>
-			</div>
-			<div class="detail-row">
-				<dt>{m.drivers_detail_flag_status()}</dt>
-				<dd>
-					{#if driver.isFlagged}
-						<Chip variant="status" status="error" label={m.drivers_flag_flagged()} size="xs" />
-					{:else if driver.flagWarningDate}
-						<Chip variant="status" status="warning" label={m.drivers_flag_warning()} size="xs" />
-					{:else}
-						<Chip variant="status" status="success" label={m.drivers_flag_good()} size="xs" />
-					{/if}
-				</dd>
-			</div>
-			{#if driver.flagWarningDate}
-				<div class="detail-row">
-					<dt></dt>
-					<dd class="warning-date">
-						{m.drivers_flag_warning_date({ date: formatDate(driver.flagWarningDate) })}
-					</dd>
-				</div>
-			{/if}
-			<div class="detail-row">
-				<dt>{m.drivers_detail_member_since()}</dt>
-				<dd>{formatDate(driver.createdAt)}</dd>
-			</div>
-		</dl>
+		{#if isEditing}
+			{@render driverDetailEditList(driver)}
+		{:else}
+			{@render driverDetailList(driver)}
+		{/if}
 
 		<div class="detail-actions">
-			<Button fill onclick={() => openEditModal(driver)}>
-				{m.common_edit()}
-				{m.drivers_header_weekly_cap()}
-			</Button>
-			{#if driver.isFlagged}
-				<Button variant="secondary" fill onclick={(e) => openUnflagConfirm(driver, e)}>
-					{m.drivers_unflag_button()}
+			{#if isEditing}
+				<Button variant="secondary" fill onclick={cancelEditing}>
+					{m.common_cancel()}
 				</Button>
+				<Button fill disabled={!hasChanges} onclick={handleSave}>
+					{m.common_save()}
+				</Button>
+			{:else}
+				<Button fill onclick={() => startEditing(driver)}>
+					{m.common_edit()}
+				</Button>
+				{#if driver.isFlagged}
+					<Button variant="secondary" fill onclick={(e) => openUnflagConfirm(driver, e)}>
+						{m.drivers_unflag_button()}
+					</Button>
+				{/if}
 			{/if}
 		</div>
 	</div>
 {/snippet}
 
-<svelte:head>
-	<title>{m.drivers_page_title()} | Drive</title>
-</svelte:head>
-
-<div class="page-surface">
+{#snippet tableContent(ctx: {
+	isWideMode: boolean;
+	onWideModeChange: (value: boolean) => void;
+	isMobile: boolean;
+})}
 	<DataTable
 		{table}
 		loading={driverStore.isLoading}
 		emptyTitle={m.drivers_empty_state()}
 		emptyMessage={m.drivers_empty_state_message()}
 		showPagination
+		showSelection={false}
 		showColumnVisibility
 		showExport
+		showWideModeToggle
+		isWideMode={ctx.isWideMode}
+		onWideModeChange={ctx.onWideModeChange}
+		onMobileDetailOpen={syncSelectedDriver}
 		exportFilename="drivers"
 		tabs={tabsSnippet}
 		cellComponents={{
@@ -325,51 +454,36 @@
 			attendance: attendanceCell,
 			completion: completionCell,
 			weeklyCap: weeklyCapCell,
-			flagStatus: flagStatusCell,
-			actions: actionsCell
+			flagStatus: flagStatusCell
 		}}
+		activeRowId={selectedDriverId ?? undefined}
+		onRowClick={handleRowClick}
 		mobileDetailContent={mobileDetail}
 		mobileDetailTitle={m.drivers_detail_title()}
 	/>
+{/snippet}
+
+<svelte:head>
+	<title>{m.drivers_page_title()} | Drive</title>
+</svelte:head>
+
+<div class="page-surface">
+	<PageWithDetailPanel
+		item={selectedDriver}
+		title={m.drivers_detail_title()}
+		open={!!selectedDriver}
+		onClose={clearSelection}
+		{isEditing}
+		{hasChanges}
+		onEditToggle={handleEditToggle}
+		onSave={handleSave}
+		viewContent={driverDetailView}
+		editContent={driverDetailEdit}
+		viewActions={driverDetailActions}
+		{tableContent}
+		storageKey="drivers"
+	/>
 </div>
-
-<!-- Edit Modal -->
-{#if editingDriver}
-	<Modal title={m.drivers_edit_title()} onClose={closeModals}>
-		<form
-			class="modal-form"
-			onsubmit={(e) => {
-				e.preventDefault();
-				handleUpdate();
-			}}
-		>
-			<div class="driver-info">
-				<p class="driver-name">{editingDriver.name}</p>
-				<p class="driver-email">{editingDriver.email}</p>
-			</div>
-
-			<div class="form-field">
-				<label for="edit-cap">{m.drivers_cap_label()}</label>
-				<Select
-					id="edit-cap"
-					options={weeklyCapOptions}
-					value={String(formWeeklyCap)}
-					onChange={(v) => (formWeeklyCap = Number(v))}
-				/>
-				<p class="field-hint">{m.drivers_cap_description()}</p>
-			</div>
-
-			<div class="modal-actions">
-				<Button variant="secondary" onclick={closeModals} fill>
-					{m.common_cancel()}
-				</Button>
-				<Button type="submit" fill>
-					{m.common_save()}
-				</Button>
-			</div>
-		</form>
-	</Modal>
-{/if}
 
 <!-- Unflag Confirmation -->
 {#if unflagConfirm}
@@ -385,11 +499,6 @@
 {/if}
 
 <style>
-	.cell-actions {
-		display: flex;
-		gap: var(--spacing-1);
-	}
-
 	/* Phone cell styling */
 	.phone {
 		color: var(--text-normal);
@@ -416,7 +525,7 @@
 		color: var(--text-normal);
 	}
 
-	/* Detail drawer */
+	/* Detail panel */
 	.detail-content {
 		display: flex;
 		flex-direction: column;
@@ -451,6 +560,12 @@
 		margin: 0;
 		font-size: var(--font-size-sm);
 		color: var(--text-normal);
+	}
+
+	.detail-field {
+		display: flex;
+		justify-content: flex-end;
+		min-width: 140px;
 	}
 
 	.detail-row dd.low {
@@ -540,55 +655,5 @@
 			transparent var(--radius-lg),
 			var(--surface-primary) calc(var(--radius-lg) + 0.5px)
 		);
-	}
-
-	/* Modal form */
-	.modal-form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-4);
-	}
-
-	.driver-info {
-		padding: var(--spacing-3);
-		background: var(--surface-secondary);
-		border-radius: var(--radius-md);
-	}
-
-	.driver-name {
-		margin: 0;
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-medium);
-		color: var(--text-normal);
-	}
-
-	.driver-email {
-		margin: var(--spacing-1) 0 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-muted);
-	}
-
-	.form-field {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-1);
-	}
-
-	.form-field label {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-		color: var(--text-normal);
-	}
-
-	.field-hint {
-		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--text-muted);
-	}
-
-	.modal-actions {
-		display: flex;
-		gap: var(--spacing-2);
-		margin-top: var(--spacing-2);
 	}
 </style>

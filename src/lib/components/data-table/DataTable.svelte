@@ -26,7 +26,6 @@ Designed to work with the Driver Ops design system.
 -->
 <script lang="ts" generics="RowType">
 	import type { Snippet } from 'svelte';
-	import { untrack } from 'svelte';
 	import type { Table } from '@tanstack/table-core';
 	import type {
 		RowClickHandler,
@@ -35,8 +34,11 @@ Designed to work with the Driver Ops design system.
 		DisabledSelectionReasonFn,
 		CellSnippets,
 		CellComponentSnippets,
-		HeaderSnippets
+		HeaderSnippets,
+		WideModeChangeHandler,
+		MobileDetailOpenHandler
 	} from './types';
+	import * as m from '$lib/paraglide/messages.js';
 	import DataTableHeader from './DataTableHeader.svelte';
 	import DataTableBody from './DataTableBody.svelte';
 	import DataTableVirtualBody from './DataTableVirtualBody.svelte';
@@ -45,6 +47,9 @@ Designed to work with the Driver Ops design system.
 	import DataTableColumnVisibility from './DataTableColumnVisibility.svelte';
 	import DataTableExportButton from './DataTableExportButton.svelte';
 	import DataTableMobileDetail from './DataTableMobileDetail.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
+	import Icon from '$lib/components/primitives/Icon.svelte';
+	import ViewportWide from '$lib/components/icons/ViewportWide.svelte';
 
 	type Props = {
 		/** The TanStack Table instance */
@@ -110,6 +115,15 @@ Designed to work with the Driver Ops design system.
 		/** Show column visibility toggle */
 		showColumnVisibility?: boolean;
 
+		/** Enable the wide mode toggle in chrome (for side panel vs modal switching) */
+		showWideModeToggle?: boolean;
+
+		/** Current wide mode state (true = modal mode, false = side panel mode) */
+		isWideMode?: boolean;
+
+		/** Callback when wide mode is toggled */
+		onWideModeChange?: WideModeChangeHandler;
+
 		/** Show export button */
 		showExport?: boolean;
 
@@ -157,6 +171,9 @@ Designed to work with the Driver Ops design system.
 
 		/** Custom title for mobile detail panel */
 		mobileDetailTitle?: string;
+
+		/** Callback when mobile detail panel opens */
+		onMobileDetailOpen?: MobileDetailOpenHandler<RowType>;
 	};
 
 	let {
@@ -181,6 +198,9 @@ Designed to work with the Driver Ops design system.
 		footer,
 		totalRows,
 		showColumnVisibility = false,
+		showWideModeToggle = false,
+		isWideMode = false,
+		onWideModeChange,
 		showExport = false,
 		exportFilename = 'export',
 		empty,
@@ -196,7 +216,8 @@ Designed to work with the Driver Ops design system.
 		class: className = '',
 		disableMobileDetail = false,
 		mobileDetailContent,
-		mobileDetailTitle
+		mobileDetailTitle,
+		onMobileDetailOpen
 	}: Props = $props();
 
 	// Layout measurement state
@@ -223,6 +244,7 @@ Designed to work with the Driver Ops design system.
 	 */
 	function handleMobileRowTap(row: RowType) {
 		mobileDetailRow = row;
+		onMobileDetailOpen?.(row);
 	}
 
 	/**
@@ -261,10 +283,13 @@ Designed to work with the Driver Ops design system.
 	const hasData = $derived(rows.length > 0);
 
 	const selectionVisible = $derived(showSelection ?? !!reactiveTable.options.enableRowSelection);
+	const showWideToggle = $derived(showWideModeToggle && !isMobile);
 	const hasChrome = $derived(
-		!!tabs || !!toolbar || !!selection || showColumnVisibility || showExport
+		!!tabs || !!toolbar || !!selection || showColumnVisibility || showExport || showWideToggle
 	);
-	const hasActions = $derived(!!toolbar || !!selection || showColumnVisibility || showExport);
+	const hasActions = $derived(
+		!!toolbar || !!selection || showColumnVisibility || showExport || showWideToggle
+	);
 
 	// Pagination info (used by DataTableBody for row indexing)
 	const currentPage = $derived.by(() => {
@@ -308,74 +333,6 @@ Designed to work with the Driver Ops design system.
 		return total;
 	});
 
-	// Mobile column visibility management
-	// Store original visibility when entering mobile mode, restore when leaving
-	let savedDesktopVisibility: Record<string, boolean> | null = $state(null);
-	// Track previous mobile state to detect transitions
-	let wasMobile = $state(false);
-
-	/**
-	 * Get the column IDs that should be visible on mobile.
-	 * Respects mobileVisible/mobilePriority from column meta.
-	 * Falls back to first 3 columns if none are explicitly marked.
-	 */
-	function getMobileVisibleColumnIds(): string[] {
-		const allCols = reactiveTable.getAllColumns();
-
-		// Filter to columns marked as mobileVisible
-		const mobileCols = allCols.filter((col) => col.columnDef.meta?.mobileVisible);
-
-		// Fallback: if no columns marked, take first 3 data columns
-		if (mobileCols.length === 0) {
-			return allCols
-				.filter((col) => !col.id.startsWith('__')) // Skip internal columns
-				.slice(0, 3)
-				.map((col) => col.id);
-		}
-
-		// Sort by priority and return IDs
-		return mobileCols
-			.sort(
-				(a, b) =>
-					(a.columnDef.meta?.mobilePriority ?? 99) - (b.columnDef.meta?.mobilePriority ?? 99)
-			)
-			.map((col) => col.id);
-	}
-
-	// Effect to manage mobile column visibility
-	// Uses untrack to prevent infinite loops when reading/writing table state
-	$effect(() => {
-		// Only react to isMobile changes
-		const nowMobile = isMobile;
-
-		// Use untrack to read/write table state without creating dependencies
-		untrack(() => {
-			// Only act on transitions, not every render
-			if (nowMobile && !wasMobile) {
-				// Transitioning TO mobile: save current visibility and apply mobile filter
-				const currentVisibility = reactiveTable.getState().columnVisibility;
-				savedDesktopVisibility = { ...currentVisibility };
-
-				const mobileIds = getMobileVisibleColumnIds();
-				const newVisibility: Record<string, boolean> = {};
-
-				for (const col of reactiveTable.getAllColumns()) {
-					// Skip internal columns
-					if (col.id.startsWith('__')) continue;
-					newVisibility[col.id] = mobileIds.includes(col.id);
-				}
-
-				reactiveTable.setColumnVisibility(newVisibility);
-			} else if (!nowMobile && wasMobile && savedDesktopVisibility) {
-				// Transitioning FROM mobile: restore original visibility
-				reactiveTable.setColumnVisibility(savedDesktopVisibility);
-				savedDesktopVisibility = null;
-			}
-
-			wasMobile = nowMobile;
-		});
-	});
-
 	// Get all column definitions for the mobile detail panel
 	const allColumnDefs = $derived.by(() => {
 		trackTable();
@@ -415,6 +372,18 @@ Designed to work with the Driver Ops design system.
 									{@render toolbar()}
 								{/if}
 								<!-- Built-in buttons after (columns, export) -->
+								{#if showWideToggle}
+									<IconButton
+										tooltip={isWideMode
+											? m.table_wide_mode_restore()
+											: m.table_wide_mode_maximize()}
+										onclick={() => onWideModeChange?.(!isWideMode)}
+										isActive={isWideMode}
+										ariaPressed={isWideMode}
+									>
+										<Icon><ViewportWide /></Icon>
+									</IconButton>
+								{/if}
 								{#if showColumnVisibility}
 									<DataTableColumnVisibility {table} />
 								{/if}
