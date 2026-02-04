@@ -1,8 +1,12 @@
 /**
  * Lock Preferences Cron Job
  *
- * Runs Sunday 23:59 Toronto time.
+ * Scheduled: Monday 04:59 UTC (= Sunday 23:59 Toronto EST)
  * Locks driver preferences for week N+2 and triggers schedule generation.
+ *
+ * Note: Vercel cron uses UTC only. 04:59 UTC Monday = 23:59 EST Sunday.
+ * During EDT (summer), this runs at 00:59 Monday Toronto time, but the
+ * code calculates the correct week boundary internally.
  *
  * @see DRV-e30
  */
