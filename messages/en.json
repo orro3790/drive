@@ -412,5 +412,46 @@
 	"manager_dashboard_detail_driver": "Driver",
 	"manager_dashboard_detail_bid_window": "Bid Window",
 	"manager_dashboard_detail_no_assignment": "No assignment for this date",
-	"manager_dashboard_assign_button": "Assign Driver"
+	"manager_dashboard_assign_button": "Assign Driver",
+
+	"drivers_page_title": "Drivers",
+	"drivers_page_description": "View and manage driver settings and metrics.",
+	"drivers_empty_state": "No drivers yet",
+	"drivers_empty_state_message": "Drivers will appear here once they sign up.",
+	"drivers_load_error": "Failed to load drivers.",
+	"drivers_update_error": "Failed to update driver.",
+	"drivers_updated_success": "Driver updated successfully.",
+	"drivers_unflagged_success": "Driver unflagged successfully.",
+	"drivers_unflag_error": "Failed to unflag driver.",
+
+	"drivers_header_email": "Email",
+	"drivers_header_phone": "Phone",
+	"drivers_header_attendance": "Attendance",
+	"drivers_header_completion": "Completion",
+	"drivers_header_weekly_cap": "Weekly Cap",
+	"drivers_header_flag_status": "Flag Status",
+
+	"drivers_flag_flagged": "Flagged",
+	"drivers_flag_warning": "Warning",
+	"drivers_flag_good": "Good",
+	"drivers_flag_warning_date": "Warning since {date}",
+
+	"drivers_edit_title": "Edit Driver",
+	"drivers_cap_label": "Weekly Cap",
+	"drivers_cap_description": "Maximum days per week (1-6)",
+	"drivers_unflag_button": "Remove Flag",
+	"drivers_unflag_confirm_title": "Unflag Driver",
+	"drivers_unflag_confirm_message": "Remove the flag from this driver? They will regain their full weekly cap.",
+
+	"drivers_detail_title": "Driver Details",
+	"drivers_detail_email": "Email",
+	"drivers_detail_phone": "Phone",
+	"drivers_detail_total_shifts": "Total Shifts",
+	"drivers_detail_completed_shifts": "Completed Shifts",
+	"drivers_detail_attendance": "Attendance Rate",
+	"drivers_detail_completion": "Completion Rate",
+	"drivers_detail_weekly_cap": "Weekly Cap",
+	"drivers_detail_flag_status": "Flag Status",
+	"drivers_detail_member_since": "Member Since",
+	"drivers_detail_no_phone": "Not provided"
 }
