@@ -30,9 +30,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const managerPaths = ['/routes', '/drivers', '/warehouses'];
 	const isManagerPath = managerPaths.some((path) => pathname.startsWith(path));
 
-	// Driver paths (routes under /(app) group)
-	const driverPaths = ['/dashboard', '/schedule', '/settings', '/notifications'];
-	const isDriverPath = driverPaths.some((path) => pathname.startsWith(path));
 
 	// Handle unauthenticated users
 	if (!session && !isPublicPath) {
