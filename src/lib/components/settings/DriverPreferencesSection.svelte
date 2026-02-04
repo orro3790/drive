@@ -1,0 +1,347 @@
+<!--
+@component
+DriverPreferencesSection - Preference controls for driver settings.
+-->
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages.js';
+	import SettingsGroupTitle from './SettingsGroupTitle.svelte';
+	import SettingsGrid from './SettingsGrid.svelte';
+	import SettingsRow from './SettingsRow.svelte';
+	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
+	import Checkbox from '$lib/components/primitives/Checkbox.svelte';
+	import Combobox from '$lib/components/Combobox.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
+	import Icon from '$lib/components/primitives/Icon.svelte';
+	import Spinner from '$lib/components/primitives/Spinner.svelte';
+	import Minus from '$lib/components/icons/Minus.svelte';
+	import { preferencesStore, type RouteDetail } from '$lib/stores/preferencesStore.svelte';
+	import type { SelectOption } from '$lib/schemas/ui/select';
+	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
+	import { formatUiDateTime } from '$lib/utils/date/formatting';
+
+	let routeResetKey = $state(0);
+	let routeSelection = $state<string | number | undefined>(undefined);
+	let hasRouteLoadError = $state(false);
+
+	const dayOptions = $derived.by(() => [
+		{ value: 0, short: m.preferences_day_sun(), full: m.preferences_day_sunday() },
+		{ value: 1, short: m.preferences_day_mon(), full: m.preferences_day_monday() },
+		{ value: 2, short: m.preferences_day_tue(), full: m.preferences_day_tuesday() },
+		{ value: 3, short: m.preferences_day_wed(), full: m.preferences_day_wednesday() },
+		{ value: 4, short: m.preferences_day_thu(), full: m.preferences_day_thursday() },
+		{ value: 5, short: m.preferences_day_fri(), full: m.preferences_day_friday() },
+		{ value: 6, short: m.preferences_day_sat(), full: m.preferences_day_saturday() }
+	]);
+
+	const preferredDays = $derived(preferencesStore.preferences?.preferredDays ?? []);
+	const selectedRoutes = $derived(preferencesStore.preferences?.preferredRoutesDetails ?? []);
+	const selectedRouteIds = $derived(preferencesStore.preferences?.preferredRoutes ?? []);
+	const isLocked = $derived(preferencesStore.isLocked);
+	const isLoading = $derived(preferencesStore.isLoading);
+	const isSaving = $derived(preferencesStore.isSaving);
+	const routeLimitReached = $derived(selectedRouteIds.length >= 3);
+
+	const lockStatus = $derived.by(() => {
+		if (preferencesStore.isLocked && preferencesStore.lockedUntil) {
+			return m.preferences_locked_until({
+				date: formatUiDateTime(preferencesStore.lockedUntil)
+			});
+		}
+		if (preferencesStore.lockDeadline) {
+			return m.preferences_lock_countdown({
+				time: formatUiDateTime(preferencesStore.lockDeadline)
+			});
+		}
+		return '';
+	});
+
+	const routeDataSource = {
+		fetchPage: async ({
+			query,
+			signal
+		}: {
+			query?: string;
+			cursor?: unknown;
+			limit?: number;
+			signal?: AbortSignal;
+		}) => {
+			const params = query ? `?q=${encodeURIComponent(query)}` : '';
+			try {
+				const res = await fetch(`/api/preferences/routes${params}`, { signal });
+				if (!res.ok) {
+					throw new Error('route-load-failed');
+				}
+				const data = await res.json();
+				const options = (data.routes ?? []).map((route: RouteDetail) => ({
+					value: route.id,
+					label: `${route.name} - ${route.warehouseName}`,
+					meta: route
+				}));
+				return { options, hasMore: false };
+			} catch (err) {
+				const isAbort = err instanceof Error && err.name === 'AbortError';
+				if (!isAbort && !hasRouteLoadError) {
+					hasRouteLoadError = true;
+					toastStore.error(m.preferences_load_error());
+				}
+				return { options: [], hasMore: false };
+			}
+		}
+	} satisfies {
+		fetchPage: (args: {
+			query?: string;
+			cursor?: unknown;
+			limit?: number;
+			signal?: AbortSignal;
+		}) => Promise<{ options: SelectOption[]; hasMore: boolean }>;
+	};
+
+	onMount(() => {
+		if (!preferencesStore.preferences && !preferencesStore.isLoading) {
+			void preferencesStore.load();
+		}
+	});
+
+	function handleRouteSelect(option: SelectOption) {
+		if (isLocked || routeLimitReached) {
+			return;
+		}
+
+		const routeId = String(option.value);
+		if (selectedRouteIds.includes(routeId)) {
+			routeSelection = undefined;
+			routeResetKey += 1;
+			return;
+		}
+
+		const meta = option.meta as RouteDetail | undefined;
+		const routeDetail: RouteDetail = meta ?? {
+			id: routeId,
+			name: option.label,
+			warehouseName: ''
+		};
+
+		const nextIds = [...selectedRouteIds, routeId].slice(0, 3);
+		const nextDetails = [...selectedRoutes, routeDetail].filter(
+			(route, index, list) => list.findIndex((item) => item.id === route.id) === index
+		);
+
+		preferencesStore.updateRoutes(nextIds, nextDetails);
+		routeSelection = undefined;
+		routeResetKey += 1;
+	}
+
+	function removeRoute(routeId: string) {
+		if (isLocked) return;
+		const nextIds = selectedRouteIds.filter((id) => id !== routeId);
+		const nextDetails = selectedRoutes.filter((route) => route.id !== routeId);
+		preferencesStore.updateRoutes(nextIds, nextDetails);
+	}
+</script>
+
+<section aria-labelledby="preferences-section" class="preferences-stack">
+	<div class="settings-card">
+		<SettingsGroupTitle
+			title={m.preferences_page_title()}
+			desc={m.preferences_page_description()}
+			id="preferences-section"
+		/>
+
+		{#if isLocked}
+			<NoticeBanner variant="warning">
+				<div class="lock-banner">
+					<span>{m.preferences_locked_message()}</span>
+					{#if preferencesStore.lockedUntil}
+						<span>
+							{m.preferences_locked_until({
+								date: formatUiDateTime(preferencesStore.lockedUntil)
+							})}
+						</span>
+					{/if}
+				</div>
+			</NoticeBanner>
+		{/if}
+
+		{#if isLoading && !preferencesStore.preferences}
+			<div class="preferences-loading" aria-live="polite">
+				<Spinner size={18} label={m.common_loading()} />
+				<span>{m.common_loading()}</span>
+			</div>
+		{:else}
+			<SettingsGrid>
+				<SettingsRow ariaDisabled={isLocked || isSaving}>
+					{#snippet label()}
+						<div class="title">{m.preferences_days_section()}</div>
+						<div class="desc">{m.preferences_days_description()}</div>
+					{/snippet}
+					{#snippet control()}
+						{#if lockStatus}
+							<span class="status-text">{lockStatus}</span>
+						{/if}
+					{/snippet}
+					{#snippet children()}
+						<div class="days-grid">
+							{#each dayOptions as day (day.value)}
+								<Checkbox
+									id={`preferred-day-${day.value}`}
+									name={`preferred-day-${day.value}`}
+									label={day.short}
+									ariaLabel={day.full}
+									checked={preferredDays.includes(day.value)}
+									disabled={isLocked || isSaving}
+									onclick={() => preferencesStore.toggleDay(day.value)}
+								/>
+							{/each}
+						</div>
+					{/snippet}
+				</SettingsRow>
+
+				<SettingsRow ariaDisabled={isLocked || isSaving}>
+					{#snippet label()}
+						<div class="title">{m.preferences_routes_section()}</div>
+						<div class="desc">{m.preferences_routes_description()}</div>
+					{/snippet}
+					{#snippet control()}
+						{#if routeLimitReached}
+							<span class="status-text">{m.preferences_routes_max()}</span>
+						{/if}
+					{/snippet}
+					{#snippet children()}
+						<div class="routes-stack">
+							{#key routeResetKey}
+								<Combobox
+									dataSource={routeDataSource}
+									bind:value={routeSelection}
+									placeholder={m.preferences_routes_placeholder()}
+									searchPlaceholder={m.preferences_routes_placeholder()}
+									aria-label={m.preferences_routes_aria_label()}
+									disabled={isLocked || isSaving || routeLimitReached}
+									onSelect={handleRouteSelect}
+									size="xl"
+								/>
+							{/key}
+
+							{#if selectedRoutes.length === 0}
+								<p class="route-empty">{m.preferences_no_routes()}</p>
+							{:else}
+								<div class="route-list">
+									{#each selectedRoutes as route (route.id)}
+										<div class="route-item">
+											<div class="route-text">
+												<span class="route-name">{route.name}</span>
+												<span class="route-warehouse">{route.warehouseName}</span>
+											</div>
+											<IconButton
+												tooltip={m.preferences_remove_route()}
+												aria-label={m.preferences_remove_route_label({ route: route.name })}
+												noBackground
+												onclick={() => removeRoute(route.id)}
+												disabled={isLocked || isSaving}
+											>
+												<Icon><Minus /></Icon>
+											</IconButton>
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/snippet}
+				</SettingsRow>
+			</SettingsGrid>
+		{/if}
+	</div>
+</section>
+
+<style>
+	.preferences-stack {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
+	}
+
+	.lock-banner {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-1);
+	}
+
+	.preferences-loading {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		color: var(--text-muted);
+		font-size: var(--font-size-sm);
+		padding: var(--spacing-2) 0;
+	}
+
+	.status-text {
+		color: var(--text-muted);
+		font-size: var(--font-size-sm);
+		text-align: right;
+	}
+
+	.days-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+		gap: var(--spacing-2);
+	}
+
+	.routes-stack {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+	}
+
+	.route-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+	}
+
+	.route-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-2);
+		padding: var(--spacing-2) var(--spacing-3);
+		border-radius: var(--radius-base);
+		border: var(--border-width-thin) solid var(--border-primary);
+		background: var(--surface-secondary);
+	}
+
+	.route-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-0-5);
+		min-width: 0;
+	}
+
+	.route-name {
+		font-size: var(--font-size-base);
+		color: var(--text-normal);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.route-warehouse {
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.route-empty {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+	}
+
+	@media (max-width: 767px) {
+		.days-grid {
+			grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+		}
+	}
+</style>
