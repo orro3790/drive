@@ -1,2 +1,24 @@
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://svelte.dev/docs/kit">svelte.dev/docs/kit</a> to read the documentation</p>
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+
+	// This page will redirect based on auth state via hooks.server.ts
+	// If user reaches here, redirect to sign-in
+	onMount(() => {
+		goto('/sign-in');
+	});
+</script>
+
+<div class="loading">
+	<p>Redirecting...</p>
+</div>
+
+<style>
+	.loading {
+		min-height: 100vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--text-muted);
+	}
+</style>
