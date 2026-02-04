@@ -247,5 +247,38 @@ export const routeStore = {
 				toastStore.error(m.route_delete_error());
 			}
 		}
+	},
+
+	/**
+	 * Apply assignment updates for a route (optimistic)
+	 */
+	applyAssignmentUpdate(assignmentId: string, updates: Partial<RouteWithWarehouse>) {
+		const original = state.routes.find((route) => route.assignmentId === assignmentId);
+		if (!original) return null;
+
+		const nextRoute: RouteWithWarehouse = {
+			...original,
+			...updates
+		};
+
+		if (matchesFilters(nextRoute, state.filters)) {
+			state.routes = state.routes.map((route) => (route.id === original.id ? nextRoute : route));
+		} else {
+			state.routes = state.routes.filter((route) => route.id !== original.id);
+		}
+
+		return original;
+	},
+
+	rollbackAssignmentUpdate(original: RouteWithWarehouse | null) {
+		if (!original) return;
+		if (matchesFilters(original, state.filters)) {
+			const exists = state.routes.some((route) => route.id === original.id);
+			state.routes = exists
+				? state.routes.map((route) => (route.id === original.id ? original : route))
+				: [...state.routes, original];
+		} else {
+			state.routes = state.routes.filter((route) => route.id !== original.id);
+		}
 	}
 };

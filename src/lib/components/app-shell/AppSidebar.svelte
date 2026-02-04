@@ -20,9 +20,9 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import Calendar from '$lib/components/icons/Calendar.svelte';
 	import CalendarCog from '$lib/components/icons/CalendarCog.svelte';
 	import Home from '$lib/components/icons/Home.svelte';
-	import MapPin from '$lib/components/icons/MapPin.svelte';
 	import Building from '$lib/components/icons/Building.svelte';
-	import Avatar from '$lib/components/icons/Avatar.svelte';
+	import Driver from '$lib/components/icons/Driver.svelte';
+	import Route from '$lib/components/icons/Route.svelte';
 	import Settings from '$lib/components/icons/Settings.svelte';
 	import Logout from '$lib/components/icons/Logout.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
@@ -71,13 +71,13 @@ Mobile: Hidden by default, hamburger in header opens overlay
 		{
 			id: 'drivers',
 			label: () => m.nav_drivers(),
-			Icon: Avatar,
+			Icon: Driver,
 			path: '/drivers'
 		},
 		{
 			id: 'routes',
 			label: () => m.nav_routes(),
-			Icon: MapPin,
+			Icon: Route,
 			path: '/routes'
 		},
 		{

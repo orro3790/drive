@@ -41,6 +41,7 @@
 	import { routeStore, type RouteWithWarehouse } from '$lib/stores/routeStore.svelte';
 	import { warehouseStore } from '$lib/stores/warehouseStore.svelte';
 	import { bidWindowStore, type BidWindow } from '$lib/stores/bidWindowStore.svelte';
+	import { driverStore } from '$lib/stores/driverStore.svelte';
 	import { routeCreateSchema, routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
 	import type { SelectOption } from '$lib/schemas/ui/select';
 
@@ -60,6 +61,11 @@
 	let formName = $state('');
 	let formWarehouseId = $state('');
 	let formErrors = $state<{ name?: string[]; warehouseId?: string[] }>({});
+	let showAssignModal = $state(false);
+	let assignTargetWindow = $state<BidWindow | null>(null);
+	let assignDriverId = $state('');
+	let assignErrors = $state<{ driverId?: string[] }>({});
+	let closeConfirmWindow = $state<BidWindow | null>(null);
 
 	// Filter state
 	let warehouseFilter = $state('');
@@ -314,6 +320,13 @@
 
 	const warehouseFormOptions = $derived(warehouseOptions);
 
+	const driverOptions = $derived(
+		driverStore.drivers.map((driver) => ({
+			value: driver.id,
+			label: driver.name
+		}))
+	);
+
 	const selectedRoute = $derived.by(
 		() => routeStore.routes.find((route) => route.id === selectedRouteId) ?? null
 	);
@@ -360,6 +373,58 @@
 	const selectedBidWindow = $derived.by(
 		() => bidWindowStore.bidWindows.find((w) => w.id === selectedBidWindowId) ?? null
 	);
+
+	function canManualAssign(window: BidWindow) {
+		return window.status === 'open' || !window.winnerName;
+	}
+
+	function openAssignModal(window: BidWindow) {
+		assignTargetWindow = window;
+		assignDriverId = '';
+		assignErrors = {};
+		showAssignModal = true;
+		if (!driverStore.isLoading && driverStore.drivers.length === 0) {
+			driverStore.load();
+		}
+	}
+
+	function closeAssignModal() {
+		showAssignModal = false;
+		assignTargetWindow = null;
+		assignDriverId = '';
+		assignErrors = {};
+	}
+
+	function handleAssignDriver() {
+		if (!assignTargetWindow) return;
+		if (!assignDriverId) {
+			assignErrors = { driverId: [m.bid_windows_assign_driver_error()] };
+			return;
+		}
+
+		const driver = driverStore.drivers.find((item) => item.id === assignDriverId);
+		if (!driver) {
+			assignErrors = { driverId: [m.bid_windows_assign_driver_error()] };
+			return;
+		}
+
+		bidWindowStore.manualAssign(assignTargetWindow, { id: driver.id, name: driver.name });
+		closeAssignModal();
+	}
+
+	function openCloseConfirm(window: BidWindow) {
+		closeConfirmWindow = window;
+	}
+
+	function closeCloseConfirm() {
+		closeConfirmWindow = null;
+	}
+
+	function handleCloseWindow() {
+		if (!closeConfirmWindow) return;
+		bidWindowStore.closeWindow(closeConfirmWindow);
+		closeCloseConfirm();
+	}
 
 	// Load data on mount
 	onMount(() => {
@@ -611,9 +676,49 @@
 	</div>
 {/snippet}
 
+{#snippet bidWindowDetailActions(window: BidWindow)}
+	<Button
+		fill
+		onclick={() => openAssignModal(window)}
+		disabled={!canManualAssign(window) || bidWindowStore.isAssigning(window.id) || bidWindowStore.isClosing(window.id)}
+		isLoading={bidWindowStore.isAssigning(window.id)}
+	>
+		{m.bid_windows_assign_button()}
+	</Button>
+	<Button
+		variant="secondary"
+		fill
+		onclick={() => openCloseConfirm(window)}
+		disabled={window.status !== 'open' || bidWindowStore.isAssigning(window.id) || bidWindowStore.isClosing(window.id)}
+		isLoading={bidWindowStore.isClosing(window.id)}
+	>
+		{m.bid_windows_close_button()}
+	</Button>
+{/snippet}
+
 {#snippet bidWindowMobileDetail(window: BidWindow)}
 	<div class="detail-content">
 		{@render bidWindowDetailInfo(window)}
+
+		<div class="detail-actions">
+			<Button
+				fill
+				onclick={() => openAssignModal(window)}
+				disabled={!canManualAssign(window) || bidWindowStore.isAssigning(window.id) || bidWindowStore.isClosing(window.id)}
+				isLoading={bidWindowStore.isAssigning(window.id)}
+			>
+				{m.bid_windows_assign_button()}
+			</Button>
+			<Button
+				variant="secondary"
+				fill
+				onclick={() => openCloseConfirm(window)}
+				disabled={window.status !== 'open' || bidWindowStore.isAssigning(window.id) || bidWindowStore.isClosing(window.id)}
+				isLoading={bidWindowStore.isClosing(window.id)}
+			>
+				{m.bid_windows_close_button()}
+			</Button>
+		</div>
 	</div>
 {/snippet}
 
@@ -725,6 +830,7 @@
 			isEditing={false}
 			hasChanges={false}
 			viewContent={bidWindowDetailView}
+			viewActions={bidWindowDetailActions}
 			{tableContent}
 			storageKey="bid-windows"
 		/>
@@ -817,6 +923,76 @@
 				</Button>
 			</div>
 		</form>
+	</Modal>
+{/if}
+
+<!-- Manual Assign Modal -->
+{#if showAssignModal && assignTargetWindow}
+	<Modal title={m.bid_windows_assign_title()} description={m.bid_windows_assign_description()} onClose={closeAssignModal}>
+		<form
+			class="modal-form"
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleAssignDriver();
+			}}
+		>
+			<p class="modal-meta">
+				{assignTargetWindow.routeName} · {formatDate(assignTargetWindow.assignmentDate)}
+			</p>
+			<div class="form-field">
+				<label for="assign-driver">{m.bid_windows_assign_driver_label()}</label>
+				<Select
+					id="assign-driver"
+					options={driverOptions}
+					bind:value={assignDriverId}
+					placeholder={m.bid_windows_assign_driver_placeholder()}
+					errors={assignErrors.driverId}
+					disabled={driverStore.isLoading || bidWindowStore.isAssigning(assignTargetWindow.id)}
+				/>
+			</div>
+
+			<div class="modal-actions">
+				<Button variant="secondary" onclick={closeAssignModal} fill>
+					{m.common_cancel()}
+				</Button>
+				<Button
+					type="submit"
+					fill
+					disabled={bidWindowStore.isAssigning(assignTargetWindow.id)}
+					isLoading={bidWindowStore.isAssigning(assignTargetWindow.id)}
+				>
+					{m.bid_windows_assign_submit()}
+				</Button>
+			</div>
+		</form>
+	</Modal>
+{/if}
+
+<!-- Close Bid Window Modal -->
+{#if closeConfirmWindow}
+	<Modal
+		title={m.bid_windows_close_title()}
+		description={m.bid_windows_close_description()}
+		onClose={closeCloseConfirm}
+	>
+		<div class="modal-form">
+			<p class="modal-meta">
+				{closeConfirmWindow.routeName} · {formatDate(closeConfirmWindow.assignmentDate)}
+			</p>
+			<div class="modal-actions">
+				<Button variant="secondary" onclick={closeCloseConfirm} fill>
+					{m.common_cancel()}
+				</Button>
+				<Button
+					fill
+					onclick={handleCloseWindow}
+					disabled={bidWindowStore.isClosing(closeConfirmWindow.id)}
+					isLoading={bidWindowStore.isClosing(closeConfirmWindow.id)}
+				>
+					{m.bid_windows_close_confirm()}
+				</Button>
+			</div>
+		</div>
 	</Modal>
 {/if}
 
@@ -1006,6 +1182,12 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-4);
+	}
+
+	.modal-meta {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
 	}
 
 	.form-field {

@@ -482,5 +482,20 @@
 	"bid_windows_detail_status": "Status",
 	"bid_windows_detail_bids": "Bid Count",
 	"bid_windows_detail_winner": "Winner",
-	"bid_windows_detail_closes": "Closes At"
+	"bid_windows_detail_closes": "Closes At",
+	"bid_windows_assign_button": "Manual Assign",
+	"bid_windows_close_button": "Close Window Now",
+	"bid_windows_assign_title": "Manual Assign",
+	"bid_windows_assign_description": "Assign a driver to this route. This will close the bid window.",
+	"bid_windows_assign_driver_label": "Driver",
+	"bid_windows_assign_driver_placeholder": "Select a driver",
+	"bid_windows_assign_driver_error": "Select a driver to assign.",
+	"bid_windows_assign_submit": "Assign Driver",
+	"bid_windows_close_title": "Close Bid Window",
+	"bid_windows_close_description": "Stop bidding now. If there are bids, the current winner will be assigned. If not, the assignment will remain unfilled.",
+	"bid_windows_close_confirm": "Close Window",
+	"bid_windows_assign_success": "Driver assigned.",
+	"bid_windows_assign_error": "Failed to assign driver.",
+	"bid_windows_close_success": "Bid window closed.",
+	"bid_windows_close_error": "Failed to close bid window."
 }

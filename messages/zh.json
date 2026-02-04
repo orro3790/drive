@@ -203,5 +203,20 @@
 	"bid_windows_detail_status": "状态",
 	"bid_windows_detail_bids": "竞标数量",
 	"bid_windows_detail_winner": "中标者",
-	"bid_windows_detail_closes": "关闭时间"
+	"bid_windows_detail_closes": "关闭时间",
+	"bid_windows_assign_button": "手动分配",
+	"bid_windows_close_button": "立即关闭窗口",
+	"bid_windows_assign_title": "手动分配",
+	"bid_windows_assign_description": "为此路线分配司机。这将关闭竞标窗口。",
+	"bid_windows_assign_driver_label": "司机",
+	"bid_windows_assign_driver_placeholder": "选择司机",
+	"bid_windows_assign_driver_error": "请选择要分配的司机。",
+	"bid_windows_assign_submit": "分配司机",
+	"bid_windows_close_title": "关闭竞标窗口",
+	"bid_windows_close_description": "立即停止竞标。如果已有竞标，将分配当前中标者；否则该任务保持未分配。",
+	"bid_windows_close_confirm": "关闭窗口",
+	"bid_windows_assign_success": "已分配司机。",
+	"bid_windows_assign_error": "分配司机失败。",
+	"bid_windows_close_success": "竞标窗口已关闭。",
+	"bid_windows_close_error": "关闭竞标窗口失败。"
 }
