@@ -2,6 +2,10 @@
  * Available Bids API
  *
  * GET /api/bids/available - Get open bid windows the current driver is eligible for
+ *
+ * This endpoint performs event-driven bid resolution: before returning available
+ * windows, it resolves any expired windows. This ensures drivers see accurate
+ * results without waiting for the daily cron job.
  */
 
 import { json, error } from '@sveltejs/kit';
@@ -11,6 +15,8 @@ import { assignments, bidWindows, bids, routes, warehouses, user } from '$lib/se
 import { and, eq, gt } from 'drizzle-orm';
 import { parseISO } from 'date-fns';
 import { getWeekStart, canDriverTakeAssignment } from '$lib/server/services/scheduling';
+import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
+import logger from '$lib/server/logger';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user) {
@@ -19,6 +25,19 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 	if (locals.user.role !== 'driver') {
 		throw error(403, 'Only drivers can view available bids');
+	}
+
+	// Event-driven resolution: resolve any expired windows before returning results
+	const expiredWindows = await getExpiredBidWindows();
+	if (expiredWindows.length > 0) {
+		const log = logger.child({ operation: 'event-driven-resolution', userId: locals.user.id });
+		for (const window of expiredWindows) {
+			try {
+				await resolveBidWindow(window.id);
+			} catch (err) {
+				log.error({ windowId: window.id, error: err }, 'Failed to resolve expired window');
+			}
+		}
 	}
 
 	// Check if driver is flagged
