@@ -6,7 +6,7 @@
 		},
 		{
 			"path": "/api/cron/close-bid-windows",
-			"schedule": "0,15,30,45 * * * *"
+			"schedule": "*/15 * * * *"
 		},
 		{
 			"path": "/api/cron/shift-reminders",

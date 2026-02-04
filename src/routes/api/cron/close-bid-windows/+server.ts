@@ -1,7 +1,7 @@
 /**
  * Close Bid Windows Cron Job
  *
- * Scheduled: Every 15 minutes (0,15,30,45 * * * *)
+ * Scheduled: Every 15 minutes (*/15 * * * *)
  * Finds expired bid windows and resolves them via resolveBidWindow().
  *
  * Windows without bids remain open (per spec: stays open indefinitely).
