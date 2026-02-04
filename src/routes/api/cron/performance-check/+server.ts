@@ -9,7 +9,22 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { eq } from 'drizzle-orm';
+import { db } from '$lib/server/db';
+import { user } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
+import { updateDriverMetrics } from '$lib/server/services/metrics';
+import { checkAndApplyFlag, type FlaggingResult } from '$lib/server/services/flagging';
+
+const BATCH_SIZE = 50;
+
+interface PerformanceCheckSummary {
+	driversChecked: number;
+	newlyFlagged: number;
+	capsReduced: number;
+	rewardsGranted: number;
+	errors: number;
+}
 
 export const GET: RequestHandler = async ({ request }) => {
 	// Verify cron secret to prevent unauthorized access
@@ -19,20 +34,76 @@ export const GET: RequestHandler = async ({ request }) => {
 	}
 
 	const log = logger.child({ cron: 'performance-check' });
+	const startedAt = Date.now();
 	log.info('Starting performance check cron job');
 
-	try {
-		// TODO: Implement performance check logic
-		// 1. For each driver, recalculate metrics from assignments/shifts
-		// 2. Apply flagging rules:
-		//    - Before 10 shifts: flag if attendance < 80%
-		//    - After 10 shifts: flag if attendance < 70%
-		// 3. Check grace period expiry for flagged drivers
-		// 4. Reduce weekly cap for drivers still below threshold
-		// 5. Send warning notifications as needed
+	const summary: PerformanceCheckSummary = {
+		driversChecked: 0,
+		newlyFlagged: 0,
+		capsReduced: 0,
+		rewardsGranted: 0,
+		errors: 0
+	};
 
-		log.info('Performance check cron job completed');
-		return json({ success: true });
+	try {
+		// Get all drivers
+		const drivers = await db
+			.select({ id: user.id })
+			.from(user)
+			.where(eq(user.role, 'driver'));
+
+		log.info({ driverCount: drivers.length }, 'Found drivers to process');
+
+		// Process in batches to avoid timeout
+		for (let i = 0; i < drivers.length; i += BATCH_SIZE) {
+			const batch = drivers.slice(i, i + BATCH_SIZE);
+			const batchResults = await Promise.allSettled(
+				batch.map(async (driver) => {
+					// Update metrics first
+					await updateDriverMetrics(driver.id);
+					// Then apply flagging logic
+					return await checkAndApplyFlag(driver.id);
+				})
+			);
+
+			for (const result of batchResults) {
+				if (result.status === 'fulfilled' && result.value) {
+					const flagResult: FlaggingResult = result.value;
+					summary.driversChecked++;
+
+					if (flagResult.warningSent) {
+						summary.newlyFlagged++;
+					}
+					if (flagResult.gracePenaltyApplied) {
+						summary.capsReduced++;
+					}
+					if (flagResult.rewardApplied) {
+						summary.rewardsGranted++;
+					}
+				} else if (result.status === 'rejected') {
+					summary.errors++;
+					log.error({ error: result.reason }, 'Error processing driver');
+				}
+			}
+
+			log.debug({ batch: Math.floor(i / BATCH_SIZE) + 1, processed: i + batch.length }, 'Batch processed');
+		}
+
+		const elapsedMs = Date.now() - startedAt;
+		log.info(
+			{
+				...summary,
+				elapsedMs,
+				driverCount: drivers.length
+			},
+			'Performance check cron job completed'
+		);
+
+		return json({
+			success: true,
+			summary,
+			elapsedMs
+		});
 	} catch (error) {
 		log.error({ error }, 'Performance check cron job failed');
 		return json({ error: 'Internal server error' }, { status: 500 });
