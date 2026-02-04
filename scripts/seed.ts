@@ -195,7 +195,9 @@ async function seed(seedConfig: SeedConfig) {
 					userId: testUser.id
 				});
 			}
-			console.log(`   Added test user ${testUserEmail} to all ${insertedWarehouses.length} warehouses`);
+			console.log(
+				`   Added test user ${testUserEmail} to all ${insertedWarehouses.length} warehouses`
+			);
 		}
 	}
 

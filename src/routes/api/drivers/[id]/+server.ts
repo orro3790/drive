@@ -78,10 +78,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 
 	// If no actual changes, return current state
 	if (Object.keys(dbUpdates).length === 0) {
-		const [metrics] = await db
-			.select()
-			.from(driverMetrics)
-			.where(eq(driverMetrics.userId, id));
+		const [metrics] = await db.select().from(driverMetrics).where(eq(driverMetrics.userId, id));
 
 		return json({
 			driver: {
@@ -124,10 +121,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 	});
 
 	// Get metrics for response
-	const [metrics] = await db
-		.select()
-		.from(driverMetrics)
-		.where(eq(driverMetrics.userId, id));
+	const [metrics] = await db.select().from(driverMetrics).where(eq(driverMetrics.userId, id));
 
 	return json({
 		driver: {

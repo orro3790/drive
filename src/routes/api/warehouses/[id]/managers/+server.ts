@@ -83,14 +83,13 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const [existing] = await db
 		.select({ id: warehouseManagers.id })
 		.from(warehouseManagers)
-		.where(and(eq(warehouseManagers.warehouseId, warehouseId), eq(warehouseManagers.userId, userId)));
+		.where(
+			and(eq(warehouseManagers.warehouseId, warehouseId), eq(warehouseManagers.userId, userId))
+		);
 
 	if (existing) throw error(409, 'Manager already assigned to warehouse');
 
-	const [created] = await db
-		.insert(warehouseManagers)
-		.values({ warehouseId, userId })
-		.returning();
+	const [created] = await db.insert(warehouseManagers).values({ warehouseId, userId }).returning();
 
 	return json({ warehouseManager: created }, { status: 201 });
 };
@@ -123,7 +122,9 @@ export const DELETE: RequestHandler = async ({ locals, params, request }) => {
 
 	const deleted = await db
 		.delete(warehouseManagers)
-		.where(and(eq(warehouseManagers.warehouseId, warehouseId), eq(warehouseManagers.userId, userId)))
+		.where(
+			and(eq(warehouseManagers.warehouseId, warehouseId), eq(warehouseManagers.userId, userId))
+		)
 		.returning();
 
 	if (deleted.length === 0) throw error(404, 'Manager assignment not found');

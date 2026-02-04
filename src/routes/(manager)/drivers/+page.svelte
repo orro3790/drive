@@ -214,7 +214,10 @@
 			<Icon><Pencil /></Icon>
 		</IconButton>
 		{#if ctx.row.isFlagged}
-			<IconButton onclick={(e) => openUnflagConfirm(ctx.row, e)} tooltip={m.drivers_unflag_button()}>
+			<IconButton
+				onclick={(e) => openUnflagConfirm(ctx.row, e)}
+				tooltip={m.drivers_unflag_button()}
+			>
 				<Icon><ShieldMinus /></Icon>
 			</IconButton>
 		{/if}
