@@ -8,8 +8,9 @@
 	import * as m from '$lib/paraglide/messages.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { pageHeaderStore } from '$lib/stores/app-shell/pageHeaderStore.svelte';
+	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import SettingsNav, {
 		type Category,
 		type NavGroup
@@ -59,6 +60,37 @@
 		goto(home);
 	}
 
+	function getStoredFcmToken(): string | null {
+		if (typeof window === 'undefined') return null;
+		try {
+			const storageKeys = ['fcmToken', 'fcm_token', 'firebase_fcm_token'];
+			for (const key of storageKeys) {
+				const token = window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
+				if (token && token.trim()) return token.trim();
+			}
+			const globalToken = (window as { fcmToken?: string; __fcmToken?: string }).fcmToken;
+			const legacyToken = (window as { fcmToken?: string; __fcmToken?: string }).__fcmToken;
+			return globalToken?.trim() || legacyToken?.trim() || null;
+		} catch {
+			return null;
+		}
+	}
+
+	async function registerFcmToken(token: string) {
+		try {
+			const res = await fetch('/api/users/fcm-token', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ token })
+			});
+			if (!res.ok) {
+				throw new Error('fcm-register-failed');
+			}
+		} catch {
+			toastStore.error(m.settings_fcm_register_error());
+		}
+	}
+
 	// Build breadcrumbs and sync to page header store
 	const breadcrumbs = $derived.by((): Breadcrumb[] => {
 		const crumbs: Breadcrumb[] = [
@@ -84,6 +116,14 @@
 			title: m.settings_page_title(),
 			breadcrumbs
 		});
+	});
+
+	onMount(() => {
+		if (!user) return;
+		const token = getStoredFcmToken();
+		if (token) {
+			void registerFcmToken(token);
+		}
 	});
 
 	// Reset page header when leaving

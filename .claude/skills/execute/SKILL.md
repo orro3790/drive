@@ -12,17 +12,27 @@ The complete implementation lifecycle for executing a plan file. Handles fresh s
 ## Usage
 
 ```
+/execute <task-id>
 /execute <plan-file-path> [task-id]
 ```
 
-- `plan-file-path`: Path to the implementation plan (e.g., `ralph/plans/my-feature.md`)
-- `task-id` (optional): BEADS task ID. If not provided, derive from plan filename.
+- `task-id`: BEADS task ID. Required if the plan file path is omitted. If a plan path is provided and task-id is omitted, derive from the plan filename.
+- `plan-file-path`: Path to the implementation plan (e.g., `ralph/plans/my-feature.md`). Optional when the bead body includes a `Source:` line pointing to the plan/spec.
 
 ---
 
 ## Phase 1: Preflight
 
 **First, detect if this is a fresh start or resume, then set up accordingly.**
+
+### 1.0 Resolve Plan Source (if missing)
+
+If `plan-file-path` was not provided:
+
+1. `bd show <task-id>`
+2. Find the first line starting with `Source:` in the bead body.
+3. Extract the path (and optional section) and use it as the plan source.
+4. If no `Source:` line is present or the path is ambiguous, stop and ask the user for the plan file path (then update the bead to include `Source:` once known).
 
 ### 1.1 Check BEADS Status
 
@@ -107,7 +117,7 @@ If status=in_progress and branch exists:
 
 ### 2.1 Read the Plan
 
-Read the plan file and understand ALL implementation steps.
+Read the plan file (from CLI arg or bead `Source:`) and understand ALL implementation steps.
 
 ### 2.2 Determine Progress (if resuming)
 
@@ -338,7 +348,7 @@ The `/verify` skill will:
 
 | Verdict   | Meaning                              | Required Action                  |
 | --------- | ------------------------------------ | -------------------------------- |
-| **PASS**  | Tests pass AND quality bar met       | Proceed to Phase 9 (Submit PR)   |
+| **PASS**  | Tests pass AND quality bar met       | Proceed to Phase 9 (Close Task)  |
 | **BLOCK** | Issues must be fixed                 | **STOP. Fix issues. Re-verify.** |
 | **WARN**  | Functional OK, minor polish concerns | May proceed, note in PR          |
 
@@ -364,9 +374,30 @@ The `/verify` skill doesn't just check "does it work." It evaluates:
 
 ---
 
-## Phase 9: Submit PR
+## Phase 9: Close Task
 
-**Only after browser verification passes (PASS or WARN).**
+**CRITICAL: Close BEFORE submitting the PR.**
+
+When browser verification passed and the branch is ready to submit:
+
+```bash
+bd close <task-id>
+```
+
+**Checklist before closing:**
+
+- [ ] Code review completed and issues addressed
+- [ ] Type check passed with 0 errors
+- [ ] `pnpm validate` passed
+- [ ] `/verify` verdict is PASS or WARN
+
+**Immediately continue to Phase 10 to submit the PR.**
+
+---
+
+## Phase 10: Submit PR
+
+**Only after browser verification passes (PASS or WARN) and the bead is closed.**
 
 ```bash
 git push -u origin HEAD
@@ -380,9 +411,9 @@ For multi-PR plans, submit each PR as it's ready. Don't wait until the end.
 
 ---
 
-## Phase 10: Merge PR
+## Phase 11: Merge PR
 
-**MANDATORY — Do NOT skip to Phase 11 without merging. Creating a PR is NOT done.**
+**MANDATORY — Do NOT end the workflow without merging. Creating a PR is NOT done.**
 
 After PR is submitted, wait for CI to pass, then merge:
 
@@ -401,7 +432,7 @@ gh pr merge <pr-number> --squash
 ```
 
 - Uses squash merge to keep develop history clean
-- If merge fails (CI blocking, conflicts), log the issue and skip to Phase 11 without closing
+- If merge fails (CI blocking, conflicts), log the issue and pause the workflow
 
 ### Sync After Merge
 
@@ -412,30 +443,14 @@ git branch -d <feature-branch>  # Clean up local branch manually
 
 ---
 
-## Phase 11: Close Task
-
-**CRITICAL: Only close AFTER the PR is merged. Creating a PR is NOT done.**
-
-When the PR is merged and browser verification passed:
-
-```bash
-bd close <task-id>
-```
-
-**Checklist before closing:**
-
-- [ ] PR was created (`gh pr create`)
-- [ ] CI passed (`gh pr checks`)
-- [ ] PR was merged (`gh pr merge --squash`)
-- [ ] Local branch synced with develop
-- [ ] Only THEN close the bead
-
----
-
 ## Example: Fresh Start
 
 ```
-Human: /execute ralph/plans/search-filters.md dzz.1
+Human: /execute dzz.1
+
+Agent: Resolving plan source...
+  bd show dzz.1 → Source: ralph/plans/search-filters.md (Task 2)
+  → Using plan: ralph/plans/search-filters.md
 
 Agent: Checking task status...
   bd show dzz.1 → status: open
@@ -464,22 +479,29 @@ Agent: Checking task status...
 - Spawning documentation-auditor...
 - No updates needed
 
-[Submit PR]
-- git push -u origin HEAD... done
-- gh pr create... PR #123 created
-- bd update dzz.1 --comment "PR: #123"
-
 [Browser Verification]
 - Connecting to localhost:5173...
 - Taking snapshot of /search...
 - Testing filter interactions...
 - All checks passed
+
+[Close Task]
+- bd close dzz.1... done
+
+[Submit PR]
+- git push -u origin HEAD... done
+- gh pr create... PR #123 created
+- bd update dzz.1 --comment "PR: #123"
 ```
 
 ## Example: Resume After Pause
 
 ```
-Human: /execute ralph/plans/search-filters.md dzz.1
+Human: /execute dzz.1
+
+Agent: Resolving plan source...
+  bd show dzz.1 → Source: ralph/plans/search-filters.md (Task 2)
+  → Using plan: ralph/plans/search-filters.md
 
 Agent: Checking task status...
   bd show dzz.1 → status: in_progress
