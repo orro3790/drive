@@ -18,6 +18,7 @@ import {
 } from '$lib/server/db/schema';
 import { routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, eq, ne, gt, count } from 'drizzle-orm';
+import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 
 function toLocalYmd(date = new Date()): string {
 	const year = date.getFullYear();
@@ -89,6 +90,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 			name: routes.name,
 			warehouseId: routes.warehouseId,
 			warehouseName: warehouses.name,
+			managerId: routes.managerId,
 			createdAt: routes.createdAt,
 			updatedAt: routes.updatedAt
 		})
@@ -98,6 +100,12 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 
 	if (!existing) {
 		throw error(404, 'Route not found');
+	}
+
+	// Validate manager has access to this route's warehouse
+	const canAccess = await canManagerAccessWarehouse(locals.user.id, existing.warehouseId);
+	if (!canAccess) {
+		throw error(403, 'No access to this route');
 	}
 
 	const updates = result.data;
@@ -208,6 +216,12 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 
 	if (!existing) {
 		throw error(404, 'Route not found');
+	}
+
+	// Validate manager has access to this route's warehouse
+	const canAccess = await canManagerAccessWarehouse(locals.user.id, existing.warehouseId);
+	if (!canAccess) {
+		throw error(403, 'No access to this route');
 	}
 
 	const today = toLocalYmd();

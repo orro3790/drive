@@ -212,6 +212,9 @@
 	"warehouse_delete_error": "Failed to delete warehouse.",
 	"warehouse_empty_state": "No warehouses yet",
 	"warehouse_empty_state_message": "Add your first warehouse to get started.",
+	"warehouse_routes_header": "Routes",
+	"warehouse_filter_name_label": "Name",
+	"warehouse_filter_name_placeholder": "Search by name...",
 
 	"route_page_title": "Routes",
 	"route_page_description": "Manage routes and track daily coverage status.",

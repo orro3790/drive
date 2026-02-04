@@ -8,9 +8,10 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { warehouses, auditLogs, routes } from '$lib/server/db/schema';
+import { warehouses, auditLogs, routes, warehouseManagers } from '$lib/server/db/schema';
 import { warehouseCreateSchema } from '$lib/schemas/warehouse';
-import { eq, count } from 'drizzle-orm';
+import { eq, count, inArray } from 'drizzle-orm';
+import { getManagerWarehouseIds } from '$lib/server/services/managers';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user) {
@@ -19,6 +20,12 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 	if (locals.user.role !== 'manager') {
 		throw error(403, 'Forbidden');
+	}
+
+	// Get warehouses this manager can access
+	const accessibleWarehouses = await getManagerWarehouseIds(locals.user.id);
+	if (accessibleWarehouses.length === 0) {
+		return json({ warehouses: [] });
 	}
 
 	const warehouseList = await db
@@ -33,6 +40,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		})
 		.from(warehouses)
 		.leftJoin(routes, eq(routes.warehouseId, warehouses.id))
+		.where(inArray(warehouses.id, accessibleWarehouses))
 		.groupBy(warehouses.id)
 		.orderBy(warehouses.name);
 
@@ -61,12 +69,18 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.insert(warehouses)
 		.values({
 			name,
-			address
-			// createdBy is nullable - Better Auth user IDs don't match domain users table yet
+			address,
+			createdBy: locals.user.id
 		})
 		.returning();
 
-	// Audit log - skip actorId since Better Auth IDs don't match domain users table
+	// Auto-assign creator as warehouse manager
+	await db.insert(warehouseManagers).values({
+		warehouseId: created.id,
+		userId: locals.user.id
+	});
+
+	// Audit log
 	await db.insert(auditLogs).values({
 		entityType: 'warehouse',
 		entityId: created.id,

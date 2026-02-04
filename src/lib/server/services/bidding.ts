@@ -17,7 +17,7 @@ import {
 	routes,
 	user
 } from '$lib/server/db/schema';
-import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
+import { sendBulkNotifications, sendManagerAlert, sendNotification } from '$lib/server/services/notifications';
 import { and, eq, lt } from 'drizzle-orm';
 import { toZonedTime } from 'date-fns-tz';
 import { addMinutes, parseISO, startOfDay } from 'date-fns';
@@ -334,6 +334,18 @@ export async function resolveBidWindow(bidWindowId: string): Promise<ResolveBidW
 
 	if (pendingBids.length === 0) {
 		log.info({ assignmentId: assignment.id }, 'No bids to resolve');
+
+		// Alert manager that assignment remains unfilled
+		try {
+			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
+				routeName: assignment.routeName,
+				date: assignment.date
+			});
+			log.info({ routeId: assignment.routeId }, 'Manager alerted about unfilled route');
+		} catch {
+			// Best-effort alert, don't fail resolution
+		}
+
 		return { resolved: false, bidCount: 0, reason: 'no_bids' };
 	}
 

@@ -9,6 +9,7 @@ import { db } from '$lib/server/db';
 import { notifications, user } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import logger from '$lib/server/logger';
+import { getRouteManager } from './managers';
 import {
 	FIREBASE_PROJECT_ID,
 	FIREBASE_CLIENT_EMAIL,
@@ -32,7 +33,15 @@ export type NotificationType =
 	| 'warning'
 	| 'manual'
 	| 'schedule_locked'
-	| 'assignment_confirmed';
+	| 'assignment_confirmed'
+	| 'route_unfilled'
+	| 'route_cancelled'
+	| 'driver_no_show';
+
+/**
+ * Subset of notification types used for manager alerts.
+ */
+export type ManagerAlertType = 'route_unfilled' | 'route_cancelled' | 'driver_no_show';
 
 /**
  * Title and body templates for each notification type.
@@ -73,6 +82,18 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	assignment_confirmed: {
 		title: 'Shift Assigned',
 		body: 'You have been assigned a new shift. Check your schedule.'
+	},
+	route_unfilled: {
+		title: 'Route Unfilled',
+		body: 'A route at your warehouse has no driver assigned.'
+	},
+	route_cancelled: {
+		title: 'Driver Cancelled',
+		body: 'A driver has cancelled their assignment.'
+	},
+	driver_no_show: {
+		title: 'Driver No-Show',
+		body: 'A driver did not show up for their assigned shift.'
 	}
 };
 
@@ -266,4 +287,56 @@ export async function sendBulkNotifications(
 	}
 
 	return results;
+}
+
+export interface ManagerAlertDetails {
+	routeName?: string;
+	driverName?: string;
+	date?: string;
+	warehouseName?: string;
+}
+
+/**
+ * Send alert notification to the primary manager of a route.
+ *
+ * @param routeId - The route UUID to look up manager
+ * @param alertType - Type of alert to send
+ * @param details - Additional context for the notification body
+ * @returns true if notification sent, false if no manager assigned
+ */
+export async function sendManagerAlert(
+	routeId: string,
+	alertType: ManagerAlertType,
+	details: ManagerAlertDetails = {}
+): Promise<boolean> {
+	const log = logger.child({ operation: 'sendManagerAlert', routeId, alertType });
+
+	const managerId = await getRouteManager(routeId);
+	if (!managerId) {
+		log.warn('No manager assigned to route, skipping alert');
+		return false;
+	}
+
+	const template = NOTIFICATION_TEMPLATES[alertType];
+
+	// Customize body with details
+	let body = template.body;
+	if (details.routeName) {
+		body = body.replace('A route', `Route ${details.routeName}`);
+		body = body.replace('A driver', details.driverName ?? 'A driver');
+	}
+	if (details.driverName && !details.routeName) {
+		body = body.replace('A driver', details.driverName);
+	}
+	if (details.date) {
+		body += ` (${details.date})`;
+	}
+
+	await sendNotification(managerId, alertType, {
+		customBody: body,
+		data: { routeId, ...details }
+	});
+
+	log.info({ managerId }, 'Manager alert sent');
+	return true;
 }

@@ -2,7 +2,7 @@
 	Warehouse Management Page
 
 	Manager-only page for CRUD operations on warehouses.
-	Uses DataTable with optimistic updates via warehouseStore.
+	Uses DataTable with Drive tabs/toolbar pattern.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
@@ -12,8 +12,10 @@
 		createSvelteTable,
 		getCoreRowModel,
 		getSortedRowModel,
+		getPaginationRowModel,
 		createColumnHelper,
 		type SortingState,
+		type PaginationState,
 		type CellRendererContext
 	} from '$lib/components/data-table';
 	import Button from '$lib/components/primitives/Button.svelte';
@@ -22,14 +24,18 @@
 	import ConfirmationDialog from '$lib/components/ConfirmationDialog.svelte';
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
+	import Drawer from '$lib/components/primitives/Drawer.svelte';
 	import Pencil from '$lib/components/icons/Pencil.svelte';
 	import Trash from '$lib/components/icons/Trash.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
+	import Filter from '$lib/components/icons/Filter.svelte';
+	import Reset from '$lib/components/icons/Reset.svelte';
 	import { warehouseStore, type WarehouseWithRouteCount } from '$lib/stores/warehouseStore.svelte';
 	import { warehouseCreateSchema, warehouseUpdateSchema } from '$lib/schemas/warehouse';
 
 	// State
 	let showCreateModal = $state(false);
+	let showFilterDrawer = $state(false);
 	let editingWarehouse = $state<WarehouseWithRouteCount | null>(null);
 	let deleteConfirm = $state<{ warehouse: WarehouseWithRouteCount; x: number; y: number } | null>(
 		null
@@ -40,8 +46,12 @@
 	let formAddress = $state('');
 	let formErrors = $state<{ name?: string[]; address?: string[] }>({});
 
+	// Filter state
+	let nameFilter = $state('');
+
 	// Table state
 	let sorting = $state<SortingState>([]);
+	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
 
 	// Column definitions
 	const helper = createColumnHelper<WarehouseWithRouteCount>();
@@ -60,7 +70,7 @@
 			mobilePriority: 2
 		}),
 		helper.number('routeCount', {
-			header: 'Routes',
+			header: m.warehouse_routes_header(),
 			sortable: true,
 			width: 100
 		}),
@@ -71,24 +81,42 @@
 		})
 	];
 
+	// Filtered data
+	const filteredData = $derived(
+		nameFilter
+			? warehouseStore.warehouses.filter((w) =>
+					w.name.toLowerCase().includes(nameFilter.toLowerCase())
+				)
+			: warehouseStore.warehouses
+	);
+
 	// Create table instance
 	const table = createSvelteTable<WarehouseWithRouteCount>(() => ({
-		data: warehouseStore.warehouses,
+		data: filteredData,
 		columns,
 		state: {
-			sorting
+			sorting,
+			pagination
 		},
 		onSortingChange: (updater) => {
 			sorting = typeof updater === 'function' ? updater(sorting) : updater;
 		},
+		onPaginationChange: (updater) => {
+			pagination = typeof updater === 'function' ? updater(pagination) : updater;
+		},
 		getCoreRowModel: getCoreRowModel(),
-		getSortedRowModel: getSortedRowModel()
+		getSortedRowModel: getSortedRowModel(),
+		getPaginationRowModel: getPaginationRowModel()
 	}));
 
 	// Load data on mount
 	onMount(() => {
 		warehouseStore.load();
 	});
+
+	function resetFilters() {
+		nameFilter = '';
+	}
 
 	// Form handlers
 	function openCreateModal() {
@@ -165,37 +193,74 @@
 	</div>
 {/snippet}
 
+{#snippet tabsSnippet()}
+	<div class="tab-bar" role="tablist">
+		<button type="button" class="tab active" role="tab" aria-selected="true" tabindex="0">
+			{m.warehouse_page_title()}
+		</button>
+	</div>
+{/snippet}
+
+{#snippet toolbarSnippet()}
+	<IconButton tooltip={m.table_filter_label()} onclick={() => (showFilterDrawer = true)}>
+		<Icon><Filter /></Icon>
+	</IconButton>
+
+	<IconButton tooltip={m.warehouse_create_button()} onclick={openCreateModal}>
+		<Icon><Plus /></Icon>
+	</IconButton>
+
+	<IconButton tooltip={m.table_columns_reset_sizes()} onclick={resetFilters}>
+		<Icon><Reset /></Icon>
+	</IconButton>
+{/snippet}
+
 <svelte:head>
 	<title>{m.warehouse_page_title()} | Drive</title>
 </svelte:head>
 
 <div class="page-surface">
-	<div class="page-stage">
-		<div class="page-header">
-			<div class="header-text">
-				<h1>{m.warehouse_page_title()}</h1>
-				<p>{m.warehouse_page_description()}</p>
-			</div>
-			<Button onclick={openCreateModal}>
-				<Icon><Plus /></Icon>
-				{m.warehouse_create_button()}
-			</Button>
-		</div>
-
-		<div class="page-content">
-			<DataTable
-				{table}
-				loading={warehouseStore.isLoading}
-				emptyTitle={m.warehouse_empty_state()}
-				emptyMessage={m.warehouse_empty_state_message()}
-				showPagination={false}
-				cellComponents={{
-					actions: actionsCell
-				}}
-			/>
-		</div>
-	</div>
+	<DataTable
+		{table}
+		loading={warehouseStore.isLoading}
+		emptyTitle={m.warehouse_empty_state()}
+		emptyMessage={m.warehouse_empty_state_message()}
+		showPagination
+		showColumnVisibility
+		showExport
+		exportFilename="warehouses"
+		tabs={tabsSnippet}
+		toolbar={toolbarSnippet}
+		cellComponents={{
+			actions: actionsCell
+		}}
+	/>
 </div>
+
+<!-- Filter Drawer -->
+{#if showFilterDrawer}
+	<Drawer title={m.table_filter_title()} onClose={() => (showFilterDrawer = false)}>
+		<div class="filter-form">
+			<div class="filter-field">
+				<label for="warehouse-name-filter">{m.warehouse_filter_name_label()}</label>
+				<InlineEditor
+					id="warehouse-name-filter"
+					value={nameFilter}
+					onInput={(v) => (nameFilter = v)}
+					placeholder={m.warehouse_filter_name_placeholder()}
+				/>
+			</div>
+			<div class="filter-actions">
+				<Button variant="secondary" onclick={resetFilters} fill>
+					{m.table_filter_clear_all()}
+				</Button>
+				<Button onclick={() => (showFilterDrawer = false)} fill>
+					{m.common_confirm()}
+				</Button>
+			</div>
+		</div>
+	</Drawer>
+{/if}
 
 <!-- Create Modal -->
 {#if showCreateModal}
@@ -312,49 +377,112 @@
 {/if}
 
 <style>
-	.page-surface {
-		min-height: 100vh;
-		background: var(--surface-inset);
-	}
-
-	.page-stage {
-		max-width: 1200px;
-		margin: 0 auto;
-		padding: var(--spacing-4);
-	}
-
-	.page-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		gap: var(--spacing-4);
-		margin-bottom: var(--spacing-4);
-	}
-
-	.header-text h1 {
-		margin: 0;
-		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
-		color: var(--text-normal);
-	}
-
-	.header-text p {
-		margin: var(--spacing-1) 0 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-muted);
-	}
-
-	.page-content {
-		background: var(--surface-primary);
-		border-radius: var(--radius-lg);
-		overflow: hidden;
-	}
-
 	.cell-actions {
 		display: flex;
 		gap: var(--spacing-1);
 	}
 
+	/* Tab bar styling - matching Drive pattern */
+	.tab-bar {
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		height: 48px;
+		flex-shrink: 0;
+		padding-bottom: 1px;
+		margin-bottom: -1px;
+	}
+
+	.tab {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 var(--spacing-3);
+		height: 32px;
+		border: none;
+		border-radius: var(--radius-lg);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--font-size-base);
+		font-weight: var(--font-weight-medium);
+		cursor: pointer;
+		z-index: 1;
+		transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+	}
+
+	.tab:not(.active):hover {
+		background: var(--interactive-hover);
+		color: var(--text-normal);
+	}
+
+	.tab.active {
+		align-self: flex-end;
+		height: 48px;
+		background: var(--surface-primary);
+		color: var(--text-normal);
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+		margin-bottom: -1px;
+		z-index: 10;
+	}
+
+	.tab.active::before,
+	.tab.active::after {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		width: var(--radius-lg);
+		height: var(--radius-lg);
+		pointer-events: none;
+		z-index: 1;
+	}
+
+	.tab.active::before {
+		left: calc(var(--radius-lg) * -1);
+		background: radial-gradient(
+			circle at 0 0,
+			transparent var(--radius-lg),
+			var(--surface-primary) calc(var(--radius-lg) + 0.5px)
+		);
+	}
+
+	.tab.active::after {
+		right: calc(var(--radius-lg) * -1);
+		background: radial-gradient(
+			circle at 100% 0,
+			transparent var(--radius-lg),
+			var(--surface-primary) calc(var(--radius-lg) + 0.5px)
+		);
+	}
+
+	/* Filter drawer form */
+	.filter-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
+		padding: var(--spacing-4);
+	}
+
+	.filter-field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-1);
+	}
+
+	.filter-field label {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-normal);
+	}
+
+	.filter-actions {
+		display: flex;
+		gap: var(--spacing-2);
+		margin-top: var(--spacing-2);
+	}
+
+	/* Modal form */
 	.modal-form {
 		display: flex;
 		flex-direction: column;
