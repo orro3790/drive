@@ -29,7 +29,6 @@
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Select from '$lib/components/Select.svelte';
-	import Drawer from '$lib/components/primitives/Drawer.svelte';
 	import ConfirmationDialog from '$lib/components/ConfirmationDialog.svelte';
 	import Pencil from '$lib/components/icons/Pencil.svelte';
 	import ShieldMinus from '$lib/components/icons/ShieldMinus.svelte';
@@ -40,7 +39,6 @@
 	// State
 	let editingDriver = $state<Driver | null>(null);
 	let unflagConfirm = $state<{ driver: Driver; x: number; y: number } | null>(null);
-	let selectedDriver = $state<Driver | null>(null);
 
 	// Form state
 	let formWeeklyCap = $state(4);
@@ -133,10 +131,6 @@
 			month: 'short',
 			day: 'numeric'
 		});
-	}
-
-	function handleRowClick(driver: Driver, _event: MouseEvent) {
-		selectedDriver = driver;
 	}
 
 	function openEditModal(driver: Driver) {
@@ -232,6 +226,88 @@
 	</div>
 {/snippet}
 
+{#snippet mobileDetail(driver: Driver)}
+	<div class="detail-content">
+		<dl class="detail-list">
+			<div class="detail-row">
+				<dt>{m.common_name()}</dt>
+				<dd>{driver.name}</dd>
+			</div>
+			<div class="detail-row">
+				<dt>{m.drivers_detail_email()}</dt>
+				<dd>{driver.email}</dd>
+			</div>
+			<div class="detail-row">
+				<dt>{m.drivers_detail_phone()}</dt>
+				<dd>{driver.phone || m.drivers_detail_no_phone()}</dd>
+			</div>
+			<div class="detail-row">
+				<dt>{m.drivers_detail_total_shifts()}</dt>
+				<dd>{driver.totalShifts}</dd>
+			</div>
+			<div class="detail-row">
+				<dt>{m.drivers_detail_completed_shifts()}</dt>
+				<dd>{driver.completedShifts}</dd>
+			</div>
+			<div class="detail-row">
+				<dt>{m.drivers_detail_attendance()}</dt>
+				<dd class:low={driver.attendanceRate < 0.7}>
+					{formatPercent(driver.attendanceRate)}
+				</dd>
+			</div>
+			<div class="detail-row">
+				<dt>{m.drivers_detail_completion()}</dt>
+				<dd class:low={driver.completionRate < 0.7}>
+					{formatPercent(driver.completionRate)}
+				</dd>
+			</div>
+			<div class="detail-row">
+				<dt>{m.drivers_detail_weekly_cap()}</dt>
+				<dd>{driver.weeklyCap} days</dd>
+			</div>
+			<div class="detail-row">
+				<dt>{m.drivers_detail_flag_status()}</dt>
+				<dd>
+					{#if driver.isFlagged}
+						<Chip variant="status" status="error" label={m.drivers_flag_flagged()} size="xs" />
+					{:else if driver.flagWarningDate}
+						<Chip variant="status" status="warning" label={m.drivers_flag_warning()} size="xs" />
+					{:else}
+						<Chip variant="status" status="success" label={m.drivers_flag_good()} size="xs" />
+					{/if}
+				</dd>
+			</div>
+			{#if driver.flagWarningDate}
+				<div class="detail-row">
+					<dt></dt>
+					<dd class="warning-date">
+						{m.drivers_flag_warning_date({ date: formatDate(driver.flagWarningDate) })}
+					</dd>
+				</div>
+			{/if}
+			<div class="detail-row">
+				<dt>{m.drivers_detail_member_since()}</dt>
+				<dd>{formatDate(driver.createdAt)}</dd>
+			</div>
+		</dl>
+
+		<div class="detail-actions">
+			<Button fill onclick={() => openEditModal(driver)}>
+				{m.common_edit()} {m.drivers_header_weekly_cap()}
+			</Button>
+			{#if driver.isFlagged}
+				<Button
+					variant="secondary"
+					fill
+					onclick={(e) => openUnflagConfirm(driver, e)}
+				>
+					{m.drivers_unflag_button()}
+				</Button>
+			{/if}
+		</div>
+	</div>
+{/snippet}
+
 <svelte:head>
 	<title>{m.drivers_page_title()} | Drive</title>
 </svelte:head>
@@ -255,7 +331,8 @@
 			flagStatus: flagStatusCell,
 			actions: actionsCell
 		}}
-		onRowClick={handleRowClick}
+		mobileDetailContent={mobileDetail}
+		mobileDetailTitle={m.drivers_detail_title()}
 	/>
 </div>
 
@@ -308,90 +385,6 @@
 		onConfirm={handleUnflag}
 		onCancel={() => (unflagConfirm = null)}
 	/>
-{/if}
-
-<!-- Detail Drawer -->
-{#if selectedDriver}
-	<Drawer title={m.drivers_detail_title()} onClose={() => (selectedDriver = null)}>
-		<div class="detail-content">
-			<dl class="detail-list">
-				<div class="detail-row">
-					<dt>{m.common_name()}</dt>
-					<dd>{selectedDriver.name}</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.drivers_detail_email()}</dt>
-					<dd>{selectedDriver.email}</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.drivers_detail_phone()}</dt>
-					<dd>{selectedDriver.phone || m.drivers_detail_no_phone()}</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.drivers_detail_total_shifts()}</dt>
-					<dd>{selectedDriver.totalShifts}</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.drivers_detail_completed_shifts()}</dt>
-					<dd>{selectedDriver.completedShifts}</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.drivers_detail_attendance()}</dt>
-					<dd class:low={selectedDriver.attendanceRate < 0.7}>
-						{formatPercent(selectedDriver.attendanceRate)}
-					</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.drivers_detail_completion()}</dt>
-					<dd class:low={selectedDriver.completionRate < 0.7}>
-						{formatPercent(selectedDriver.completionRate)}
-					</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.drivers_detail_weekly_cap()}</dt>
-					<dd>{selectedDriver.weeklyCap} days</dd>
-				</div>
-				<div class="detail-row">
-					<dt>{m.drivers_detail_flag_status()}</dt>
-					<dd>
-						{#if selectedDriver.isFlagged}
-							<Chip variant="status" status="error" label={m.drivers_flag_flagged()} size="xs" />
-						{:else if selectedDriver.flagWarningDate}
-							<Chip variant="status" status="warning" label={m.drivers_flag_warning()} size="xs" />
-						{:else}
-							<Chip variant="status" status="success" label={m.drivers_flag_good()} size="xs" />
-						{/if}
-					</dd>
-				</div>
-				{#if selectedDriver.flagWarningDate}
-					<div class="detail-row">
-						<dt></dt>
-						<dd class="warning-date">
-							{m.drivers_flag_warning_date({ date: formatDate(selectedDriver.flagWarningDate) })}
-						</dd>
-					</div>
-				{/if}
-				<div class="detail-row">
-					<dt>{m.drivers_detail_member_since()}</dt>
-					<dd>{formatDate(selectedDriver.createdAt)}</dd>
-				</div>
-			</dl>
-
-			{#if selectedDriver.isFlagged}
-				<div class="detail-actions">
-					<Button
-						fill
-						onclick={(e) => {
-							openUnflagConfirm(selectedDriver!, e);
-							selectedDriver = null;
-						}}
-					>
-						{m.drivers_unflag_button()}
-					</Button>
-				</div>
-			{/if}
-		</div>
-	</Drawer>
 {/if}
 
 <style>

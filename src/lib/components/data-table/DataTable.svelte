@@ -148,6 +148,15 @@ Designed to work with the Driver Ops design system.
 
 		/** Additional CSS class for the table container */
 		class?: string;
+
+		/** Disable the built-in mobile detail panel (use when you have custom detail views) */
+		disableMobileDetail?: boolean;
+
+		/** Custom content for mobile detail panel - receives row data */
+		mobileDetailContent?: Snippet<[RowType]>;
+
+		/** Custom title for mobile detail panel */
+		mobileDetailTitle?: string;
 	};
 
 	let {
@@ -184,7 +193,10 @@ Designed to work with the Driver Ops design system.
 		noPadding = false,
 		bordered = false,
 		rounded = true,
-		class: className = ''
+		class: className = '',
+		disableMobileDetail = false,
+		mobileDetailContent,
+		mobileDetailTitle
 	}: Props = $props();
 
 	// Layout measurement state
@@ -475,7 +487,7 @@ Designed to work with the Driver Ops design system.
 						{cells}
 						{cellComponents}
 						{isMobile}
-						onMobileRowTap={handleMobileRowTap}
+						onMobileRowTap={disableMobileDetail ? undefined : handleMobileRowTap}
 					/>
 				{:else}
 					<DataTableBody
@@ -494,7 +506,7 @@ Designed to work with the Driver Ops design system.
 						{cells}
 						{cellComponents}
 						{isMobile}
-						onMobileRowTap={handleMobileRowTap}
+						onMobileRowTap={disableMobileDetail ? undefined : handleMobileRowTap}
 					/>
 				{/if}
 			</table>
@@ -508,11 +520,13 @@ Designed to work with the Driver Ops design system.
 </div>
 
 <!-- Mobile detail panel - shows all row data when tapping a row on mobile -->
-{#if mobileDetailRow}
+{#if mobileDetailRow && !disableMobileDetail}
 	<DataTableMobileDetail
 		row={mobileDetailRow}
 		columns={allColumnDefs}
 		{cells}
+		title={mobileDetailTitle}
+		customContent={mobileDetailContent}
 		onClose={closeMobileDetail}
 	/>
 {/if}

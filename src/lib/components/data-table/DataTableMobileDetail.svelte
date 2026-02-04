@@ -3,20 +3,33 @@
 A slide-up modal panel that displays all row data in a mobile-friendly card layout.
 Used by DataTable when a row is tapped on mobile devices (<600px).
 
-@example
+Supports two modes:
+1. Default: Auto-generates a detail list from column definitions
+2. Custom: Renders a custom snippet for full control over content
+
+@example Default mode
 ```svelte
-{#if mobileDetailRow}
-  <DataTableMobileDetail
-    row={mobileDetailRow}
-    columns={table.getAllColumns().map(c => c.columnDef)}
-    cells={cells}
-    onClose={() => mobileDetailRow = null}
-  />
-{/if}
+<DataTableMobileDetail
+  row={mobileDetailRow}
+  columns={columns}
+  cells={cells}
+  onClose={() => mobileDetailRow = null}
+/>
+```
+
+@example Custom content mode
+```svelte
+<DataTableMobileDetail
+  row={mobileDetailRow}
+  title="Driver Details"
+  customContent={driverDetailSnippet}
+  onClose={() => mobileDetailRow = null}
+/>
 ```
 -->
 <script lang="ts" generics="RowType">
 	import * as m from '$lib/paraglide/messages.js';
+	import type { Snippet } from 'svelte';
 	import type { ColumnDef } from '@tanstack/table-core';
 	import type { CellSnippets } from './types';
 	import { onMount } from 'svelte';
@@ -28,15 +41,19 @@ Used by DataTable when a row is tapped on mobile devices (<600px).
 	type Props = {
 		/** The row data to display */
 		row: RowType;
-		/** Column definitions for labels and accessors */
-		columns: ColumnDef<RowType>[];
-		/** Optional custom cell snippets for rendering values */
+		/** Column definitions for labels and accessors (used in default mode) */
+		columns?: ColumnDef<RowType>[];
+		/** Optional custom cell snippets for rendering values (used in default mode) */
 		cells?: CellSnippets<RowType>;
+		/** Custom title for the panel (defaults to "Details") */
+		title?: string;
+		/** Custom content snippet - when provided, replaces the default column list */
+		customContent?: Snippet<[RowType]>;
 		/** Callback when panel should close */
 		onClose: () => void;
 	};
 
-	let { row, columns, cells, onClose }: Props = $props();
+	let { row, columns = [], cells, title, customContent, onClose }: Props = $props();
 
 	let isBackdropPointerDown = false;
 
@@ -126,30 +143,34 @@ Used by DataTable when a row is tapped on mobile devices (<600px).
 >
 	<div class="mobile-detail-container">
 		<header class="mobile-detail-header">
-			<h2 id="mobile-detail-title">{m.table_mobile_detail_title()}</h2>
+			<h2 id="mobile-detail-title">{title ?? m.table_mobile_detail_title()}</h2>
 			<IconButton onclick={onClose} tooltip={m.common_close()}>
 				<Icon><XIcon /></Icon>
 			</IconButton>
 		</header>
 
 		<div class="mobile-detail-body">
-			<dl class="detail-list">
-				{#each displayColumns as column (column.id)}
-					{@const header = getColumnHeader(column)}
-					{@const value = getColumnValue(column)}
-					{@const cellSnippet = column.id ? cells?.[column.id] : undefined}
-					<div class="detail-item">
-						<dt class="detail-label">{header}</dt>
-						<dd class="detail-value">
-							{#if cellSnippet}
-								{@render cellSnippet(row)}
-							{:else}
-								{formatValue(value)}
-							{/if}
-						</dd>
-					</div>
-				{/each}
-			</dl>
+			{#if customContent}
+				{@render customContent(row)}
+			{:else}
+				<dl class="detail-list">
+					{#each displayColumns as column (column.id)}
+						{@const header = getColumnHeader(column)}
+						{@const value = getColumnValue(column)}
+						{@const cellSnippet = column.id ? cells?.[column.id] : undefined}
+						<div class="detail-item">
+							<dt class="detail-label">{header}</dt>
+							<dd class="detail-value">
+								{#if cellSnippet}
+									{@render cellSnippet(row)}
+								{:else}
+									{formatValue(value)}
+								{/if}
+							</dd>
+						</div>
+					{/each}
+				</dl>
+			{/if}
 		</div>
 	</div>
 </div>
