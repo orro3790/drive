@@ -28,6 +28,11 @@ import { toZonedTime } from 'date-fns-tz';
 import { addMinutes, parseISO, startOfDay } from 'date-fns';
 import logger from '$lib/server/logger';
 import { getWeekStart, canDriverTakeAssignment } from './scheduling';
+import {
+	broadcastAssignmentUpdated,
+	broadcastBidWindowClosed,
+	broadcastBidWindowOpened
+} from '$lib/server/realtime/managerSse';
 
 const TORONTO_TZ = 'America/Toronto';
 const BID_WINDOW_DURATION_MINUTES = 30;
@@ -37,6 +42,10 @@ export interface CreateBidWindowResult {
 	bidWindowId?: string;
 	reason?: string;
 	notifiedCount?: number;
+}
+
+export interface CreateBidWindowOptions {
+	allowPastShift?: boolean;
 }
 
 export interface ResolveBidWindowResult {
@@ -68,14 +77,20 @@ function getShiftStartTime(dateString: string): Date {
  * Rules:
  * - If shift > 30 min away: closesAt = now + 30 minutes
  * - If shift ≤ 30 min away: closesAt = shift start time
- * - If shift already passed: no window (return null)
+ * - If shift already passed: no window (return null), unless allowPastShift
  */
-function calculateWindowClosesAt(assignmentDate: string): Date | null {
+function calculateWindowClosesAt(
+	assignmentDate: string,
+	options: CreateBidWindowOptions = {}
+): Date | null {
 	const now = getNowToronto();
 	const shiftStart = getShiftStartTime(assignmentDate);
 
-	// If shift already passed, no window
+	// If shift already passed, optionally allow a short replacement window
 	if (shiftStart <= now) {
+		if (options.allowPastShift) {
+			return addMinutes(now, BID_WINDOW_DURATION_MINUTES);
+		}
 		return null;
 	}
 
@@ -101,8 +116,11 @@ function calculateWindowClosesAt(assignmentDate: string): Date | null {
  *
  * @param assignmentId - The assignment that needs a replacement driver
  */
-export async function createBidWindow(assignmentId: string): Promise<CreateBidWindowResult> {
-	const log = logger.child({ operation: 'createBidWindow', assignmentId });
+export async function createBidWindow(
+	assignmentId: string,
+	options: CreateBidWindowOptions = {}
+): Promise<CreateBidWindowResult> {
+	const log = logger.child({ operation: 'createBidWindow', assignmentId, ...options });
 
 	// Get assignment details
 	const [assignment] = await db
@@ -132,7 +150,7 @@ export async function createBidWindow(assignmentId: string): Promise<CreateBidWi
 	}
 
 	// Calculate window close time
-	const closesAt = calculateWindowClosesAt(assignment.date);
+	const closesAt = calculateWindowClosesAt(assignment.date, options);
 	if (!closesAt) {
 		log.info('Shift already passed, no window created');
 		return { success: false, reason: 'Shift has already passed' };
@@ -143,6 +161,7 @@ export async function createBidWindow(assignmentId: string): Promise<CreateBidWi
 		.select({ name: routes.name })
 		.from(routes)
 		.where(eq(routes.id, assignment.routeId));
+	const routeName = route?.name ?? 'Unknown Route';
 
 	// Update assignment status to unfilled if not already
 	if (assignment.status !== 'unfilled') {
@@ -169,8 +188,25 @@ export async function createBidWindow(assignmentId: string): Promise<CreateBidWi
 	const notifiedCount = await notifyEligibleDrivers({
 		assignmentId,
 		assignmentDate: assignment.date,
-		routeName: route?.name ?? 'Unknown Route',
+		routeName,
 		closesAt
+	});
+
+	broadcastBidWindowOpened({
+		assignmentId,
+		routeId: assignment.routeId,
+		routeName,
+		assignmentDate: assignment.date,
+		closesAt: closesAt.toISOString()
+	});
+
+	broadcastAssignmentUpdated({
+		assignmentId,
+		status: 'unfilled',
+		driverId: null,
+		driverName: null,
+		routeId: assignment.routeId,
+		bidWindowClosesAt: closesAt.toISOString()
 	});
 
 	return {
@@ -422,6 +458,19 @@ export async function resolveBidWindow(bidWindowId: string): Promise<ResolveBidW
 			data: notificationData
 		});
 	}
+
+	broadcastBidWindowClosed({
+		assignmentId: assignment.id,
+		bidWindowId,
+		winnerId: winner.userId
+	});
+
+	broadcastAssignmentUpdated({
+		assignmentId: assignment.id,
+		status: 'scheduled',
+		driverId: winner.userId,
+		routeId: assignment.routeId
+	});
 
 	log.info({ winnerId: winner.userId, bidCount: scoredBids.length }, 'Bid window resolved');
 
