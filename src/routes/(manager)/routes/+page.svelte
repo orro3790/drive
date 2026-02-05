@@ -609,14 +609,14 @@
 				<Button fill disabled={!hasChanges} onclick={handleSave}>
 					{m.common_save()}
 				</Button>
-		{:else}
-			<Button fill onclick={() => startEditing(route)}>
-				{m.common_edit()}
-			</Button>
-			<Button variant="secondary" size="small" fill onclick={(e) => openDeleteConfirm(route, e)}>
-				{m.common_delete()}
-			</Button>
-		{/if}
+			{:else}
+				<Button fill onclick={() => startEditing(route)}>
+					{m.common_edit()}
+				</Button>
+				<Button variant="secondary" size="small" fill onclick={(e) => openDeleteConfirm(route, e)}>
+					{m.common_delete()}
+				</Button>
+			{/if}
 		</div>
 	</div>
 {/snippet}
@@ -641,7 +641,12 @@
 				{#if window.status === 'open'}
 					<Chip variant="status" status="info" label={m.bid_windows_status_open()} size="xs" />
 				{:else}
-					<Chip variant="status" status="neutral" label={m.bid_windows_status_resolved()} size="xs" />
+					<Chip
+						variant="status"
+						status="neutral"
+						label={m.bid_windows_status_resolved()}
+						size="xs"
+					/>
 				{/if}
 			</dd>
 		</div>
@@ -680,7 +685,9 @@
 	<Button
 		fill
 		onclick={() => openAssignModal(window)}
-		disabled={!canManualAssign(window) || bidWindowStore.isAssigning(window.id) || bidWindowStore.isClosing(window.id)}
+		disabled={!canManualAssign(window) ||
+			bidWindowStore.isAssigning(window.id) ||
+			bidWindowStore.isClosing(window.id)}
 		isLoading={bidWindowStore.isAssigning(window.id)}
 	>
 		{m.bid_windows_assign_button()}
@@ -689,7 +696,9 @@
 		variant="secondary"
 		fill
 		onclick={() => openCloseConfirm(window)}
-		disabled={window.status !== 'open' || bidWindowStore.isAssigning(window.id) || bidWindowStore.isClosing(window.id)}
+		disabled={window.status !== 'open' ||
+			bidWindowStore.isAssigning(window.id) ||
+			bidWindowStore.isClosing(window.id)}
 		isLoading={bidWindowStore.isClosing(window.id)}
 	>
 		{m.bid_windows_close_button()}
@@ -704,7 +713,9 @@
 			<Button
 				fill
 				onclick={() => openAssignModal(window)}
-				disabled={!canManualAssign(window) || bidWindowStore.isAssigning(window.id) || bidWindowStore.isClosing(window.id)}
+				disabled={!canManualAssign(window) ||
+					bidWindowStore.isAssigning(window.id) ||
+					bidWindowStore.isClosing(window.id)}
 				isLoading={bidWindowStore.isAssigning(window.id)}
 			>
 				{m.bid_windows_assign_button()}
@@ -713,7 +724,9 @@
 				variant="secondary"
 				fill
 				onclick={() => openCloseConfirm(window)}
-				disabled={window.status !== 'open' || bidWindowStore.isAssigning(window.id) || bidWindowStore.isClosing(window.id)}
+				disabled={window.status !== 'open' ||
+					bidWindowStore.isAssigning(window.id) ||
+					bidWindowStore.isClosing(window.id)}
 				isLoading={bidWindowStore.isClosing(window.id)}
 			>
 				{m.bid_windows_close_button()}
@@ -928,7 +941,11 @@
 
 <!-- Manual Assign Modal -->
 {#if showAssignModal && assignTargetWindow}
-	<Modal title={m.bid_windows_assign_title()} description={m.bid_windows_assign_description()} onClose={closeAssignModal}>
+	<Modal
+		title={m.bid_windows_assign_title()}
+		description={m.bid_windows_assign_description()}
+		onClose={closeAssignModal}
+	>
 		<form
 			class="modal-form"
 			onsubmit={(e) => {

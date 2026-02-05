@@ -65,7 +65,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 			log.info({ count: expiredWindows.length }, 'Resolved expired bid windows');
 		}
 	} catch (err) {
-		log.warn({ error: err instanceof Error ? err.message : 'Unknown' }, 'Failed to resolve expired windows');
+		log.warn(
+			{ error: err instanceof Error ? err.message : 'Unknown' },
+			'Failed to resolve expired windows'
+		);
 		// Continue with query - don't fail the request
 	}
 
@@ -75,7 +78,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	// Build status conditions
 	const statusConditions =
 		statusParam === 'all'
-			? or(eq(bidWindows.status, 'open'), and(eq(bidWindows.status, 'resolved'), gte(bidWindows.closesAt, since)))
+			? or(
+					eq(bidWindows.status, 'open'),
+					and(eq(bidWindows.status, 'resolved'), gte(bidWindows.closesAt, since))
+				)
 			: statusParam === 'open'
 				? eq(bidWindows.status, 'open')
 				: and(eq(bidWindows.status, 'resolved'), gte(bidWindows.closesAt, since));

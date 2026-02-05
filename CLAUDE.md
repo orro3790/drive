@@ -69,6 +69,9 @@ For deeper conventions and patterns, start at `documentation/agent-guidelines/in
 Driver-facing endpoints in `src/routes/api/`:
 
 - `GET /api/dashboard` - Driver dashboard overview (today's shift, week summaries, metrics, pending bids)
+- `GET /api/notifications` - In-app notifications list (paginated)
+- `PATCH /api/notifications/[id]/read` - Mark notification as read
+- `POST /api/notifications/mark-all-read` - Mark all notifications as read
 
 ## UI Components
 
@@ -85,6 +88,7 @@ Available in `src/lib/components/`:
 Svelte 5 stores in `src/lib/stores/`:
 
 - `dashboardStore.svelte.ts` - Driver dashboard state (shift data, metrics, pending bids)
+- `notificationsStore.svelte.ts` - Notification inbox state (list, unread count)
 
 ## Assets
 

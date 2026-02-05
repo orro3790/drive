@@ -82,14 +82,22 @@ Visit `http://localhost:5173`
 src/
 ├── routes/
 │   ├── (auth)/              # Authentication pages
+│   ├── (app)/               # Shared authenticated routes
+│   │   ├── settings/         # Account settings
+│   │   └── notifications/    # In-app notification inbox
 │   ├── (driver)/            # Driver-only routes
-│   │   └── +page.svelte     # Driver dashboard
+│   │   ├── dashboard/        # Driver dashboard
+│   │   ├── schedule/         # Schedule view
+│   │   └── bids/             # Bidding inbox
 │   ├── (manager)/           # Manager-only dashboard
 │   │   ├── warehouses/      # Warehouse CRUD
 │   │   ├── drivers/         # Driver management (planned)
 │   │   └── routes/          # Route management (planned)
 │   └── api/                 # API endpoints
 │       ├── dashboard/       # Driver dashboard data
+│       ├── notifications/   # Notifications list + read actions
+│       │   ├── [id]/read/    # Mark notification as read
+│       │   └── mark-all-read/# Mark all notifications as read
 │       └── users/
 │           └── fcm-token/   # FCM token registration
 ├── lib/
@@ -130,6 +138,11 @@ src/
 - **Not FCFS**: Algorithm-based scoring when assignments become unfilled
 - **Scoring factors**: Completion rate (40%), route familiarity (30%), attendance (20%), preferences (10%)
 - **Notifications**: Push alerts sent to all eligible drivers when bid windows open
+
+### Notifications
+
+- **Push**: Time-sensitive alerts via FCM
+- **In-app**: Inbox with read/unread tracking and history
 
 ### Performance Tracking
 
