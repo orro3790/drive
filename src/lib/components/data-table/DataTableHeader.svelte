@@ -730,9 +730,8 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 		color: var(--interactive-accent);
 	}
 
-	/* Add a resizable class to th for proper spacing and visible resize handle */
+	/* Allow resize handle to extend past column boundary */
 	.resizable {
-		padding-right: var(--spacing-4);
 		overflow: visible; /* Allow resize handle to extend past column boundary */
 	}
 

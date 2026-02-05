@@ -50,37 +50,55 @@
 		helper.text('name', {
 			header: m.common_name(),
 			sortable: true,
+			sizing: 'fixed',
+			width: 200,
+			minWidth: 160,
+			stickyLeft: true,
 			mobileVisible: true,
 			mobilePriority: 1
 		}),
 		helper.text('email', {
 			header: m.drivers_header_email(),
 			sortable: true,
+			sizing: 'fixed',
+			width: 220,
+			minWidth: 180,
 			mobileVisible: false
 		}),
 		helper.display({
 			id: 'phone',
 			header: m.drivers_header_phone(),
+			sizing: 'fixed',
 			width: 140
 		}),
 		helper.display({
 			id: 'attendance',
 			header: m.drivers_header_attendance(),
-			width: 100
+			sizing: 'fixed',
+			width: 110
 		}),
 		helper.display({
 			id: 'completion',
 			header: m.drivers_header_completion(),
-			width: 100
+			sizing: 'fixed',
+			width: 110
+		}),
+		helper.number('avgParcelsDelivered', {
+			header: m.drivers_header_avg_parcels(),
+			sortable: true,
+			sizing: 'fixed',
+			width: 140
 		}),
 		helper.display({
 			id: 'weeklyCap',
 			header: m.drivers_header_weekly_cap(),
-			width: 100
+			sizing: 'fixed',
+			width: 110
 		}),
 		helper.display({
 			id: 'flagStatus',
 			header: m.drivers_header_flag_status(),
+			sizing: 'fixed',
 			width: 120
 		})
 	];
@@ -93,6 +111,8 @@
 			sorting,
 			pagination
 		},
+		enableColumnResizing: true,
+		columnResizeMode: 'onChange',
 		onSortingChange: (updater) => {
 			sorting = typeof updater === 'function' ? updater(sorting) : updater;
 		},
@@ -120,6 +140,10 @@
 
 	function formatPercent(rate: number) {
 		return `${Math.round(rate * 100)}%`;
+	}
+
+	function formatAverageParcels(value: number) {
+		return Math.round(value).toLocaleString();
 	}
 
 	function formatDate(date: Date | string | null) {
@@ -221,6 +245,12 @@
 	</span>
 {/snippet}
 
+{#snippet avgParcelsCell(ctx: CellRendererContext<Driver>)}
+	<span class="metric">
+		{formatAverageParcels(ctx.row.avgParcelsDelivered)}
+	</span>
+{/snippet}
+
 {#snippet weeklyCapCell(ctx: CellRendererContext<Driver>)}
 	<span class="weekly-cap">{ctx.row.weeklyCap} days</span>
 {/snippet}
@@ -276,6 +306,10 @@
 			<dd class:low={driver.completionRate < 0.7}>
 				{formatPercent(driver.completionRate)}
 			</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_avg_parcels()}</dt>
+			<dd>{formatAverageParcels(driver.avgParcelsDelivered)}</dd>
 		</div>
 		<div class="detail-row">
 			<dt>{m.drivers_detail_weekly_cap()}</dt>
@@ -341,6 +375,10 @@
 			<dd class:low={driver.completionRate < 0.7}>
 				{formatPercent(driver.completionRate)}
 			</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_avg_parcels()}</dt>
+			<dd>{formatAverageParcels(driver.avgParcelsDelivered)}</dd>
 		</div>
 		<div class="detail-row">
 			<dt>{m.drivers_detail_weekly_cap()}</dt>
@@ -453,6 +491,7 @@
 			phone: phoneCell,
 			attendance: attendanceCell,
 			completion: completionCell,
+			avgParcelsDelivered: avgParcelsCell,
 			weeklyCap: weeklyCapCell,
 			flagStatus: flagStatusCell
 		}}

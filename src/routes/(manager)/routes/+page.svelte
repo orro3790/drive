@@ -84,24 +84,33 @@
 		helper.text('name', {
 			header: m.common_name(),
 			sortable: true,
+			sizing: 'fixed',
+			width: 280,
+			minWidth: 200,
+			stickyLeft: true,
 			mobileVisible: true,
 			mobilePriority: 1
 		}),
 		helper.text('warehouseName', {
 			header: m.route_warehouse_header(),
 			sortable: true,
+			sizing: 'fixed',
+			width: 220,
+			minWidth: 180,
 			mobileVisible: true,
 			mobilePriority: 2
 		}),
 		helper.display({
 			id: 'driver',
 			header: m.manager_dashboard_driver_header(),
-			width: 160
+			sizing: 'fixed',
+			width: 220
 		}),
 		helper.display({
 			id: 'status',
 			header: m.route_status_header(),
-			width: 140
+			sizing: 'fixed',
+			width: 160
 		})
 	];
 
@@ -113,6 +122,8 @@
 			sorting,
 			pagination
 		},
+		enableColumnResizing: true,
+		columnResizeMode: 'onChange',
 		onSortingChange: (updater) => {
 			sorting = typeof updater === 'function' ? updater(sorting) : updater;
 		},

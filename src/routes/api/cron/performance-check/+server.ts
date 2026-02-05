@@ -8,6 +8,8 @@
  */
 
 import { json } from '@sveltejs/kit';
+import { CRON_SECRET } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
@@ -28,8 +30,11 @@ interface PerformanceCheckSummary {
 
 export const GET: RequestHandler = async ({ request }) => {
 	// Verify cron secret to prevent unauthorized access
-	const authHeader = request.headers.get('authorization');
-	if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+	const authHeader = request.headers.get('authorization')?.trim();
+	const expectedToken = (CRON_SECRET || env.CRON_SECRET)?.trim();
+	const isAuthorized = !!expectedToken && authHeader === `Bearer ${expectedToken}`;
+
+	if (!isAuthorized) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
@@ -44,7 +49,6 @@ export const GET: RequestHandler = async ({ request }) => {
 		rewardsGranted: 0,
 		errors: 0
 	};
-
 	try {
 		// Get all drivers
 		const drivers = await db.select({ id: user.id }).from(user).where(eq(user.role, 'driver'));
@@ -63,7 +67,8 @@ export const GET: RequestHandler = async ({ request }) => {
 				})
 			);
 
-			for (const result of batchResults) {
+			for (const [index, result] of batchResults.entries()) {
+				const driverId = batch[index]?.id ?? 'unknown';
 				if (result.status === 'fulfilled' && result.value) {
 					const flagResult: FlaggingResult = result.value;
 					summary.driversChecked++;
@@ -79,7 +84,7 @@ export const GET: RequestHandler = async ({ request }) => {
 					}
 				} else if (result.status === 'rejected') {
 					summary.errors++;
-					log.error({ error: result.reason }, 'Error processing driver');
+					log.error({ error: result.reason, userId: driverId }, 'Error processing driver');
 				}
 			}
 

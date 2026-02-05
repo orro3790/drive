@@ -677,6 +677,7 @@ Designed to work with the Driver Ops design system.
 	.data-table.table-fixed {
 		table-layout: fixed;
 		width: auto; /* Override max-content; actual width set via inline style */
+		min-width: 0; /* Allow fixed-width tables to be narrower than container */
 	}
 
 	.state-cell {

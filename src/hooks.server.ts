@@ -9,7 +9,7 @@ import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { auth } from '$lib/server/auth';
 
 const publicPaths = new Set(['/', '/sign-in', '/sign-up']);
-const publicPrefixes = ['/api/auth', '/_app', '/static'];
+const publicPrefixes = ['/api/auth', '/api/cron', '/_app', '/static'];
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const { pathname } = event.url;

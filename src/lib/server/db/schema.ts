@@ -219,6 +219,7 @@ export const driverMetrics = pgTable('driver_metrics', {
 	completedShifts: integer('completed_shifts').notNull().default(0),
 	attendanceRate: real('attendance_rate').notNull().default(0),
 	completionRate: real('completion_rate').notNull().default(0),
+	avgParcelsDelivered: real('avg_parcels_delivered').notNull().default(0),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
 

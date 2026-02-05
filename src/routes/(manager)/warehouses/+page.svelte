@@ -59,19 +59,51 @@
 		helper.text('name', {
 			header: m.common_name(),
 			sortable: true,
+			sizing: 'fixed',
+			width: 270,
+			minWidth: 180,
+			stickyLeft: true,
 			mobileVisible: true,
 			mobilePriority: 1
 		}),
 		helper.text('address', {
 			header: m.common_address(),
 			sortable: true,
+			sizing: 'fixed',
+			width: 360,
+			minWidth: 240,
 			mobileVisible: true,
 			mobilePriority: 2
 		}),
 		helper.number('routeCount', {
 			header: m.warehouse_routes_header(),
 			sortable: true,
-			width: 100
+			sizing: 'fixed',
+			width: 180
+		}),
+		helper.number('assignedDriversNext7', {
+			header: m.warehouse_header_assigned_drivers(),
+			sortable: true,
+			sizing: 'fixed',
+			width: 160
+		}),
+		helper.number('unfilledRoutesNext7', {
+			header: m.warehouse_header_unfilled_routes(),
+			sortable: true,
+			sizing: 'fixed',
+			width: 160
+		}),
+		helper.number('openBidWindows', {
+			header: m.warehouse_header_open_bid_windows(),
+			sortable: true,
+			sizing: 'fixed',
+			width: 150
+		}),
+		helper.number('managerCount', {
+			header: m.warehouse_header_manager_count(),
+			sortable: true,
+			sizing: 'fixed',
+			width: 120
 		})
 	];
 
@@ -102,6 +134,8 @@
 			sorting,
 			pagination
 		},
+		enableColumnResizing: true,
+		columnResizeMode: 'onChange',
 		onSortingChange: (updater) => {
 			sorting = typeof updater === 'function' ? updater(sorting) : updater;
 		},
@@ -257,6 +291,22 @@
 		<div class="detail-row">
 			<dt>{m.warehouse_routes_header()}</dt>
 			<dd>{warehouse.routeCount}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.warehouse_detail_assigned_drivers()}</dt>
+			<dd>{warehouse.assignedDriversNext7}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.warehouse_detail_unfilled_routes()}</dt>
+			<dd>{warehouse.unfilledRoutesNext7}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.warehouse_detail_open_bid_windows()}</dt>
+			<dd>{warehouse.openBidWindows}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.warehouse_detail_manager_count()}</dt>
+			<dd>{warehouse.managerCount}</dd>
 		</div>
 	</dl>
 {/snippet}

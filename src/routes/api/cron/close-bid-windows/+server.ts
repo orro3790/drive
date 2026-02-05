@@ -13,6 +13,8 @@
  */
 
 import { json } from '@sveltejs/kit';
+import { CRON_SECRET } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import logger from '$lib/server/logger';
 import {
@@ -28,8 +30,9 @@ interface ProcessingResult {
 
 export const GET: RequestHandler = async ({ request }) => {
 	// Verify cron secret to prevent unauthorized access
-	const authHeader = request.headers.get('authorization');
-	if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+	const authHeader = request.headers.get('authorization')?.trim();
+	const expectedToken = (CRON_SECRET || env.CRON_SECRET)?.trim();
+	if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
