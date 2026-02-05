@@ -8,17 +8,47 @@ Uses notificationsStore for data loading and optimistic read updates.
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
-	import Button from '$lib/components/primitives/Button.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
+	import Icon from '$lib/components/primitives/Icon.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
 	import DataTablePagination from '$lib/components/data-table/DataTablePagination.svelte';
+	import NotificationItem from '$lib/components/notifications/NotificationItem.svelte';
+	import CheckCircleIcon from '$lib/components/icons/CheckCircleIcon.svelte';
 	import { notificationsStore } from '$lib/stores/notificationsStore.svelte';
-	import { formatUiDateTime } from '$lib/utils/date/formatting';
+	import { getTimeGroup } from '$lib/utils/date/formatting';
 
 	const hasUnread = $derived(notificationsStore.unreadCount > 0);
 	const pagination = $derived(notificationsStore.pagination);
 	const canPreviousPage = $derived(pagination.pageIndex > 0);
 	const canNextPage = $derived(pagination.pageIndex < pagination.pageCount - 1);
+	const groupedNotifications = $derived.by(() => {
+		const groups: { key: string; label: string; items: typeof notificationsStore.notifications }[] =
+			[];
+		const groupMap = new Map<string, typeof notificationsStore.notifications>();
+		const order = ['today', 'yesterday', 'this_week', 'earlier'];
+		const labels: Record<string, () => string> = {
+			today: m.notifications_group_today,
+			yesterday: m.notifications_group_yesterday,
+			this_week: m.notifications_group_this_week,
+			earlier: m.notifications_group_earlier
+		};
+
+		for (const notification of notificationsStore.notifications) {
+			const key = getTimeGroup(notification.createdAt);
+			if (!groupMap.has(key)) groupMap.set(key, []);
+			groupMap.get(key)?.push(notification);
+		}
+
+		for (const key of order) {
+			const items = groupMap.get(key);
+			if (items?.length) {
+				groups.push({ key, label: labels[key](), items });
+			}
+		}
+
+		return groups;
+	});
 
 	function handleMarkAllRead() {
 		void notificationsStore.markAllRead();
@@ -56,113 +86,116 @@ Uses notificationsStore for data loading and optimistic read updates.
 </svelte:head>
 
 <div class="page-surface notifications-surface">
-	<div class="page-stage">
-		<div class="page-header">
-			<div class="header-text">
-				<h1>{m.notifications_page_title()}</h1>
-				<p>{m.notifications_page_description()}</p>
-			</div>
-			<div class="header-actions">
-				<Button
-					variant="secondary"
-					size="small"
-					onclick={handleMarkAllRead}
-					disabled={!hasUnread}
-					isLoading={notificationsStore.isMarkingAll}
-				>
-					{m.notifications_mark_all()}
-				</Button>
-			</div>
-		</div>
-
+	<div class="page-stage notifications-stage">
 		<div class="page-card notifications-card">
-			{#if notificationsStore.isLoading}
-				<div class="notifications-loading">
-					<Spinner size={24} label={m.common_loading()} />
+			<div class="card-header">
+				<div class="header-text">
+					<h1>{m.notifications_page_title()}</h1>
+					<p>{m.notifications_page_description()}</p>
 				</div>
-			{:else if notificationsStore.error}
-				<NoticeBanner variant="warning">
-					<p>{m.notifications_load_error()}</p>
-				</NoticeBanner>
-			{:else if notificationsStore.notifications.length === 0}
-				<div class="notifications-empty">
-					<h3>{m.notifications_empty_title()}</h3>
-					<p>{m.notifications_empty_message()}</p>
+				<div class="header-actions">
+					<IconButton
+						tooltip={m.notifications_mark_all()}
+						onclick={handleMarkAllRead}
+						disabled={!hasUnread || notificationsStore.isMarkingAll}
+					>
+						<Icon size="medium">
+							<CheckCircleIcon />
+						</Icon>
+					</IconButton>
 				</div>
-			{:else}
-				<div class="notifications-list">
-					{#each notificationsStore.notifications as notification (notification.id)}
-						<Button
-							variant="secondary-inverted"
-							size="small"
-							fill
-							class={`notification-item ${notification.read ? 'read' : 'unread'}`}
-							onclick={() => handleMarkRead(notification.id)}
-						>
-							<div class="notification-content">
-								<div class="notification-main">
-									<div class="notification-title-row">
-										{#if !notification.read}
-											<span class="unread-dot" aria-hidden="true"></span>
-											<span class="sr-only">{m.notifications_unread_label()}</span>
-										{/if}
-										<span class="notification-title">{notification.title}</span>
-									</div>
-									<p class="notification-body">{notification.body}</p>
-								</div>
-								<div class="notification-meta">
-									<span class="notification-time">
-										{formatUiDateTime(notification.createdAt)}
-									</span>
+			</div>
+
+			<div class="card-body">
+				{#if notificationsStore.isLoading}
+					<div class="notifications-loading">
+						<Spinner size={24} label={m.common_loading()} />
+					</div>
+				{:else if notificationsStore.error}
+					<NoticeBanner variant="warning">
+						<p>{m.notifications_load_error()}</p>
+					</NoticeBanner>
+				{:else if notificationsStore.notifications.length === 0}
+					<div class="notifications-empty">
+						<h3>{m.notifications_empty_title()}</h3>
+						<p>{m.notifications_empty_message()}</p>
+					</div>
+				{:else}
+					<div class="notifications-groups">
+						{#each groupedNotifications as group (group.key)}
+							<div class="notification-group">
+								<h3 class="group-header">{group.label}</h3>
+								<div class="group-items">
+									{#each group.items as notification (notification.id)}
+										<NotificationItem {notification} onMarkRead={handleMarkRead} />
+									{/each}
 								</div>
 							</div>
-						</Button>
-					{/each}
-				</div>
-
-				{#if pagination.pageCount > 1}
-					<div class="notifications-pagination">
-						<DataTablePagination
-							currentPage={pagination.pageIndex}
-							pageCount={pagination.pageCount}
-							{canPreviousPage}
-							{canNextPage}
-							onFirstPage={goToFirstPage}
-							onPreviousPage={goToPreviousPage}
-							onNextPage={goToNextPage}
-							onLastPage={goToLastPage}
-						/>
+						{/each}
 					</div>
+
+					{#if pagination.pageCount > 1}
+						<div class="notifications-pagination">
+							<DataTablePagination
+								currentPage={pagination.pageIndex}
+								pageCount={pagination.pageCount}
+								{canPreviousPage}
+								{canNextPage}
+								onFirstPage={goToFirstPage}
+								onPreviousPage={goToPreviousPage}
+								onNextPage={goToNextPage}
+								onLastPage={goToLastPage}
+							/>
+						</div>
+					{/if}
 				{/if}
-			{/if}
+			</div>
 		</div>
 	</div>
 </div>
 
 <style>
 	.notifications-surface {
-		width: 100%;
-		height: 100%;
+		min-height: 100vh;
+		background: var(--surface-inset);
 	}
 
-	.page-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
+	.notifications-stage {
+		max-width: 720px;
+		margin: 0 auto;
+		padding: var(--spacing-4);
+		width: 100%;
+		background: transparent;
+		overflow: visible;
+	}
+
+	.card-header {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
 		gap: var(--spacing-3);
-		padding: var(--spacing-4) var(--spacing-4) var(--spacing-2);
+		padding: var(--spacing-4) var(--spacing-4) var(--spacing-3);
+		border-bottom: var(--border-width-thin) solid var(--border-primary);
+	}
+
+	.header-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-1);
 	}
 
 	.header-text h1 {
 		margin: 0;
 		font-size: var(--font-size-xl);
+		font-weight: var(--font-weight-semibold);
 		color: var(--text-normal);
 	}
 
 	.header-text p {
-		margin: var(--spacing-1) 0 0;
+		margin: 0;
 		color: var(--text-muted);
 		font-size: var(--font-size-sm);
+		max-width: 52ch;
 	}
 
 	.header-actions {
@@ -173,9 +206,20 @@ Uses notificationsStore for data loading and optimistic read updates.
 
 	.notifications-card {
 		gap: var(--spacing-3);
-		padding: var(--spacing-3);
-		margin: 0 var(--spacing-4) var(--spacing-4);
+		padding: 0;
+		margin: 0;
+		max-width: 720px;
+		width: 100%;
+		align-self: center;
+		box-shadow: var(--shadow-sm);
 		overflow: hidden;
+	}
+
+	.card-body {
+		padding: var(--spacing-3) var(--spacing-4) var(--spacing-4);
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
 	}
 
 	.notifications-loading {
@@ -202,108 +246,30 @@ Uses notificationsStore for data loading and optimistic read updates.
 		font-size: var(--font-size-sm);
 	}
 
-	.notifications-list {
+	.notifications-groups {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
+	}
+
+	.notification-group {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-2);
 	}
 
-	:global(.notification-item) {
-		--btn-bg: var(--surface-primary);
-		--btn-hover-bg: var(--surface-secondary);
-		--btn-border: var(--border-width-thin) solid var(--border-primary);
-		--btn-fg: var(--text-normal);
-		width: 100%;
-		text-align: left;
-		justify-content: flex-start;
-		align-items: stretch;
-	}
-
-	:global(.notification-item.unread) {
-		--btn-bg: color-mix(in srgb, var(--interactive-accent) 6%, var(--surface-primary));
-		--btn-hover-bg: color-mix(in srgb, var(--interactive-accent) 12%, var(--surface-primary));
-		--btn-border: var(--border-width-thin) solid
-			color-mix(in srgb, var(--interactive-accent) 30%, var(--border-primary));
-	}
-
-	:global(.notification-item) :global(.content-wrapper) {
-		width: 100%;
-		justify-content: flex-start;
-	}
-
-	:global(.notification-item) :global(.content) {
-		width: 100%;
-		justify-content: flex-start;
-	}
-
-	.notification-content {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: var(--spacing-3);
-		width: 100%;
-	}
-
-	.notification-main {
-		flex: 1;
-		min-width: 0;
-	}
-
-	.notification-title-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-2);
-		margin-bottom: var(--spacing-1);
-	}
-
-	.notification-title {
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-medium);
-		color: var(--text-normal);
-	}
-
-	:global(.notification-item.unread) .notification-title {
-		font-weight: var(--font-weight-bold);
-	}
-
-	:global(.notification-item.read) .notification-title {
-		font-weight: var(--font-weight-medium);
-		color: var(--text-muted);
-	}
-
-	.notification-body {
+	.group-header {
 		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-muted);
-		line-height: 1.4;
-	}
-
-	.notification-meta {
-		flex-shrink: 0;
-		color: var(--text-faint);
 		font-size: var(--font-size-xs);
-		margin-top: 2px;
+		color: var(--text-faint);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
 	}
 
-	.unread-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: var(--radius-full);
-		background: var(--interactive-accent);
-		display: inline-block;
-		flex-shrink: 0;
-	}
-
-	.sr-only {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		padding: 0;
-		margin: -1px;
-		overflow: hidden;
-		clip: rect(0, 0, 0, 0);
-		white-space: nowrap;
-		border: 0;
+	.group-items {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
 	}
 
 	.notifications-pagination {
@@ -311,29 +277,32 @@ Uses notificationsStore for data loading and optimistic read updates.
 	}
 
 	@media (max-width: 768px) {
-		.page-header {
-			flex-direction: column;
-			align-items: flex-start;
+		.notifications-stage {
+			padding: var(--spacing-3);
 		}
 
-		.notifications-card {
-			margin: 0 var(--spacing-3) var(--spacing-4);
+		.card-header {
+			padding: var(--spacing-3);
+			gap: var(--spacing-2);
 		}
 
-		.notification-content {
-			flex-direction: column;
-			align-items: flex-start;
+		.card-body {
+			padding: var(--spacing-2) var(--spacing-3) var(--spacing-3);
 		}
 	}
 
 	@media (max-width: 480px) {
-		.page-header {
-			padding: var(--spacing-3);
+		.notifications-stage {
+			padding: var(--spacing-2);
 		}
 
-		.notifications-card {
-			margin: 0 var(--spacing-2) var(--spacing-3);
+		.header-text h1 {
+			font-size: var(--font-size-lg);
+		}
+
+		.card-body {
 			padding: var(--spacing-2);
+			gap: var(--spacing-2);
 		}
 	}
 </style>
