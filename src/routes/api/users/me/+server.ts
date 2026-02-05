@@ -17,6 +17,8 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 		throw error(401, 'Unauthorized');
 	}
 
+	const currentUser = locals.user;
+
 	const body = await request.json();
 	const result = userProfileUpdateSchema.safeParse(body);
 
@@ -30,15 +32,13 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 	const normalizedName = result.data.name.trim();
 	const normalizedPhone = result.data.phone ? result.data.phone.trim() : null;
 
-	let updatedUser:
-		| {
-				id: string;
-				name: string;
-				email: string;
-				phone: string | null;
-				role: string;
-		  }
-		| null = null;
+	let updatedUser: {
+		id: string;
+		name: string;
+		email: string;
+		phone: string | null;
+		role: string;
+	} | null = null;
 
 	try {
 		updatedUser = await db.transaction(async (tx) => {
@@ -63,7 +63,7 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 				return null;
 			}
 
-			if (normalizedEmail !== locals.user.email.toLowerCase()) {
+			if (normalizedEmail !== currentUser.email.toLowerCase()) {
 				await tx
 					.update(account)
 					.set({
@@ -77,9 +77,7 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 		});
 	} catch (err) {
 		const errorCode =
-			err && typeof err === 'object' && 'code' in err
-				? (err as { code?: string }).code
-				: undefined;
+			err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : undefined;
 		if (errorCode === '23505') {
 			return json({ error: 'email_taken' }, { status: 409 });
 		}

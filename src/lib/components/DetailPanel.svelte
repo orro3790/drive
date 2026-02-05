@@ -106,8 +106,8 @@
 							{m.common_edit()}
 						</Button>
 					{/if}
-					{#if viewActions}
-						{@render viewActions(item)}
+					{#if viewActions && item}
+						{@render viewActions(item as ItemType)}
 					{/if}
 				{/if}
 			</footer>

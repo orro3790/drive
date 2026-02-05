@@ -6,12 +6,14 @@
 		label,
 		onClick,
 		icon,
+		badgeLabel,
 		disabled = false,
 		selected = false
 	} = $props<{
 		label: string;
 		onClick: () => void;
 		icon?: Snippet;
+		badgeLabel?: string | null;
 		children?: Snippet;
 		disabled?: boolean;
 		selected?: boolean;
@@ -50,6 +52,9 @@
 				{@render icon()}
 			{/if}
 		</IconButton>
+		{#if badgeLabel}
+			<span class="nav-badge" aria-hidden="true">{badgeLabel}</span>
+		{/if}
 	</div>
 	<div class="nav-text">
 		<span class="nav-label">{label}</span>
@@ -71,6 +76,28 @@
 			background-color 0.15s ease,
 			width 0.15s ease-out;
 		text-decoration: none;
+	}
+
+	.icon-center {
+		position: relative;
+	}
+
+	.nav-badge {
+		position: absolute;
+		top: -4px;
+		right: -4px;
+		min-width: 16px;
+		height: 16px;
+		padding: 0 4px;
+		background: var(--interactive-accent);
+		color: var(--text-on-accent);
+		font-size: 10px;
+		font-weight: var(--font-weight-bold);
+		border-radius: var(--radius-full);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		pointer-events: none;
 	}
 
 	/* Override IconButton's default text-muted color to inherit from nav-item */

@@ -101,7 +101,7 @@ Displays and updates user's account info, password, and preferences.
 				nextErrors.name = [m.settings_account_name_required()];
 			}
 			if (field === 'email') {
-				if (issue.code === 'invalid_string' && issue.validation === 'email') {
+				if (issue.code === 'invalid_format' && issue.format === 'email') {
 					nextErrors.email = [m.settings_account_email_invalid()];
 				} else {
 					nextErrors.email = [m.settings_account_email_required()];
