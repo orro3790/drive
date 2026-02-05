@@ -12,6 +12,8 @@ import { driverMetrics, user } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { updateDriverMetrics } from '$lib/server/services/metrics';
 import { sendNotification } from '$lib/server/services/notifications';
+import { broadcastDriverFlagged } from '$lib/server/realtime/managerSse';
+import { createAuditLog } from '$lib/server/services/audit';
 
 const PRE_10_SHIFT_THRESHOLD = 0.8;
 const POST_10_SHIFT_THRESHOLD = 0.7;
@@ -138,6 +140,48 @@ export async function checkAndApplyFlag(userId: string): Promise<FlaggingResult 
 				updatedAt: now
 			})
 			.where(eq(user.id, userId));
+
+		const action =
+			nextIsFlagged && !userRecord.isFlagged
+				? 'flag'
+				: !nextIsFlagged && userRecord.isFlagged
+					? 'unflag'
+					: 'update';
+
+		await createAuditLog({
+			entityType: 'user',
+			entityId: userId,
+			action,
+			actorType: 'system',
+			actorId: null,
+			changes: {
+				before: {
+					isFlagged: userRecord.isFlagged,
+					flagWarningDate: userRecord.flagWarningDate,
+					weeklyCap: userRecord.weeklyCap
+				},
+				after: {
+					isFlagged: nextIsFlagged,
+					flagWarningDate: nextFlagWarningDate,
+					weeklyCap: nextWeeklyCap
+				},
+				attendanceRate,
+				threshold,
+				totalShifts,
+				warningSent,
+				gracePenaltyApplied,
+				rewardApplied
+			}
+		});
+	}
+
+	if (nextIsFlagged && !userRecord.isFlagged) {
+		broadcastDriverFlagged({
+			driverId: userId,
+			attendanceRate,
+			threshold,
+			totalShifts
+		});
 	}
 
 	if (warningSent) {

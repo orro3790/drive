@@ -8,17 +8,11 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import {
-	assignments,
-	auditLogs,
-	bidWindows,
-	routes,
-	user,
-	warehouses
-} from '$lib/server/db/schema';
+import { assignments, bidWindows, routes, user, warehouses } from '$lib/server/db/schema';
 import { routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, eq, ne, gt, count } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
+import { createAuditLog } from '$lib/server/services/audit';
 
 function toLocalYmd(date = new Date()): string {
 	const year = date.getFullYear();
@@ -169,13 +163,24 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 		.where(eq(routes.id, id))
 		.returning();
 
-	// Audit log - skip actorId since Better Auth IDs don't match domain users table
-	await db.insert(auditLogs).values({
+	await createAuditLog({
 		entityType: 'route',
 		entityId: id,
 		action: 'update',
 		actorType: 'user',
-		changes: updates
+		actorId: locals.user.id,
+		changes: {
+			before: {
+				name: existing.name,
+				warehouseId: existing.warehouseId,
+				managerId: existing.managerId
+			},
+			after: {
+				name: updated.name,
+				warehouseId: updated.warehouseId,
+				managerId: updated.managerId
+			}
+		}
 	});
 
 	const assignment = await getRouteAssignmentDetails(id, date);
@@ -236,13 +241,15 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 
 	await db.delete(routes).where(eq(routes.id, id));
 
-	// Audit log - skip actorId since Better Auth IDs don't match domain users table
-	await db.insert(auditLogs).values({
+	await createAuditLog({
 		entityType: 'route',
 		entityId: id,
 		action: 'delete',
 		actorType: 'user',
-		changes: { name: existing.name, warehouseId: existing.warehouseId }
+		actorId: locals.user.id,
+		changes: {
+			before: { name: existing.name, warehouseId: existing.warehouseId }
+		}
 	});
 
 	return json({ success: true });

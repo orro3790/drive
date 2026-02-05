@@ -9,9 +9,10 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { warehouses, auditLogs, routes } from '$lib/server/db/schema';
+import { warehouses, routes } from '$lib/server/db/schema';
 import { warehouseUpdateSchema } from '$lib/schemas/warehouse';
 import { eq, count } from 'drizzle-orm';
+import { createAuditLog } from '$lib/server/services/audit';
 
 export const GET: RequestHandler = async ({ locals, params }) => {
 	if (!locals.user) {
@@ -86,13 +87,16 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		.where(eq(warehouses.id, id))
 		.returning();
 
-	// Audit log - skip actorId since Better Auth IDs don't match domain users table
-	await db.insert(auditLogs).values({
+	await createAuditLog({
 		entityType: 'warehouse',
 		entityId: id,
 		action: 'update',
 		actorType: 'user',
-		changes: updates
+		actorId: locals.user.id,
+		changes: {
+			before: { name: existing.name, address: existing.address },
+			after: { name: updated.name, address: updated.address }
+		}
 	});
 
 	// Get route count for response
@@ -134,13 +138,15 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 
 	await db.delete(warehouses).where(eq(warehouses.id, id));
 
-	// Audit log - skip actorId since Better Auth IDs don't match domain users table
-	await db.insert(auditLogs).values({
+	await createAuditLog({
 		entityType: 'warehouse',
 		entityId: id,
 		action: 'delete',
 		actorType: 'user',
-		changes: { name: existing.name, address: existing.address }
+		actorId: locals.user.id,
+		changes: {
+			before: { name: existing.name, address: existing.address }
+		}
 	});
 
 	return json({ success: true });

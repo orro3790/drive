@@ -23,6 +23,7 @@ import {
 	sendManagerAlert,
 	sendNotification
 } from '$lib/server/services/notifications';
+import { createAuditLog, type AuditActor } from '$lib/server/services/audit';
 import { and, eq, lt, sql } from 'drizzle-orm';
 import { toZonedTime } from 'date-fns-tz';
 import { addMinutes, parseISO, startOfDay } from 'date-fns';
@@ -165,10 +166,24 @@ export async function createBidWindow(
 
 	// Update assignment status to unfilled if not already
 	if (assignment.status !== 'unfilled') {
+		const updatedAt = new Date();
 		await db
 			.update(assignments)
-			.set({ status: 'unfilled', updatedAt: new Date() })
+			.set({ status: 'unfilled', updatedAt })
 			.where(eq(assignments.id, assignmentId));
+
+		await createAuditLog({
+			entityType: 'assignment',
+			entityId: assignmentId,
+			action: 'unfilled',
+			actorType: 'system',
+			actorId: null,
+			changes: {
+				before: { status: assignment.status },
+				after: { status: 'unfilled' },
+				reason: 'bid_window_opened'
+			}
+		});
 	}
 
 	// Create the bid window
@@ -326,7 +341,10 @@ async function calculateBidScore(userId: string, routeId: string): Promise<numbe
 /**
  * Resolve a bid window by scoring bids and selecting a winner.
  */
-export async function resolveBidWindow(bidWindowId: string): Promise<ResolveBidWindowResult> {
+export async function resolveBidWindow(
+	bidWindowId: string,
+	actor: AuditActor = { actorType: 'system', actorId: null }
+): Promise<ResolveBidWindowResult> {
 	const log = logger.child({ operation: 'resolveBidWindow', bidWindowId });
 
 	const [window] = await db
@@ -353,7 +371,9 @@ export async function resolveBidWindow(bidWindowId: string): Promise<ResolveBidW
 			id: assignments.id,
 			date: assignments.date,
 			routeId: assignments.routeId,
-			routeName: routes.name
+			routeName: routes.name,
+			status: assignments.status,
+			userId: assignments.userId
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
@@ -434,6 +454,30 @@ export async function resolveBidWindow(bidWindowId: string): Promise<ResolveBidW
 				})
 				.where(eq(bids.id, bid.id));
 		}
+
+		await createAuditLog(
+			{
+				entityType: 'assignment',
+				entityId: assignment.id,
+				action: 'assign',
+				actorType: actor.actorType,
+				actorId: actor.actorId ?? null,
+				changes: {
+					before: {
+						status: assignment.status,
+						userId: assignment.userId
+					},
+					after: {
+						status: 'scheduled',
+						userId: winner.userId,
+						assignedBy: 'bid',
+						assignedAt: resolvedAt
+					},
+					bidWindowId
+				}
+			},
+			tx
+		);
 	});
 
 	const formattedDate = assignment.date;

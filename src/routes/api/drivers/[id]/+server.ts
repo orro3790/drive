@@ -13,9 +13,10 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { user, driverMetrics, auditLogs } from '$lib/server/db/schema';
+import { user, driverMetrics } from '$lib/server/db/schema';
 import { driverUpdateSchema } from '$lib/schemas/driver';
 import { eq } from 'drizzle-orm';
+import { createAuditLog } from '$lib/server/services/audit';
 
 export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 	if (!locals.user) {
@@ -110,14 +111,25 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 			createdAt: user.createdAt
 		});
 
-	// Audit log the changes
-	await db.insert(auditLogs).values({
+	await createAuditLog({
 		entityType: 'user',
 		entityId: id,
 		action: updates.unflag ? 'unflag' : 'update',
-		actorId: locals.user.id,
 		actorType: 'user',
-		changes
+		actorId: locals.user.id,
+		changes: {
+			before: {
+				weeklyCap: existing.weeklyCap,
+				isFlagged: existing.isFlagged,
+				flagWarningDate: existing.flagWarningDate
+			},
+			after: {
+				weeklyCap: updated.weeklyCap,
+				isFlagged: updated.isFlagged,
+				flagWarningDate: updated.flagWarningDate
+			},
+			fields: changes
+		}
 	});
 
 	// Get metrics for response

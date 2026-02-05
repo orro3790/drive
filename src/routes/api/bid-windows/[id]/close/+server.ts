@@ -7,17 +7,15 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import {
-	assignments,
-	auditLogs,
-	bidWindows,
-	bids,
-	routes,
-	warehouses
-} from '$lib/server/db/schema';
+import { assignments, bidWindows, bids, routes, warehouses } from '$lib/server/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { getBidWindowDetail, resolveBidWindow } from '$lib/server/services/bidding';
+import { createAuditLog } from '$lib/server/services/audit';
+import {
+	broadcastAssignmentUpdated,
+	broadcastBidWindowClosed
+} from '$lib/server/realtime/managerSse';
 
 export const POST: RequestHandler = async ({ locals, params }) => {
 	if (!locals.user) {
@@ -27,6 +25,8 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 	if (locals.user.role !== 'manager') {
 		throw error(403, 'Forbidden');
 	}
+
+	const actorId = locals.user.id;
 
 	const windowId = params.id;
 
@@ -51,7 +51,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		throw error(404, 'Bid window not found');
 	}
 
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, window.warehouseId);
+	const canAccess = await canManagerAccessWarehouse(actorId, window.warehouseId);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -79,18 +79,55 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 				.update(assignments)
 				.set({ status: 'unfilled', updatedAt: closedAt })
 				.where(eq(assignments.id, window.assignmentId));
+
+			await createAuditLog(
+				{
+					entityType: 'assignment',
+					entityId: window.assignmentId,
+					action: 'unfilled',
+					actorType: 'user',
+					actorId,
+					changes: {
+						before: { status: window.assignmentStatus },
+						after: { status: 'unfilled' },
+						bidWindowId: window.id
+					}
+				},
+				tx
+			);
+		});
+
+		broadcastBidWindowClosed({
+			assignmentId: window.assignmentId,
+			bidWindowId: window.id,
+			winnerId: null
+		});
+
+		broadcastAssignmentUpdated({
+			assignmentId: window.assignmentId,
+			status: 'unfilled',
+			routeId: window.routeId,
+			bidWindowClosesAt: null
 		});
 	} else {
-		resolvedResult = await resolveBidWindow(window.id);
+		resolvedResult = await resolveBidWindow(window.id, {
+			actorType: 'user',
+			actorId
+		});
 	}
 
-	await db.insert(auditLogs).values({
+	const nextStatus =
+		pendingBids.length === 0 ? 'closed' : resolvedResult?.resolved ? 'resolved' : window.status;
+
+	await createAuditLog({
 		entityType: 'bid_window',
 		entityId: window.id,
 		action: 'close',
 		actorType: 'user',
-		actorId: locals.user.id,
+		actorId,
 		changes: {
+			before: { status: window.status },
+			after: { status: nextStatus },
 			bidCount: resolvedResult?.bidCount ?? 0,
 			winnerId: resolvedResult?.winnerId ?? null
 		}

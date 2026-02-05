@@ -44,6 +44,7 @@
 	import { driverStore } from '$lib/stores/driverStore.svelte';
 	import { routeCreateSchema, routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
 	import type { SelectOption } from '$lib/schemas/ui/select';
+	import { debounce } from '$lib/stores/helpers/debounce';
 
 	// Tab state
 	type TabId = 'routes' | 'bidWindows';
@@ -66,6 +67,7 @@
 	let assignDriverId = $state('');
 	let assignErrors = $state<{ driverId?: string[] }>({});
 	let closeConfirmWindow = $state<BidWindow | null>(null);
+	let managerStream: EventSource | null = null;
 
 	// Filter state
 	let warehouseFilter = $state('');
@@ -374,6 +376,43 @@
 		() => bidWindowStore.bidWindows.find((w) => w.id === selectedBidWindowId) ?? null
 	);
 
+	const refreshRoutes = debounce(() => {
+		routeStore.load(routeStore.filters);
+	}, 200);
+
+	const refreshBidWindows = debounce(() => {
+		bidWindowStore.load(bidWindowStore.filters);
+	}, 200);
+
+	const refreshDrivers = debounce(() => {
+		driverStore.load();
+	}, 200);
+
+	function handleAssignmentUpdate() {
+		refreshRoutes();
+	}
+
+	function handleBidWindowUpdate() {
+		refreshRoutes();
+		if (activeTab === 'bidWindows') {
+			refreshBidWindows();
+		}
+	}
+
+	function handleDriverFlagged() {
+		if (driverStore.drivers.length > 0) {
+			refreshDrivers();
+		}
+	}
+
+	function startRealtime() {
+		managerStream = new EventSource('/api/sse/manager');
+		managerStream.addEventListener('assignment:updated', handleAssignmentUpdate);
+		managerStream.addEventListener('bid_window:opened', handleBidWindowUpdate);
+		managerStream.addEventListener('bid_window:closed', handleBidWindowUpdate);
+		managerStream.addEventListener('driver:flagged', handleDriverFlagged);
+	}
+
 	function canManualAssign(window: BidWindow) {
 		return window.status === 'open' || !window.winnerName;
 	}
@@ -431,11 +470,16 @@
 		warehouseStore.load();
 		dateFilter = toLocalYmd();
 		applyFilters();
+		startRealtime();
 	});
 
 	// Cleanup on destroy
 	onDestroy(() => {
 		bidWindowStore.stopPolling();
+		managerStream?.close();
+		refreshRoutes.cancel();
+		refreshBidWindows.cancel();
+		refreshDrivers.cancel();
 	});
 </script>
 

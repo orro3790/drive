@@ -7,12 +7,17 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, auditLogs, bidWindows, routes } from '$lib/server/db/schema';
+import { assignments, bidWindows, routes } from '$lib/server/db/schema';
 import { assignmentCancelSchema } from '$lib/schemas/assignment';
 import { and, eq } from 'drizzle-orm';
 import { addMinutes, differenceInCalendarDays, parseISO } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
 import { sendManagerAlert } from '$lib/server/services/notifications';
+import { createAuditLog } from '$lib/server/services/audit';
+import {
+	broadcastAssignmentUpdated,
+	broadcastBidWindowOpened
+} from '$lib/server/realtime/managerSse';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -84,29 +89,33 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			status: assignments.status
 		});
 
-	await db.insert(auditLogs).values({
+	await createAuditLog({
 		entityType: 'assignment',
 		entityId: existing.id,
 		action: 'cancel',
 		actorType: 'user',
 		actorId: locals.user.id,
 		changes: {
+			before: { status: existing.status },
+			after: { status: updated.status },
 			reason: result.data.reason,
 			lateCancel: isLateCancel
 		}
 	});
 
 	// Send alert to route manager (best-effort, don't fail if alert fails)
+	let routeName: string | null = null;
 	try {
 		const [route] = await db
 			.select({ name: routes.name })
 			.from(routes)
 			.where(eq(routes.id, existing.routeId));
+		routeName = route?.name ?? null;
 
 		await sendManagerAlert(existing.routeId, 'route_cancelled', {
 			driverName: locals.user.name ?? 'A driver',
 			date: existing.date,
-			routeName: route?.name
+			routeName
 		});
 	} catch {
 		// Manager alert is best-effort, don't fail cancellation
@@ -117,17 +126,37 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		.from(bidWindows)
 		.where(eq(bidWindows.assignmentId, existing.id));
 
+	let createdWindowClosesAt: Date | null = null;
 	if (!existingWindow) {
 		const closesAt =
 			minutesUntilShift > 30
 				? addMinutes(new Date(), 30)
 				: addMinutes(new Date(), Math.max(1, minutesUntilShift));
+		createdWindowClosesAt = closesAt;
 
 		await db.insert(bidWindows).values({
 			assignmentId: existing.id,
 			opensAt: new Date(),
 			closesAt,
 			status: 'open'
+		});
+	}
+
+	broadcastAssignmentUpdated({
+		assignmentId: existing.id,
+		status: 'cancelled',
+		driverId: locals.user.id,
+		driverName: locals.user.name ?? null,
+		routeId: existing.routeId
+	});
+
+	if (createdWindowClosesAt) {
+		broadcastBidWindowOpened({
+			assignmentId: existing.id,
+			routeId: existing.routeId,
+			routeName: routeName ?? 'Unknown Route',
+			assignmentDate: existing.date,
+			closesAt: createdWindowClosesAt.toISOString()
 		});
 	}
 

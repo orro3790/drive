@@ -8,19 +8,16 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
 import { db } from '$lib/server/db';
-import {
-	assignments,
-	auditLogs,
-	bidWindows,
-	bids,
-	routes,
-	user,
-	warehouses
-} from '$lib/server/db/schema';
+import { assignments, bidWindows, bids, routes, user, warehouses } from '$lib/server/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
 import { getBidWindowDetail } from '$lib/server/services/bidding';
+import { createAuditLog } from '$lib/server/services/audit';
+import {
+	broadcastAssignmentUpdated,
+	broadcastBidWindowClosed
+} from '$lib/server/realtime/managerSse';
 
 const assignSchema = z
 	.object({
@@ -37,6 +34,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(403, 'Forbidden');
 	}
 
+	const actorId = locals.user.id;
+
 	const body = await request.json();
 	const result = assignSchema.safeParse(body);
 
@@ -52,6 +51,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			assignmentId: bidWindows.assignmentId,
 			status: bidWindows.status,
 			assignmentStatus: assignments.status,
+			assignmentUserId: assignments.userId,
 			assignmentDate: assignments.date,
 			routeId: assignments.routeId,
 			routeName: routes.name,
@@ -67,7 +67,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(404, 'Bid window not found');
 	}
 
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, window.warehouseId);
+	const canAccess = await canManagerAccessWarehouse(actorId, window.warehouseId);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -124,18 +124,30 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 				await tx.update(bids).set({ status: 'won', resolvedAt }).where(eq(bids.id, winnerBid.id));
 			}
 		}
-	});
 
-	await db.insert(auditLogs).values({
-		entityType: 'assignment',
-		entityId: window.assignmentId,
-		action: 'manual_assign',
-		actorType: 'user',
-		actorId: locals.user.id,
-		changes: {
-			bidWindowId: window.id,
-			driverId: driver.id
-		}
+		await createAuditLog(
+			{
+				entityType: 'assignment',
+				entityId: window.assignmentId,
+				action: 'manual_assign',
+				actorType: 'user',
+				actorId,
+				changes: {
+					before: {
+						status: window.assignmentStatus,
+						userId: window.assignmentUserId
+					},
+					after: {
+						status: 'scheduled',
+						userId: driver.id,
+						assignedBy: 'manager',
+						assignedAt: resolvedAt
+					},
+					bidWindowId: window.id
+				}
+			},
+			tx
+		);
 	});
 
 	const notificationData = {
@@ -158,6 +170,21 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			data: notificationData
 		});
 	}
+
+	broadcastBidWindowClosed({
+		assignmentId: window.assignmentId,
+		bidWindowId: window.id,
+		winnerId: driver.id,
+		winnerName: driver.name
+	});
+
+	broadcastAssignmentUpdated({
+		assignmentId: window.assignmentId,
+		status: 'scheduled',
+		driverId: driver.id,
+		driverName: driver.name,
+		routeId: window.routeId
+	});
 
 	const bidWindow = await getBidWindowDetail(window.id);
 

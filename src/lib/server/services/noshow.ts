@@ -9,6 +9,7 @@ import { db } from '$lib/server/db';
 import { assignments, bidWindows, routes, shifts, user } from '$lib/server/db/schema';
 import { createBidWindow } from '$lib/server/services/bidding';
 import { sendManagerAlert } from '$lib/server/services/notifications';
+import { createAuditLog } from '$lib/server/services/audit';
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { format, toZonedTime } from 'date-fns-tz';
 import { set, startOfDay } from 'date-fns';
@@ -67,6 +68,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 			assignmentId: assignments.id,
 			routeId: assignments.routeId,
 			assignmentDate: assignments.date,
+			assignmentStatus: assignments.status,
 			driverId: assignments.userId,
 			driverName: user.name,
 			routeName: routes.name,
@@ -98,10 +100,25 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 
 		if (candidate.existingWindowId) {
 			try {
+				const updatedAt = new Date();
 				await db
 					.update(assignments)
-					.set({ status: 'unfilled', updatedAt: new Date() })
+					.set({ status: 'unfilled', updatedAt })
 					.where(eq(assignments.id, candidate.assignmentId));
+
+				await createAuditLog({
+					entityType: 'assignment',
+					entityId: candidate.assignmentId,
+					action: 'unfilled',
+					actorType: 'system',
+					actorId: null,
+					changes: {
+						before: { status: candidate.assignmentStatus },
+						after: { status: 'unfilled' },
+						reason: 'no_show',
+						bidWindowId: candidate.existingWindowId
+					}
+				});
 			} catch (error) {
 				errors++;
 				log.error(

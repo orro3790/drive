@@ -7,11 +7,13 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, shifts, auditLogs } from '$lib/server/db/schema';
+import { assignments, shifts } from '$lib/server/db/schema';
 import { recordRouteCompletion, updateDriverMetrics } from '$lib/server/services/metrics';
 import { shiftCompleteSchema } from '$lib/schemas/shift';
 import { eq } from 'drizzle-orm';
 import logger from '$lib/server/logger';
+import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
+import { createAuditLog } from '$lib/server/services/audit';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -122,14 +124,32 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		})
 		.where(eq(assignments.id, assignmentId));
 
-	// Audit log
-	await db.insert(auditLogs).values({
+	broadcastAssignmentUpdated({
+		assignmentId,
+		status: 'completed',
+		driverId: assignment.userId,
+		routeId: assignment.routeId
+	});
+
+	await createAuditLog({
+		entityType: 'assignment',
+		entityId: assignmentId,
+		action: 'complete',
+		actorType: 'user',
+		actorId: locals.user.id,
+		changes: {
+			before: { status: assignment.status },
+			after: { status: 'completed' }
+		}
+	});
+
+	await createAuditLog({
 		entityType: 'shift',
 		entityId: shift.id,
 		action: 'complete',
 		actorType: 'user',
 		actorId: locals.user.id,
-		changes: { parcelsDelivered, parcelsReturned }
+		changes: { parcelsDelivered, parcelsReturned, assignmentId }
 	});
 
 	await Promise.all([

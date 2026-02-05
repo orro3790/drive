@@ -8,17 +8,11 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import {
-	assignments,
-	auditLogs,
-	bidWindows,
-	routes,
-	user,
-	warehouses
-} from '$lib/server/db/schema';
+import { assignments, bidWindows, routes, user, warehouses } from '$lib/server/db/schema';
 import { routeCreateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, eq, inArray } from 'drizzle-orm';
 import { getManagerWarehouseIds, canManagerAccessWarehouse } from '$lib/server/services/managers';
+import { createAuditLog } from '$lib/server/services/audit';
 
 const VALID_STATUSES: RouteStatus[] = ['assigned', 'unfilled', 'bidding'];
 
@@ -202,13 +196,15 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		})
 		.returning();
 
-	// Audit log - skip actorId since Better Auth IDs don't match domain users table
-	await db.insert(auditLogs).values({
+	await createAuditLog({
 		entityType: 'route',
 		entityId: created.id,
 		action: 'create',
 		actorType: 'user',
-		changes: { name, warehouseId }
+		actorId: locals.user.id,
+		changes: {
+			after: { name, warehouseId, managerId: created.managerId }
+		}
 	});
 
 	return json(

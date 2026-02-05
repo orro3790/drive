@@ -7,10 +7,12 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, shifts, auditLogs } from '$lib/server/db/schema';
+import { assignments, shifts } from '$lib/server/db/schema';
 import { shiftStartSchema } from '$lib/schemas/shift';
 import { eq, and } from 'drizzle-orm';
 import { format, toZonedTime } from 'date-fns-tz';
+import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
+import { createAuditLog } from '$lib/server/services/audit';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -98,14 +100,32 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		})
 		.where(eq(assignments.id, assignmentId));
 
-	// Audit log
-	await db.insert(auditLogs).values({
+	broadcastAssignmentUpdated({
+		assignmentId,
+		status: 'active',
+		driverId: locals.user.id,
+		driverName: locals.user.name ?? null
+	});
+
+	await createAuditLog({
+		entityType: 'assignment',
+		entityId: assignmentId,
+		action: 'start',
+		actorType: 'user',
+		actorId: locals.user.id,
+		changes: {
+			before: { status: assignment.status },
+			after: { status: 'active' }
+		}
+	});
+
+	await createAuditLog({
 		entityType: 'shift',
 		entityId: shift.id,
 		action: 'start',
 		actorType: 'user',
 		actorId: locals.user.id,
-		changes: { parcelsStart }
+		changes: { parcelsStart, assignmentId }
 	});
 
 	return json({

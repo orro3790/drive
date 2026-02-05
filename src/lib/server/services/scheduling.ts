@@ -18,6 +18,7 @@ import { and, eq, gte, lt, ne, sql } from 'drizzle-orm';
 import { toZonedTime, format } from 'date-fns-tz';
 import { addDays, startOfDay } from 'date-fns';
 import logger from '$lib/server/logger';
+import { createAuditLog } from '$lib/server/services/audit';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -226,14 +227,37 @@ export async function generateWeekSchedule(
 				if (candidates.length > 0) {
 					// Assign top candidate
 					const winner = candidates[0];
-					await db.insert(assignments).values({
-						routeId: route.id,
-						userId: winner.userId,
-						warehouseId: route.warehouseId,
-						date: dateString,
-						status: 'scheduled',
-						assignedBy: 'algorithm',
-						assignedAt: new Date()
+					const assignedAt = new Date();
+					const [created] = await db
+						.insert(assignments)
+						.values({
+							routeId: route.id,
+							userId: winner.userId,
+							warehouseId: route.warehouseId,
+							date: dateString,
+							status: 'scheduled',
+							assignedBy: 'algorithm',
+							assignedAt
+						})
+						.returning({ id: assignments.id });
+
+					await createAuditLog({
+						entityType: 'assignment',
+						entityId: created.id,
+						action: 'create',
+						actorType: 'system',
+						actorId: null,
+						changes: {
+							after: {
+								status: 'scheduled',
+								userId: winner.userId,
+								routeId: route.id,
+								warehouseId: route.warehouseId,
+								date: dateString,
+								assignedBy: 'algorithm',
+								assignedAt
+							}
+						}
 					});
 
 					// Update weekly count for this driver
@@ -247,14 +271,37 @@ export async function generateWeekSchedule(
 					);
 				} else {
 					// No eligible driver - create unfilled assignment
-					await db.insert(assignments).values({
-						routeId: route.id,
-						userId: null,
-						warehouseId: route.warehouseId,
-						date: dateString,
-						status: 'unfilled',
-						assignedBy: 'algorithm',
-						assignedAt: new Date()
+					const assignedAt = new Date();
+					const [created] = await db
+						.insert(assignments)
+						.values({
+							routeId: route.id,
+							userId: null,
+							warehouseId: route.warehouseId,
+							date: dateString,
+							status: 'unfilled',
+							assignedBy: 'algorithm',
+							assignedAt
+						})
+						.returning({ id: assignments.id });
+
+					await createAuditLog({
+						entityType: 'assignment',
+						entityId: created.id,
+						action: 'create',
+						actorType: 'system',
+						actorId: null,
+						changes: {
+							after: {
+								status: 'unfilled',
+								userId: null,
+								routeId: route.id,
+								warehouseId: route.warehouseId,
+								date: dateString,
+								assignedBy: 'algorithm',
+								assignedAt
+							}
+						}
 					});
 
 					result.unfilled++;

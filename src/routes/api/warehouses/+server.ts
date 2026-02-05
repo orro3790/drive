@@ -8,10 +8,11 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { warehouses, auditLogs, routes, warehouseManagers } from '$lib/server/db/schema';
+import { warehouses, routes, warehouseManagers } from '$lib/server/db/schema';
 import { warehouseCreateSchema } from '$lib/schemas/warehouse';
 import { eq, count, inArray } from 'drizzle-orm';
 import { getManagerWarehouseIds } from '$lib/server/services/managers';
+import { createAuditLog } from '$lib/server/services/audit';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user) {
@@ -80,13 +81,15 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		userId: locals.user.id
 	});
 
-	// Audit log
-	await db.insert(auditLogs).values({
+	await createAuditLog({
 		entityType: 'warehouse',
 		entityId: created.id,
 		action: 'create',
 		actorType: 'user',
-		changes: { name, address }
+		actorId: locals.user.id,
+		changes: {
+			after: { name, address, createdBy: locals.user.id }
+		}
 	});
 
 	return json({ warehouse: { ...created, routeCount: 0 } }, { status: 201 });
