@@ -23,7 +23,8 @@ export const driverSchema = z.object({
 	totalShifts: z.number().int().default(0),
 	completedShifts: z.number().int().default(0),
 	attendanceRate: z.number().min(0).max(1).default(0),
-	completionRate: z.number().min(0).max(1).default(0)
+	completionRate: z.number().min(0).max(1).default(0),
+	avgParcelsDelivered: z.number().min(0).default(0)
 });
 
 export type Driver = z.infer<typeof driverSchema>;

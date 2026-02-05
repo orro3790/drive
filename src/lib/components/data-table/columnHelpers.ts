@@ -186,20 +186,38 @@ export function createColumnHelper<TData extends RowData>() {
 	 * and preserves them during column resizing.
 	 *
 	 * NOTE: When column resizing is enabled, use `sizing: 'fixed'` with explicit
-	 * widths for all columns. `sizing: 'fill'` is incompatible with TanStack's
-	 * resize handler since CSS-driven widths don't match TanStack's internal state.
+	 * widths (or the header-width heuristic below). `sizing: 'fill'` is
+	 * incompatible with TanStack's resize handler since CSS-driven widths don't
+	 * match TanStack's internal state.
 	 */
+	function estimateHeaderWidth(options: BaseColumnOptions<TData>) {
+		if (options.sizing !== 'fixed') return undefined;
+		const headerText = options.header?.trim();
+		if (!headerText) return undefined;
+		const headerLength = Array.from(headerText).length;
+		const headerCharWidth = 7.5;
+		const headerBaseWidth = 40;
+		const sortIconWidth = options.sortable ? 24 : 0;
+		return Math.ceil(headerLength * headerCharWidth + headerBaseWidth + sortIconWidth);
+	}
+
 	function getSizingProps(options: BaseColumnOptions<TData>) {
 		const props: { size?: number; minSize?: number; maxSize?: number } = {};
+		const estimatedWidth = estimateHeaderWidth(options);
+		let size = options.width;
 
-		if (options.width) {
-			props.size = options.width;
+		if (typeof estimatedWidth === 'number') {
+			size = typeof size === 'number' ? Math.max(size, estimatedWidth) : estimatedWidth;
 		}
-		if (options.minWidth) {
+		if (typeof options.minWidth === 'number') {
 			props.minSize = options.minWidth;
+			size = typeof size === 'number' ? Math.max(size, options.minWidth) : options.minWidth;
 		}
-		if (options.maxWidth) {
+		if (typeof options.maxWidth === 'number') {
 			props.maxSize = options.maxWidth;
+		}
+		if (typeof size === 'number') {
+			props.size = size;
 		}
 		return props;
 	}

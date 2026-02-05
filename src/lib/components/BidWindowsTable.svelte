@@ -54,33 +54,44 @@
 		helper.text('routeName', {
 			header: m.bid_windows_header_route(),
 			sortable: true,
+			sizing: 'fixed',
+			width: 220,
+			minWidth: 160,
+			stickyLeft: true,
 			mobileVisible: true,
 			mobilePriority: 1
 		}),
 		helper.text('warehouseName', {
 			header: m.bid_windows_header_warehouse(),
 			sortable: true,
+			sizing: 'fixed',
+			width: 180,
+			minWidth: 150,
 			mobileVisible: true,
 			mobilePriority: 2
 		}),
 		helper.text('assignmentDate', {
 			header: m.bid_windows_header_date(),
 			sortable: true,
-			width: 120
+			sizing: 'fixed',
+			width: 140
 		}),
 		helper.display({
 			id: 'status',
 			header: m.bid_windows_header_status(),
-			width: 140
+			sizing: 'fixed',
+			width: 160
 		}),
 		helper.number('bidCount', {
 			header: m.bid_windows_header_bids(),
-			width: 80
+			sizing: 'fixed',
+			width: 90
 		}),
 		helper.display({
 			id: 'winner',
 			header: m.bid_windows_header_winner(),
-			width: 160
+			sizing: 'fixed',
+			width: 180
 		})
 	];
 
@@ -92,6 +103,8 @@
 			sorting,
 			pagination
 		},
+		enableColumnResizing: true,
+		columnResizeMode: 'onChange',
 		onSortingChange: (updater) => {
 			sorting = typeof updater === 'function' ? updater(sorting) : updater;
 		},

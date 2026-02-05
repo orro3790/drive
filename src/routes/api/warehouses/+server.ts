@@ -8,11 +8,29 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { warehouses, routes, warehouseManagers } from '$lib/server/db/schema';
+import {
+	assignments,
+	bidWindows,
+	routes,
+	warehouses,
+	warehouseManagers
+} from '$lib/server/db/schema';
 import { warehouseCreateSchema } from '$lib/schemas/warehouse';
-import { eq, count, inArray } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm';
 import { getManagerWarehouseIds } from '$lib/server/services/managers';
 import { createAuditLog } from '$lib/server/services/audit';
+import { addDays } from 'date-fns';
+import { format, toZonedTime } from 'date-fns-tz';
+
+const TORONTO_TZ = 'America/Toronto';
+
+function getTorontoDateRange() {
+	const torontoNow = toZonedTime(new Date(), TORONTO_TZ);
+	return {
+		startDate: format(torontoNow, 'yyyy-MM-dd'),
+		endDate: format(addDays(torontoNow, 7), 'yyyy-MM-dd')
+	};
+}
 
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user) {
@@ -29,23 +47,83 @@ export const GET: RequestHandler = async ({ locals }) => {
 		return json({ warehouses: [] });
 	}
 
-	const warehouseList = await db
-		.select({
-			id: warehouses.id,
-			name: warehouses.name,
-			address: warehouses.address,
-			createdBy: warehouses.createdBy,
-			createdAt: warehouses.createdAt,
-			updatedAt: warehouses.updatedAt,
-			routeCount: count(routes.id)
-		})
-		.from(warehouses)
-		.leftJoin(routes, eq(routes.warehouseId, warehouses.id))
-		.where(inArray(warehouses.id, accessibleWarehouses))
-		.groupBy(warehouses.id)
-		.orderBy(warehouses.name);
+	const { startDate, endDate } = getTorontoDateRange();
 
-	return json({ warehouses: warehouseList });
+	const [warehouseList, assignmentCounts, openBidWindowCounts, managerCounts] = await Promise.all([
+		db
+			.select({
+				id: warehouses.id,
+				name: warehouses.name,
+				address: warehouses.address,
+				createdBy: warehouses.createdBy,
+				createdAt: warehouses.createdAt,
+				updatedAt: warehouses.updatedAt,
+				routeCount: count(routes.id)
+			})
+			.from(warehouses)
+			.leftJoin(routes, eq(routes.warehouseId, warehouses.id))
+			.where(inArray(warehouses.id, accessibleWarehouses))
+			.groupBy(warehouses.id)
+			.orderBy(warehouses.name),
+		db
+			.select({
+				warehouseId: assignments.warehouseId,
+				assignedDriversNext7: sql<number>`count(distinct ${assignments.userId})`,
+				unfilledRoutesNext7: sql<number>`count(*) filter (where ${assignments.status} = 'unfilled')`
+			})
+			.from(assignments)
+			.where(
+				and(
+					inArray(assignments.warehouseId, accessibleWarehouses),
+					gte(assignments.date, startDate),
+					lte(assignments.date, endDate),
+					ne(assignments.status, 'cancelled')
+				)
+			)
+			.groupBy(assignments.warehouseId),
+		db
+			.select({
+				warehouseId: assignments.warehouseId,
+				openBidWindows: count(bidWindows.id)
+			})
+			.from(bidWindows)
+			.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
+			.where(
+				and(inArray(assignments.warehouseId, accessibleWarehouses), eq(bidWindows.status, 'open'))
+			)
+			.groupBy(assignments.warehouseId),
+		db
+			.select({
+				warehouseId: warehouseManagers.warehouseId,
+				managerCount: count(warehouseManagers.userId)
+			})
+			.from(warehouseManagers)
+			.where(inArray(warehouseManagers.warehouseId, accessibleWarehouses))
+			.groupBy(warehouseManagers.warehouseId)
+	]);
+
+	const assignmentCountsByWarehouse = new Map(
+		assignmentCounts.map((row) => [row.warehouseId, row])
+	);
+	const openBidWindowsByWarehouse = new Map(
+		openBidWindowCounts.map((row) => [row.warehouseId, row.openBidWindows])
+	);
+	const managerCountsByWarehouse = new Map(
+		managerCounts.map((row) => [row.warehouseId, row.managerCount])
+	);
+
+	const warehousesWithMetrics = warehouseList.map((warehouse) => {
+		const assignmentCounts = assignmentCountsByWarehouse.get(warehouse.id);
+		return {
+			...warehouse,
+			assignedDriversNext7: assignmentCounts?.assignedDriversNext7 ?? 0,
+			unfilledRoutesNext7: assignmentCounts?.unfilledRoutesNext7 ?? 0,
+			openBidWindows: openBidWindowsByWarehouse.get(warehouse.id) ?? 0,
+			managerCount: managerCountsByWarehouse.get(warehouse.id) ?? 0
+		};
+	});
+
+	return json({ warehouses: warehousesWithMetrics });
 };
 
 export const POST: RequestHandler = async ({ locals, request }) => {
@@ -92,5 +170,17 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		}
 	});
 
-	return json({ warehouse: { ...created, routeCount: 0 } }, { status: 201 });
+	return json(
+		{
+			warehouse: {
+				...created,
+				routeCount: 0,
+				assignedDriversNext7: 0,
+				unfilledRoutesNext7: 0,
+				openBidWindows: 0,
+				managerCount: 1
+			}
+		},
+		{ status: 201 }
+	);
 };

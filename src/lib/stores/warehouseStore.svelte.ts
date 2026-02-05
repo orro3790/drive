@@ -9,7 +9,13 @@ import type { Warehouse, WarehouseCreate, WarehouseUpdate } from '$lib/schemas/w
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import * as m from '$lib/paraglide/messages.js';
 
-export type WarehouseWithRouteCount = Warehouse & { routeCount: number };
+export type WarehouseWithRouteCount = Warehouse & {
+	routeCount: number;
+	assignedDriversNext7: number;
+	unfilledRoutesNext7: number;
+	openBidWindows: number;
+	managerCount: number;
+};
 
 const state = $state<{
 	warehouses: WarehouseWithRouteCount[];
@@ -69,7 +75,11 @@ export const warehouseStore = {
 			createdBy: null,
 			createdAt: now,
 			updatedAt: now,
-			routeCount: 0
+			routeCount: 0,
+			assignedDriversNext7: 0,
+			unfilledRoutesNext7: 0,
+			openBidWindows: 0,
+			managerCount: 0
 		};
 
 		state.warehouses = [...state.warehouses, optimisticWarehouse];

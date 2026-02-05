@@ -9,10 +9,75 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { warehouses, routes } from '$lib/server/db/schema';
+import {
+	assignments,
+	bidWindows,
+	routes,
+	warehouses,
+	warehouseManagers
+} from '$lib/server/db/schema';
 import { warehouseUpdateSchema } from '$lib/schemas/warehouse';
-import { eq, count } from 'drizzle-orm';
+import { and, count, eq, gte, lte, ne, sql } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
+import { addDays } from 'date-fns';
+import { format, toZonedTime } from 'date-fns-tz';
+
+const TORONTO_TZ = 'America/Toronto';
+
+function getTorontoDateRange() {
+	const torontoNow = toZonedTime(new Date(), TORONTO_TZ);
+	return {
+		startDate: format(torontoNow, 'yyyy-MM-dd'),
+		endDate: format(addDays(torontoNow, 7), 'yyyy-MM-dd')
+	};
+}
+
+async function getWarehouseMetrics(warehouseId: string) {
+	const { startDate, endDate } = getTorontoDateRange();
+
+	const [routeCountRows, assignmentRows, openBidWindowRows, managerCountRows] = await Promise.all([
+		db
+			.select({ count: count(routes.id) })
+			.from(routes)
+			.where(eq(routes.warehouseId, warehouseId)),
+		db
+			.select({
+				assignedDriversNext7: sql<number>`count(distinct ${assignments.userId})`,
+				unfilledRoutesNext7: sql<number>`count(*) filter (where ${assignments.status} = 'unfilled')`
+			})
+			.from(assignments)
+			.where(
+				and(
+					eq(assignments.warehouseId, warehouseId),
+					gte(assignments.date, startDate),
+					lte(assignments.date, endDate),
+					ne(assignments.status, 'cancelled')
+				)
+			),
+		db
+			.select({ count: count(bidWindows.id) })
+			.from(bidWindows)
+			.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
+			.where(and(eq(assignments.warehouseId, warehouseId), eq(bidWindows.status, 'open'))),
+		db
+			.select({ count: count(warehouseManagers.userId) })
+			.from(warehouseManagers)
+			.where(eq(warehouseManagers.warehouseId, warehouseId))
+	]);
+
+	const routeCountResult = routeCountRows[0];
+	const assignmentCounts = assignmentRows[0];
+	const openBidWindowCount = openBidWindowRows[0];
+	const managerCountResult = managerCountRows[0];
+
+	return {
+		routeCount: routeCountResult?.count ?? 0,
+		assignedDriversNext7: assignmentCounts?.assignedDriversNext7 ?? 0,
+		unfilledRoutesNext7: assignmentCounts?.unfilledRoutesNext7 ?? 0,
+		openBidWindows: openBidWindowCount?.count ?? 0,
+		managerCount: managerCountResult?.count ?? 0
+	};
+}
 
 export const GET: RequestHandler = async ({ locals, params }) => {
 	if (!locals.user) {
@@ -44,7 +109,9 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 		throw error(404, 'Warehouse not found');
 	}
 
-	return json({ warehouse });
+	const metrics = await getWarehouseMetrics(id);
+
+	return json({ warehouse: { ...warehouse, ...metrics } });
 };
 
 export const PATCH: RequestHandler = async ({ locals, params, request }) => {
@@ -75,7 +142,8 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 
 	// Only update if there are changes
 	if (Object.keys(updates).length === 0) {
-		return json({ warehouse: existing });
+		const metrics = await getWarehouseMetrics(id);
+		return json({ warehouse: { ...existing, ...metrics } });
 	}
 
 	const [updated] = await db
@@ -99,13 +167,9 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		}
 	});
 
-	// Get route count for response
-	const [routeCountResult] = await db
-		.select({ count: count(routes.id) })
-		.from(routes)
-		.where(eq(routes.warehouseId, id));
+	const metrics = await getWarehouseMetrics(id);
 
-	return json({ warehouse: { ...updated, routeCount: routeCountResult?.count ?? 0 } });
+	return json({ warehouse: { ...updated, ...metrics } });
 };
 
 export const DELETE: RequestHandler = async ({ locals, params }) => {

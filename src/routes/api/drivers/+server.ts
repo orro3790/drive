@@ -10,7 +10,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { user, driverMetrics } from '$lib/server/db/schema';
+import { driverMetrics, user } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 
 export const GET: RequestHandler = async ({ locals }) => {
@@ -37,7 +37,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 			totalShifts: driverMetrics.totalShifts,
 			completedShifts: driverMetrics.completedShifts,
 			attendanceRate: driverMetrics.attendanceRate,
-			completionRate: driverMetrics.completionRate
+			completionRate: driverMetrics.completionRate,
+			avgParcelsDelivered: driverMetrics.avgParcelsDelivered
 		})
 		.from(user)
 		.leftJoin(driverMetrics, eq(user.id, driverMetrics.userId))
@@ -50,7 +51,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 		totalShifts: driver.totalShifts ?? 0,
 		completedShifts: driver.completedShifts ?? 0,
 		attendanceRate: driver.attendanceRate ?? 0,
-		completionRate: driver.completionRate ?? 0
+		completionRate: driver.completionRate ?? 0,
+		avgParcelsDelivered: driver.avgParcelsDelivered ?? 0
 	}));
 
 	return json({ drivers: driversWithDefaults });

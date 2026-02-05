@@ -39,7 +39,22 @@ export async function updateDriverMetrics(userId: string): Promise<void> {
 			)
 		);
 
+	const [avgParcelsResult] = await db
+		.select({
+			average: sql<number>`avg(${shifts.parcelsDelivered}::float)`
+		})
+		.from(shifts)
+		.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
+		.where(
+			and(
+				eq(assignments.userId, userId),
+				isNotNull(shifts.completedAt),
+				isNotNull(shifts.parcelsDelivered)
+			)
+		);
+
 	const completionRate = completionResult?.average ?? 0;
+	const avgParcelsDelivered = avgParcelsResult?.average ?? 0;
 	const attendanceRate = totalShifts > 0 ? completedShifts / totalShifts : 0;
 	const updatedAt = new Date();
 
@@ -51,6 +66,7 @@ export async function updateDriverMetrics(userId: string): Promise<void> {
 			completedShifts,
 			attendanceRate,
 			completionRate,
+			avgParcelsDelivered,
 			updatedAt
 		})
 		.onConflictDoUpdate({
@@ -60,6 +76,7 @@ export async function updateDriverMetrics(userId: string): Promise<void> {
 				completedShifts,
 				attendanceRate,
 				completionRate,
+				avgParcelsDelivered,
 				updatedAt
 			}
 		});

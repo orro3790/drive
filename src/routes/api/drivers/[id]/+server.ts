@@ -13,7 +13,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { user, driverMetrics } from '$lib/server/db/schema';
+import { driverMetrics, user } from '$lib/server/db/schema';
 import { driverUpdateSchema } from '$lib/schemas/driver';
 import { eq } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
@@ -87,7 +87,8 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 				totalShifts: metrics?.totalShifts ?? 0,
 				completedShifts: metrics?.completedShifts ?? 0,
 				attendanceRate: metrics?.attendanceRate ?? 0,
-				completionRate: metrics?.completionRate ?? 0
+				completionRate: metrics?.completionRate ?? 0,
+				avgParcelsDelivered: metrics?.avgParcelsDelivered ?? 0
 			}
 		});
 	}
@@ -141,7 +142,8 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 			totalShifts: metrics?.totalShifts ?? 0,
 			completedShifts: metrics?.completedShifts ?? 0,
 			attendanceRate: metrics?.attendanceRate ?? 0,
-			completionRate: metrics?.completionRate ?? 0
+			completionRate: metrics?.completionRate ?? 0,
+			avgParcelsDelivered: metrics?.avgParcelsDelivered ?? 0
 		}
 	});
 };
