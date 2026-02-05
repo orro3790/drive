@@ -184,6 +184,8 @@ A **no-show** occurs when a driver:
 - Did not start their shift, AND
 - Did not cancel before shift start time
 
+Shift start time defaults to **07:00 Toronto** when only a date is stored.
+
 No-shows count against attendance rate and may trigger flagging.
 
 ---
@@ -281,6 +283,7 @@ Time-sensitive, critical notifications:
 | `bid_lost`        | Bid window closes        | Losers           |
 | `shift_reminder`  | Morning of shift         | Assigned driver  |
 | `shift_cancelled` | Assignment cancelled     | Affected driver  |
+| `driver_no_show`  | No-show detected         | Manager          |
 | `warning`         | Driver flagged           | Flagged driver   |
 | `urgent_unfilled` | No bids after escalation | Manager          |
 
@@ -301,6 +304,7 @@ Persisted in database, shown in inbox:
 | Lock preferences  | Sunday 23:59 Toronto | Freeze preferences, generate Week N+2 schedule         |
 | Close bid windows | Every minute         | Check for expired windows, run scoring, assign winners |
 | Performance check | Daily (time TBD)     | Recalculate metrics, apply flag logic                  |
+| No-show detection | Daily after start    | Detect no-shows, open bid windows, alert managers      |
 | Send reminders    | Daily (morning)      | Shift reminders for today's assignments                |
 
 ---
