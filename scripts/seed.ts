@@ -35,12 +35,13 @@ import {
 import { getConfig, type SeedConfig } from './seed/config';
 import { generateWarehouses } from './seed/generators/warehouses';
 import { generateRoutes } from './seed/generators/routes';
-import { generateUsers, getSeedPassword } from './seed/generators/users';
+import { generateUsers, getSeedPassword, type GeneratedUser } from './seed/generators/users';
 import { generatePreferences } from './seed/generators/preferences';
 import { generateMetrics } from './seed/generators/metrics';
 import { generateAssignments } from './seed/generators/assignments';
 import { generateRouteCompletions } from './seed/generators/route-completions';
 import { generateBidding } from './seed/generators/bidding';
+import { generateNotifications } from './seed/generators/notifications';
 
 config();
 
@@ -105,6 +106,7 @@ async function seed(seedConfig: SeedConfig) {
 		.values(warehouseData.map((w) => ({ name: w.name, address: w.address })))
 		.returning({ id: warehouses.id, name: warehouses.name });
 	console.log(`   Created ${insertedWarehouses.length} warehouses`);
+	const warehouseNameById = new Map(insertedWarehouses.map((w) => [w.id, w.name]));
 
 	// 2. Generate routes
 	console.log('\n2. Creating routes...');
@@ -120,6 +122,12 @@ async function seed(seedConfig: SeedConfig) {
 		)
 		.returning({ id: routes.id, name: routes.name, warehouseId: routes.warehouseId });
 	console.log(`   Created ${insertedRoutes.length} routes`);
+	const routesWithWarehouses = insertedRoutes.map((route) => ({
+		id: route.id,
+		name: route.name,
+		warehouseId: route.warehouseId,
+		warehouseName: warehouseNameById.get(route.warehouseId) ?? 'Warehouse'
+	}));
 
 	// Build warehouse lookup by route
 	const warehouseIdByRoute = new Map(insertedRoutes.map((r) => [r.id, r.warehouseId]));
@@ -159,6 +167,7 @@ async function seed(seedConfig: SeedConfig) {
 	// 3b. Assign managers to warehouses
 	console.log('\n3b. Assigning managers to warehouses...');
 	const warehouseManagerAssignments: { warehouseId: string; userId: string }[] = [];
+	let testUserForNotifications: GeneratedUser | null = null;
 
 	// Assign each seeded manager to 1-2 warehouses
 	managers.forEach((manager, idx) => {
@@ -183,7 +192,17 @@ async function seed(seedConfig: SeedConfig) {
 	const testUserEmail = process.env.TEST_USER_EMAIL;
 	if (testUserEmail) {
 		const [testUser] = await db
-			.select({ id: user.id })
+			.select({
+				id: user.id,
+				name: user.name,
+				email: user.email,
+				phone: user.phone,
+				role: user.role,
+				weeklyCap: user.weeklyCap,
+				isFlagged: user.isFlagged,
+				flagWarningDate: user.flagWarningDate,
+				createdAt: user.createdAt
+			})
 			.from(user)
 			.where(eq(user.email, testUserEmail));
 
@@ -195,6 +214,17 @@ async function seed(seedConfig: SeedConfig) {
 					userId: testUser.id
 				});
 			}
+			testUserForNotifications = {
+				id: testUser.id,
+				name: testUser.name,
+				email: testUser.email,
+				phone: testUser.phone ?? '',
+				role: testUser.role === 'manager' ? 'manager' : 'driver',
+				weeklyCap: testUser.weeklyCap ?? 4,
+				isFlagged: testUser.isFlagged ?? false,
+				flagWarningDate: testUser.flagWarningDate ?? null,
+				createdAt: testUser.createdAt ?? new Date()
+			};
 			console.log(
 				`   Added test user ${testUserEmail} to all ${insertedWarehouses.length} warehouses`
 			);
@@ -342,6 +372,33 @@ async function seed(seedConfig: SeedConfig) {
 
 	console.log(`   Created ${biddingData.bidWindows.length} bid windows`);
 	console.log(`   Created ${biddingData.bids.length} bids`);
+
+	// 9. Generate notifications
+	console.log('\n9. Creating notifications...');
+	const notificationUsers = testUserForNotifications
+		? userData.users.some((u) => u.id === testUserForNotifications?.id)
+			? userData.users
+			: [...userData.users, testUserForNotifications]
+		: userData.users;
+	const notificationData = generateNotifications(
+		assignmentData.assignments,
+		notificationUsers,
+		routesWithWarehouses
+	);
+	if (notificationData.length > 0) {
+		await db.insert(notifications).values(
+			notificationData.map((notification) => ({
+				userId: notification.userId,
+				type: notification.type,
+				title: notification.title,
+				body: notification.body,
+				data: notification.data,
+				read: notification.read,
+				createdAt: notification.createdAt
+			}))
+		);
+	}
+	console.log(`   Created ${notificationData.length} notifications`);
 
 	// Summary
 	console.log('\n========================================');

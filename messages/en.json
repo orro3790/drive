@@ -93,6 +93,12 @@
 	"notifications_mark_all_error": "Failed to mark all notifications as read.",
 	"notifications_mark_read_aria": "Mark notification \"{title}\" as read",
 	"notifications_unread_label": "Unread",
+	"notifications_group_today": "Today",
+	"notifications_group_yesterday": "Yesterday",
+	"notifications_group_this_week": "This Week",
+	"notifications_group_earlier": "Earlier",
+	"notifications_cta_place_bid": "Place Bid",
+	"notifications_cta_view_dashboard": "View Dashboard",
 
 	"date_picker_clear": "Clear",
 	"date_picker_placeholder_single": "Select date",
