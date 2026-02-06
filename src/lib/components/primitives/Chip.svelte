@@ -16,6 +16,7 @@
 	 * @prop {'xs' | 'sm' | 'md'} [size='sm'] - Size variant.
 	 */
 	import type { Snippet } from 'svelte';
+	import XIcon from '$lib/components/icons/XIcon.svelte';
 
 	type ChipVariant = 'default' | 'status' | 'tag' | 'code';
 	/**
@@ -44,6 +45,7 @@
 		clickable = false,
 		selected = false,
 		onClick,
+		onDismiss,
 		icon = null,
 		maxLabelWidth = '100%',
 		ariaLabel,
@@ -56,6 +58,7 @@
 		clickable?: boolean;
 		selected?: boolean;
 		onClick?: (event: MouseEvent) => void;
+		onDismiss?: () => void;
 		icon?: Snippet | null;
 		maxLabelWidth?: string;
 		ariaLabel?: string;
@@ -89,6 +92,16 @@
 >
 	{@render icon?.()}
 	<span class="chip-label">{label}</span>
+	{#if onDismiss}
+		<button
+			type="button"
+			class="chip-dismiss"
+			aria-label="Remove"
+			onclick={(e) => { e.stopPropagation(); onDismiss(); }}
+		>
+			<XIcon />
+		</button>
+	{/if}
 </svelte:element>
 
 <style>
@@ -237,6 +250,30 @@
 	:global([data-theme='dark']) .chip[data-status='poor'] {
 		background: color-mix(in srgb, var(--status-error) 20%, transparent);
 		color: var(--status-error-light, #fca5a5);
+	}
+
+	/* === Dismiss Button === */
+	.chip-dismiss {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		margin: 0;
+		border: none;
+		background: none;
+		color: inherit;
+		cursor: pointer;
+		opacity: 0.6;
+		transition: opacity var(--transition-fast);
+	}
+
+	.chip-dismiss:hover {
+		opacity: 1;
+	}
+
+	.chip-dismiss :global(svg) {
+		width: 12px;
+		height: 12px;
 	}
 
 	/* === Label Truncation === */
