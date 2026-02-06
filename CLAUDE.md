@@ -154,6 +154,13 @@ Svelte 5 stores in `src/lib/stores/`:
 - 48h before: unconfirmed shifts auto-dropped and reopened for bidding
 - Deployment date: 2026-03-01 (pre-existing assignments skip confirmation)
 
+### Arrival & Shift Lifecycle
+
+- Drivers must arrive (tap "Arrive") by **9:00 AM Toronto time** on shift day
+- 9 AM no-show auto-detected by cron → triggers emergency bid window
+- After completing shift, driver has **1-hour edit window** to correct parcel counts
+- Shift flow: Confirm → Arrive → Start (parcelsStart) → Complete (parcelsReturned) → Edit window
+
 ### Weekly Caps
 
 - Default: 4 days/week
