@@ -59,7 +59,6 @@ SettingsRow - A single row in a settings section with label and control areas.
 		flex-wrap: wrap;
 		align-items: center;
 		column-gap: var(--spacing-3);
-		row-gap: var(--spacing-3);
 		padding: var(--spacing-3) 0;
 		border-bottom: var(--border-width-thin) solid var(--border-primary);
 	}
@@ -67,7 +66,6 @@ SettingsRow - A single row in a settings section with label and control areas.
 	.row-children {
 		flex-basis: 100%;
 		width: 100%;
-		padding-top: var(--spacing-3);
 	}
 
 	/* Keep label visuals consistent; only visually dim control area when disabled. */
@@ -93,11 +91,12 @@ SettingsRow - A single row in a settings section with label and control areas.
 	.label :global(.desc) {
 		color: var(--text-muted);
 		font-size: var(--font-size-sm);
+		letter-spacing: var(--letter-spacing-sm);
 	}
 
 	.control {
-		flex: 0 0 240px;
-		width: 240px;
+		flex: 0 0 320px;
+		width: 320px;
 		display: flex;
 		gap: var(--spacing-2);
 		justify-content: flex-end;
@@ -105,10 +104,12 @@ SettingsRow - A single row in a settings section with label and control areas.
 	}
 
 	/* When the row is narrow enough that control wraps, left-align it. */
-	@container (max-width: 520px) {
+	@container (max-width: 620px) {
 		.control {
 			flex-basis: 100%;
+			width: 100%;
 			justify-content: flex-start;
+			margin-top: var(--spacing-3);
 		}
 	}
 </style>

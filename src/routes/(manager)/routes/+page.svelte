@@ -62,6 +62,10 @@
 	let formName = $state('');
 	let formWarehouseId = $state('');
 	let formErrors = $state<{ name?: string[]; warehouseId?: string[] }>({});
+	let showRouteAssignModal = $state(false);
+	let routeAssignTarget = $state<RouteWithWarehouse | null>(null);
+	let routeAssignDriverId = $state('');
+	let routeAssignErrors = $state<{ driverId?: string[] }>({});
 	let showAssignModal = $state(false);
 	let assignTargetWindow = $state<BidWindow | null>(null);
 	let assignDriverId = $state('');
@@ -428,6 +432,60 @@
 		return window.status === 'open' || !window.winnerName;
 	}
 
+	function canManualAssignRoute(route: RouteWithWarehouse) {
+		return !!route.assignmentId && (route.status === 'unfilled' || route.status === 'bidding');
+	}
+
+	function isRouteAssigning(route: RouteWithWarehouse) {
+		return route.assignmentId ? routeStore.isAssigningAssignment(route.assignmentId) : false;
+	}
+
+	function openRouteAssignModal(route: RouteWithWarehouse) {
+		if (!canManualAssignRoute(route)) return;
+		routeAssignTarget = route;
+		routeAssignDriverId = '';
+		routeAssignErrors = {};
+		showRouteAssignModal = true;
+		if (!driverStore.isLoading && driverStore.drivers.length === 0) {
+			driverStore.load();
+		}
+	}
+
+	function closeRouteAssignModal() {
+		showRouteAssignModal = false;
+		routeAssignTarget = null;
+		routeAssignDriverId = '';
+		routeAssignErrors = {};
+	}
+
+	async function handleRouteAssignDriver() {
+		if (!routeAssignTarget?.assignmentId) return;
+		if (!routeAssignDriverId) {
+			routeAssignErrors = { driverId: [m.bid_windows_assign_driver_error()] };
+			return;
+		}
+
+		const driver = driverStore.drivers.find((item) => item.id === routeAssignDriverId);
+		if (!driver) {
+			routeAssignErrors = { driverId: [m.bid_windows_assign_driver_error()] };
+			return;
+		}
+
+		const result = await routeStore.manualAssign(routeAssignTarget.assignmentId, {
+			id: driver.id,
+			name: driver.name
+		});
+
+		if (result.ok) {
+			closeRouteAssignModal();
+			return;
+		}
+
+		if (result.message) {
+			routeAssignErrors = { driverId: [result.message] };
+		}
+	}
+
 	function openAssignModal(window: BidWindow) {
 		assignTargetWindow = window;
 		assignDriverId = '';
@@ -593,12 +651,21 @@
 		{/if}
 	</dl>
 
-	{#if route.status === 'unfilled'}
+	{#if !route.assignmentId}
+		<p class="detail-hint">{m.manager_dashboard_detail_no_assignment()}</p>
+	{:else if route.status === 'unfilled' || route.status === 'bidding'}
 		<div class="detail-actions">
-			<Button fill disabled>
+			<Button
+				fill
+				onclick={() => openRouteAssignModal(route)}
+				disabled={!canManualAssignRoute(route) || isRouteAssigning(route)}
+				isLoading={isRouteAssigning(route)}
+			>
 				{m.manager_dashboard_assign_button()}
 			</Button>
-			<p class="detail-hint">Manual assignment coming soon (DRV-5iz)</p>
+			{#if route.status === 'bidding'}
+				<p class="detail-hint">{m.bid_windows_assign_description()}</p>
+			{/if}
 		</div>
 	{/if}
 {/snippet}
@@ -988,6 +1055,60 @@
 				</Button>
 				<Button type="submit" fill>
 					{m.common_create()}
+				</Button>
+			</div>
+		</form>
+	</Modal>
+{/if}
+
+<!-- Route Manual Assign Modal -->
+{#if showRouteAssignModal && routeAssignTarget}
+	<Modal
+		title={m.manager_dashboard_assign_button()}
+		description={m.bid_windows_assign_description()}
+		onClose={closeRouteAssignModal}
+	>
+		<form
+			class="modal-form"
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleRouteAssignDriver();
+			}}
+		>
+			<p class="modal-meta">
+				{routeAssignTarget.name} · {formatDate(dateFilter)}
+			</p>
+			<div class="form-field">
+				<label for="route-assign-driver">{m.bid_windows_assign_driver_label()}</label>
+				<Select
+					id="route-assign-driver"
+					options={driverOptions}
+					bind:value={routeAssignDriverId}
+					placeholder={m.bid_windows_assign_driver_placeholder()}
+					errors={routeAssignErrors.driverId}
+					disabled={driverStore.isLoading ||
+						!routeAssignTarget.assignmentId ||
+						routeStore.isAssigningAssignment(routeAssignTarget.assignmentId)}
+					onChange={() => {
+						routeAssignErrors = {};
+					}}
+				/>
+			</div>
+
+			<div class="modal-actions">
+				<Button variant="secondary" onclick={closeRouteAssignModal} fill>
+					{m.common_cancel()}
+				</Button>
+				<Button
+					type="submit"
+					fill
+					disabled={!routeAssignTarget.assignmentId ||
+						routeStore.isAssigningAssignment(routeAssignTarget.assignmentId)}
+					isLoading={routeAssignTarget.assignmentId
+						? routeStore.isAssigningAssignment(routeAssignTarget.assignmentId)
+						: false}
+				>
+					{m.bid_windows_assign_submit()}
 				</Button>
 			</div>
 		</form>

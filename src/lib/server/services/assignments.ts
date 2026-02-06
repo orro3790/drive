@@ -1,0 +1,200 @@
+import { parseISO } from 'date-fns';
+import { and, eq } from 'drizzle-orm';
+import { db } from '$lib/server/db';
+import { assignments, bids, bidWindows, routes, user } from '$lib/server/db/schema';
+import { createAuditLog } from '$lib/server/services/audit';
+import { canManagerAccessWarehouse } from '$lib/server/services/managers';
+import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
+import { getDriverWeeklyAssignmentCount, getWeekStart } from '$lib/server/services/scheduling';
+
+export type ManualAssignErrorCode =
+	| 'assignment_not_found'
+	| 'forbidden'
+	| 'assignment_not_assignable'
+	| 'driver_not_found'
+	| 'driver_flagged'
+	| 'driver_over_weekly_cap';
+
+type ManualAssignFailure = {
+	ok: false;
+	code: ManualAssignErrorCode;
+};
+
+type ManualAssignSuccess = {
+	ok: true;
+	assignmentId: string;
+	routeId: string;
+	routeName: string;
+	assignmentDate: string;
+	driverId: string;
+	driverName: string;
+	bidWindowId: string | null;
+};
+
+export type ManualAssignResult = ManualAssignSuccess | ManualAssignFailure;
+
+export async function manualAssignDriverToAssignment(params: {
+	assignmentId: string;
+	driverId: string;
+	actorId: string;
+}): Promise<ManualAssignResult> {
+	const [assignment] = await db
+		.select({
+			id: assignments.id,
+			routeId: assignments.routeId,
+			routeName: routes.name,
+			warehouseId: assignments.warehouseId,
+			date: assignments.date,
+			status: assignments.status,
+			userId: assignments.userId
+		})
+		.from(assignments)
+		.innerJoin(routes, eq(assignments.routeId, routes.id))
+		.where(eq(assignments.id, params.assignmentId));
+
+	if (!assignment) {
+		return { ok: false, code: 'assignment_not_found' };
+	}
+
+	const canAccessWarehouse = await canManagerAccessWarehouse(
+		params.actorId,
+		assignment.warehouseId
+	);
+	if (!canAccessWarehouse) {
+		return { ok: false, code: 'forbidden' };
+	}
+
+	if (assignment.status !== 'unfilled') {
+		return { ok: false, code: 'assignment_not_assignable' };
+	}
+
+	const [driver] = await db
+		.select({
+			id: user.id,
+			name: user.name,
+			role: user.role,
+			isFlagged: user.isFlagged,
+			weeklyCap: user.weeklyCap
+		})
+		.from(user)
+		.where(eq(user.id, params.driverId));
+
+	if (!driver || driver.role !== 'driver') {
+		return { ok: false, code: 'driver_not_found' };
+	}
+
+	if (driver.isFlagged) {
+		return { ok: false, code: 'driver_flagged' };
+	}
+
+	const assignmentWeekStart = getWeekStart(parseISO(assignment.date));
+	const currentAssignmentCount = await getDriverWeeklyAssignmentCount(
+		driver.id,
+		assignmentWeekStart
+	);
+	if (currentAssignmentCount >= driver.weeklyCap) {
+		return { ok: false, code: 'driver_over_weekly_cap' };
+	}
+
+	const [window] = await db
+		.select({ id: bidWindows.id })
+		.from(bidWindows)
+		.where(eq(bidWindows.assignmentId, assignment.id));
+
+	const pendingBids = await db
+		.select({ id: bids.id, userId: bids.userId })
+		.from(bids)
+		.where(and(eq(bids.assignmentId, assignment.id), eq(bids.status, 'pending')));
+
+	const assignedAt = new Date();
+
+	await db.transaction(async (tx) => {
+		await tx
+			.update(assignments)
+			.set({
+				userId: driver.id,
+				status: 'scheduled',
+				assignedBy: 'manager',
+				assignedAt,
+				updatedAt: assignedAt
+			})
+			.where(eq(assignments.id, assignment.id));
+
+		if (window) {
+			await tx
+				.update(bidWindows)
+				.set({
+					status: 'resolved',
+					winnerId: null
+				})
+				.where(eq(bidWindows.id, window.id));
+		}
+
+		if (pendingBids.length > 0) {
+			await tx
+				.update(bids)
+				.set({
+					status: 'lost',
+					resolvedAt: assignedAt
+				})
+				.where(and(eq(bids.assignmentId, assignment.id), eq(bids.status, 'pending')));
+		}
+
+		await createAuditLog(
+			{
+				entityType: 'assignment',
+				entityId: assignment.id,
+				action: 'manual_assign',
+				actorType: 'user',
+				actorId: params.actorId,
+				changes: {
+					before: {
+						status: assignment.status,
+						userId: assignment.userId
+					},
+					after: {
+						status: 'scheduled',
+						userId: driver.id,
+						assignedBy: 'manager',
+						assignedAt
+					},
+					bidWindowId: window?.id ?? null
+				}
+			},
+			tx
+		);
+	});
+
+	const notificationData: Record<string, string> = {
+		assignmentId: assignment.id,
+		routeName: assignment.routeName,
+		assignmentDate: assignment.date
+	};
+	if (window?.id) {
+		notificationData.bidWindowId = window.id;
+	}
+
+	await sendNotification(driver.id, 'assignment_confirmed', {
+		customBody: `You were assigned ${assignment.routeName} for ${assignment.date}.`,
+		data: notificationData
+	});
+
+	const loserIds = pendingBids.filter((bid) => bid.userId !== driver.id).map((bid) => bid.userId);
+	if (loserIds.length > 0) {
+		await sendBulkNotifications(loserIds, 'bid_lost', {
+			customBody: `${assignment.routeName} for ${assignment.date} was assigned by a manager.`,
+			data: notificationData
+		});
+	}
+
+	return {
+		ok: true,
+		assignmentId: assignment.id,
+		routeId: assignment.routeId,
+		routeName: assignment.routeName,
+		assignmentDate: assignment.date,
+		driverId: driver.id,
+		driverName: driver.name,
+		bidWindowId: window?.id ?? null
+	};
+}

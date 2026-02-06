@@ -4,13 +4,18 @@ PageHeader - The main header bar for app pages.
 Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamburger, and action buttons.
 -->
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import Menu from '$lib/components/icons/Menu.svelte';
 	import SidebarToggle from '$lib/components/icons/SidebarToggle.svelte';
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte';
+	import BellRinging from '$lib/components/icons/BellRinging.svelte';
 	import { appSidebarStore } from '$lib/stores/app-shell/appSidebarStore.svelte';
 	import { pageHeaderStore } from '$lib/stores/app-shell/pageHeaderStore.svelte';
+	import { notificationsStore } from '$lib/stores/notificationsStore.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
 	let { showSidebarToggle = true }: { showSidebarToggle?: boolean } = $props();
@@ -22,15 +27,37 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 	const title = $derived(pageHeaderStore.state.title);
 	const breadcrumbs = $derived(pageHeaderStore.state.breadcrumbs);
 	const actionsSnippet = $derived(pageHeaderStore.state.actionsSnippet);
+	const currentPath = $derived($page.url.pathname);
+	const unreadCount = $derived(notificationsStore.unreadCount);
 
 	// Derived breadcrumb parts
 	const hasBreadcrumbs = $derived(breadcrumbs.length > 0);
 	const leaf = $derived(breadcrumbs[breadcrumbs.length - 1]);
 	const parents = $derived(breadcrumbs.slice(0, -1));
+	const isNotificationsPage = $derived(currentPath.startsWith('/notifications'));
+	const unreadBadgeLabel = $derived(unreadCount > 0 ? formatBadgeCount(unreadCount) : null);
+	const notificationAriaLabel = $derived(
+		unreadCount > 0
+			? `${m.nav_notifications()} (${unreadCount} ${m.notifications_unread_label()})`
+			: m.nav_notifications()
+	);
+
+	function formatBadgeCount(count: number) {
+		if (count > 99) return '99+';
+		return count.toString();
+	}
 
 	function handleCrumbSelect(cb: (() => void) | undefined) {
 		cb?.();
 	}
+
+	function handleNotificationsClick() {
+		goto('/notifications');
+	}
+
+	onMount(() => {
+		void notificationsStore.loadPage(0);
+	});
 </script>
 
 <header class="page-header">
@@ -86,6 +113,19 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 		{#if actionsSnippet}
 			{@render actionsSnippet()}
 		{/if}
+		<div class="header-notification">
+			<IconButton
+				tooltip={m.nav_notifications()}
+				aria-label={notificationAriaLabel}
+				isActive={isNotificationsPage}
+				onclick={handleNotificationsClick}
+			>
+				<Icon><BellRinging /></Icon>
+			</IconButton>
+			{#if unreadBadgeLabel}
+				<span class="notification-badge" aria-hidden="true">{unreadBadgeLabel}</span>
+			{/if}
+		</div>
 	</div>
 </header>
 
@@ -116,6 +156,31 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-2);
+	}
+
+	.header-notification {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.notification-badge {
+		position: absolute;
+		top: -4px;
+		right: -4px;
+		min-width: 16px;
+		height: 16px;
+		padding: 0 4px;
+		background: var(--interactive-accent);
+		color: var(--text-on-accent);
+		font-size: 10px;
+		font-weight: var(--font-weight-bold);
+		border-radius: var(--radius-full);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		pointer-events: none;
 	}
 
 	#page-title {

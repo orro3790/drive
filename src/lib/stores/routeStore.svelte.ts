@@ -28,11 +28,13 @@ const state = $state<{
 	isLoading: boolean;
 	error: string | null;
 	filters: RouteFilters;
+	assigningAssignmentId: string | null;
 }>({
 	routes: [],
 	isLoading: false,
 	error: null,
-	filters: {}
+	filters: {},
+	assigningAssignmentId: null
 });
 
 function matchesFilters(route: RouteWithWarehouse, filters: RouteFilters) {
@@ -62,6 +64,13 @@ export const routeStore = {
 	},
 	get filters() {
 		return state.filters;
+	},
+	get assigningAssignmentId() {
+		return state.assigningAssignmentId;
+	},
+
+	isAssigningAssignment(assignmentId: string) {
+		return state.assigningAssignmentId === assignmentId;
 	},
 
 	/**
@@ -268,6 +277,67 @@ export const routeStore = {
 		}
 
 		return original;
+	},
+
+	manualAssign(assignmentId: string, driver: { id: string; name: string }) {
+		const originalRoute = this.applyAssignmentUpdate(assignmentId, {
+			status: 'assigned',
+			driverName: driver.name,
+			bidWindowClosesAt: null
+		});
+
+		if (!originalRoute) {
+			return Promise.resolve({ ok: false, message: m.manager_dashboard_detail_no_assignment() });
+		}
+
+		return this._assignInDb(assignmentId, driver, originalRoute);
+	},
+
+	async _assignInDb(
+		assignmentId: string,
+		driver: { id: string; name: string },
+		originalRoute: RouteWithWarehouse
+	) {
+		state.assigningAssignmentId = assignmentId;
+		try {
+			const res = await fetch(`/api/assignments/${assignmentId}/assign`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ userId: driver.id })
+			});
+
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				const message = typeof payload?.message === 'string' ? payload.message : null;
+				this.rollbackAssignmentUpdate(originalRoute);
+
+				if (!message) {
+					toastStore.error(m.bid_windows_assign_error());
+				}
+
+				return { ok: false, message: message ?? undefined };
+			}
+
+			const data = await res.json().catch(() => ({}));
+			if (data?.assignment?.id) {
+				this.applyAssignmentUpdate(assignmentId, {
+					status: 'assigned',
+					driverName: data.assignment.driverName ?? driver.name,
+					bidWindowClosesAt: null
+				});
+			}
+
+			toastStore.success(m.bid_windows_assign_success());
+			return { ok: true };
+		} catch {
+			this.rollbackAssignmentUpdate(originalRoute);
+			toastStore.error(m.bid_windows_assign_error());
+			return { ok: false };
+		} finally {
+			if (state.assigningAssignmentId === assignmentId) {
+				state.assigningAssignmentId = null;
+			}
+		}
 	},
 
 	rollbackAssignmentUpdate(original: RouteWithWarehouse | null) {

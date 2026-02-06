@@ -35,3 +35,11 @@ export const assignmentCancelSchema = z.object({
 });
 
 export type AssignmentCancelInput = z.infer<typeof assignmentCancelSchema>;
+
+export const assignmentManualAssignSchema = z
+	.object({
+		userId: z.string().min(1)
+	})
+	.strict();
+
+export type AssignmentManualAssignInput = z.infer<typeof assignmentManualAssignSchema>;

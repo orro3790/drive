@@ -11,6 +11,7 @@ Displays and updates user's account info, password, and preferences.
 	import SettingsRow from './SettingsRow.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
+	import Chip from '$lib/components/primitives/Chip.svelte';
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import Eye from '$lib/components/icons/Eye.svelte';
@@ -69,12 +70,13 @@ Displays and updates user's account info, password, and preferences.
 
 	$effect(() => {
 		if (!user) return;
-		accountForm = {
+		const formData = {
 			name: user.name ?? '',
 			email: user.email ?? '',
 			phone: user.phone ?? ''
 		};
-		accountBaseline = { ...accountForm };
+		accountForm = formData;
+		accountBaseline = { ...formData };
 		accountErrors = {};
 	});
 
@@ -190,6 +192,11 @@ Displays and updates user's account info, password, and preferences.
 		}
 	}
 
+	function handleAccountSubmit(event: Event) {
+		event.preventDefault();
+		void handleAccountSave();
+	}
+
 	async function handlePasswordSave() {
 		if (isPasswordSaving) return;
 
@@ -243,6 +250,11 @@ Displays and updates user's account info, password, and preferences.
 			isPasswordSaving = false;
 		}
 	}
+
+	function handlePasswordSubmit(event: Event) {
+		event.preventDefault();
+		void handlePasswordSave();
+	}
 </script>
 
 <section aria-labelledby="account-section" class="account-settings-stack">
@@ -253,123 +265,129 @@ Displays and updates user's account info, password, and preferences.
 				desc={m.settings_account_description()}
 				id="account-section"
 			/>
-			<SettingsGrid>
-				<SettingsRow ariaDisabled={isAccountSaving}>
-					{#snippet label()}
-						<div class="title">{m.settings_account_name_label()}</div>
-					{/snippet}
-					{#snippet control()}
-						<InlineEditor
-							id="settings-name"
-							name="settings-name"
-							value={accountForm.name}
-							placeholder={m.auth_name_placeholder()}
-							ariaLabel={m.settings_account_name_label()}
-							autocomplete="name"
-							disabled={isAccountSaving}
-							onInput={(value) => {
-								accountForm.name = value;
-								clearAccountError('name');
-							}}
-						/>
-					{/snippet}
-					{#snippet children()}
-						{#if accountErrors.name}
-							<p class="field-error" role="alert">{accountErrors.name[0]}</p>
-						{/if}
-					{/snippet}
-				</SettingsRow>
-
-				<SettingsRow ariaDisabled={isAccountSaving}>
-					{#snippet label()}
-						<div class="title">{m.settings_account_email_label()}</div>
-					{/snippet}
-					{#snippet control()}
-						<InlineEditor
-							id="settings-email"
-							name="settings-email"
-							value={accountForm.email}
-							inputType="email"
-							placeholder={m.auth_email_placeholder()}
-							ariaLabel={m.settings_account_email_label()}
-							autocomplete="email"
-							disabled={isAccountSaving}
-							onInput={(value) => {
-								accountForm.email = value;
-								clearAccountError('email');
-							}}
-						/>
-					{/snippet}
-					{#snippet children()}
-						{#if accountErrors.email}
-							<p class="field-error" role="alert">{accountErrors.email[0]}</p>
-						{/if}
-					{/snippet}
-				</SettingsRow>
-
-				<SettingsRow ariaDisabled={isAccountSaving}>
-					{#snippet label()}
-						<div class="title">{m.settings_account_phone_label()}</div>
-					{/snippet}
-					{#snippet control()}
-						<InlineEditor
-							id="settings-phone"
-							name="settings-phone"
-							value={accountForm.phone}
-							inputType="tel"
-							inputmode="tel"
-							placeholder={m.settings_account_phone_placeholder()}
-							ariaLabel={m.settings_account_phone_label()}
-							autocomplete="tel"
-							disabled={isAccountSaving}
-							onInput={(value) => {
-								accountForm.phone = value;
-								clearAccountError('phone');
-							}}
-						/>
-					{/snippet}
-					{#snippet children()}
-						{#if accountErrors.phone}
-							<p class="field-error" role="alert">{accountErrors.phone[0]}</p>
-						{/if}
-					{/snippet}
-				</SettingsRow>
-
-				<SettingsRow>
-					{#snippet label()}
-						<div class="title">{m.settings_account_role_label()}</div>
-					{/snippet}
-					{#snippet control()}
-						<span class="role-badge">{roleLabel}</span>
-					{/snippet}
-				</SettingsRow>
-
-				<SettingsRow class="actions-row">
-					{#snippet label()}
-						<div class="title">{m.common_actions()}</div>
-					{/snippet}
-					{#snippet control()}
-						<div class="actions">
-							<Button
-								variant="secondary"
+			<form class="settings-form" onsubmit={handleAccountSubmit}>
+				<SettingsGrid>
+					<SettingsRow ariaDisabled={isAccountSaving}>
+						{#snippet label()}
+							<div class="title">{m.settings_account_name_label()}</div>
+						{/snippet}
+						{#snippet control()}
+							<InlineEditor
+								id="settings-name"
+								name="settings-name"
 								size="small"
-								onclick={resetAccountForm}
-								disabled={!hasAccountChanges || isAccountSaving}
-							>
-								{m.common_cancel()}
-							</Button>
-							<Button
+								value={accountForm.name}
+								placeholder={m.auth_name_placeholder()}
+								ariaLabel={m.settings_account_name_label()}
+								autocomplete="name"
+								disabled={isAccountSaving}
+								onInput={(value) => {
+									accountForm.name = value;
+									clearAccountError('name');
+								}}
+							/>
+						{/snippet}
+						{#snippet children()}
+							{#if accountErrors.name}
+								<p class="field-error" role="alert">{accountErrors.name[0]}</p>
+							{/if}
+						{/snippet}
+					</SettingsRow>
+
+					<SettingsRow ariaDisabled={isAccountSaving}>
+						{#snippet label()}
+							<div class="title">{m.settings_account_email_label()}</div>
+						{/snippet}
+						{#snippet control()}
+							<InlineEditor
+								id="settings-email"
+								name="settings-email"
 								size="small"
-								onclick={handleAccountSave}
-								isLoading={isAccountSaving}
-								disabled={!hasAccountChanges || isAccountSaving}
-							>
-								{m.common_save()}
-							</Button>
-						</div>
-					{/snippet}
-				</SettingsRow>
-			</SettingsGrid>
+								value={accountForm.email}
+								inputType="email"
+								placeholder={m.auth_email_placeholder()}
+								ariaLabel={m.settings_account_email_label()}
+								autocomplete="email"
+								disabled={isAccountSaving}
+								onInput={(value) => {
+									accountForm.email = value;
+									clearAccountError('email');
+								}}
+							/>
+						{/snippet}
+						{#snippet children()}
+							{#if accountErrors.email}
+								<p class="field-error" role="alert">{accountErrors.email[0]}</p>
+							{/if}
+						{/snippet}
+					</SettingsRow>
+
+					<SettingsRow ariaDisabled={isAccountSaving}>
+						{#snippet label()}
+							<div class="title">{m.settings_account_phone_label()}</div>
+						{/snippet}
+						{#snippet control()}
+							<InlineEditor
+								id="settings-phone"
+								name="settings-phone"
+								size="small"
+								value={accountForm.phone}
+								inputType="tel"
+								inputmode="tel"
+								placeholder={m.settings_account_phone_placeholder()}
+								ariaLabel={m.settings_account_phone_label()}
+								autocomplete="tel"
+								disabled={isAccountSaving}
+								onInput={(value) => {
+									accountForm.phone = value;
+									clearAccountError('phone');
+								}}
+							/>
+						{/snippet}
+						{#snippet children()}
+							{#if accountErrors.phone}
+								<p class="field-error" role="alert">{accountErrors.phone[0]}</p>
+							{/if}
+						{/snippet}
+					</SettingsRow>
+
+					<SettingsRow>
+						{#snippet label()}
+							<div class="title">{m.settings_account_role_label()}</div>
+						{/snippet}
+						{#snippet control()}
+							<Chip
+								label={roleLabel}
+								variant="tag"
+								color="var(--interactive-accent)"
+								size="sm"
+								ariaLabel={`${m.settings_account_role_label()}: ${roleLabel}`}
+							/>
+						{/snippet}
+					</SettingsRow>
+				</SettingsGrid>
+				<div class="settings-card-footer">
+					<div class="settings-actions">
+						<Button
+							variant="secondary"
+							size="small"
+							type="button"
+							onclick={resetAccountForm}
+							disabled={!hasAccountChanges || isAccountSaving}
+						>
+							{m.common_cancel()}
+						</Button>
+						<Button
+							size="small"
+							type="submit"
+							isLoading={isAccountSaving}
+							disabled={!hasAccountChanges || isAccountSaving}
+						>
+							{m.common_save()}
+						</Button>
+					</div>
+				</div>
+			</form>
 		</div>
 
 		<div class="settings-card">
@@ -378,164 +396,167 @@ Displays and updates user's account info, password, and preferences.
 				desc={m.settings_password_description()}
 				id="password-section"
 			/>
-			<SettingsGrid>
-				<SettingsRow ariaDisabled={isPasswordSaving}>
-					{#snippet label()}
-						<div class="title">{m.settings_password_current_label()}</div>
-					{/snippet}
-					{#snippet control()}
-						<InlineEditor
-							id="settings-current-password"
-							name="settings-current-password"
-							value={passwordForm.current}
-							inputType={showCurrentPassword ? 'text' : 'password'}
-							placeholder={m.settings_password_current_placeholder()}
-							ariaLabel={m.settings_password_current_label()}
-							autocomplete="current-password"
-							disabled={isPasswordSaving}
-							onInput={(value) => {
-								passwordForm.current = value;
-								clearPasswordError('current');
-							}}
-						>
-							{#snippet trailingIcon()}
-								<IconButton
-									tooltip={showCurrentPassword ? m.auth_hide_password() : m.auth_show_password()}
-									aria-label={showCurrentPassword ? m.auth_hide_password() : m.auth_show_password()}
-									ariaPressed={showCurrentPassword}
-									noBackground
-									disabled={isPasswordSaving}
-									onclick={() => (showCurrentPassword = !showCurrentPassword)}
-								>
-									<Icon>
-										{#if showCurrentPassword}
-											<EyeOff />
-										{:else}
-											<Eye />
-										{/if}
-									</Icon>
-								</IconButton>
-							{/snippet}
-						</InlineEditor>
-					{/snippet}
-					{#snippet children()}
-						{#if passwordErrors.current}
-							<p class="field-error" role="alert">{passwordErrors.current[0]}</p>
-						{/if}
-					{/snippet}
-				</SettingsRow>
-
-				<SettingsRow ariaDisabled={isPasswordSaving}>
-					{#snippet label()}
-						<div class="title">{m.settings_password_new_label()}</div>
-					{/snippet}
-					{#snippet control()}
-						<InlineEditor
-							id="settings-new-password"
-							name="settings-new-password"
-							value={passwordForm.next}
-							inputType={showNewPassword ? 'text' : 'password'}
-							placeholder={m.auth_password_new_placeholder()}
-							ariaLabel={m.settings_password_new_label()}
-							autocomplete="new-password"
-							disabled={isPasswordSaving}
-							onInput={(value) => {
-								passwordForm.next = value;
-								clearPasswordError('next');
-								clearPasswordError('confirm');
-							}}
-						>
-							{#snippet trailingIcon()}
-								<IconButton
-									tooltip={showNewPassword ? m.auth_hide_password() : m.auth_show_password()}
-									aria-label={showNewPassword ? m.auth_hide_password() : m.auth_show_password()}
-									ariaPressed={showNewPassword}
-									noBackground
-									disabled={isPasswordSaving}
-									onclick={() => (showNewPassword = !showNewPassword)}
-								>
-									<Icon>
-										{#if showNewPassword}
-											<EyeOff />
-										{:else}
-											<Eye />
-										{/if}
-									</Icon>
-								</IconButton>
-							{/snippet}
-						</InlineEditor>
-					{/snippet}
-					{#snippet children()}
-						{#if passwordErrors.next}
-							<p class="field-error" role="alert">{passwordErrors.next[0]}</p>
-						{/if}
-					{/snippet}
-				</SettingsRow>
-
-				<SettingsRow ariaDisabled={isPasswordSaving}>
-					{#snippet label()}
-						<div class="title">{m.settings_password_confirm_label()}</div>
-					{/snippet}
-					{#snippet control()}
-						<InlineEditor
-							id="settings-confirm-password"
-							name="settings-confirm-password"
-							value={passwordForm.confirm}
-							inputType={showConfirmPassword ? 'text' : 'password'}
-							placeholder={m.auth_password_confirm_placeholder()}
-							ariaLabel={m.settings_password_confirm_label()}
-							autocomplete="new-password"
-							disabled={isPasswordSaving}
-							onInput={(value) => {
-								passwordForm.confirm = value;
-								clearPasswordError('confirm');
-							}}
-						>
-							{#snippet trailingIcon()}
-								<IconButton
-									tooltip={showConfirmPassword ? m.auth_hide_password() : m.auth_show_password()}
-									aria-label={showConfirmPassword ? m.auth_hide_password() : m.auth_show_password()}
-									ariaPressed={showConfirmPassword}
-									noBackground
-									disabled={isPasswordSaving}
-									onclick={() => (showConfirmPassword = !showConfirmPassword)}
-								>
-									<Icon>
-										{#if showConfirmPassword}
-											<EyeOff />
-										{:else}
-											<Eye />
-										{/if}
-									</Icon>
-								</IconButton>
-							{/snippet}
-						</InlineEditor>
-					{/snippet}
-					{#snippet children()}
-						{#if passwordErrors.confirm}
-							<p class="field-error" role="alert">{passwordErrors.confirm[0]}</p>
-						{/if}
-					{/snippet}
-				</SettingsRow>
-
-				<SettingsRow class="actions-row" ariaDisabled={isPasswordSaving}>
-					{#snippet label()}
-						<div class="title">{m.common_actions()}</div>
-					{/snippet}
-					{#snippet control()}
-						<div class="actions">
-							<Button
+			<form class="settings-form" onsubmit={handlePasswordSubmit}>
+				<SettingsGrid>
+					<SettingsRow ariaDisabled={isPasswordSaving}>
+						{#snippet label()}
+							<div class="title">{m.settings_password_current_label()}</div>
+						{/snippet}
+						{#snippet control()}
+							<InlineEditor
+								id="settings-current-password"
+								name="settings-current-password"
 								size="small"
-								onclick={handlePasswordSave}
-								isLoading={isPasswordSaving}
+								value={passwordForm.current}
+								inputType={showCurrentPassword ? 'text' : 'password'}
+								placeholder={m.settings_password_current_placeholder()}
+								ariaLabel={m.settings_password_current_label()}
+								autocomplete="current-password"
 								disabled={isPasswordSaving}
+								onInput={(value) => {
+									passwordForm.current = value;
+									clearPasswordError('current');
+								}}
 							>
-								{m.settings_password_update_button()}
-							</Button>
-						</div>
-					{/snippet}
-				</SettingsRow>
-			</SettingsGrid>
+								{#snippet trailingIcon()}
+									<IconButton
+										tooltip={showCurrentPassword ? m.auth_hide_password() : m.auth_show_password()}
+										aria-label={showCurrentPassword
+											? m.auth_hide_password()
+											: m.auth_show_password()}
+										ariaPressed={showCurrentPassword}
+										noBackground
+										disabled={isPasswordSaving}
+										onclick={() => (showCurrentPassword = !showCurrentPassword)}
+									>
+										<Icon>
+											{#if showCurrentPassword}
+												<EyeOff />
+											{:else}
+												<Eye />
+											{/if}
+										</Icon>
+									</IconButton>
+								{/snippet}
+							</InlineEditor>
+						{/snippet}
+						{#snippet children()}
+							{#if passwordErrors.current}
+								<p class="field-error" role="alert">{passwordErrors.current[0]}</p>
+							{/if}
+						{/snippet}
+					</SettingsRow>
+
+					<SettingsRow ariaDisabled={isPasswordSaving}>
+						{#snippet label()}
+							<div class="title">{m.settings_password_new_label()}</div>
+						{/snippet}
+						{#snippet control()}
+							<InlineEditor
+								id="settings-new-password"
+								name="settings-new-password"
+								size="small"
+								value={passwordForm.next}
+								inputType={showNewPassword ? 'text' : 'password'}
+								placeholder={m.auth_password_new_placeholder()}
+								ariaLabel={m.settings_password_new_label()}
+								autocomplete="new-password"
+								disabled={isPasswordSaving}
+								onInput={(value) => {
+									passwordForm.next = value;
+									clearPasswordError('next');
+									clearPasswordError('confirm');
+								}}
+							>
+								{#snippet trailingIcon()}
+									<IconButton
+										tooltip={showNewPassword ? m.auth_hide_password() : m.auth_show_password()}
+										aria-label={showNewPassword ? m.auth_hide_password() : m.auth_show_password()}
+										ariaPressed={showNewPassword}
+										noBackground
+										disabled={isPasswordSaving}
+										onclick={() => (showNewPassword = !showNewPassword)}
+									>
+										<Icon>
+											{#if showNewPassword}
+												<EyeOff />
+											{:else}
+												<Eye />
+											{/if}
+										</Icon>
+									</IconButton>
+								{/snippet}
+							</InlineEditor>
+						{/snippet}
+						{#snippet children()}
+							{#if passwordErrors.next}
+								<p class="field-error" role="alert">{passwordErrors.next[0]}</p>
+							{/if}
+						{/snippet}
+					</SettingsRow>
+
+					<SettingsRow ariaDisabled={isPasswordSaving}>
+						{#snippet label()}
+							<div class="title">{m.settings_password_confirm_label()}</div>
+						{/snippet}
+						{#snippet control()}
+							<InlineEditor
+								id="settings-confirm-password"
+								name="settings-confirm-password"
+								size="small"
+								value={passwordForm.confirm}
+								inputType={showConfirmPassword ? 'text' : 'password'}
+								placeholder={m.auth_password_confirm_placeholder()}
+								ariaLabel={m.settings_password_confirm_label()}
+								autocomplete="new-password"
+								disabled={isPasswordSaving}
+								onInput={(value) => {
+									passwordForm.confirm = value;
+									clearPasswordError('confirm');
+								}}
+							>
+								{#snippet trailingIcon()}
+									<IconButton
+										tooltip={showConfirmPassword ? m.auth_hide_password() : m.auth_show_password()}
+										aria-label={showConfirmPassword
+											? m.auth_hide_password()
+											: m.auth_show_password()}
+										ariaPressed={showConfirmPassword}
+										noBackground
+										disabled={isPasswordSaving}
+										onclick={() => (showConfirmPassword = !showConfirmPassword)}
+									>
+										<Icon>
+											{#if showConfirmPassword}
+												<EyeOff />
+											{:else}
+												<Eye />
+											{/if}
+										</Icon>
+									</IconButton>
+								{/snippet}
+							</InlineEditor>
+						{/snippet}
+						{#snippet children()}
+							{#if passwordErrors.confirm}
+								<p class="field-error" role="alert">{passwordErrors.confirm[0]}</p>
+							{/if}
+						{/snippet}
+					</SettingsRow>
+				</SettingsGrid>
+				<div class="settings-card-footer">
+					<div class="settings-actions">
+						<Button
+							size="small"
+							type="submit"
+							isLoading={isPasswordSaving}
+							disabled={isPasswordSaving}
+						>
+							{m.settings_password_update_button()}
+						</Button>
+					</div>
+				</div>
+			</form>
 		</div>
 
 		{#if user.role === 'driver'}
@@ -555,23 +576,28 @@ Displays and updates user's account info, password, and preferences.
 		gap: var(--spacing-4);
 	}
 
-	.role-badge {
-		padding: var(--spacing-0-5) var(--spacing-2);
-		background: var(--interactive-accent-muted);
-		border-radius: var(--radius-sm);
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-		color: var(--interactive-accent);
+	.settings-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+		width: 100%;
 	}
 
-	.actions {
+	.settings-card-footer {
+		display: flex;
+		justify-content: flex-end;
+		border-top: var(--border-width-thin) solid var(--border-muted);
+		padding-top: var(--spacing-3);
+	}
+
+	.settings-actions {
 		display: flex;
 		gap: var(--spacing-2);
 		align-items: center;
 	}
 
 	.field-error {
-		margin: 0;
+		margin: var(--spacing-3) 0 0;
 		font-size: var(--font-size-sm);
 		color: var(--status-error);
 	}

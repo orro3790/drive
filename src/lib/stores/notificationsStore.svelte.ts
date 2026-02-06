@@ -24,7 +24,9 @@ const state = $state<{
 	notifications: Notification[];
 	unreadCount: number;
 	pagination: PaginationState;
+	hasMore: boolean;
 	isLoading: boolean;
+	isLoadingMore: boolean;
 	isMarkingAll: boolean;
 	error: string | null;
 }>({
@@ -36,7 +38,9 @@ const state = $state<{
 		total: 0,
 		pageCount: 1
 	},
+	hasMore: true,
 	isLoading: false,
+	isLoadingMore: false,
 	isMarkingAll: false,
 	error: null
 });
@@ -51,8 +55,14 @@ export const notificationsStore = {
 	get pagination() {
 		return state.pagination;
 	},
+	get hasMore() {
+		return state.hasMore;
+	},
 	get isLoading() {
 		return state.isLoading;
+	},
+	get isLoadingMore() {
+		return state.isLoadingMore;
 	},
 	get isMarkingAll() {
 		return state.isMarkingAll;
@@ -94,6 +104,7 @@ export const notificationsStore = {
 				total: pagination.total,
 				pageCount: pagination.totalPages
 			};
+			state.hasMore = pageIndex + 1 < pagination.totalPages;
 		} catch (err) {
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.notifications_load_error());
@@ -162,6 +173,47 @@ export const notificationsStore = {
 			toastStore.error(m.notifications_mark_all_error());
 		} finally {
 			state.isMarkingAll = false;
+		}
+	},
+
+	async loadMore() {
+		if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
+		state.isLoadingMore = true;
+
+		const nextPage = state.pagination.pageIndex + 2;
+		const pageSize = state.pagination.pageSize;
+
+		try {
+			const res = await fetch(`/api/notifications?page=${nextPage}&pageSize=${pageSize}`);
+			if (!res.ok) {
+				throw new Error('Failed to load notifications');
+			}
+
+			const data = await res.json();
+			const parsed = notificationListResponseSchema.safeParse(data);
+			if (!parsed.success) {
+				throw new Error('Invalid notifications response');
+			}
+
+			const { notifications: newNotifications, unreadCount, pagination } = parsed.data;
+			const newPageIndex = Math.min(
+				Math.max(0, pagination.page - 1),
+				Math.max(0, pagination.totalPages - 1)
+			);
+
+			state.notifications = [...state.notifications, ...newNotifications];
+			state.unreadCount = unreadCount;
+			state.pagination = {
+				pageIndex: newPageIndex,
+				pageSize: pagination.pageSize,
+				total: pagination.total,
+				pageCount: pagination.totalPages
+			};
+			state.hasMore = newPageIndex + 1 < pagination.totalPages;
+		} catch {
+			toastStore.error(m.notifications_load_error());
+		} finally {
+			state.isLoadingMore = false;
 		}
 	}
 };

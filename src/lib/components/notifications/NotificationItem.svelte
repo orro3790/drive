@@ -18,27 +18,16 @@
 	const accentColor = $derived.by(() => `var(${config.color})`);
 	const isUnread = $derived(!notification.read);
 	const metadataChips = $derived.by(() => {
-		const chips: { label: string; type: 'route' | 'warehouse' | 'date' }[] = [];
+		const chips: { label: string; type: 'route' | 'warehouse' }[] = [];
 		if (notification.data?.routeName) {
 			chips.push({ label: notification.data.routeName, type: 'route' });
 		}
 		if (notification.data?.warehouseName) {
 			chips.push({ label: notification.data.warehouseName, type: 'warehouse' });
 		}
-		if (notification.data?.date) {
-			chips.push({ label: notification.data.date, type: 'date' });
-		}
 		return chips;
 	});
-	const timeLabel = $derived.by(() => {
-		const label = formatRelativeTime(notification.createdAt);
-		if (!label) return '';
-		const hasDateChip = metadataChips.some((chip) => chip.type === 'date');
-		if (hasDateChip && /^[A-Z][a-z]{2}\s\d{1,2}$/.test(label)) {
-			return `Notified ${label}`;
-		}
-		return label;
-	});
+	const timeLabel = $derived.by(() => formatRelativeTime(notification.createdAt) || '');
 
 	const cta = $derived.by(() => {
 		switch (notification.type) {
@@ -123,14 +112,8 @@
 <style>
 	.notification-item {
 		--item-bg: var(--surface-primary);
-		--item-hover-bg: var(--surface-secondary);
-		--item-border: var(--border-width-thin) solid var(--border-primary);
 		background: var(--item-bg);
-		border: var(--item-border);
-		border-left-width: 3px;
-		border-left-style: solid;
-		border-left-color: transparent;
-		border-radius: var(--radius-base);
+		border-radius: var(--radius-lg);
 		display: grid;
 		grid-template-columns: auto 1fr;
 		gap: var(--spacing-3);
@@ -144,21 +127,16 @@
 			opacity 150ms ease;
 	}
 
-	.notification-item.unread {
-		--item-border: var(--border-width-thin) solid
-			color-mix(in srgb, var(--notification-accent) 35%, var(--border-primary));
-		border-left-color: var(--notification-accent);
-	}
-
 	.notification-item.read {
 		opacity: 0.65;
 	}
 
 	.notification-item:hover {
-		background: var(--item-hover-bg);
+		background: var(--interactive-hover);
 	}
 
 	.icon-circle {
+		position: relative;
 		width: 32px;
 		height: 32px;
 		border-radius: var(--radius-full);
@@ -166,6 +144,17 @@
 		place-items: center;
 		background: color-mix(in srgb, var(--notification-accent) 12%, transparent);
 		color: var(--notification-accent);
+	}
+
+	.notification-item.unread .icon-circle::after {
+		content: '';
+		position: absolute;
+		top: -2px;
+		right: -2px;
+		width: 6px;
+		height: 6px;
+		border-radius: var(--radius-full);
+		background: var(--notification-accent);
 	}
 
 	.icon-circle :global(svg) {

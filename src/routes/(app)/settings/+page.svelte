@@ -172,7 +172,7 @@
 		height: 100%;
 		display: flex;
 		justify-content: center;
-		padding: var(--spacing-4);
+		padding: var(--spacing-4) 0 var(--spacing-4) var(--spacing-4);
 		min-height: 0;
 	}
 
@@ -184,16 +184,17 @@
 		height: 100%;
 		overflow: hidden;
 		background: var(--surface-primary);
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius-lg) 0 0 var(--radius-lg);
 		box-shadow: var(--shadow-base);
 	}
 
 	.settings-sidebar {
 		width: 280px;
 		min-width: 280px;
-		border-right: 1px solid var(--border-primary);
+		border-right: 1px solid var(--border-muted);
 		display: flex;
 		flex-direction: column;
+		background: var(--surface-secondary);
 		overflow-y: auto;
 	}
 
