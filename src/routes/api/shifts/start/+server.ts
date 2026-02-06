@@ -1,7 +1,7 @@
 /**
  * Shift Start API
  *
- * POST /api/shifts/start - Start a shift for today's assignment
+ * POST /api/shifts/start - Record parcel inventory for an arrived shift
  */
 
 import { json, error } from '@sveltejs/kit';
@@ -9,12 +9,9 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, shifts } from '$lib/server/db/schema';
 import { shiftStartSchema } from '$lib/schemas/shift';
-import { eq, and } from 'drizzle-orm';
-import { format, toZonedTime } from 'date-fns-tz';
+import { eq } from 'drizzle-orm';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
-
-const TORONTO_TZ = 'America/Toronto';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -39,7 +36,6 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.select({
 			id: assignments.id,
 			userId: assignments.userId,
-			date: assignments.date,
 			status: assignments.status
 		})
 		.from(assignments)
@@ -54,69 +50,52 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	// Check date is today (Toronto time)
-	const torontoNow = toZonedTime(new Date(), TORONTO_TZ);
-	const torontoToday = format(torontoNow, 'yyyy-MM-dd');
-
-	if (assignment.date !== torontoToday) {
-		throw error(400, 'Can only start shifts on the assignment date');
+	// Assignment must be active (set by arrive endpoint)
+	if (assignment.status !== 'active') {
+		throw error(409, 'Assignment is not active — arrive first');
 	}
 
-	// Check assignment status
-	if (assignment.status !== 'scheduled') {
-		throw error(409, 'Assignment is not in scheduled status');
-	}
-
-	// Check for existing shift
-	const [existingShift] = await db
-		.select({ id: shifts.id })
+	// Get existing shift record (created by arrive endpoint)
+	const [shift] = await db
+		.select({
+			id: shifts.id,
+			arrivedAt: shifts.arrivedAt,
+			parcelsStart: shifts.parcelsStart
+		})
 		.from(shifts)
 		.where(eq(shifts.assignmentId, assignmentId));
 
-	if (existingShift) {
-		throw error(409, 'Shift already started');
+	if (!shift) {
+		throw error(404, 'Shift not found — arrive first');
 	}
 
-	// Create shift record
-	const [shift] = await db
-		.insert(shifts)
-		.values({
-			assignmentId,
+	if (!shift.arrivedAt) {
+		throw error(409, 'Must arrive before starting inventory');
+	}
+
+	if (shift.parcelsStart !== null) {
+		throw error(409, 'Parcel inventory already recorded');
+	}
+
+	// Update shift with parcels and start time
+	const [updatedShift] = await db
+		.update(shifts)
+		.set({
 			parcelsStart,
 			startedAt: new Date()
 		})
+		.where(eq(shifts.id, shift.id))
 		.returning({
 			id: shifts.id,
 			parcelsStart: shifts.parcelsStart,
 			startedAt: shifts.startedAt
 		});
 
-	// Update assignment status to active
-	await db
-		.update(assignments)
-		.set({
-			status: 'active',
-			updatedAt: new Date()
-		})
-		.where(eq(assignments.id, assignmentId));
-
 	broadcastAssignmentUpdated({
 		assignmentId,
 		status: 'active',
 		driverId: locals.user.id,
 		driverName: locals.user.name ?? null
-	});
-
-	await createAuditLog({
-		entityType: 'assignment',
-		entityId: assignmentId,
-		action: 'start',
-		actorType: 'user',
-		actorId: locals.user.id,
-		changes: {
-			before: { status: assignment.status },
-			after: { status: 'active' }
-		}
 	});
 
 	await createAuditLog({
@@ -130,9 +109,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	return json({
 		shift: {
-			id: shift.id,
-			parcelsStart: shift.parcelsStart,
-			startedAt: shift.startedAt
+			id: updatedShift.id,
+			parcelsStart: updatedShift.parcelsStart,
+			startedAt: updatedShift.startedAt
 		},
 		assignmentStatus: 'active'
 	});

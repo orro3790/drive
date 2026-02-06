@@ -69,11 +69,15 @@ For deeper conventions and patterns, start at `documentation/agent-guidelines/in
 
 Driver-facing endpoints in `src/routes/api/`:
 
-- `GET /api/dashboard` - Driver dashboard overview (today's shift, week summaries, metrics, pending bids, unconfirmed shifts)
+- `GET /api/dashboard` - Driver dashboard overview (today's shift with arrivedAt/editableUntil/isArrivable, week summaries, metrics, pending bids, unconfirmed shifts)
 - `GET /api/notifications` - In-app notifications list (paginated)
 - `PATCH /api/notifications/[id]/read` - Mark notification as read
 - `POST /api/notifications/mark-all-read` - Mark all notifications as read
 - `POST /api/assignments/[id]/confirm` - Confirm an upcoming shift (7 days to 48h before)
+- `POST /api/shifts/arrive` - Signal on-site arrival for today's confirmed assignment (creates shift record, must be before 9 AM)
+- `POST /api/shifts/start` - Record starting parcel inventory (sets parcelsStart on existing shift after arrival)
+- `POST /api/shifts/complete` - Complete shift (takes parcelsReturned, server calculates delivered, sets 1-hour edit window)
+- `PATCH /api/shifts/[assignmentId]/edit` - Edit parcel counts within 1-hour window after completion
 
 ## UI Components
 

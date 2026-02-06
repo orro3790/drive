@@ -163,11 +163,13 @@ export const shifts = pgTable('shifts', {
 		.notNull()
 		.references(() => assignments.id, { onDelete: 'cascade' })
 		.unique(),
+	arrivedAt: timestamp('arrived_at', { withTimezone: true }),
 	parcelsStart: integer('parcels_start'),
 	parcelsDelivered: integer('parcels_delivered'),
 	parcelsReturned: integer('parcels_returned'),
 	startedAt: timestamp('started_at', { withTimezone: true }),
 	completedAt: timestamp('completed_at', { withTimezone: true }),
+	editableUntil: timestamp('editable_until', { withTimezone: true }),
 	cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
 	cancelReason: cancelReasonEnum('cancel_reason'),
 	cancelNotes: text('cancel_notes'),

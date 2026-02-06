@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1770037684423,
+      "tag": "0000_goofy_phalanx",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770049218715,
+      "tag": "0001_add-better-auth-tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770117030932,
+      "tag": "0002_pale_peter_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770293497102,
+      "tag": "0003_add-avg-parcels-delivered",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1770366326915,
+      "tag": "0004_greedy_rocket_racer",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1770369677003,
+      "tag": "0005_living_omega_sentinel",
+      "breakpoints": true
+    }
+  ]
+}

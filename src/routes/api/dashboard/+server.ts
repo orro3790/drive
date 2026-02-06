@@ -92,7 +92,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 				parcelsDelivered: shifts.parcelsDelivered,
 				parcelsReturned: shifts.parcelsReturned,
 				shiftStartedAt: shifts.startedAt,
-				shiftCompletedAt: shifts.completedAt
+				shiftCompletedAt: shifts.completedAt,
+				shiftArrivedAt: shifts.arrivedAt,
+				shiftEditableUntil: shifts.editableUntil
 			})
 			.from(assignments)
 			.innerJoin(routes, eq(assignments.routeId, routes.id))
@@ -136,11 +138,18 @@ export const GET: RequestHandler = async ({ locals }) => {
 		const hoursUntilShift = getHoursUntilShift(assignment.date, torontoNow);
 		const isLateCancel = isCancelable && hoursUntilShift <= 48;
 		const isToday = assignment.date === torontoToday;
+		const isArrivable =
+			isToday &&
+			assignment.status === 'scheduled' &&
+			assignment.confirmedAt !== null &&
+			!assignment.shiftArrivedAt;
 		const isStartable =
-			isToday && assignment.status === 'scheduled' && assignment.shiftStartedAt === null;
+			assignment.status === 'active' &&
+			assignment.shiftArrivedAt !== null &&
+			assignment.parcelsStart === null;
 		const isCompletable =
 			assignment.status === 'active' &&
-			assignment.shiftStartedAt !== null &&
+			assignment.parcelsStart !== null &&
 			assignment.shiftCompletedAt === null;
 
 		// Confirmation window data
@@ -163,16 +172,19 @@ export const GET: RequestHandler = async ({ locals }) => {
 			warehouseName: assignment.warehouseName,
 			isCancelable,
 			isLateCancel,
+			isArrivable,
 			isStartable,
 			isCompletable,
 			shift: assignment.shiftId
 				? {
 						id: assignment.shiftId,
+						arrivedAt: assignment.shiftArrivedAt,
 						parcelsStart: assignment.parcelsStart,
 						parcelsDelivered: assignment.parcelsDelivered,
 						parcelsReturned: assignment.parcelsReturned,
 						startedAt: assignment.shiftStartedAt,
-						completedAt: assignment.shiftCompletedAt
+						completedAt: assignment.shiftCompletedAt,
+						editableUntil: assignment.shiftEditableUntil
 					}
 				: null
 		};
