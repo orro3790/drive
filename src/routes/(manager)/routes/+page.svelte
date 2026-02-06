@@ -44,6 +44,7 @@
 	import { driverStore } from '$lib/stores/driverStore.svelte';
 	import { routeCreateSchema, routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
 	import type { SelectOption } from '$lib/schemas/ui/select';
+	import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 	import { debounce } from '$lib/stores/helpers/debounce';
 
 	// Tab state
@@ -71,6 +72,7 @@
 	let assignDriverId = $state('');
 	let assignErrors = $state<{ driverId?: string[] }>({});
 	let closeConfirmWindow = $state<BidWindow | null>(null);
+	let emergencyConfirm = $state<{ route: RouteWithWarehouse; x: number; y: number } | null>(null);
 	let managerStream: EventSource | null = null;
 
 	// Filter state
@@ -534,6 +536,28 @@
 		closeCloseConfirm();
 	}
 
+	function canEmergencyReopen(route: RouteWithWarehouse) {
+		return (
+			!!route.assignmentId &&
+			route.status === 'unfilled' &&
+			dateFilter === toLocalYmd()
+		);
+	}
+
+	function openEmergencyConfirm(route: RouteWithWarehouse, event: MouseEvent) {
+		if (!canEmergencyReopen(route)) return;
+		emergencyConfirm = { route, x: event.clientX, y: event.clientY };
+	}
+
+	async function handleEmergencyReopen() {
+		if (!emergencyConfirm?.route.assignmentId) return;
+		if (!ensureOnlineForWrite()) return;
+
+		const assignmentId = emergencyConfirm.route.assignmentId;
+		emergencyConfirm = null;
+		await routeStore.emergencyReopen(assignmentId);
+	}
+
 	// Load data on mount
 	onMount(() => {
 		warehouseStore.load();
@@ -663,6 +687,17 @@
 			>
 				{m.manager_dashboard_assign_button()}
 			</Button>
+			{#if canEmergencyReopen(route)}
+				<Button
+					variant="danger"
+					fill
+					onclick={(e) => openEmergencyConfirm(route, e)}
+					disabled={!route.assignmentId || routeStore.isEmergencyReopening(route.assignmentId)}
+					isLoading={route.assignmentId ? routeStore.isEmergencyReopening(route.assignmentId) : false}
+				>
+					{m.manager_emergency_reopen_button()}
+				</Button>
+			{/if}
 			{#if route.status === 'bidding'}
 				<p class="detail-hint">{m.bid_windows_assign_description()}</p>
 			{/if}
@@ -1200,6 +1235,20 @@
 		confirmVariant="danger"
 		onConfirm={handleDelete}
 		onCancel={() => (deleteConfirm = null)}
+	/>
+{/if}
+
+<!-- Emergency Reopen Confirmation -->
+{#if emergencyConfirm}
+	<ConfirmationDialog
+		x={emergencyConfirm.x}
+		y={emergencyConfirm.y}
+		title={m.manager_emergency_reopen_title()}
+		description={m.manager_emergency_reopen_description({ routeName: emergencyConfirm.route.name })}
+		confirmLabel={m.manager_emergency_reopen_confirm()}
+		confirmVariant="danger"
+		onConfirm={handleEmergencyReopen}
+		onCancel={() => (emergencyConfirm = null)}
 	/>
 {/if}
 

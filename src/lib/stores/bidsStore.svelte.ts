@@ -9,6 +9,7 @@ import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
 
 export type BidStatus = 'pending' | 'won' | 'lost';
+export type BidWindowMode = 'competitive' | 'instant' | 'emergency';
 
 export type AvailableBidWindow = {
 	id: string;
@@ -16,6 +17,8 @@ export type AvailableBidWindow = {
 	assignmentDate: string;
 	routeName: string;
 	warehouseName: string;
+	mode: BidWindowMode;
+	payBonusPercent: number;
 	opensAt: string;
 	closesAt: string;
 };
@@ -135,9 +138,24 @@ export const bidsStore = {
 				throw new Error(errorData.message || 'Failed to submit bid');
 			}
 
-			// Refresh both lists after successful bid
-			await this.loadAll();
+			const data = await res.json();
 
+			// Handle instant/emergency assignment (won immediately)
+			if (data.status === 'won') {
+				const bonusText =
+					data.bonusPercent > 0 ? m.bids_accept_success_bonus({ bonus: data.bonusPercent }) : '';
+				toastStore.success(m.bids_accept_success() + bonusText);
+
+				// Remove from available and refresh
+				state.availableWindows = state.availableWindows.filter(
+					(w) => w.assignmentId !== assignmentId
+				);
+				await this.loadMyBids();
+				return true;
+			}
+
+			// Competitive mode: refresh both lists
+			await this.loadAll();
 			toastStore.success(m.bids_submit_success());
 			return true;
 		} catch (err) {

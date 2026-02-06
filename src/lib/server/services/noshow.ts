@@ -1,23 +1,33 @@
 /**
  * No-Show Detection Service
  *
- * Detects assignments where drivers failed to start after shift start time.
- * Creates replacement bid windows and notifies managers.
+ * Detects confirmed assignments where drivers failed to arrive by 9 AM Toronto time.
+ * Creates emergency bid windows with 20% pay bonus and notifies available drivers.
  */
 
 import { db } from '$lib/server/db';
-import { assignments, bidWindows, routes, shifts, user } from '$lib/server/db/schema';
+import {
+	assignments,
+	bidWindows,
+	driverMetrics,
+	routes,
+	shifts,
+	user,
+	warehouses
+} from '$lib/server/db/schema';
 import { createBidWindow } from '$lib/server/services/bidding';
-import { sendManagerAlert } from '$lib/server/services/notifications';
+import {
+	notifyAvailableDriversForEmergency,
+	sendManagerAlert
+} from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { format, toZonedTime } from 'date-fns-tz';
 import { set, startOfDay } from 'date-fns';
 import logger from '$lib/server/logger';
 
 const TORONTO_TZ = 'America/Toronto';
-const DEFAULT_SHIFT_START_HOUR = 7;
-const DEFAULT_SHIFT_START_MINUTE = 0;
+const ARRIVAL_DEADLINE_HOUR = 9;
 
 function getTorontoNow(): Date {
 	return toZonedTime(new Date(), TORONTO_TZ);
@@ -27,10 +37,10 @@ function getTorontoDateString(date: Date): string {
 	return format(date, 'yyyy-MM-dd');
 }
 
-function getShiftStartForDate(date: Date): Date {
+function getArrivalDeadline(date: Date): Date {
 	return set(startOfDay(date), {
-		hours: DEFAULT_SHIFT_START_HOUR,
-		minutes: DEFAULT_SHIFT_START_MINUTE,
+		hours: ARRIVAL_DEADLINE_HOUR,
+		minutes: 0,
 		seconds: 0,
 		milliseconds: 0
 	});
@@ -41,98 +51,129 @@ export interface NoShowDetectionResult {
 	noShows: number;
 	bidWindowsCreated: number;
 	managerAlertsSent: number;
+	driversNotified: number;
 	errors: number;
-	skippedBeforeStart: boolean;
+	skippedBeforeDeadline: boolean;
 }
 
+/**
+ * Detect no-shows for today's confirmed assignments.
+ *
+ * A no-show is a confirmed assignment where the driver has not arrived by 9 AM Toronto time.
+ * "Arrived" means a shift record exists with arrivedAt set.
+ *
+ * For each no-show:
+ * 1. Create emergency bid window (mode='emergency', payBonusPercent=20)
+ * 2. Increment driver's noShows metric
+ * 3. Alert the route's manager
+ * 4. Notify available drivers about the emergency route
+ */
 export async function detectNoShows(): Promise<NoShowDetectionResult> {
 	const log = logger.child({ operation: 'detectNoShows' });
 	const nowToronto = getTorontoNow();
 	const today = getTorontoDateString(nowToronto);
-	const shiftStart = getShiftStartForDate(nowToronto);
+	const arrivalDeadline = getArrivalDeadline(nowToronto);
 
-	if (nowToronto < shiftStart) {
-		log.info({ today, shiftStart }, 'No-show detection skipped before shift start');
+	// Skip if called before 9 AM Toronto time (DST-safe: dual cron handles this)
+	if (nowToronto < arrivalDeadline) {
+		log.info({ today, arrivalDeadline }, 'No-show detection skipped before 9 AM');
 		return {
 			evaluated: 0,
 			noShows: 0,
 			bidWindowsCreated: 0,
 			managerAlertsSent: 0,
+			driversNotified: 0,
 			errors: 0,
-			skippedBeforeStart: true
+			skippedBeforeDeadline: true
 		};
 	}
 
+	// Find confirmed assignments for today where driver hasn't arrived:
+	// - date = today
+	// - status = 'scheduled' (still scheduled, not active/completed)
+	// - confirmedAt IS NOT NULL (driver confirmed the shift)
+	// - userId IS NOT NULL (driver assigned)
+	// - Either no shift record exists OR shift exists but arrivedAt IS NULL
+	// - No open bid window already exists (idempotency)
 	const candidates = await db
 		.select({
 			assignmentId: assignments.id,
 			routeId: assignments.routeId,
+			warehouseId: assignments.warehouseId,
 			assignmentDate: assignments.date,
 			assignmentStatus: assignments.status,
 			driverId: assignments.userId,
 			driverName: user.name,
 			routeName: routes.name,
+			warehouseName: warehouses.name,
 			existingWindowId: bidWindows.id,
-			shiftStartedAt: shifts.startedAt
+			arrivedAt: shifts.arrivedAt
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.leftJoin(shifts, eq(assignments.id, shifts.assignmentId))
-		.leftJoin(bidWindows, eq(assignments.id, bidWindows.assignmentId))
+		.leftJoin(
+			bidWindows,
+			and(eq(assignments.id, bidWindows.assignmentId), eq(bidWindows.status, 'open'))
+		)
 		.leftJoin(user, eq(assignments.userId, user.id))
 		.where(
 			and(
 				eq(assignments.date, today),
 				eq(assignments.status, 'scheduled'),
 				isNotNull(assignments.userId),
-				isNull(shifts.startedAt)
+				isNotNull(assignments.confirmedAt),
+				isNull(shifts.arrivedAt)
 			)
 		);
 
 	let bidWindowsCreated = 0;
 	let managerAlertsSent = 0;
+	let driversNotified = 0;
 	let errors = 0;
 
 	for (const candidate of candidates) {
-		if (candidate.shiftStartedAt) {
-			continue;
-		}
-
+		// Skip if there's already an open bid window (idempotent for dual cron runs)
 		if (candidate.existingWindowId) {
-			try {
-				const updatedAt = new Date();
-				await db
-					.update(assignments)
-					.set({ status: 'unfilled', updatedAt })
-					.where(eq(assignments.id, candidate.assignmentId));
-
-				await createAuditLog({
-					entityType: 'assignment',
-					entityId: candidate.assignmentId,
-					action: 'unfilled',
-					actorType: 'system',
-					actorId: null,
-					changes: {
-						before: { status: candidate.assignmentStatus },
-						after: { status: 'unfilled' },
-						reason: 'no_show',
-						bidWindowId: candidate.existingWindowId
-					}
-				});
-			} catch (error) {
-				errors++;
-				log.error(
-					{ assignmentId: candidate.assignmentId, error },
-					'Failed to mark no-show assignment as unfilled'
-				);
-			}
+			log.debug(
+				{ assignmentId: candidate.assignmentId },
+				'Skipping — open bid window already exists'
+			);
 			continue;
 		}
 
 		try {
-			const result = await createBidWindow(candidate.assignmentId, { allowPastShift: true });
+			// 1. Create emergency bid window
+			const result = await createBidWindow(candidate.assignmentId, {
+				mode: 'emergency',
+				trigger: 'no_show',
+				payBonusPercent: 20,
+				allowPastShift: true
+			});
+
 			if (result.success) {
 				bidWindowsCreated++;
+
+				// 2. Increment driver noShows metric
+				if (candidate.driverId) {
+					try {
+						await db
+							.update(driverMetrics)
+							.set({
+								noShows: sql`${driverMetrics.noShows} + 1`,
+								updatedAt: new Date()
+							})
+							.where(eq(driverMetrics.userId, candidate.driverId));
+					} catch (error) {
+						log.warn(
+							{ driverId: candidate.driverId, error },
+							'Failed to increment noShows metric'
+						);
+					}
+				}
+
+				// 3. Alert route manager
 				try {
 					await sendManagerAlert(candidate.routeId, 'driver_no_show', {
 						routeName: candidate.routeName ?? 'Unknown Route',
@@ -146,6 +187,38 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 						'Manager alert failed for no-show'
 					);
 				}
+
+				// 4. Notify available drivers about emergency route
+				try {
+					const notifiedCount = await notifyAvailableDriversForEmergency({
+						assignmentId: candidate.assignmentId,
+						routeName: candidate.routeName ?? 'Unknown Route',
+						warehouseName: candidate.warehouseName ?? 'Unknown Warehouse',
+						date: candidate.assignmentDate,
+						payBonusPercent: 20
+					});
+					driversNotified += notifiedCount;
+				} catch (error) {
+					log.warn(
+						{ assignmentId: candidate.assignmentId, error },
+						'Emergency notification failed'
+					);
+				}
+
+				// 5. Create audit log
+				await createAuditLog({
+					entityType: 'assignment',
+					entityId: candidate.assignmentId,
+					action: 'no_show_detected',
+					actorType: 'system',
+					actorId: null,
+					changes: {
+						driverId: candidate.driverId,
+						driverName: candidate.driverName,
+						reason: 'no_arrival_by_9am',
+						bidWindowId: result.bidWindowId
+					}
+				});
 			} else {
 				log.info(
 					{ assignmentId: candidate.assignmentId, reason: result.reason },
@@ -158,12 +231,19 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 		}
 	}
 
+	const noShowCount = bidWindowsCreated;
+	log.info(
+		{ evaluated: candidates.length, noShows: noShowCount, bidWindowsCreated, driversNotified },
+		'No-show detection completed'
+	);
+
 	return {
 		evaluated: candidates.length,
-		noShows: candidates.length,
+		noShows: noShowCount,
 		bidWindowsCreated,
 		managerAlertsSent,
+		driversNotified,
 		errors,
-		skippedBeforeStart: false
+		skippedBeforeDeadline: false
 	};
 }

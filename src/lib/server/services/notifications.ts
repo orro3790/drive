@@ -6,10 +6,13 @@
  */
 
 import { db } from '$lib/server/db';
-import { notifications, user } from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
+import { assignments, notifications, shifts, user } from '$lib/server/db/schema';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import { toZonedTime, format } from 'date-fns-tz';
+import { parseISO } from 'date-fns';
 import logger from '$lib/server/logger';
 import { getRouteManager } from './managers';
+import { getWeekStart, canDriverTakeAssignment } from './scheduling';
 import {
 	FIREBASE_PROJECT_ID,
 	FIREBASE_CLIENT_EMAIL,
@@ -17,6 +20,8 @@ import {
 } from '$env/static/private';
 import type { App } from 'firebase-admin/app';
 import type { Messaging } from 'firebase-admin/messaging';
+
+const TORONTO_TZ = 'America/Toronto';
 
 // Lazy-initialized Firebase Admin app
 let firebaseApp: App | null = null;
@@ -354,4 +359,151 @@ export async function sendManagerAlert(
 
 	log.info({ managerId }, 'Manager alert sent');
 	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Emergency route notifications
+// ---------------------------------------------------------------------------
+
+export interface EmergencyNotifyParams {
+	assignmentId: string;
+	routeName: string;
+	warehouseName: string;
+	date: string;
+	payBonusPercent: number;
+}
+
+/**
+ * Notify available drivers about an emergency route.
+ *
+ * "Available" means:
+ * - Role = driver
+ * - Not flagged
+ * - Not already on an active shift today (no arrivedAt on today's assignment)
+ * - Under weekly cap for the assignment's week
+ *
+ * Creates in-app notification records and sends FCM push notifications.
+ *
+ * @returns Number of drivers notified
+ */
+export async function notifyAvailableDriversForEmergency(
+	params: EmergencyNotifyParams
+): Promise<number> {
+	const { assignmentId, routeName, warehouseName, date, payBonusPercent } = params;
+	const log = logger.child({ operation: 'notifyAvailableDriversForEmergency', assignmentId });
+
+	const today = format(toZonedTime(new Date(), TORONTO_TZ), 'yyyy-MM-dd');
+
+	// Subquery: drivers who have an active shift today (arrived or started)
+	const driversOnShiftToday = db
+		.select({ userId: assignments.userId })
+		.from(assignments)
+		.innerJoin(shifts, eq(assignments.id, shifts.assignmentId))
+		.where(
+			and(
+				eq(assignments.date, today),
+				eq(assignments.status, 'active'),
+				isNotNull(assignments.userId)
+			)
+		);
+
+	// Get all non-flagged drivers who are NOT on an active shift today
+	const drivers = await db
+		.select({ id: user.id })
+		.from(user)
+		.where(
+			and(
+				eq(user.role, 'driver'),
+				eq(user.isFlagged, false),
+				sql`${user.id} NOT IN (${driversOnShiftToday})`
+			)
+		);
+
+	if (drivers.length === 0) {
+		log.info('No available drivers found');
+		return 0;
+	}
+
+	// Filter by weekly cap
+	const assignmentWeekStart = getWeekStart(parseISO(date));
+	const eligibleDriverIds: string[] = [];
+	for (const driver of drivers) {
+		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart);
+		if (canTake) {
+			eligibleDriverIds.push(driver.id);
+		}
+	}
+
+	if (eligibleDriverIds.length === 0) {
+		log.info('No drivers under weekly cap');
+		return 0;
+	}
+
+	const bonusText = payBonusPercent > 0 ? ` +${payBonusPercent}% bonus.` : '';
+	const body = `${routeName} at ${warehouseName} needs a driver urgently.${bonusText} First to accept gets it.`;
+
+	const notificationRecords = eligibleDriverIds.map((driverId) => ({
+		userId: driverId,
+		type: 'emergency_route_available' as const,
+		title: 'Priority Route Available',
+		body,
+		data: {
+			assignmentId,
+			routeName,
+			warehouseName,
+			date,
+			payBonusPercent: String(payBonusPercent),
+			mode: 'emergency'
+		}
+	}));
+
+	// Create in-app notification records
+	await db.insert(notifications).values(notificationRecords);
+
+	// Send FCM push notifications
+	const messaging = await getMessaging();
+	if (messaging) {
+		const BATCH_SIZE = 10;
+		for (let i = 0; i < eligibleDriverIds.length; i += BATCH_SIZE) {
+			const batch = eligibleDriverIds.slice(i, i + BATCH_SIZE);
+			await Promise.all(
+				batch.map(async (driverId) => {
+					const [userData] = await db
+						.select({ fcmToken: user.fcmToken })
+						.from(user)
+						.where(eq(user.id, driverId));
+
+					if (!userData?.fcmToken) return;
+
+					try {
+						await messaging.send({
+							token: userData.fcmToken,
+							notification: { title: 'Priority Route Available', body },
+							data: {
+								assignmentId,
+								routeName,
+								warehouseName,
+								date,
+								payBonusPercent: String(payBonusPercent),
+								mode: 'emergency'
+							},
+							android: {
+								priority: 'high' as const,
+								notification: { channelId: 'drive_notifications' }
+							},
+							apns: {
+								payload: { aps: { sound: 'default', badge: 1 } },
+								headers: { 'apns-priority': '10' }
+							}
+						});
+					} catch (error) {
+						log.warn({ driverId, error }, 'Failed to send emergency push notification');
+					}
+				})
+			);
+		}
+	}
+
+	log.info({ count: eligibleDriverIds.length }, 'Emergency notifications sent');
+	return eligibleDriverIds.length;
 }

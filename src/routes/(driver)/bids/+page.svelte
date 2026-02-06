@@ -2,6 +2,7 @@
 	Driver Bids Page
 
 	Displays available bid windows and driver's submitted bids.
+	Emergency routes are visually distinct with green accent and bonus badge.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
@@ -10,6 +11,7 @@
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
+	import Lightning from '$lib/components/icons/Lightning.svelte';
 	import { bidsStore, type BidStatus } from '$lib/stores/bidsStore.svelte';
 
 	const statusLabels: Record<BidStatus, string> = {
@@ -88,15 +90,34 @@
 					{:else}
 						<div class="bid-list">
 							{#each bidsStore.availableWindows as window (window.id)}
-								<div class="bid-card">
+								{@const isEmergency = window.mode === 'emergency'}
+								<div class="bid-card" class:emergency={isEmergency}>
 									<div class="card-header">
 										<div class="card-summary">
+											{#if isEmergency}
+												<div class="emergency-label">
+													<Lightning stroke="var(--status-success)" />
+													<span>{m.bids_emergency_label()}</span>
+												</div>
+											{/if}
 											<p class="bid-date">{formatAssignmentDate(window.assignmentDate)}</p>
 											<p class="bid-route">{window.routeName}</p>
 											<p class="bid-warehouse">{window.warehouseName}</p>
 										</div>
 										<div class="card-meta">
-											<p class="closes-at">{formatClosesAt(window.closesAt)}</p>
+											{#if isEmergency && window.payBonusPercent > 0}
+												<Chip
+													variant="status"
+													status="success"
+													label={m.bids_emergency_bonus({ bonus: window.payBonusPercent })}
+													size="xs"
+												/>
+											{/if}
+											{#if !isEmergency}
+												<p class="closes-at">{formatClosesAt(window.closesAt)}</p>
+											{:else}
+												<p class="closes-at">{m.bids_emergency_first_come()}</p>
+											{/if}
 										</div>
 									</div>
 									<div class="card-actions">
@@ -107,7 +128,7 @@
 											isLoading={bidsStore.isSubmitting(window.assignmentId)}
 											disabled={bidsStore.submittingAssignmentId !== null}
 										>
-											{m.bids_submit_button()}
+											{isEmergency ? m.bids_accept_button() : m.bids_submit_button()}
 										</Button>
 									</div>
 								</div>
@@ -262,8 +283,28 @@
 		gap: var(--spacing-3);
 	}
 
+	.bid-card.emergency {
+		border: 2px solid var(--status-success);
+		background: color-mix(in srgb, var(--status-success) 4%, var(--surface-secondary));
+	}
+
 	.bid-card.resolved {
 		opacity: 0.7;
+	}
+
+	.emergency-label {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+		color: var(--status-success);
+		margin-bottom: var(--spacing-1);
+	}
+
+	.emergency-label :global(svg) {
+		width: 16px;
+		height: 16px;
 	}
 
 	.card-header {
@@ -300,6 +341,10 @@
 
 	.card-meta {
 		text-align: right;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: var(--spacing-1);
 	}
 
 	.closes-at {
