@@ -58,6 +58,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.select({
 			id: bidWindows.id,
 			assignmentId: bidWindows.assignmentId,
+			mode: bidWindows.mode,
+			payBonusPercent: bidWindows.payBonusPercent,
 			opensAt: bidWindows.opensAt,
 			closesAt: bidWindows.closesAt,
 			assignmentDate: assignments.date,
@@ -106,6 +108,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 			assignmentDate: window.assignmentDate,
 			routeName: window.routeName,
 			warehouseName: window.warehouseName,
+			mode: window.mode,
+			payBonusPercent: window.payBonusPercent,
 			opensAt: window.opensAt.toISOString(),
 			closesAt: window.closesAt.toISOString()
 		});

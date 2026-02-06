@@ -29,12 +29,14 @@ const state = $state<{
 	error: string | null;
 	filters: RouteFilters;
 	assigningAssignmentId: string | null;
+	emergencyReopenAssignmentId: string | null;
 }>({
 	routes: [],
 	isLoading: false,
 	error: null,
 	filters: {},
-	assigningAssignmentId: null
+	assigningAssignmentId: null,
+	emergencyReopenAssignmentId: null
 });
 
 function matchesFilters(route: RouteWithWarehouse, filters: RouteFilters) {
@@ -71,6 +73,12 @@ export const routeStore = {
 
 	isAssigningAssignment(assignmentId: string) {
 		return state.assigningAssignmentId === assignmentId;
+	},
+	get emergencyReopenAssignmentId() {
+		return state.emergencyReopenAssignmentId;
+	},
+	isEmergencyReopening(assignmentId: string) {
+		return state.emergencyReopenAssignmentId === assignmentId;
 	},
 
 	/**
@@ -349,6 +357,46 @@ export const routeStore = {
 				: [...state.routes, original];
 		} else {
 			state.routes = state.routes.filter((route) => route.id !== original.id);
+		}
+	},
+
+	/**
+	 * Emergency reopen: create emergency bid window for today's assignment
+	 */
+	async emergencyReopen(assignmentId: string): Promise<{ ok: boolean; notifiedCount?: number }> {
+		state.emergencyReopenAssignmentId = assignmentId;
+
+		try {
+			const res = await fetch(`/api/assignments/${assignmentId}/emergency-reopen`, {
+				method: 'POST'
+			});
+
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				const message = typeof payload?.message === 'string' ? payload.message : null;
+				toastStore.error(message ?? m.manager_emergency_reopen_error());
+				return { ok: false };
+			}
+
+			const data = await res.json();
+
+			// Update route status to show bidding active
+			this.applyAssignmentUpdate(assignmentId, {
+				status: 'bidding',
+				driverName: null
+			});
+
+			toastStore.success(
+				m.manager_emergency_reopen_success({ count: data.notifiedCount ?? 0 })
+			);
+			return { ok: true, notifiedCount: data.notifiedCount };
+		} catch {
+			toastStore.error(m.manager_emergency_reopen_error());
+			return { ok: false };
+		} finally {
+			if (state.emergencyReopenAssignmentId === assignmentId) {
+				state.emergencyReopenAssignmentId = null;
+			}
 		}
 	}
 };
