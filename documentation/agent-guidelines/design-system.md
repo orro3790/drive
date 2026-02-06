@@ -67,3 +67,72 @@ Common higher-level inputs live in `src/lib/components/`:
 | Form        | `--form-background`                             | Recessed input background             |
 
 See `src/app.css` for full token definitions.
+
+## 6) Theme System
+
+Drive supports dark and light themes with localStorage persistence and no-flash bootstrap.
+
+**Theme Attribute**: `html[data-theme="dark"|"light"]`
+
+**Token Switching**: All color tokens in `src/app.css` automatically switch based on `data-theme` attribute. Never hardcode colors or duplicate token definitions.
+
+**Utilities** (`src/lib/utils/theme.ts`):
+
+```typescript
+import { applyTheme, getDomTheme, getStoredTheme, type Theme } from '$lib/utils/theme';
+
+// Apply theme (updates DOM + localStorage)
+applyTheme('light');
+applyTheme('dark');
+
+// Read current theme from DOM
+const currentTheme = getDomTheme(); // 'dark' | 'light' | null
+
+// Read persisted theme from localStorage
+const storedTheme = getStoredTheme(); // 'dark' | 'light' | null
+```
+
+**No-Flash Bootstrap**: `src/app.html` contains inline script that applies stored theme before first paint:
+
+```html
+<html lang="en" data-theme="dark">
+	<head>
+		<script>
+			// Runs before page render
+			(function () {
+				try {
+					var t = localStorage.getItem('drive-theme');
+					if (t === 'light' || t === 'dark') {
+						document.documentElement.setAttribute('data-theme', t);
+						document.documentElement.style.colorScheme = t;
+					}
+				} catch (e) {}
+			})();
+		</script>
+	</head>
+</html>
+```
+
+**Theme Toggle Pattern**:
+
+```svelte
+<script lang="ts">
+	import { getDomTheme, applyTheme, type Theme } from '$lib/utils/theme';
+
+	let currentTheme = $state<Theme>(getDomTheme() ?? 'dark');
+
+	function setTheme(theme: Theme) {
+		currentTheme = theme;
+		applyTheme(theme);
+	}
+</script>
+
+<button onclick={() => setTheme(currentTheme === 'dark' ? 'light' : 'dark')}>
+	Toggle Theme
+</button>
+```
+
+**Rules**:
+- Never hardcode colors - always use CSS tokens
+- Never read/write localStorage directly - use theme utilities
+- Theme switching is client-side only (no server persistence)
