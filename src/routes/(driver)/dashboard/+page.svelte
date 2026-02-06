@@ -385,13 +385,11 @@
 								<div class="step-content">
 									<p class="step-status">{m.shift_delivering_status()}</p>
 									<p class="step-info">
-										{m.shift_delivering_parcels({ count: String(todayShift.shift?.parcelsStart ?? 0) })}
+										{m.shift_delivering_parcels({
+											count: String(todayShift.shift?.parcelsStart ?? 0)
+										})}
 									</p>
-									<Button
-										variant="primary"
-										fill
-										onclick={openCompleteStep}
-									>
+									<Button variant="primary" fill onclick={openCompleteStep}>
 										{m.shift_complete_button()}
 									</Button>
 								</div>
@@ -427,10 +425,14 @@
 
 										<div class="delivery-summary">
 											<p>
-												{m.shift_complete_summary_started({ count: String(todayShift.shift?.parcelsStart ?? 0) })}
+												{m.shift_complete_summary_started({
+													count: String(todayShift.shift?.parcelsStart ?? 0)
+												})}
 											</p>
 											<p>
-												{m.shift_complete_summary_returning({ count: String(typeof parcelsReturned === 'number' ? parcelsReturned : 0) })}
+												{m.shift_complete_summary_returning({
+													count: String(typeof parcelsReturned === 'number' ? parcelsReturned : 0)
+												})}
 											</p>
 											<p class="summary-delivered">
 												{m.shift_complete_summary_delivered({
@@ -479,7 +481,9 @@
 												/>
 											</div>
 											<div class="form-field">
-												<label for="edit-parcels-returned">{m.shift_complete_returned_label()}</label>
+												<label for="edit-parcels-returned"
+													>{m.shift_complete_returned_label()}</label
+												>
 												<input
 													id="edit-parcels-returned"
 													type="number"
@@ -511,13 +515,19 @@
 									{:else}
 										<div class="delivery-summary">
 											<p>
-												{m.shift_complete_summary_started({ count: String(todayShift.shift?.parcelsStart ?? 0) })}
+												{m.shift_complete_summary_started({
+													count: String(todayShift.shift?.parcelsStart ?? 0)
+												})}
 											</p>
 											<p>
-												{m.shift_complete_summary_returning({ count: String(todayShift.shift?.parcelsReturned ?? 0) })}
+												{m.shift_complete_summary_returning({
+													count: String(todayShift.shift?.parcelsReturned ?? 0)
+												})}
 											</p>
 											<p class="summary-delivered">
-												{m.shift_complete_summary_delivered({ count: String(todayShift.shift?.parcelsDelivered ?? 0) })}
+												{m.shift_complete_summary_delivered({
+													count: String(todayShift.shift?.parcelsDelivered ?? 0)
+												})}
 											</p>
 										</div>
 										<p class="edit-countdown">
@@ -535,13 +545,19 @@
 								<div class="step-content">
 									<div class="delivery-summary">
 										<p>
-											{m.shift_complete_summary_started({ count: String(todayShift.shift?.parcelsStart ?? 0) })}
+											{m.shift_complete_summary_started({
+												count: String(todayShift.shift?.parcelsStart ?? 0)
+											})}
 										</p>
 										<p>
-											{m.shift_complete_summary_returning({ count: String(todayShift.shift?.parcelsReturned ?? 0) })}
+											{m.shift_complete_summary_returning({
+												count: String(todayShift.shift?.parcelsReturned ?? 0)
+											})}
 										</p>
 										<p class="summary-delivered">
-											{m.shift_complete_summary_delivered({ count: String(todayShift.shift?.parcelsDelivered ?? 0) })}
+											{m.shift_complete_summary_delivered({
+												count: String(todayShift.shift?.parcelsDelivered ?? 0)
+											})}
 										</p>
 									</div>
 									<p class="edit-locked">{m.shift_edit_contact_manager()}</p>

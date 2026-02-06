@@ -287,11 +287,7 @@ export const dashboardStore = {
 		}
 	},
 
-	async editShift(
-		assignmentId: string,
-		parcelsStart?: number,
-		parcelsReturned?: number
-	) {
+	async editShift(assignmentId: string, parcelsStart?: number, parcelsReturned?: number) {
 		if (!ensureOnlineForWrite()) {
 			return false;
 		}

@@ -556,7 +556,7 @@ Record starting parcel inventory for an arrived shift. Sets parcelsStart and sta
 		id: string;
 		parcelsStart: number;
 		startedAt: string; // ISO timestamp
-	};
+	}
 	assignmentStatus: 'active';
 }
 ```
@@ -596,7 +596,7 @@ Complete an active shift. Takes parcelsReturned, server calculates parcelsDelive
 		startedAt: string;
 		completedAt: string;
 		editableUntil: string; // completedAt + 1 hour
-	};
+	}
 	assignmentStatus: 'completed';
 }
 ```
@@ -637,7 +637,7 @@ Edit parcel counts within 1-hour window after completion. Can update parcelsStar
 		startedAt: string;
 		completedAt: string;
 		editableUntil: string;
-	};
+	}
 }
 ```
 
