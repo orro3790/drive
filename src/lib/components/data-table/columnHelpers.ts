@@ -190,35 +190,90 @@ export function createColumnHelper<TData extends RowData>() {
 	 * incompatible with TanStack's resize handler since CSS-driven widths don't
 	 * match TanStack's internal state.
 	 */
-	function estimateHeaderWidth(options: BaseColumnOptions<TData>) {
+	const HEADER_WIDTH_GROWTH_FACTOR = 1.18;
+	const HEADER_HORIZONTAL_CHROME = 36;
+	const SORT_AFFORDANCE_WIDTH = 22;
+
+	function estimateHeaderTextWidth(headerText: string): number {
+		let width = 0;
+
+		for (const char of Array.from(headerText)) {
+			if (char === ' ') {
+				width += 3.5;
+				continue;
+			}
+
+			const codePoint = char.codePointAt(0) ?? 0;
+			const isWideGlyph = codePoint > 0xff;
+
+			if (isWideGlyph) {
+				width += 12;
+				continue;
+			}
+
+			if (char >= 'A' && char <= 'Z') {
+				width += 7.6;
+				continue;
+			}
+
+			width += 7.1;
+		}
+
+		return width;
+	}
+
+	function estimateHeaderWidths(options: BaseColumnOptions<TData>) {
 		if (options.sizing !== 'fixed') return undefined;
 		const headerText = options.header?.trim();
 		if (!headerText) return undefined;
-		const headerLength = Array.from(headerText).length;
-		const headerCharWidth = 7.5;
-		const headerBaseWidth = 40;
-		const sortIconWidth = options.sortable ? 24 : 0;
-		return Math.ceil(headerLength * headerCharWidth + headerBaseWidth + sortIconWidth);
+
+		const textWidth = estimateHeaderTextWidth(headerText);
+		const sortWidth = options.sortable ? SORT_AFFORDANCE_WIDTH : 0;
+		const minWidth = Math.ceil(textWidth + HEADER_HORIZONTAL_CHROME + sortWidth);
+		const defaultWidth = Math.ceil(minWidth * HEADER_WIDTH_GROWTH_FACTOR);
+
+		return {
+			minWidth,
+			defaultWidth
+		};
 	}
 
 	function getSizingProps(options: BaseColumnOptions<TData>) {
 		const props: { size?: number; minSize?: number; maxSize?: number } = {};
-		const estimatedWidth = estimateHeaderWidth(options);
+		const estimatedWidths = estimateHeaderWidths(options);
+		const estimatedMinWidth = estimatedWidths?.minWidth;
+		const estimatedDefaultWidth = estimatedWidths?.defaultWidth;
 		let size = options.width;
+		let minSize = options.minWidth;
+		const maxSize = options.maxWidth;
 
-		if (typeof estimatedWidth === 'number') {
-			size = typeof size === 'number' ? Math.max(size, estimatedWidth) : estimatedWidth;
+		if (typeof estimatedMinWidth === 'number') {
+			minSize =
+				typeof minSize === 'number' ? Math.max(minSize, estimatedMinWidth) : estimatedMinWidth;
 		}
-		if (typeof options.minWidth === 'number') {
-			props.minSize = options.minWidth;
-			size = typeof size === 'number' ? Math.max(size, options.minWidth) : options.minWidth;
+
+		if (typeof minSize === 'number') {
+			props.minSize = minSize;
 		}
-		if (typeof options.maxWidth === 'number') {
-			props.maxSize = options.maxWidth;
+
+		if (typeof estimatedDefaultWidth === 'number') {
+			size =
+				typeof size === 'number' ? Math.max(size, estimatedDefaultWidth) : estimatedDefaultWidth;
 		}
+
+		if (typeof minSize === 'number') {
+			size = typeof size === 'number' ? Math.max(size, minSize) : minSize;
+		}
+
+		if (typeof maxSize === 'number') {
+			props.maxSize = maxSize;
+			size = typeof size === 'number' ? Math.min(size, maxSize) : size;
+		}
+
 		if (typeof size === 'number') {
 			props.size = size;
 		}
+
 		return props;
 	}
 

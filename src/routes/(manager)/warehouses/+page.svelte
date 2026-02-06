@@ -60,8 +60,8 @@
 			header: m.common_name(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 270,
-			minWidth: 180,
+			width: 320,
+			minWidth: 220,
 			stickyLeft: true,
 			mobileVisible: true,
 			mobilePriority: 1
@@ -70,8 +70,8 @@
 			header: m.common_address(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 360,
-			minWidth: 240,
+			width: 430,
+			minWidth: 300,
 			mobileVisible: true,
 			mobilePriority: 2
 		}),

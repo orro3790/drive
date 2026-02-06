@@ -51,8 +51,8 @@
 			header: m.common_name(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 200,
-			minWidth: 160,
+			width: 240,
+			minWidth: 200,
 			stickyLeft: true,
 			mobileVisible: true,
 			mobilePriority: 1
@@ -61,8 +61,8 @@
 			header: m.drivers_header_email(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 220,
-			minWidth: 180,
+			width: 320,
+			minWidth: 260,
 			mobileVisible: false
 		}),
 		helper.display({

@@ -234,8 +234,8 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 		const current = column.getSize();
 		const step = event.shiftKey ? 50 : 10; // Shift for larger steps
 		const meta = getColumnMeta(header);
-		const minSize = meta.minWidth ?? 50;
-		const maxSize = meta.maxWidth ?? 500;
+		const minSize = column.columnDef.minSize ?? meta.minWidth ?? 50;
+		const maxSize = column.columnDef.maxSize ?? meta.maxWidth ?? 500;
 
 		let newSize: number | null = null;
 
@@ -309,8 +309,9 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 				{@const isResizingEnabled = table.options.enableColumnResizing}
 				{@const pinnedPosition = header.column.getIsPinned()}
 				{@const pinnedOffset = getPinnedOffset(header)}
-				{@const explicitSize = columnSizing[header.column.id]}
-				{@const dynamicWidth = explicitSize !== undefined ? explicitSize : undefined}
+				{@const dynamicWidth = isResizingEnabled
+					? (columnSizing[header.column.id] ?? header.column.getSize())
+					: undefined}
 				{@const pinnedLabel = pinnedPosition
 					? m.table_header_pinned({ position: pinnedPosition })
 					: null}

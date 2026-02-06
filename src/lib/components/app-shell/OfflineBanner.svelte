@@ -12,7 +12,9 @@
 		}
 
 		try {
-			await navigator.serviceWorker.register(`${base}/service-worker.js`);
+			await navigator.serviceWorker.register(`${base}/service-worker.js`, {
+				type: 'module'
+			});
 		} catch {
 			// Registration failures should not break navigation
 		}
