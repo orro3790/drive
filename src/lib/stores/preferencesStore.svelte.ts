@@ -7,6 +7,7 @@
 
 import type { PreferencesUpdate } from '$lib/schemas/preferences';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
+import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
 
 export type RouteDetail = {
@@ -103,6 +104,10 @@ export const preferencesStore = {
 	 * Save preferences (optimistic update)
 	 */
 	async save(data: PreferencesUpdate, routeDetails?: RouteDetail[]) {
+		if (!ensureOnlineForWrite()) {
+			return;
+		}
+
 		if (state.isLocked) {
 			toastStore.error(m.preferences_locked_error());
 			return;

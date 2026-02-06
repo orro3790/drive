@@ -7,6 +7,7 @@
 
 import type { AssignmentStatus, CancelReason } from '$lib/schemas/assignment';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
+import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
 
 export type ShiftData = {
@@ -125,23 +126,30 @@ export const dashboardStore = {
 		state.error = null;
 
 		try {
-			const res = await fetch('/api/dashboard');
-			if (!res.ok) {
+			const [dashboardRes, metricsRes] = await Promise.all([
+				fetch('/api/dashboard'),
+				fetch('/api/metrics').catch(() => null)
+			]);
+
+			if (!dashboardRes.ok) {
 				throw new Error('Failed to load dashboard');
 			}
 
-			const data = await res.json();
-			state.todayShift = data.todayShift ?? null;
-			state.thisWeek = data.thisWeek ?? null;
-			state.nextWeek = data.nextWeek ?? null;
-			state.metrics = data.metrics ?? {
-				totalShifts: 0,
-				completedShifts: 0,
-				attendanceRate: 0,
-				completionRate: 0
-			};
-			state.pendingBids = data.pendingBids ?? [];
-			state.isNewDriver = data.isNewDriver ?? false;
+			const dashboardData = await dashboardRes.json();
+			const metricsData = metricsRes?.ok ? await metricsRes.json() : null;
+
+			state.todayShift = dashboardData.todayShift ?? null;
+			state.thisWeek = dashboardData.thisWeek ?? null;
+			state.nextWeek = dashboardData.nextWeek ?? null;
+			state.metrics = metricsData?.metrics ??
+				dashboardData.metrics ?? {
+					totalShifts: 0,
+					completedShifts: 0,
+					attendanceRate: 0,
+					completionRate: 0
+				};
+			state.pendingBids = dashboardData.pendingBids ?? [];
+			state.isNewDriver = dashboardData.isNewDriver ?? false;
 		} catch (err) {
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.dashboard_load_error());
@@ -151,6 +159,10 @@ export const dashboardStore = {
 	},
 
 	async startShift(assignmentId: string, parcelsStart: number) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
 		state.isStartingShift = true;
 
 		try {
@@ -178,6 +190,10 @@ export const dashboardStore = {
 	},
 
 	async completeShift(assignmentId: string, parcelsDelivered: number, parcelsReturned: number) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
 		state.isCompletingShift = true;
 
 		try {
@@ -205,6 +221,10 @@ export const dashboardStore = {
 	},
 
 	async cancel(assignmentId: string, reason: CancelReason) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
 		state.isCancelling = true;
 
 		try {
