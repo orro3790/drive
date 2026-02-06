@@ -47,6 +47,7 @@ export const cancelReasonEnum = pgEnum('cancel_reason', [
 	'personal_emergency',
 	'other'
 ]);
+export const bidWindowModeEnum = pgEnum('bid_window_mode', ['competitive', 'instant', 'emergency']);
 export const notificationTypeEnum = pgEnum('notification_type', [
 	'shift_reminder',
 	'bid_open',
@@ -56,7 +57,13 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 	'warning',
 	'manual',
 	'schedule_locked',
-	'assignment_confirmed'
+	'assignment_confirmed',
+	'route_unfilled',
+	'route_cancelled',
+	'driver_no_show',
+	'confirmation_reminder',
+	'shift_auto_dropped',
+	'emergency_route_available'
 ]);
 export const actorTypeEnum = pgEnum('actor_type', ['user', 'system']);
 
@@ -144,6 +151,7 @@ export const assignments = pgTable('assignments', {
 	status: assignmentStatusEnum('status').notNull().default('scheduled'),
 	assignedBy: assignedByEnum('assigned_by'),
 	assignedAt: timestamp('assigned_at', { withTimezone: true }),
+	confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
 	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
@@ -189,8 +197,10 @@ export const bidWindows = pgTable('bid_windows', {
 	id: uuid('id').primaryKey().defaultRandom(),
 	assignmentId: uuid('assignment_id')
 		.notNull()
-		.references(() => assignments.id, { onDelete: 'cascade' })
-		.unique(),
+		.references(() => assignments.id, { onDelete: 'cascade' }),
+	mode: bidWindowModeEnum('mode').notNull().default('competitive'),
+	trigger: text('trigger'),
+	payBonusPercent: integer('pay_bonus_percent').notNull().default(0),
 	opensAt: timestamp('opens_at', { withTimezone: true }).notNull().defaultNow(),
 	closesAt: timestamp('closes_at', { withTimezone: true }).notNull(),
 	status: bidWindowStatusEnum('status').notNull().default('open'),
@@ -206,6 +216,13 @@ export const driverMetrics = pgTable('driver_metrics', {
 	completedShifts: integer('completed_shifts').notNull().default(0),
 	attendanceRate: real('attendance_rate').notNull().default(0), // 0-1
 	completionRate: real('completion_rate').notNull().default(0), // 0-1
+	avgParcelsDelivered: real('avg_parcels_delivered').notNull().default(0),
+	totalAssigned: integer('total_assigned').notNull().default(0),
+	confirmedShifts: integer('confirmed_shifts').notNull().default(0),
+	autoDroppedShifts: integer('auto_dropped_shifts').notNull().default(0),
+	lateCancellations: integer('late_cancellations').notNull().default(0),
+	noShows: integer('no_shows').notNull().default(0),
+	bidPickups: integer('bid_pickups').notNull().default(0),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
 

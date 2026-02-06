@@ -114,13 +114,16 @@ A bid window opens when an assignment becomes unfilled due to:
 - No-show (failed to confirm)
 - No eligible driver at schedule generation
 
-### Bid Window Duration
+### Bid Window Modes
 
-| Condition                  | Window Duration                         |
-| -------------------------- | --------------------------------------- |
-| Shift > 30 minutes away    | 30 minutes                              |
-| Shift ≤ 30 minutes away    | Until shift start time                  |
-| No bids when window closes | Stays open indefinitely until first bid |
+| Mode            | Trigger                              | Duration                  | Resolution              |
+| --------------- | ------------------------------------ | ------------------------- | ----------------------- |
+| **Competitive** | > 24h before shift                   | Closes 24h before shift   | Highest score wins      |
+| **Instant**     | ≤ 24h before shift, or no comp bids  | Closes at shift start     | First to accept wins    |
+| **Emergency**   | Manager-triggered or 9 AM no-show    | Closes at shift start/EOD | First to accept + bonus |
+
+- Competitive windows with no bids automatically transition to instant mode
+- Emergency mode includes an optional pay bonus (default 20%)
 
 ### Notification
 
@@ -167,7 +170,20 @@ Managers can **always** manually assign any driver, bypassing the bidding system
 
 ### Confirmation Model
 
-**Assumed confirmed unless cancelled.** Drivers do not need to explicitly confirm each shift — assignments are valid unless the driver cancels.
+**Mandatory confirmation required.** Drivers must explicitly confirm each upcoming shift within a defined window.
+
+- **Confirmation window**: 7 days to 48 hours before shift
+- **72h before**: Reminder notification sent to unconfirmed drivers
+- **48h before**: Unconfirmed shifts auto-dropped and reopened for bidding
+- **Deployment date**: 2026-03-01 (pre-existing assignments skip confirmation)
+
+### Arrival Deadline
+
+Drivers must signal arrival (tap "Arrive" in the app) by **9:00 AM Toronto time** on the day of their shift. Failure to arrive by 9 AM triggers a no-show and opens an emergency bid window.
+
+### Post-Shift Edit Window
+
+After completing a shift, drivers have a **1-hour window** to edit parcel counts (parcelsReturned). The `editableUntil` timestamp is set server-side at completion time.
 
 ### Cancellation Rules
 
@@ -181,12 +197,10 @@ Managers can **always** manually assign any driver, bypassing the bidding system
 
 A **no-show** occurs when a driver:
 
-- Did not start their shift, AND
-- Did not cancel before shift start time
+- Did not arrive by 9:00 AM Toronto time on shift day, AND
+- Did not cancel before the arrival deadline
 
-Shift start time defaults to **07:00 Toronto** when only a date is stored.
-
-No-shows count against attendance rate and may trigger flagging.
+No-shows count against attendance rate and may trigger flagging. The route is automatically reopened as an emergency bid window.
 
 ---
 

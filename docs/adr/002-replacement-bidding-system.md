@@ -21,19 +21,30 @@ Requirements:
 
 ## Decision
 
-Replace FCFS with a **bidding window + algorithm selection** system:
+Replace FCFS with a **three-mode bidding system** (competitive, instant, emergency):
 
 1. **Shift opens** → Push notification to all eligible drivers
-2. **Bidding window opens** (default: 30 minutes)
-3. **Drivers bid** (express interest, not instant assignment)
-4. **Window closes** → Algorithm selects winner based on score
+2. **Bidding window opens** in the appropriate mode
+3. **Drivers bid** (express interest, not instant assignment — except in instant/emergency modes)
+4. **Window closes** → Algorithm selects winner (competitive) or first-come wins (instant/emergency)
 5. **Winner notified**, losers notified, assignment updated
 
-### Window Duration Rules
+### Bidding Modes
 
-- If shift > 30 min away: window = 30 minutes
-- If shift < 30 min away: window = time until shift start
-- If no bids when window closes: window stays open until first bid
+**Competitive** (> 24h before shift):
+- Window closes 24h before shift start
+- Multiple drivers can bid; highest score wins
+- If no bids received: transitions to instant mode
+
+**Instant** (≤ 24h before shift):
+- Window closes at shift start time
+- First driver to accept wins immediately
+- No scoring, no waiting
+
+**Emergency** (manager-triggered or 9 AM no-show auto-detection):
+- Always instant-assign (first to accept wins)
+- Optional pay bonus (default 20%, stored as `payBonusPercent`)
+- Closes at shift start or end of day
 
 ### Scoring Algorithm
 
@@ -64,12 +75,13 @@ Managers can always manually assign any driver, bypassing the algorithm.
 - No way to prioritize experienced drivers for difficult routes
 - Creates "race condition" UX (stressful for drivers)
 
-### Why bidding window?
+### Why three modes?
 
-- Collects all interested parties before deciding
-- Algorithm can optimize for best match
-- Fairer to drivers who may be busy when notification arrives
-- Provides transparency (manager can see all bids + scores)
+- **Competitive** gives time to collect bids and pick the best driver when there's runway
+- **Instant** fills shifts fast when time is short — no point waiting for bids that won't come
+- **Emergency** handles day-of crises (no-shows at 9 AM) with urgency + pay incentive
+- Fairer to drivers who may be busy when notification arrives (competitive window)
+- Provides transparency (manager can see all bids + scores in competitive mode)
 
 ### Why these weights?
 
@@ -96,7 +108,8 @@ Managers can always manually assign any driver, bypassing the algorithm.
 
 ### Implementation Notes
 
-- `BidWindow` table tracks open/closed state
+- `BidWindow` table tracks open/closed state with `mode` (competitive/instant/emergency), `trigger`, and `payBonusPercent` columns
+- `assignmentId` is NOT unique on `bidWindows` — an assignment can have multiple bid windows (e.g., competitive → instant fallback, or re-opened emergency)
 - Vercel Cron job runs every minute to close expired windows
 - Score calculated at resolution time (not bid time) for fairness
 - Audit log captures algorithm decision for transparency
