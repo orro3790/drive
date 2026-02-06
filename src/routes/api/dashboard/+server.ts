@@ -26,6 +26,10 @@ import { addDays, parseISO, differenceInCalendarDays } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
 import { getWeekStart } from '$lib/server/services/scheduling';
 import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
+import {
+	calculateConfirmationDeadline,
+	getUnconfirmedAssignments
+} from '$lib/server/services/confirmations';
 import logger from '$lib/server/logger';
 
 const TORONTO_TZ = 'America/Toronto';
@@ -80,6 +84,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 				id: assignments.id,
 				date: assignments.date,
 				status: assignments.status,
+				confirmedAt: assignments.confirmedAt,
 				routeName: routes.name,
 				warehouseName: warehouses.name,
 				shiftId: shifts.id,
@@ -138,10 +143,22 @@ export const GET: RequestHandler = async ({ locals }) => {
 			assignment.shiftStartedAt !== null &&
 			assignment.shiftCompletedAt === null;
 
+		// Confirmation window data
+		const { opensAt, deadline } = calculateConfirmationDeadline(assignment.date);
+		const isConfirmable =
+			!assignment.confirmedAt &&
+			assignment.status === 'scheduled' &&
+			torontoNow >= opensAt &&
+			torontoNow <= deadline;
+
 		return {
 			id: assignment.id,
 			date: assignment.date,
 			status: assignment.status,
+			confirmedAt: assignment.confirmedAt?.toISOString() ?? null,
+			confirmationOpensAt: opensAt.toISOString(),
+			confirmationDeadline: deadline.toISOString(),
+			isConfirmable,
 			routeName: assignment.routeName,
 			warehouseName: assignment.warehouseName,
 			isCancelable,
@@ -200,6 +217,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 		windowClosesAt: bid.windowClosesAt.toISOString()
 	}));
 
+	// Get unconfirmed shifts within confirmation window
+	const unconfirmedShifts = await getUnconfirmedAssignments(locals.user.id);
+
 	// Determine if user is a new driver (no scheduled shifts ever)
 	const isNewDriver = metrics.totalShifts === 0 && processedAssignments.length === 0;
 
@@ -217,6 +237,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		},
 		metrics,
 		pendingBids,
+		unconfirmedShifts,
 		isNewDriver
 	});
 };

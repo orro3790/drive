@@ -12,6 +12,7 @@ import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import { addDays, differenceInCalendarDays, parseISO } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
 import { getWeekStart } from '$lib/server/services/scheduling';
+import { calculateConfirmationDeadline } from '$lib/server/services/confirmations';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -49,6 +50,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			id: assignments.id,
 			date: assignments.date,
 			status: assignments.status,
+			confirmedAt: assignments.confirmedAt,
 			routeName: routes.name,
 			warehouseName: warehouses.name,
 			shiftId: shifts.id,
@@ -87,10 +89,21 @@ export const GET: RequestHandler = async ({ locals }) => {
 			assignment.shiftStartedAt !== null &&
 			assignment.shiftCompletedAt === null;
 
+		const { opensAt, deadline } = calculateConfirmationDeadline(assignment.date);
+		const isConfirmable =
+			!assignment.confirmedAt &&
+			assignment.status === 'scheduled' &&
+			torontoNow >= opensAt &&
+			torontoNow <= deadline;
+
 		return {
 			id: assignment.id,
 			date: assignment.date,
 			status: assignment.status,
+			confirmedAt: assignment.confirmedAt?.toISOString() ?? null,
+			confirmationOpensAt: opensAt.toISOString(),
+			confirmationDeadline: deadline.toISOString(),
+			isConfirmable,
 			routeName: assignment.routeName,
 			warehouseName: assignment.warehouseName,
 			isCancelable,

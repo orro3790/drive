@@ -23,6 +23,10 @@ export type DashboardAssignment = {
 	id: string;
 	date: string;
 	status: AssignmentStatus;
+	confirmedAt: string | null;
+	confirmationOpensAt: string;
+	confirmationDeadline: string;
+	isConfirmable: boolean;
 	routeName: string;
 	warehouseName: string;
 	isCancelable: boolean;
@@ -30,6 +34,15 @@ export type DashboardAssignment = {
 	isStartable: boolean;
 	isCompletable: boolean;
 	shift: ShiftData | null;
+};
+
+export type UnconfirmedShift = {
+	id: string;
+	date: string;
+	routeName: string;
+	confirmationOpensAt: string;
+	confirmationDeadline: string;
+	isConfirmable: boolean;
 };
 
 export type WeekSummary = {
@@ -61,11 +74,13 @@ const state = $state<{
 	nextWeek: WeekSummary | null;
 	metrics: DriverMetrics;
 	pendingBids: PendingBid[];
+	unconfirmedShifts: UnconfirmedShift[];
 	isNewDriver: boolean;
 	isLoading: boolean;
 	isStartingShift: boolean;
 	isCompletingShift: boolean;
 	isCancelling: boolean;
+	isConfirming: boolean;
 	error: string | null;
 }>({
 	todayShift: null,
@@ -78,11 +93,13 @@ const state = $state<{
 		completionRate: 0
 	},
 	pendingBids: [],
+	unconfirmedShifts: [],
 	isNewDriver: false,
 	isLoading: false,
 	isStartingShift: false,
 	isCompletingShift: false,
 	isCancelling: false,
+	isConfirming: false,
 	error: null
 });
 
@@ -101,6 +118,12 @@ export const dashboardStore = {
 	},
 	get pendingBids() {
 		return state.pendingBids;
+	},
+	get unconfirmedShifts() {
+		return state.unconfirmedShifts;
+	},
+	get isConfirming() {
+		return state.isConfirming;
 	},
 	get isNewDriver() {
 		return state.isNewDriver;
@@ -149,6 +172,7 @@ export const dashboardStore = {
 					completionRate: 0
 				};
 			state.pendingBids = dashboardData.pendingBids ?? [];
+			state.unconfirmedShifts = dashboardData.unconfirmedShifts ?? [];
 			state.isNewDriver = dashboardData.isNewDriver ?? false;
 		} catch (err) {
 			state.error = err instanceof Error ? err.message : 'Unknown error';
@@ -217,6 +241,58 @@ export const dashboardStore = {
 			return false;
 		} finally {
 			state.isCompletingShift = false;
+		}
+	},
+
+	async confirmShift(assignmentId: string) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
+		state.isConfirming = true;
+
+		try {
+			const res = await fetch(`/api/assignments/${assignmentId}/confirm`, {
+				method: 'POST'
+			});
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => null);
+				throw new Error(data?.message ?? 'Failed to confirm shift');
+			}
+
+			// Remove from unconfirmedShifts locally
+			state.unconfirmedShifts = state.unconfirmedShifts.filter((s) => s.id !== assignmentId);
+
+			// Update the assignment in week summaries
+			const updateAssignment = (a: DashboardAssignment) => {
+				if (a.id === assignmentId) {
+					return { ...a, confirmedAt: new Date().toISOString(), isConfirmable: false };
+				}
+				return a;
+			};
+
+			if (state.thisWeek) {
+				state.thisWeek = {
+					...state.thisWeek,
+					assignments: state.thisWeek.assignments.map(updateAssignment)
+				};
+			}
+			if (state.nextWeek) {
+				state.nextWeek = {
+					...state.nextWeek,
+					assignments: state.nextWeek.assignments.map(updateAssignment)
+				};
+			}
+
+			toastStore.success('Shift confirmed!');
+			return true;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Failed to confirm shift';
+			toastStore.error(message);
+			return false;
+		} finally {
+			state.isConfirming = false;
 		}
 	},
 

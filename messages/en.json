@@ -302,6 +302,10 @@
 	"schedule_cancel_success": "Assignment cancelled.",
 	"schedule_cancel_error": "Unable to cancel assignment.",
 	"schedule_load_error": "Failed to load schedule.",
+	"schedule_confirmed_chip": "Confirmed",
+	"schedule_confirm_by_chip": "Confirm by {date}",
+	"schedule_confirm_opens_chip": "Opens {date}",
+	"schedule_confirm_button": "Confirm",
 	"offline_banner_message": "You're offline. Some features are unavailable.",
 	"offline_requires_connectivity": "This action requires connectivity.",
 	"schedule_cancel_reason_vehicle_breakdown": "Vehicle breakdown",
@@ -459,6 +463,10 @@
 	"dashboard_bids_empty": "No pending bids",
 	"dashboard_bids_empty_message": "Visit the Bids page to see available shifts.",
 	"dashboard_bids_view_all": "View all bids",
+
+	"dashboard_confirm_section": "Needs Confirmation",
+	"dashboard_confirm_deadline": "Confirm by {deadline}",
+	"dashboard_confirm_button": "Confirm",
 
 	"dashboard_new_driver_title": "Welcome to Drive!",
 	"dashboard_new_driver_message": "Your first scheduled shifts will appear in approximately 2 weeks. In the meantime, you can bid on available shifts to start working sooner.",

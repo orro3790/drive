@@ -1,35 +1,23 @@
-/**
- * Close Bid Windows Cron Job
- *
- * Scheduled: Daily at midnight UTC (0 0 * * *)
- * Note: Vercel Hobby plan limits cron to once daily. Upgrade to Pro for
- * more frequent execution (e.g., every 15 minutes for faster bid resolution).
- *
- * Finds expired bid windows and resolves them via resolveBidWindow().
- * Windows without bids remain open (per spec: stays open indefinitely).
- * Each window is processed independently - errors don't block others.
- *
- * @see DRV-5eo
- */
+// Close Bid Windows Cron Job
+//
+// Scheduled: Every 15 minutes
+//
+// Handles expired bid windows by mode:
+// - Competitive with bids: scored resolution (pick winner)
+// - Competitive without bids: transition to instant mode
+// - Instant/emergency past closesAt: close window, alert manager
 
 import { json } from '@sveltejs/kit';
 import { CRON_SECRET } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
+import { eq } from 'drizzle-orm';
+import { db } from '$lib/server/db';
+import { bidWindows } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
-import {
-	getExpiredBidWindows,
-	resolveBidWindow,
-	type ResolveBidWindowResult
-} from '$lib/server/services/bidding';
-
-interface ProcessingResult {
-	windowId: string;
-	result: ResolveBidWindowResult | { error: string };
-}
+import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
 
 export const GET: RequestHandler = async ({ request }) => {
-	// Verify cron secret to prevent unauthorized access
 	const authHeader = request.headers.get('authorization')?.trim();
 	const expectedToken = (CRON_SECRET || env.CRON_SECRET)?.trim();
 	if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
@@ -43,49 +31,61 @@ export const GET: RequestHandler = async ({ request }) => {
 
 	if (expiredWindows.length === 0) {
 		log.info('No expired bid windows to process');
-		return json({ success: true, processed: 0, resolved: 0, errors: 0 });
+		return json({
+			success: true,
+			processed: 0,
+			resolved: 0,
+			transitioned: 0,
+			closed: 0,
+			errors: 0
+		});
 	}
 
 	log.info({ count: expiredWindows.length }, 'Found expired bid windows');
 
-	const results: ProcessingResult[] = [];
-	let resolvedCount = 0;
-	let errorCount = 0;
+	let resolved = 0;
+	let transitioned = 0;
+	let closed = 0;
+	let errors = 0;
 
-	// Process each window independently
 	for (const window of expiredWindows) {
 		try {
 			const result = await resolveBidWindow(window.id);
-			results.push({ windowId: window.id, result });
 
 			if (result.resolved) {
-				resolvedCount++;
+				resolved++;
 				log.info(
 					{ windowId: window.id, winnerId: result.winnerId, bidCount: result.bidCount },
 					'Bid window resolved'
 				);
+			} else if (result.transitioned) {
+				transitioned++;
+				log.info({ windowId: window.id }, 'Competitive window transitioned to instant');
+			} else if (result.reason === 'no_bids') {
+				// Instant/emergency window with no bids — close it
+				await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, window.id));
+				closed++;
+				log.info({ windowId: window.id, mode: window.mode }, 'Window closed (no bids)');
 			} else {
-				// Window stayed open (no bids or already resolved)
 				log.info({ windowId: window.id, reason: result.reason }, 'Bid window not resolved');
 			}
-		} catch (error) {
-			errorCount++;
-			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-			results.push({ windowId: window.id, result: { error: errorMessage } });
-			log.error({ windowId: window.id, error: errorMessage }, 'Failed to process bid window');
+		} catch (err) {
+			errors++;
+			log.error({ windowId: window.id, error: err }, 'Failed to process bid window');
 		}
 	}
 
 	log.info(
-		{ processed: expiredWindows.length, resolved: resolvedCount, errors: errorCount },
-		'Bid window closure cron job completed'
+		{ processed: expiredWindows.length, resolved, transitioned, closed, errors },
+		'Bid window closure cron completed'
 	);
 
 	return json({
 		success: true,
 		processed: expiredWindows.length,
-		resolved: resolvedCount,
-		errors: errorCount,
-		results
+		resolved,
+		transitioned,
+		closed,
+		errors
 	});
 };

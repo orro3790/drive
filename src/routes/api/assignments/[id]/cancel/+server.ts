@@ -2,31 +2,26 @@
  * Assignment Cancellation API
  *
  * POST /api/assignments/[id]/cancel - Cancel an assignment (driver only)
+ *
+ * Late cancellation: if the assignment was confirmed and the driver cancels
+ * within 48h of the shift, the lateCancellations metric is incremented.
+ * A bid window is created with mode based on time remaining.
  */
 
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, bidWindows, routes } from '$lib/server/db/schema';
+import { assignments, driverMetrics } from '$lib/server/db/schema';
 import { assignmentCancelSchema } from '$lib/schemas/assignment';
-import { and, eq } from 'drizzle-orm';
-import { addMinutes, differenceInCalendarDays, parseISO } from 'date-fns';
+import { and, eq, sql } from 'drizzle-orm';
 import { format, toZonedTime } from 'date-fns-tz';
 import { sendManagerAlert } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
-import {
-	broadcastAssignmentUpdated,
-	broadcastBidWindowOpened
-} from '$lib/server/realtime/managerSse';
+import { createBidWindow } from '$lib/server/services/bidding';
+import { calculateConfirmationDeadline } from '$lib/server/services/confirmations';
+import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 
 const TORONTO_TZ = 'America/Toronto';
-
-function getMinutesUntilShift(dateString: string, nowToronto: Date): number {
-	const torontoToday = format(nowToronto, 'yyyy-MM-dd');
-	const dayDiff = differenceInCalendarDays(parseISO(dateString), parseISO(torontoToday));
-	const currentMinutes = nowToronto.getHours() * 60 + nowToronto.getMinutes();
-	return dayDiff * 24 * 60 - currentMinutes;
-}
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (!locals.user) {
@@ -51,7 +46,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			userId: assignments.userId,
 			routeId: assignments.routeId,
 			date: assignments.date,
-			status: assignments.status
+			status: assignments.status,
+			confirmedAt: assignments.confirmedAt
 		})
 		.from(assignments)
 		.where(eq(assignments.id, id));
@@ -74,9 +70,11 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(400, 'Assignments must be cancelled in advance');
 	}
 
-	const minutesUntilShift = getMinutesUntilShift(existing.date, torontoNow);
-	const isLateCancel = minutesUntilShift <= 48 * 60;
+	// Check for late cancellation: confirmed + past 48h deadline
+	const { deadline } = calculateConfirmationDeadline(existing.date);
+	const isLateCancellation = existing.confirmedAt !== null && torontoNow > deadline;
 
+	// Cancel the assignment
 	const [updated] = await db
 		.update(assignments)
 		.set({
@@ -89,6 +87,17 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			status: assignments.status
 		});
 
+	// Increment late cancellation metric if applicable
+	if (isLateCancellation) {
+		await db
+			.update(driverMetrics)
+			.set({
+				lateCancellations: sql`${driverMetrics.lateCancellations} + 1`,
+				updatedAt: new Date()
+			})
+			.where(eq(driverMetrics.userId, locals.user.id));
+	}
+
 	await createAuditLog({
 		entityType: 'assignment',
 		entityId: existing.id,
@@ -99,48 +108,23 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			before: { status: existing.status },
 			after: { status: updated.status },
 			reason: result.data.reason,
-			lateCancel: isLateCancel
+			lateCancel: isLateCancellation,
+			trigger: 'cancellation'
 		}
 	});
 
-	// Send alert to route manager (best-effort, don't fail if alert fails)
-	let routeName: string | null = null;
+	// Send alert to route manager (best-effort)
 	try {
-		const [route] = await db
-			.select({ name: routes.name })
-			.from(routes)
-			.where(eq(routes.id, existing.routeId));
-		routeName = route?.name ?? null;
-
 		await sendManagerAlert(existing.routeId, 'route_cancelled', {
 			driverName: locals.user.name ?? 'A driver',
-			date: existing.date,
-			routeName
+			date: existing.date
 		});
 	} catch {
-		// Manager alert is best-effort, don't fail cancellation
+		// Manager alert is best-effort
 	}
 
-	const [existingWindow] = await db
-		.select({ id: bidWindows.id })
-		.from(bidWindows)
-		.where(eq(bidWindows.assignmentId, existing.id));
-
-	let createdWindowClosesAt: Date | null = null;
-	if (!existingWindow) {
-		const closesAt =
-			minutesUntilShift > 30
-				? addMinutes(new Date(), 30)
-				: addMinutes(new Date(), Math.max(1, minutesUntilShift));
-		createdWindowClosesAt = closesAt;
-
-		await db.insert(bidWindows).values({
-			assignmentId: existing.id,
-			opensAt: new Date(),
-			closesAt,
-			status: 'open'
-		});
-	}
+	// Create bid window via service (handles mode selection automatically)
+	await createBidWindow(existing.id, { trigger: 'cancellation' });
 
 	broadcastAssignmentUpdated({
 		assignmentId: existing.id,
@@ -149,16 +133,6 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		driverName: locals.user.name ?? null,
 		routeId: existing.routeId
 	});
-
-	if (createdWindowClosesAt) {
-		broadcastBidWindowOpened({
-			assignmentId: existing.id,
-			routeId: existing.routeId,
-			routeName: routeName ?? 'Unknown Route',
-			assignmentDate: existing.date,
-			closesAt: createdWindowClosesAt.toISOString()
-		});
-	}
 
 	return json({
 		assignment: updated

@@ -15,6 +15,7 @@ import {
 	notifications,
 	routeCompletions,
 	routes,
+	shifts,
 	user,
 	warehouses
 } from '$lib/server/db/schema';
@@ -24,9 +25,9 @@ import {
 	sendNotification
 } from '$lib/server/services/notifications';
 import { createAuditLog, type AuditActor } from '$lib/server/services/audit';
-import { and, eq, lt, sql } from 'drizzle-orm';
+import { and, eq, lt, ne, sql } from 'drizzle-orm';
 import { toZonedTime } from 'date-fns-tz';
-import { addMinutes, parseISO, startOfDay } from 'date-fns';
+import { addHours, parseISO, set, startOfDay } from 'date-fns';
 import logger from '$lib/server/logger';
 import { getWeekStart, canDriverTakeAssignment } from './scheduling';
 import {
@@ -36,7 +37,11 @@ import {
 } from '$lib/server/realtime/managerSse';
 
 const TORONTO_TZ = 'America/Toronto';
-const BID_WINDOW_DURATION_MINUTES = 30;
+const SHIFT_START_HOUR = 7;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+export type BidWindowMode = 'competitive' | 'instant' | 'emergency';
+export type BidWindowTrigger = 'cancellation' | 'auto_drop' | 'no_show' | 'manager';
 
 export interface CreateBidWindowResult {
 	success: boolean;
@@ -46,6 +51,9 @@ export interface CreateBidWindowResult {
 }
 
 export interface CreateBidWindowOptions {
+	mode?: BidWindowMode;
+	trigger?: BidWindowTrigger;
+	payBonusPercent?: number;
 	allowPastShift?: boolean;
 }
 
@@ -54,6 +62,14 @@ export interface ResolveBidWindowResult {
 	bidCount: number;
 	winnerId?: string;
 	reason?: string;
+	transitioned?: boolean;
+}
+
+export interface InstantAssignResult {
+	instantlyAssigned: boolean;
+	bidId?: string;
+	assignmentId?: string;
+	error?: string;
 }
 
 /**
@@ -64,58 +80,66 @@ function getNowToronto(): Date {
 }
 
 /**
- * Convert an assignment date string to a Date representing shift start (start of day in Toronto)
+ * Convert an assignment date string to shift start (07:00 Toronto)
  */
 function getShiftStartTime(dateString: string): Date {
-	// Assignment date is stored as 'YYYY-MM-DD', shift starts at beginning of day
 	const parsed = parseISO(dateString);
-	return startOfDay(toZonedTime(parsed, TORONTO_TZ));
+	const toronto = toZonedTime(parsed, TORONTO_TZ);
+	return set(startOfDay(toronto), {
+		hours: SHIFT_START_HOUR,
+		minutes: 0,
+		seconds: 0,
+		milliseconds: 0
+	});
 }
 
 /**
- * Calculate the closesAt time for a bid window based on time until shift.
+ * Determine the appropriate bid window mode based on time until shift.
  *
- * Rules:
- * - If shift > 30 min away: closesAt = now + 30 minutes
- * - If shift ≤ 30 min away: closesAt = shift start time
- * - If shift already passed: no window (return null), unless allowPastShift
+ * - > 24h to shift: competitive (closesAt = 24h before shift)
+ * - <= 24h to shift: instant (closesAt = shift start)
+ * - Emergency: always closesAt = shift start (or end of day if past)
  */
-function calculateWindowClosesAt(
+function determineModeAndClosesAt(
 	assignmentDate: string,
 	options: CreateBidWindowOptions = {}
-): Date | null {
+): { mode: BidWindowMode; closesAt: Date } | null {
 	const now = getNowToronto();
 	const shiftStart = getShiftStartTime(assignmentDate);
 
-	// If shift already passed, optionally allow a short replacement window
+	// If explicitly set, use it
+	if (options.mode === 'emergency') {
+		const closesAt = shiftStart > now ? shiftStart : set(now, { hours: 23, minutes: 59 });
+		return { mode: 'emergency', closesAt };
+	}
+
+	// If shift already passed
 	if (shiftStart <= now) {
 		if (options.allowPastShift) {
-			return addMinutes(now, BID_WINDOW_DURATION_MINUTES);
+			return { mode: 'instant', closesAt: set(now, { hours: 23, minutes: 59 }) };
 		}
 		return null;
 	}
 
 	const timeUntilShiftMs = shiftStart.getTime() - now.getTime();
-	const thirtyMinutesMs = BID_WINDOW_DURATION_MINUTES * 60 * 1000;
 
-	if (timeUntilShiftMs > thirtyMinutesMs) {
-		// Shift > 30 min away: window = 30 minutes
-		return addMinutes(now, BID_WINDOW_DURATION_MINUTES);
-	} else {
-		// Shift ≤ 30 min away: window closes at shift start
-		return shiftStart;
+	if (options.mode === 'instant' || timeUntilShiftMs <= TWENTY_FOUR_HOURS_MS) {
+		return { mode: 'instant', closesAt: shiftStart };
 	}
+
+	// Competitive: closes 24h before shift
+	const closesAt = addHours(shiftStart, -24);
+	return { mode: 'competitive', closesAt };
 }
 
 /**
  * Create a bid window when an assignment becomes unfilled.
  *
- * Triggers:
- * - Driver cancels assignment
- * - No-show detected
- * - Schedule generation creates unfilled assignment
- *
- * @param assignmentId - The assignment that needs a replacement driver
+ * Mode selection:
+ * - Explicit mode in options takes priority
+ * - > 24h to shift: competitive (closesAt = 24h before shift)
+ * - <= 24h to shift: instant (closesAt = shift start)
+ * - Emergency: always instant-like with bonus
  */
 export async function createBidWindow(
 	assignmentId: string,
@@ -123,7 +147,6 @@ export async function createBidWindow(
 ): Promise<CreateBidWindowResult> {
 	const log = logger.child({ operation: 'createBidWindow', assignmentId, ...options });
 
-	// Get assignment details
 	const [assignment] = await db
 		.select({
 			id: assignments.id,
@@ -139,32 +162,31 @@ export async function createBidWindow(
 		return { success: false, reason: 'Assignment not found' };
 	}
 
-	// Check for existing bid window (no duplicates)
+	// Check for existing OPEN bid window only (resolved/closed windows are fine)
 	const [existingWindow] = await db
 		.select({ id: bidWindows.id })
 		.from(bidWindows)
-		.where(eq(bidWindows.assignmentId, assignmentId));
+		.where(and(eq(bidWindows.assignmentId, assignmentId), eq(bidWindows.status, 'open')));
 
 	if (existingWindow) {
-		log.info({ existingWindowId: existingWindow.id }, 'Bid window already exists');
-		return { success: false, reason: 'Bid window already exists for this assignment' };
+		log.info({ existingWindowId: existingWindow.id }, 'Open bid window already exists');
+		return { success: false, reason: 'Open bid window already exists for this assignment' };
 	}
 
-	// Calculate window close time
-	const closesAt = calculateWindowClosesAt(assignment.date, options);
-	if (!closesAt) {
+	const result = determineModeAndClosesAt(assignment.date, options);
+	if (!result) {
 		log.info('Shift already passed, no window created');
 		return { success: false, reason: 'Shift has already passed' };
 	}
 
-	// Get route name for notification
+	const { mode, closesAt } = result;
+
 	const [route] = await db
 		.select({ name: routes.name })
 		.from(routes)
 		.where(eq(routes.id, assignment.routeId));
 	const routeName = route?.name ?? 'Unknown Route';
 
-	// Update assignment status to unfilled if not already
 	if (assignment.status !== 'unfilled') {
 		const updatedAt = new Date();
 		await db
@@ -181,30 +203,34 @@ export async function createBidWindow(
 			changes: {
 				before: { status: assignment.status },
 				after: { status: 'unfilled' },
-				reason: 'bid_window_opened'
+				reason: 'bid_window_opened',
+				trigger: options.trigger
 			}
 		});
 	}
 
-	// Create the bid window
 	const [bidWindow] = await db
 		.insert(bidWindows)
 		.values({
 			assignmentId,
+			mode,
+			trigger: options.trigger ?? null,
+			payBonusPercent: options.payBonusPercent ?? 0,
 			opensAt: new Date(),
 			closesAt,
 			status: 'open'
 		})
 		.returning({ id: bidWindows.id });
 
-	log.info({ bidWindowId: bidWindow.id, closesAt }, 'Bid window created');
+	log.info({ bidWindowId: bidWindow.id, mode, closesAt }, 'Bid window created');
 
-	// Find eligible drivers and send notifications
 	const notifiedCount = await notifyEligibleDrivers({
 		assignmentId,
 		assignmentDate: assignment.date,
 		routeName,
-		closesAt
+		closesAt,
+		mode,
+		payBonusPercent: options.payBonusPercent ?? 0
 	});
 
 	broadcastBidWindowOpened({
@@ -236,6 +262,8 @@ interface NotifyEligibleDriversParams {
 	assignmentDate: string;
 	routeName: string;
 	closesAt: Date;
+	mode: BidWindowMode;
+	payBonusPercent: number;
 }
 
 /**
@@ -247,10 +275,9 @@ interface NotifyEligibleDriversParams {
  * - Under weekly cap for the assignment's week
  */
 async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promise<number> {
-	const { assignmentId, assignmentDate, routeName, closesAt } = params;
-	const log = logger.child({ operation: 'notifyEligibleDrivers', assignmentId });
+	const { assignmentId, assignmentDate, routeName, closesAt, mode, payBonusPercent } = params;
+	const log = logger.child({ operation: 'notifyEligibleDrivers', assignmentId, mode });
 
-	// Get all non-flagged drivers
 	const drivers = await db
 		.select({ id: user.id })
 		.from(user)
@@ -261,10 +288,8 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 		return 0;
 	}
 
-	// Get the week start for the assignment date
 	const assignmentWeekStart = getWeekStart(parseISO(assignmentDate));
 
-	// Filter to drivers under their weekly cap
 	const eligibleDriverIds: string[] = [];
 	for (const driver of drivers) {
 		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart);
@@ -278,29 +303,42 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 		return 0;
 	}
 
-	// Format notification message
-	const formattedDate = assignmentDate; // Already YYYY-MM-DD format
-	const formattedCloseTime = closesAt.toLocaleTimeString('en-US', {
-		hour: 'numeric',
-		minute: '2-digit',
-		timeZone: TORONTO_TZ
-	});
+	const formattedDate = assignmentDate;
+	const isEmergency = mode === 'emergency';
+	const isInstant = mode === 'instant' || isEmergency;
 
-	// Create notifications for all eligible drivers
-	const notificationRecords = eligibleDriverIds.map((userId) => ({
-		userId,
-		type: 'bid_open' as const,
-		title: 'New Shift Available',
-		body: `${routeName} on ${formattedDate} is open for bidding. Window closes at ${formattedCloseTime}.`,
-		data: { assignmentId, routeName, closesAt: closesAt.toISOString() }
+	const notificationType = isEmergency
+		? ('emergency_route_available' as const)
+		: ('bid_open' as const);
+
+	let body: string;
+	if (isEmergency) {
+		const bonusText = payBonusPercent > 0 ? ` +${payBonusPercent}% bonus.` : '';
+		body = `${routeName} on ${formattedDate} needs a driver urgently.${bonusText} First to accept gets it.`;
+	} else if (isInstant) {
+		body = `${routeName} on ${formattedDate} is available. First to accept gets it.`;
+	} else {
+		const formattedCloseTime = closesAt.toLocaleTimeString('en-US', {
+			hour: 'numeric',
+			minute: '2-digit',
+			timeZone: TORONTO_TZ
+		});
+		body = `${routeName} on ${formattedDate} is open for bidding. Window closes at ${formattedCloseTime}.`;
+	}
+
+	const title = isEmergency ? 'Priority Route Available' : 'New Shift Available';
+
+	const notificationRecords = eligibleDriverIds.map((driverId) => ({
+		userId: driverId,
+		type: notificationType,
+		title,
+		body,
+		data: { assignmentId, routeName, closesAt: closesAt.toISOString(), mode }
 	}));
 
 	await db.insert(notifications).values(notificationRecords);
 
-	log.info({ count: eligibleDriverIds.length }, 'Notifications created');
-
-	// TODO: Send push notifications via FCM when infrastructure is ready (DRV-69a)
-	// For now, we create in-app notifications that drivers can see in the app
+	log.info({ count: eligibleDriverIds.length, mode }, 'Notifications created');
 
 	return eligibleDriverIds.length;
 }
@@ -351,7 +389,8 @@ export async function resolveBidWindow(
 		.select({
 			id: bidWindows.id,
 			assignmentId: bidWindows.assignmentId,
-			status: bidWindows.status
+			status: bidWindows.status,
+			mode: bidWindows.mode
 		})
 		.from(bidWindows)
 		.where(eq(bidWindows.id, bidWindowId));
@@ -396,7 +435,18 @@ export async function resolveBidWindow(
 	if (pendingBids.length === 0) {
 		log.info({ assignmentId: assignment.id }, 'No bids to resolve');
 
-		// Alert manager that assignment remains unfilled
+		// For competitive windows with no bids, transition to instant mode
+		if (window.mode === 'competitive') {
+			await transitionToInstantMode(bidWindowId);
+			return {
+				resolved: false,
+				bidCount: 0,
+				reason: 'transitioned_to_instant',
+				transitioned: true
+			};
+		}
+
+		// For instant/emergency windows, alert manager
 		try {
 			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
 				routeName: assignment.routeName,
@@ -525,16 +575,191 @@ export async function resolveBidWindow(
  * Get all open bid windows that have passed their closesAt time.
  * Used by the cron job to resolve expired windows.
  */
-export async function getExpiredBidWindows(): Promise<Array<{ id: string; assignmentId: string }>> {
+export async function getExpiredBidWindows(): Promise<
+	Array<{ id: string; assignmentId: string; mode: BidWindowMode }>
+> {
 	const now = new Date();
 
 	return db
 		.select({
 			id: bidWindows.id,
-			assignmentId: bidWindows.assignmentId
+			assignmentId: bidWindows.assignmentId,
+			mode: bidWindows.mode
 		})
 		.from(bidWindows)
 		.where(and(eq(bidWindows.status, 'open'), lt(bidWindows.closesAt, now)));
+}
+
+/**
+ * Transition a competitive bid window to instant mode.
+ * Called when a competitive window expires with no bids.
+ */
+export async function transitionToInstantMode(bidWindowId: string): Promise<void> {
+	const log = logger.child({ operation: 'transitionToInstantMode', bidWindowId });
+
+	const [window] = await db
+		.select({
+			id: bidWindows.id,
+			assignmentId: bidWindows.assignmentId,
+			mode: bidWindows.mode
+		})
+		.from(bidWindows)
+		.where(eq(bidWindows.id, bidWindowId));
+
+	if (!window) {
+		log.warn('Bid window not found');
+		return;
+	}
+
+	const [assignment] = await db
+		.select({
+			date: assignments.date,
+			routeId: assignments.routeId
+		})
+		.from(assignments)
+		.where(eq(assignments.id, window.assignmentId));
+
+	if (!assignment) {
+		log.warn('Assignment not found for transition');
+		return;
+	}
+
+	const shiftStart = getShiftStartTime(assignment.date);
+
+	await db
+		.update(bidWindows)
+		.set({ mode: 'instant', closesAt: shiftStart })
+		.where(eq(bidWindows.id, bidWindowId));
+
+	const [route] = await db
+		.select({ name: routes.name })
+		.from(routes)
+		.where(eq(routes.id, assignment.routeId));
+	const routeName = route?.name ?? 'Unknown Route';
+
+	await notifyEligibleDrivers({
+		assignmentId: window.assignmentId,
+		assignmentDate: assignment.date,
+		routeName,
+		closesAt: shiftStart,
+		mode: 'instant',
+		payBonusPercent: 0
+	});
+
+	log.info({ assignmentId: window.assignmentId }, 'Transitioned to instant mode');
+}
+
+/**
+ * Instantly assign a driver to an assignment via an instant/emergency bid window.
+ * Uses SELECT FOR UPDATE to prevent race conditions.
+ */
+export async function instantAssign(
+	assignmentId: string,
+	userId: string,
+	bidWindowId: string
+): Promise<InstantAssignResult> {
+	const log = logger.child({ operation: 'instantAssign', assignmentId, userId, bidWindowId });
+
+	try {
+		return await db.transaction(async (tx) => {
+			// Lock the bid window row with FOR UPDATE to serialize concurrent requests
+			const lockResult = await tx.execute(
+				sql`SELECT id, status, pay_bonus_percent FROM bid_windows WHERE id = ${bidWindowId} FOR UPDATE`
+			);
+			const windowRow = (lockResult as { rows?: Array<Record<string, unknown>> }).rows?.[0];
+
+			if (!windowRow || windowRow.status !== 'open') {
+				return { instantlyAssigned: false, error: 'Route already assigned' };
+			}
+
+			const resolvedAt = new Date();
+
+			// Create winning bid
+			const [assignment] = await tx
+				.select({ date: assignments.date })
+				.from(assignments)
+				.where(eq(assignments.id, assignmentId));
+
+			const shiftStart = getShiftStartTime(assignment.date);
+
+			const [bid] = await tx
+				.insert(bids)
+				.values({
+					assignmentId,
+					userId,
+					score: null,
+					status: 'won',
+					bidAt: resolvedAt,
+					windowClosesAt: shiftStart,
+					resolvedAt
+				})
+				.returning({ id: bids.id });
+
+			// Assign driver to assignment
+			await tx
+				.update(assignments)
+				.set({
+					userId,
+					status: 'scheduled',
+					assignedBy: 'bid',
+					assignedAt: resolvedAt,
+					updatedAt: resolvedAt
+				})
+				.where(eq(assignments.id, assignmentId));
+
+			// Resolve window
+			await tx
+				.update(bidWindows)
+				.set({ status: 'resolved', winnerId: userId })
+				.where(eq(bidWindows.id, bidWindowId));
+
+			// Delete any incomplete shift record (reassignment case)
+			await tx.delete(shifts).where(eq(shifts.assignmentId, assignmentId));
+
+			// Mark other pending bids as lost
+			await tx
+				.update(bids)
+				.set({ status: 'lost', resolvedAt })
+				.where(
+					and(eq(bids.assignmentId, assignmentId), eq(bids.status, 'pending'), ne(bids.id, bid.id))
+				);
+
+			// Increment bidPickups metric
+			await tx
+				.update(driverMetrics)
+				.set({
+					bidPickups: sql`${driverMetrics.bidPickups} + 1`,
+					updatedAt: resolvedAt
+				})
+				.where(eq(driverMetrics.userId, userId));
+
+			await createAuditLog(
+				{
+					entityType: 'assignment',
+					entityId: assignmentId,
+					action: 'instant_assign',
+					actorType: 'user',
+					actorId: userId,
+					changes: {
+						before: { status: 'unfilled' },
+						after: { status: 'scheduled', userId, assignedBy: 'bid' },
+						bidWindowId,
+						mode: 'instant'
+					}
+				},
+				tx
+			);
+
+			return {
+				instantlyAssigned: true,
+				bidId: bid.id,
+				assignmentId
+			};
+		});
+	} catch (err) {
+		log.error({ error: err }, 'Instant assign failed');
+		return { instantlyAssigned: false, error: 'Route already assigned' };
+	}
 }
 
 export async function getBidWindowDetail(windowId: string) {

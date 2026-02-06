@@ -114,6 +114,17 @@
 			: m.schedule_week_current({ week: weekNumber });
 	}
 
+	function getConfirmationState(assignment: ScheduleAssignment) {
+		if (assignment.confirmedAt) return 'confirmed';
+		if (assignment.isConfirmable) return 'confirmable';
+		if (assignment.status === 'scheduled' && !assignment.confirmedAt) {
+			const now = new Date();
+			const opensAt = parseISO(assignment.confirmationOpensAt);
+			if (now < opensAt) return 'not_open';
+		}
+		return 'none';
+	}
+
 	function openCancelModal(assignment: ScheduleAssignment) {
 		cancelTarget = assignment;
 		cancelReason = '';
@@ -240,6 +251,7 @@
 					{:else}
 						<div class="assignment-list">
 							{#each thisWeekAssignments as assignment (assignment.id)}
+								{@const confirmState = getConfirmationState(assignment)}
 								<div class="assignment-card" class:cancelled={assignment.status === 'cancelled'}>
 									<div class="card-header">
 										<div class="card-summary">
@@ -247,16 +259,55 @@
 											<p class="assignment-route">{assignment.routeName}</p>
 											<p class="assignment-warehouse">{assignment.warehouseName}</p>
 										</div>
-										<Chip
-											variant="status"
-											status={statusChips[assignment.status]}
-											label={statusLabels[assignment.status]}
-											size="xs"
-										/>
+										<div class="card-chips">
+											<Chip
+												variant="status"
+												status={statusChips[assignment.status]}
+												label={statusLabels[assignment.status]}
+												size="xs"
+											/>
+											{#if confirmState === 'confirmed'}
+												<Chip
+													variant="status"
+													status="success"
+													label={m.schedule_confirmed_chip()}
+													size="xs"
+												/>
+											{:else if confirmState === 'confirmable'}
+												<Chip
+													variant="status"
+													status="warning"
+													label={m.schedule_confirm_by_chip({
+														date: format(parseISO(assignment.confirmationDeadline), 'MMM d')
+													})}
+													size="xs"
+												/>
+											{:else if confirmState === 'not_open'}
+												<Chip
+													variant="status"
+													status="neutral"
+													label={m.schedule_confirm_opens_chip({
+														date: format(parseISO(assignment.confirmationOpensAt), 'MMM d')
+													})}
+													size="xs"
+												/>
+											{/if}
+										</div>
 									</div>
 
-									{#if assignment.isStartable || assignment.isCompletable || assignment.isCancelable}
+									{#if assignment.isStartable || assignment.isCompletable || assignment.isConfirmable || assignment.isCancelable}
 										<div class="card-actions">
+											{#if assignment.isConfirmable}
+												<Button
+													variant="primary"
+													size="small"
+													fill
+													isLoading={scheduleStore.isConfirming}
+													onclick={() => scheduleStore.confirmShift(assignment.id)}
+												>
+													{m.schedule_confirm_button()}
+												</Button>
+											{/if}
 											{#if assignment.isStartable}
 												<Button
 													variant="primary"
@@ -310,6 +361,7 @@
 					{:else}
 						<div class="assignment-list">
 							{#each nextWeekAssignments as assignment (assignment.id)}
+								{@const confirmState = getConfirmationState(assignment)}
 								<div class="assignment-card" class:cancelled={assignment.status === 'cancelled'}>
 									<div class="card-header">
 										<div class="card-summary">
@@ -317,23 +369,64 @@
 											<p class="assignment-route">{assignment.routeName}</p>
 											<p class="assignment-warehouse">{assignment.warehouseName}</p>
 										</div>
-										<Chip
-											variant="status"
-											status={statusChips[assignment.status]}
-											label={statusLabels[assignment.status]}
-											size="xs"
-										/>
+										<div class="card-chips">
+											<Chip
+												variant="status"
+												status={statusChips[assignment.status]}
+												label={statusLabels[assignment.status]}
+												size="xs"
+											/>
+											{#if confirmState === 'confirmed'}
+												<Chip
+													variant="status"
+													status="success"
+													label={m.schedule_confirmed_chip()}
+													size="xs"
+												/>
+											{:else if confirmState === 'confirmable'}
+												<Chip
+													variant="status"
+													status="warning"
+													label={m.schedule_confirm_by_chip({
+														date: format(parseISO(assignment.confirmationDeadline), 'MMM d')
+													})}
+													size="xs"
+												/>
+											{:else if confirmState === 'not_open'}
+												<Chip
+													variant="status"
+													status="neutral"
+													label={m.schedule_confirm_opens_chip({
+														date: format(parseISO(assignment.confirmationOpensAt), 'MMM d')
+													})}
+													size="xs"
+												/>
+											{/if}
+										</div>
 									</div>
 
-									{#if assignment.isCancelable}
+									{#if assignment.isConfirmable || assignment.isCancelable}
 										<div class="card-actions">
-											<Button
-												variant="danger"
-												size="small"
-												onclick={() => openCancelModal(assignment)}
-											>
-												{m.schedule_cancel_button()}
-											</Button>
+											{#if assignment.isConfirmable}
+												<Button
+													variant="primary"
+													size="small"
+													fill
+													isLoading={scheduleStore.isConfirming}
+													onclick={() => scheduleStore.confirmShift(assignment.id)}
+												>
+													{m.schedule_confirm_button()}
+												</Button>
+											{/if}
+											{#if assignment.isCancelable}
+												<Button
+													variant="danger"
+													size="small"
+													onclick={() => openCancelModal(assignment)}
+												>
+													{m.schedule_cancel_button()}
+												</Button>
+											{/if}
 										</div>
 									{/if}
 								</div>
@@ -615,6 +708,13 @@
 		margin: 0;
 		font-size: var(--font-size-sm);
 		color: var(--text-muted);
+	}
+
+	.card-chips {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: var(--spacing-1);
 	}
 
 	.card-actions {

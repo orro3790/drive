@@ -48,6 +48,7 @@ export const cancelReasonEnum = pgEnum('cancel_reason', [
 	'personal_emergency',
 	'other'
 ]);
+export const bidWindowModeEnum = pgEnum('bid_window_mode', ['competitive', 'instant', 'emergency']);
 export const notificationTypeEnum = pgEnum('notification_type', [
 	'shift_reminder',
 	'bid_open',
@@ -60,7 +61,10 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 	'assignment_confirmed',
 	'route_unfilled',
 	'route_cancelled',
-	'driver_no_show'
+	'driver_no_show',
+	'confirmation_reminder',
+	'shift_auto_dropped',
+	'emergency_route_available'
 ]);
 export const actorTypeEnum = pgEnum('actor_type', ['user', 'system']);
 
@@ -141,6 +145,7 @@ export const assignments = pgTable(
 		status: assignmentStatusEnum('status').notNull().default('scheduled'),
 		assignedBy: assignedByEnum('assigned_by'),
 		assignedAt: timestamp('assigned_at', { withTimezone: true }),
+		confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 	},
@@ -198,15 +203,21 @@ export const bidWindows = pgTable(
 		id: uuid('id').primaryKey().defaultRandom(),
 		assignmentId: uuid('assignment_id')
 			.notNull()
-			.references(() => assignments.id, { onDelete: 'cascade' })
-			.unique(),
+			.references(() => assignments.id, { onDelete: 'cascade' }),
+		mode: bidWindowModeEnum('mode').notNull().default('competitive'),
+		trigger: text('trigger'),
+		payBonusPercent: integer('pay_bonus_percent').notNull().default(0),
 		opensAt: timestamp('opens_at', { withTimezone: true }).notNull().defaultNow(),
 		closesAt: timestamp('closes_at', { withTimezone: true }).notNull(),
 		status: bidWindowStatusEnum('status').notNull().default('open'),
 		winnerId: text('winner_id').references(() => user.id)
 	},
 	(table) => ({
-		statusClosesIdx: index('idx_bid_windows_status_closes').on(table.status, table.closesAt)
+		statusClosesIdx: index('idx_bid_windows_status_closes').on(table.status, table.closesAt),
+		assignmentStatusIdx: index('idx_bid_windows_assignment_status').on(
+			table.assignmentId,
+			table.status
+		)
 	})
 );
 
@@ -220,6 +231,12 @@ export const driverMetrics = pgTable('driver_metrics', {
 	attendanceRate: real('attendance_rate').notNull().default(0),
 	completionRate: real('completion_rate').notNull().default(0),
 	avgParcelsDelivered: real('avg_parcels_delivered').notNull().default(0),
+	totalAssigned: integer('total_assigned').notNull().default(0),
+	confirmedShifts: integer('confirmed_shifts').notNull().default(0),
+	autoDroppedShifts: integer('auto_dropped_shifts').notNull().default(0),
+	lateCancellations: integer('late_cancellations').notNull().default(0),
+	noShows: integer('no_shows').notNull().default(0),
+	bidPickups: integer('bid_pickups').notNull().default(0),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
 
@@ -351,10 +368,7 @@ export const assignmentsRelations = relations(assignments, ({ one, many }) => ({
 		fields: [assignments.id],
 		references: [shifts.assignmentId]
 	}),
-	bidWindow: one(bidWindows, {
-		fields: [assignments.id],
-		references: [bidWindows.assignmentId]
-	}),
+	bidWindows: many(bidWindows),
 	bids: many(bids)
 }));
 
@@ -372,6 +386,17 @@ export const bidsRelations = relations(bids, ({ one }) => ({
 	}),
 	user: one(user, {
 		fields: [bids.userId],
+		references: [user.id]
+	})
+}));
+
+export const bidWindowsRelations = relations(bidWindows, ({ one }) => ({
+	assignment: one(assignments, {
+		fields: [bidWindows.assignmentId],
+		references: [assignments.id]
+	}),
+	winner: one(user, {
+		fields: [bidWindows.winnerId],
 		references: [user.id]
 	})
 }));

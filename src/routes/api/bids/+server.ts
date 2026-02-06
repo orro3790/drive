@@ -2,6 +2,11 @@
  * Bids API
  *
  * POST /api/bids - Submit a bid on an assignment
+ *
+ * Supports three modes:
+ * - competitive: creates a pending bid, scored at window close
+ * - instant: immediately assigns the driver (FCFS)
+ * - emergency: same as instant, with bonus tracking
  */
 
 import { json, error } from '@sveltejs/kit';
@@ -9,9 +14,20 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { bids, bidWindows, assignments, user } from '$lib/server/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { parseISO } from 'date-fns';
+import { parseISO, set, startOfDay } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import { getWeekStart, canDriverTakeAssignment } from '$lib/server/services/scheduling';
+import { instantAssign } from '$lib/server/services/bidding';
+import {
+	broadcastAssignmentUpdated,
+	broadcastBidWindowClosed
+} from '$lib/server/realtime/managerSse';
+import { sendNotification } from '$lib/server/services/notifications';
 import logger from '$lib/server/logger';
+
+const TORONTO_TZ = 'America/Toronto';
+const SHIFT_START_HOUR = 7;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -48,24 +64,23 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(403, 'Flagged drivers cannot submit bids');
 	}
 
-	// Get the bid window for this assignment
+	// Get the OPEN bid window for this assignment
 	const [window] = await db
 		.select({
 			id: bidWindows.id,
 			status: bidWindows.status,
+			mode: bidWindows.mode,
+			payBonusPercent: bidWindows.payBonusPercent,
 			closesAt: bidWindows.closesAt,
-			assignmentDate: assignments.date
+			assignmentDate: assignments.date,
+			routeId: assignments.routeId
 		})
 		.from(bidWindows)
 		.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
-		.where(eq(bidWindows.assignmentId, assignmentId));
+		.where(and(eq(bidWindows.assignmentId, assignmentId), eq(bidWindows.status, 'open')));
 
 	if (!window) {
-		throw error(404, 'No bid window found for this assignment');
-	}
-
-	if (window.status !== 'open') {
-		throw error(400, 'Bid window is not open');
+		throw error(404, 'No open bid window found for this assignment');
 	}
 
 	const now = new Date();
@@ -90,7 +105,57 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'You have reached your weekly cap for that week');
 	}
 
-	// Create the bid
+	// Belt-and-suspenders: if < 24h to shift, treat as instant regardless of stored mode
+	const parsed = parseISO(window.assignmentDate);
+	const toronto = toZonedTime(parsed, TORONTO_TZ);
+	const shiftStart = set(startOfDay(toronto), {
+		hours: SHIFT_START_HOUR,
+		minutes: 0,
+		seconds: 0,
+		milliseconds: 0
+	});
+	const timeUntilShiftMs = shiftStart.getTime() - now.getTime();
+	const effectiveMode =
+		timeUntilShiftMs <= TWENTY_FOUR_HOURS_MS && window.mode === 'competitive'
+			? 'instant'
+			: window.mode;
+
+	// Instant or emergency mode: assign immediately
+	if (effectiveMode === 'instant' || effectiveMode === 'emergency') {
+		const result = await instantAssign(assignmentId, locals.user.id, window.id);
+
+		if (!result.instantlyAssigned) {
+			throw error(400, result.error ?? 'Route already assigned');
+		}
+
+		broadcastBidWindowClosed({
+			assignmentId,
+			bidWindowId: window.id,
+			winnerId: locals.user.id
+		});
+
+		broadcastAssignmentUpdated({
+			assignmentId,
+			status: 'scheduled',
+			driverId: locals.user.id,
+			routeId: window.routeId
+		});
+
+		await sendNotification(locals.user.id, 'bid_won', {
+			data: { assignmentId, bidWindowId: window.id }
+		});
+
+		log.info({ bidId: result.bidId, mode: effectiveMode }, 'Instant assignment');
+
+		return json({
+			success: true,
+			status: 'won',
+			assignmentId,
+			bonusPercent: window.payBonusPercent
+		});
+	}
+
+	// Competitive mode: create pending bid
 	const [newBid] = await db
 		.insert(bids)
 		.values({
@@ -111,6 +176,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	return json({
 		success: true,
+		status: 'pending',
 		bid: {
 			id: newBid.id,
 			assignmentId: newBid.assignmentId,

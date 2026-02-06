@@ -132,38 +132,56 @@ await sendBulkNotifications(driverIds, 'bid_open', {
 
 #### `bidding.ts`
 
-Bid window management for unfilled assignments. See `docs/adr/002-replacement-bidding-system.md` for full rationale.
+Bid window management for unfilled assignments with mode-based behavior. See `docs/adr/002-replacement-bidding-system.md` for full rationale.
 
 **Key Functions:**
 
-- `createBidWindow(assignmentId: string)` - Opens bid window for unfilled assignment (30 min or until shift start)
-- `resolveBidWindow(windowId: string)` - Closes window, scores bids, assigns winner
-- `getEligibleDriversForBid(assignmentId: string)` - Returns drivers eligible to bid (under weekly cap, not flagged)
+- `createBidWindow(assignmentId, options?)` - Opens bid window for unfilled assignment with mode selection
+- `resolveBidWindow(windowId)` - Closes window, scores bids (competitive), or alerts manager (instant/emergency)
+- `instantAssign(assignmentId, userId, bidWindowId)` - Immediately assign driver in instant/emergency mode (race-condition safe)
+- `transitionToInstantMode(bidWindowId)` - Convert competitive window to instant when no bids received
+- `getExpiredBidWindows()` - Returns windows past closesAt time (used by cron)
+
+**Modes:**
+
+- **Competitive** (> 24h to shift): Window closes 24h before shift, scored resolution, auto-transitions to instant if no bids
+- **Instant** (<= 24h to shift): Window closes at shift start, first-come-first-served
+- **Emergency**: Manager-triggered or no-show, always instant, optional pay bonus
 
 **Usage:**
 
 ```typescript
-import { createBidWindow, resolveBidWindow } from '$lib/server/services/bidding';
+import { createBidWindow, resolveBidWindow, instantAssign } from '$lib/server/services/bidding';
 
-// Open bid window for unfilled assignment
-const result = await createBidWindow(assignmentId);
-if (result.success) {
-	console.log(`Bid window opened, notified ${result.notifiedCount} drivers`);
+// Automatic mode selection (based on time to shift)
+const result = await createBidWindow(assignmentId, { trigger: 'cancellation' });
+
+// Emergency mode with bonus
+const emergency = await createBidWindow(assignmentId, {
+	mode: 'emergency',
+	trigger: 'no_show',
+	payBonusPercent: 20
+});
+
+// Resolve window (cron job)
+const resolved = await resolveBidWindow(windowId);
+if (resolved.transitioned) {
+	console.log('Competitive window had no bids, transitioned to instant mode');
 }
 
-// Close and resolve window (typically via cron)
-const resolved = await resolveBidWindow(windowId);
-if (resolved.winnerId) {
-	console.log(`Bid awarded to driver ${resolved.winnerId}`);
+// Instant assignment (driver accepts)
+const assigned = await instantAssign(assignmentId, userId, bidWindowId);
+if (assigned.instantlyAssigned) {
+	console.log(`Driver ${userId} got the route immediately`);
 }
 ```
 
 **Behavior:**
 
 - Automatically notifies eligible drivers when window opens
-- Window closes after 30 minutes OR at shift start time (whichever comes first)
-- Scores bids using: completion rate (40%), route familiarity (30%), attendance (20%), preference bonus (10%)
-- Assignment remains unfilled if no bids received
+- Competitive mode scores using: completion rate (40%), route familiarity (30%), attendance (20%), preference bonus (10%)
+- Instant mode uses SELECT FOR UPDATE to prevent race conditions
+- Manager alert sent if instant/emergency window closes with no bids
 
 #### `flagging.ts`
 
@@ -201,6 +219,54 @@ import { recalculateDriverMetrics } from '$lib/server/services/metrics';
 // After shift completion
 await recalculateDriverMetrics(driverId);
 ```
+
+#### `confirmations.ts`
+
+Mandatory shift confirmation system. Drivers must confirm shifts between 7 days and 48 hours before start. Unconfirmed shifts are auto-dropped by cron.
+
+**Key Functions:**
+
+- `confirmShift(assignmentId, userId)` - Confirm a shift (validates window and status)
+- `getUnconfirmedAssignments(userId)` - Returns driver's unconfirmed shifts within or approaching confirmation window
+- `calculateConfirmationDeadline(assignmentDate)` - Returns `{ opensAt, deadline }` for an assignment
+
+**Constants:**
+
+- `CONFIRMATION_DEPLOYMENT_DATE` - '2026-03-01' (pre-existing assignments skip confirmation)
+
+**Usage:**
+
+```typescript
+import {
+	confirmShift,
+	getUnconfirmedAssignments,
+	calculateConfirmationDeadline
+} from '$lib/server/services/confirmations';
+
+// Confirm a shift
+const result = await confirmShift(assignmentId, userId);
+if (!result.success) {
+	console.error(result.error); // "Confirmation window not yet open", "Already confirmed", etc.
+}
+
+// Get driver's unconfirmed shifts
+const unconfirmed = await getUnconfirmedAssignments(userId);
+for (const shift of unconfirmed) {
+	console.log(`${shift.routeName} on ${shift.date} - confirmable: ${shift.isConfirmable}`);
+}
+
+// Check confirmation window
+const { opensAt, deadline } = calculateConfirmationDeadline('2026-03-15');
+// opensAt = 2026-03-08 07:00 Toronto
+// deadline = 2026-03-13 07:00 Toronto
+```
+
+**Behavior:**
+
+- Confirmation window: 7 days before shift to 48h before shift
+- Increments `driverMetrics.confirmedShifts` on success
+- Creates audit log entry
+- Deployment date check: assignments before 2026-03-01 bypass confirmation requirement
 
 #### `managers.ts`
 
@@ -334,7 +400,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 #### `GET /api/dashboard`
 
-Get driver dashboard overview data.
+Get driver dashboard overview data including unconfirmed shifts.
 
 **Response:**
 
@@ -345,6 +411,7 @@ Get driver dashboard overview data.
 	nextWeek: { weekStart: string; assignedDays: number; assignments: DashboardAssignment[] };
 	metrics: { totalShifts: number; completedShifts: number; attendanceRate: number; completionRate: number };
 	pendingBids: PendingBid[];
+	needsConfirmation: UnconfirmedAssignment[]; // Shifts requiring confirmation
 	isNewDriver: boolean;
 }
 ```
@@ -405,6 +472,83 @@ Remove user's FCM token (e.g., on logout or app uninstall).
 ```
 
 **Auth:** Required
+
+#### `POST /api/assignments/[id]/confirm`
+
+Confirm an upcoming shift (mandatory 7 days to 48h before shift).
+
+**Request:** No body required
+
+**Response:**
+
+```typescript
+{
+	success: true;
+	confirmedAt: string; // ISO timestamp
+}
+```
+
+**Errors:**
+
+- `400` - Outside confirmation window, already confirmed, or invalid status
+- `401` - Not authenticated
+- `403` - Not a driver or forbidden access
+- `404` - Assignment not found
+
+**Auth:** Required (driver role only)
+
+---
+
+## Cron Jobs
+
+Automated jobs configured in `vercel.json` with `CRON_SECRET` authentication.
+
+### `GET /api/cron/auto-drop-unconfirmed`
+
+Drops drivers who haven't confirmed shifts within 48h deadline. Creates bid windows for unconfirmed assignments.
+
+**Schedule:** `0 * * * *` (hourly)
+
+**Process:**
+
+1. Find scheduled assignments with no `confirmedAt` >= deployment date
+2. Check if past 48h deadline
+3. Increment driver's `autoDroppedShifts` metric
+4. Create bid window with `trigger: 'auto_drop'`
+5. Notify original driver
+6. Create audit log
+
+**Returns:** `{ success, dropped, bidWindowsCreated, errors, elapsedMs }`
+
+### `GET /api/cron/send-confirmation-reminders`
+
+Sends reminder notifications to drivers with unconfirmed shifts 3 days out (72h before deadline).
+
+**Schedule:** `0 11 * * *` (daily at 06:00 Toronto time)
+
+**Process:**
+
+1. Calculate target date (now + 3 days)
+2. Find scheduled assignments on target date with no `confirmedAt`
+3. Send `confirmation_reminder` notification to each driver
+
+**Returns:** `{ success, sent, errors, date, elapsedMs }`
+
+### `GET /api/cron/close-bid-windows`
+
+Resolves or transitions expired bid windows based on mode.
+
+**Schedule:** `*/15 * * * *` (every 15 minutes)
+
+**Process:**
+
+1. Get all open bid windows past `closesAt` time
+2. For each window:
+   - **Competitive with bids**: Score and resolve, notify winner/losers
+   - **Competitive without bids**: Transition to instant mode, re-notify drivers
+   - **Instant/emergency without bids**: Close window, alert manager
+
+**Returns:** `{ success, processed, resolved, transitioned, closed, errors }`
 
 ---
 

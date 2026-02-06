@@ -22,6 +22,10 @@ export type ScheduleAssignment = {
 	id: string;
 	date: string;
 	status: AssignmentStatus;
+	confirmedAt: string | null;
+	confirmationOpensAt: string;
+	confirmationDeadline: string;
+	isConfirmable: boolean;
 	routeName: string;
 	warehouseName: string;
 	isCancelable: boolean;
@@ -39,6 +43,7 @@ const state = $state<{
 	isCancelling: boolean;
 	isStartingShift: boolean;
 	isCompletingShift: boolean;
+	isConfirming: boolean;
 	error: string | null;
 }>({
 	assignments: [],
@@ -48,6 +53,7 @@ const state = $state<{
 	isCancelling: false,
 	isStartingShift: false,
 	isCompletingShift: false,
+	isConfirming: false,
 	error: null
 });
 
@@ -73,6 +79,9 @@ export const scheduleStore = {
 	get isCompletingShift() {
 		return state.isCompletingShift;
 	},
+	get isConfirming() {
+		return state.isConfirming;
+	},
 	get error() {
 		return state.error;
 	},
@@ -96,6 +105,38 @@ export const scheduleStore = {
 			toastStore.error(m.schedule_load_error());
 		} finally {
 			state.isLoading = false;
+		}
+	},
+
+	async confirmShift(assignmentId: string) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
+		state.isConfirming = true;
+
+		try {
+			const res = await fetch(`/api/assignments/${assignmentId}/confirm`, {
+				method: 'POST'
+			});
+
+			if (!res.ok) {
+				throw new Error('Failed to confirm shift');
+			}
+
+			state.assignments = state.assignments.map((item) =>
+				item.id === assignmentId
+					? { ...item, confirmedAt: new Date().toISOString(), isConfirmable: false }
+					: item
+			);
+
+			toastStore.success('Shift confirmed!');
+			return true;
+		} catch (err) {
+			toastStore.error('Failed to confirm shift');
+			return false;
+		} finally {
+			state.isConfirming = false;
 		}
 	},
 

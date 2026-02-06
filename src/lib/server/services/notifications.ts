@@ -36,7 +36,10 @@ export type NotificationType =
 	| 'assignment_confirmed'
 	| 'route_unfilled'
 	| 'route_cancelled'
-	| 'driver_no_show';
+	| 'driver_no_show'
+	| 'confirmation_reminder'
+	| 'shift_auto_dropped'
+	| 'emergency_route_available';
 
 /**
  * Subset of notification types used for manager alerts.
@@ -94,6 +97,18 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	driver_no_show: {
 		title: 'Driver No-Show',
 		body: 'A driver did not show up for their assigned shift.'
+	},
+	confirmation_reminder: {
+		title: 'Confirm Your Shift',
+		body: 'Your upcoming shift needs confirmation within 24 hours.'
+	},
+	shift_auto_dropped: {
+		title: 'Shift Dropped',
+		body: "Your shift was dropped because it wasn't confirmed in time."
+	},
+	emergency_route_available: {
+		title: 'Priority Route Available',
+		body: 'An urgent route is available with a bonus. First to accept gets it.'
 	}
 };
 

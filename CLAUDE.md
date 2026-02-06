@@ -55,7 +55,8 @@ Business logic in `src/lib/server/services/`:
 
 - `scheduling.ts` - Schedule generation algorithm (`generateWeekSchedule`)
 - `notifications.ts` - Push notifications via FCM (`sendNotification`, `sendBulkNotifications`)
-- `bidding.ts` - Bid window management (`createBidWindow`, `resolveBidWindow`)
+- `bidding.ts` - Bid window management with mode system (`createBidWindow`, `resolveBidWindow`, `instantAssign`)
+- `confirmations.ts` - Mandatory shift confirmations (`confirmShift`, `getUnconfirmedAssignments`, `calculateConfirmationDeadline`)
 - `flagging.ts` - Driver performance flagging (`checkDriverForFlagging`)
 - `metrics.ts` - Driver metrics calculation (`recalculateDriverMetrics`)
 - `managers.ts` - Manager access control (`getManagerWarehouseIds`, `canManagerAccessWarehouse`, `getRouteManager`)
@@ -68,10 +69,11 @@ For deeper conventions and patterns, start at `documentation/agent-guidelines/in
 
 Driver-facing endpoints in `src/routes/api/`:
 
-- `GET /api/dashboard` - Driver dashboard overview (today's shift, week summaries, metrics, pending bids)
+- `GET /api/dashboard` - Driver dashboard overview (today's shift, week summaries, metrics, pending bids, unconfirmed shifts)
 - `GET /api/notifications` - In-app notifications list (paginated)
 - `PATCH /api/notifications/[id]/read` - Mark notification as read
 - `POST /api/notifications/mark-all-read` - Mark all notifications as read
+- `POST /api/assignments/[id]/confirm` - Confirm an upcoming shift (7 days to 48h before)
 
 ## UI Components
 
@@ -128,9 +130,10 @@ Svelte 5 stores in `src/lib/stores/`:
 4. **Manager dashboard**: Routes CRUD ✓, Warehouses CRUD ✓
 5. **Driver app**: Preferences UI ✓, Dashboard ✓, schedule view with shift lifecycle ✓
 6. **Scheduling engine**: Core algorithm ✓ (`services/scheduling.ts`), cron integration pending
-7. **Bidding system**: Bid windows, scoring algorithm, resolution
-8. **Capacitor wrapper**: Push notifications
-9. **Cron jobs**: Lock preferences, close bid windows, metrics
+7. **Bidding system**: Bid windows ✓, scoring algorithm ✓, mode system ✓ (competitive/instant/emergency)
+8. **Shift confirmations**: Mandatory 48h confirmation ✓, auto-drop ✓, reminders ✓
+9. **Capacitor wrapper**: Push notifications
+10. **Cron jobs**: Lock preferences, close bid windows ✓, metrics, auto-drop unconfirmed ✓, confirmation reminders ✓
 
 ## Key Business Rules
 
@@ -139,6 +142,13 @@ Svelte 5 stores in `src/lib/stores/`:
 - Preferences lock Sunday 23:59 Toronto time
 - Schedule generates for 2 weeks out
 - New drivers wait ~2 weeks for scheduled shifts (can bid immediately)
+
+### Shift Confirmations
+
+- Confirmation window: 7 days to 48 hours before shift
+- 72h before: reminder notification sent
+- 48h before: unconfirmed shifts auto-dropped and reopened for bidding
+- Deployment date: 2026-03-01 (pre-existing assignments skip confirmation)
 
 ### Weekly Caps
 
@@ -153,7 +163,28 @@ Svelte 5 stores in `src/lib/stores/`:
 - 1 week grace period to improve
 - If still below: lose 1 day from cap
 
-### Bid Scoring
+### Bidding Modes
+
+**Competitive** (> 24h before shift):
+
+- Window closes 24h before shift
+- Multiple drivers can bid
+- Winner selected by score
+- If no bids: transitions to instant mode
+
+**Instant** (<= 24h before shift):
+
+- Window closes at shift start
+- First to accept wins immediately
+- No scoring, no waiting
+
+**Emergency** (manager-triggered or no-show):
+
+- Always instant-assign
+- Optional pay bonus (default 20%)
+- Closes at shift start or end of day
+
+### Bid Scoring (Competitive Mode)
 
 ```
 score = (completion_rate * 0.4) +

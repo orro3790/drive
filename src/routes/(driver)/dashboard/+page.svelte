@@ -262,6 +262,49 @@
 					{/if}
 				</section>
 
+				<!-- Needs Confirmation -->
+				{#if dashboardStore.unconfirmedShifts.length > 0}
+					<section class="dashboard-section">
+						<div class="section-header">
+							<h2 class="warning-heading">{m.dashboard_confirm_section()}</h2>
+							<Chip
+								variant="status"
+								status="warning"
+								size="sm"
+								label={String(dashboardStore.unconfirmedShifts.length)}
+							/>
+						</div>
+
+						<div class="confirm-list">
+							{#each dashboardStore.unconfirmedShifts as shift (shift.id)}
+								<div class="confirm-card">
+									<div class="card-summary">
+										<p class="confirm-date">{formatAssignmentDate(shift.date)}</p>
+										<p class="confirm-route">{shift.routeName}</p>
+										<p class="confirm-deadline">
+											{m.dashboard_confirm_deadline({
+												deadline: formatDistanceToNow(parseISO(shift.confirmationDeadline), {
+													addSuffix: true
+												})
+											})}
+										</p>
+									</div>
+									{#if shift.isConfirmable}
+										<Button
+											variant="primary"
+											size="small"
+											isLoading={dashboardStore.isConfirming}
+											onclick={() => dashboardStore.confirmShift(shift.id)}
+										>
+											{m.dashboard_confirm_button()}
+										</Button>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</section>
+				{/if}
+
 				<!-- Week Summaries Row -->
 				<div class="week-row">
 					<!-- This Week -->
@@ -762,6 +805,46 @@
 		margin: 0;
 		font-size: var(--font-size-xs);
 		color: var(--text-muted);
+	}
+
+	/* Needs Confirmation */
+	.warning-heading {
+		color: var(--status-warning);
+	}
+
+	.confirm-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+	}
+
+	.confirm-card {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: var(--spacing-3);
+		border-radius: var(--radius-base);
+		background: var(--surface-secondary);
+		border: 1px solid var(--status-warning);
+	}
+
+	.confirm-date {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-normal);
+	}
+
+	.confirm-route {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--text-muted);
+	}
+
+	.confirm-deadline {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--status-warning);
 	}
 
 	/* Modal Styles */
