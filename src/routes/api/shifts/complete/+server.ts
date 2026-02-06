@@ -11,7 +11,7 @@ import { assignments, shifts } from '$lib/server/db/schema';
 import { recordRouteCompletion, updateDriverMetrics } from '$lib/server/services/metrics';
 import { shiftCompleteSchema } from '$lib/schemas/shift';
 import { eq } from 'drizzle-orm';
-import logger from '$lib/server/logger';
+import { addHours } from 'date-fns';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
 
@@ -31,7 +31,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'Validation failed');
 	}
 
-	const { assignmentId, parcelsDelivered, parcelsReturned } = result.data;
+	const { assignmentId, parcelsReturned } = result.data;
 
 	// Get assignment with shift
 	const [assignment] = await db
@@ -73,29 +73,26 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.where(eq(shifts.assignmentId, assignmentId));
 
 	if (!shift) {
-		throw error(404, 'Shift not found - start shift first');
+		throw error(404, 'Shift not found — start shift first');
 	}
 
 	if (shift.completedAt) {
 		throw error(409, 'Shift already completed');
 	}
 
-	// Warn if parcels don't add up (but allow it)
-	const totalAfter = parcelsDelivered + parcelsReturned;
-	if (shift.parcelsStart !== null && totalAfter > shift.parcelsStart) {
-		logger.warn(
-			{
-				shiftId: shift.id,
-				parcelsStart: shift.parcelsStart,
-				parcelsDelivered,
-				parcelsReturned,
-				total: totalAfter
-			},
-			'Parcel count exceeds start count'
-		);
+	if (shift.parcelsStart === null) {
+		throw error(409, 'Parcel inventory not recorded — start shift first');
 	}
 
+	// Validate returns don't exceed start count
+	if (parcelsReturned > shift.parcelsStart) {
+		throw error(400, 'Returns cannot exceed starting parcels');
+	}
+
+	// Server-calculated delivered count
+	const parcelsDelivered = shift.parcelsStart - parcelsReturned;
 	const completedAt = new Date();
+	const editableUntil = addHours(completedAt, 1);
 
 	// Update shift record
 	const [updatedShift] = await db
@@ -103,7 +100,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.set({
 			parcelsDelivered,
 			parcelsReturned,
-			completedAt
+			completedAt,
+			editableUntil
 		})
 		.where(eq(shifts.id, shift.id))
 		.returning({
@@ -112,7 +110,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			parcelsDelivered: shifts.parcelsDelivered,
 			parcelsReturned: shifts.parcelsReturned,
 			startedAt: shifts.startedAt,
-			completedAt: shifts.completedAt
+			completedAt: shifts.completedAt,
+			editableUntil: shifts.editableUntil
 		});
 
 	// Update assignment status to completed
