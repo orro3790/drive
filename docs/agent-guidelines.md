@@ -400,13 +400,13 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 #### `GET /api/dashboard`
 
-Get driver dashboard overview data including unconfirmed shifts.
+Get driver dashboard overview data including unconfirmed shifts and shift workflow state.
 
 **Response:**
 
 ```typescript
 {
-	todayShift: DashboardAssignment | null;
+	todayShift: DashboardAssignment | null; // Includes isArrivable, shift.arrivedAt, shift.editableUntil
 	thisWeek: { weekStart: string; assignedDays: number; assignments: DashboardAssignment[] };
 	nextWeek: { weekStart: string; assignedDays: number; assignments: DashboardAssignment[] };
 	metrics: { totalShifts: number; completedShifts: number; attendanceRate: number; completionRate: number };
@@ -414,6 +414,13 @@ Get driver dashboard overview data including unconfirmed shifts.
 	needsConfirmation: UnconfirmedAssignment[]; // Shifts requiring confirmation
 	isNewDriver: boolean;
 }
+
+// DashboardAssignment includes:
+// - isArrivable: boolean (can signal arrival today before 9 AM)
+// - isStartable: boolean (can record parcel inventory after arrival)
+// - isCompletable: boolean (can complete shift after recording inventory)
+// - shift.arrivedAt: ISO timestamp when driver arrived on-site
+// - shift.editableUntil: ISO timestamp of 1-hour edit window expiration
 ```
 
 **Auth:** Required (driver role only)
@@ -494,6 +501,152 @@ Confirm an upcoming shift (mandatory 7 days to 48h before shift).
 - `401` - Not authenticated
 - `403` - Not a driver or forbidden access
 - `404` - Assignment not found
+
+**Auth:** Required (driver role only)
+
+#### `POST /api/shifts/arrive`
+
+Signal on-site arrival for today's confirmed assignment. Creates shift record with arrivedAt timestamp. Must be called before 9:00 AM Toronto time.
+
+**Request:**
+
+```typescript
+{
+	assignmentId: string; // UUID
+}
+```
+
+**Response:**
+
+```typescript
+{
+	success: true;
+	arrivedAt: string; // ISO timestamp
+}
+```
+
+**Errors:**
+
+- `400` - Not today's shift, must be before 9 AM, or assignment must be confirmed first
+- `401` - Not authenticated
+- `403` - Not a driver or forbidden access
+- `404` - Assignment not found
+- `409` - Already arrived or assignment not in scheduled status
+
+**Auth:** Required (driver role only)
+
+#### `POST /api/shifts/start`
+
+Record starting parcel inventory for an arrived shift. Sets parcelsStart and startedAt on existing shift record.
+
+**Request:**
+
+```typescript
+{
+	assignmentId: string; // UUID
+	parcelsStart: number; // Integer 1-999
+}
+```
+
+**Response:**
+
+```typescript
+{
+	shift: {
+		id: string;
+		parcelsStart: number;
+		startedAt: string; // ISO timestamp
+	};
+	assignmentStatus: 'active';
+}
+```
+
+**Errors:**
+
+- `400` - Invalid input
+- `401` - Not authenticated
+- `403` - Not a driver or forbidden access
+- `404` - Assignment or shift not found
+- `409` - Must arrive first, or inventory already recorded
+
+**Auth:** Required (driver role only)
+
+#### `POST /api/shifts/complete`
+
+Complete an active shift. Takes parcelsReturned, server calculates parcelsDelivered, sets completedAt and editableUntil (1 hour from completion).
+
+**Request:**
+
+```typescript
+{
+	assignmentId: string; // UUID
+	parcelsReturned: number; // Integer 0-999
+}
+```
+
+**Response:**
+
+```typescript
+{
+	shift: {
+		id: string;
+		parcelsStart: number;
+		parcelsDelivered: number; // Server-calculated: start - returned
+		parcelsReturned: number;
+		startedAt: string;
+		completedAt: string;
+		editableUntil: string; // completedAt + 1 hour
+	};
+	assignmentStatus: 'completed';
+}
+```
+
+**Errors:**
+
+- `400` - Returns exceed starting parcels
+- `401` - Not authenticated
+- `403` - Not a driver or forbidden access
+- `404` - Assignment or shift not found
+- `409` - Assignment not active, shift already completed, or inventory not recorded
+
+**Auth:** Required (driver role only)
+
+#### `PATCH /api/shifts/[assignmentId]/edit`
+
+Edit parcel counts within 1-hour window after completion. Can update parcelsStart and/or parcelsReturned. Server recalculates parcelsDelivered and updates driver metrics.
+
+**Request:**
+
+```typescript
+{
+	parcelsStart?: number; // Optional, integer 1-999
+	parcelsReturned?: number; // Optional, integer 0-999
+}
+```
+
+**Response:**
+
+```typescript
+{
+	success: true;
+	shift: {
+		id: string;
+		parcelsStart: number;
+		parcelsDelivered: number;
+		parcelsReturned: number;
+		startedAt: string;
+		completedAt: string;
+		editableUntil: string;
+	};
+}
+```
+
+**Errors:**
+
+- `400` - No fields provided, returns exceed start count, or edit window expired
+- `401` - Not authenticated
+- `403` - Not a driver or forbidden access
+- `404` - Assignment or shift not found
 
 **Auth:** Required (driver role only)
 
