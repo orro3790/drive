@@ -35,10 +35,9 @@ import {
 	broadcastBidWindowClosed,
 	broadcastBidWindowOpened
 } from '$lib/server/realtime/managerSse';
+import { calculateBidScoreParts, dispatchPolicy } from '$lib/config/dispatchPolicy';
 
-const TORONTO_TZ = 'America/Toronto';
-const SHIFT_START_HOUR = 7;
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const INSTANT_MODE_CUTOFF_MS = dispatchPolicy.bidding.instantModeCutoffHours * 60 * 60 * 1000;
 
 export type BidWindowMode = 'competitive' | 'instant' | 'emergency';
 export type BidWindowTrigger = 'cancellation' | 'auto_drop' | 'no_show' | 'manager';
@@ -76,7 +75,7 @@ export interface InstantAssignResult {
  * Get the current time in Toronto timezone
  */
 function getNowToronto(): Date {
-	return toZonedTime(new Date(), TORONTO_TZ);
+	return toZonedTime(new Date(), dispatchPolicy.timezone.toronto);
 }
 
 /**
@@ -84,9 +83,9 @@ function getNowToronto(): Date {
  */
 function getShiftStartTime(dateString: string): Date {
 	const parsed = parseISO(dateString);
-	const toronto = toZonedTime(parsed, TORONTO_TZ);
+	const toronto = toZonedTime(parsed, dispatchPolicy.timezone.toronto);
 	return set(startOfDay(toronto), {
-		hours: SHIFT_START_HOUR,
+		hours: dispatchPolicy.shifts.startHourLocal,
 		minutes: 0,
 		seconds: 0,
 		milliseconds: 0
@@ -123,12 +122,12 @@ function determineModeAndClosesAt(
 
 	const timeUntilShiftMs = shiftStart.getTime() - now.getTime();
 
-	if (options.mode === 'instant' || timeUntilShiftMs <= TWENTY_FOUR_HOURS_MS) {
+	if (options.mode === 'instant' || timeUntilShiftMs <= INSTANT_MODE_CUTOFF_MS) {
 		return { mode: 'instant', closesAt: shiftStart };
 	}
 
 	// Competitive: closes 24h before shift
-	const closesAt = addHours(shiftStart, -24);
+	const closesAt = addHours(shiftStart, -dispatchPolicy.bidding.instantModeCutoffHours);
 	return { mode: 'competitive', closesAt };
 }
 
@@ -321,7 +320,7 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 		const formattedCloseTime = closesAt.toLocaleTimeString('en-US', {
 			hour: 'numeric',
 			minute: '2-digit',
-			timeZone: TORONTO_TZ
+			timeZone: dispatchPolicy.timezone.toronto
 		});
 		body = `${routeName} on ${formattedDate} is open for bidding. Window closes at ${formattedCloseTime}.`;
 	}
@@ -364,16 +363,15 @@ async function calculateBidScore(userId: string, routeId: string): Promise<numbe
 
 	const completionRate = metrics?.completionRate ?? 0;
 	const attendanceRate = metrics?.attendanceRate ?? 0;
-	const familiarityNormalized = Math.min((routeFamiliarity?.completionCount ?? 0) / 20, 1);
 	const preferredRoutes = preferences?.preferredRoutes ?? [];
-	const preferenceBonus = preferredRoutes.slice(0, 3).includes(routeId) ? 1 : 0;
 
-	return (
-		completionRate * 0.4 +
-		familiarityNormalized * 0.3 +
-		attendanceRate * 0.2 +
-		preferenceBonus * 0.1
-	);
+	return calculateBidScoreParts({
+		completionRate,
+		routeFamiliarityCount: routeFamiliarity?.completionCount ?? 0,
+		attendanceRate,
+		preferredRouteIds: preferredRoutes,
+		routeId
+	}).total;
 }
 
 /**

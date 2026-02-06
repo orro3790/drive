@@ -40,6 +40,8 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 		showExpand?: boolean;
 		/** Custom header snippets - map column IDs to snippets with header context */
 		headers?: HeaderSnippets;
+		/** Show an empty filler column at the end to absorb remaining width */
+		showFiller?: boolean;
 	};
 
 	let {
@@ -47,7 +49,8 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 		showIndex = false,
 		showSelection = false,
 		showExpand = false,
-		headers
+		headers,
+		showFiller = false
 	}: Props = $props();
 
 	const reactiveTable = $derived(table as ReactiveTable<RowType>);
@@ -275,6 +278,59 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 			return next;
 		});
 	}
+
+	/**
+	 * Balanced resize: dragging the handle between column A and B
+	 * grows A and shrinks B (or vice versa), keeping everything else stationary.
+	 */
+	function balancedResizeHandler(
+		header: Header<RowType, unknown>,
+		headerGroup: (typeof headerGroups)[number]
+	) {
+		return (event: MouseEvent | TouchEvent) => {
+			event.preventDefault();
+			const startX = 'touches' in event ? event.touches[0].clientX : event.clientX;
+			const column = header.column;
+			const initialSize = column.getSize();
+			const minSize = column.columnDef.minSize ?? 50;
+
+			// Find the next visible column in this header group
+			const idx = headerGroup.headers.indexOf(header);
+			const nextHeader = idx >= 0 ? headerGroup.headers[idx + 1] : undefined;
+			const nextColumn = nextHeader?.column;
+			const nextInitialSize = nextColumn?.getSize() ?? 0;
+			const nextMinSize = nextColumn?.columnDef.minSize ?? 50;
+
+			const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
+				const currentX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX;
+				let delta = currentX - startX;
+
+				// Clamp: don't let either column go below its minSize
+				delta = Math.max(-(initialSize - minSize), delta);
+				if (nextColumn) {
+					delta = Math.min(nextInitialSize - nextMinSize, delta);
+				}
+
+				table.setColumnSizing((old) => ({
+					...old,
+					[column.id]: initialSize + delta,
+					...(nextColumn ? { [nextColumn.id]: nextInitialSize - delta } : {})
+				}));
+			};
+
+			const handleUp = () => {
+				document.removeEventListener('mousemove', handleMove);
+				document.removeEventListener('mouseup', handleUp);
+				document.removeEventListener('touchmove', handleMove);
+				document.removeEventListener('touchend', handleUp);
+			};
+
+			document.addEventListener('mousemove', handleMove);
+			document.addEventListener('mouseup', handleUp);
+			document.addEventListener('touchmove', handleMove);
+			document.addEventListener('touchend', handleUp);
+		};
+	}
 </script>
 
 <thead>
@@ -443,8 +499,8 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 								event.stopPropagation();
 								resetColumnSize(header);
 							}}
-							onmousedown={header.getResizeHandler()}
-							ontouchstart={header.getResizeHandler()}
+							onmousedown={balancedResizeHandler(header, headerGroup)}
+							ontouchstart={balancedResizeHandler(header, headerGroup)}
 							onkeydown={(event) => handleResizeKey(event, header)}
 						>
 							<span class="resize-icon"><GripVertical /></span>
@@ -452,6 +508,9 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 					{/if}
 				</th>
 			{/each}
+			{#if showFiller}
+				<th class="col-filler"></th>
+			{/if}
 		</tr>
 	{/each}
 </thead>
@@ -601,10 +660,15 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 		align-items: center;
 		gap: var(--spacing-1);
 		min-width: 0;
+		width: 100%;
 		max-width: 100%;
 		height: 100%; /* Ensure they fill the th height for consistent vertical centering */
 		padding: 0 var(--spacing-3);
 		box-sizing: border-box;
+	}
+
+	.static-header {
+		overflow: hidden;
 	}
 
 	.checkbox-header {
@@ -747,5 +811,12 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 	.resize-icon :global(svg) {
 		width: 100%;
 		height: 100%;
+	}
+
+	.col-filler {
+		width: auto;
+		padding: 0;
+		background: var(--surface-primary);
+		border-bottom: var(--border-width-thin) solid var(--border-primary);
 	}
 </style>

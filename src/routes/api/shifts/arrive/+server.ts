@@ -13,9 +13,7 @@ import { eq } from 'drizzle-orm';
 import { format, toZonedTime } from 'date-fns-tz';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
-
-const TORONTO_TZ = 'America/Toronto';
-const ARRIVAL_DEADLINE_HOUR = 9;
+import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -57,7 +55,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	// Check date is today (Toronto time)
-	const torontoNow = toZonedTime(new Date(), TORONTO_TZ);
+	const torontoNow = toZonedTime(new Date(), dispatchPolicy.timezone.toronto);
 	const torontoToday = format(torontoNow, 'yyyy-MM-dd');
 
 	if (assignment.date !== torontoToday) {
@@ -75,7 +73,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	// Check time: must be before 9 AM Toronto time
-	if (torontoNow.getHours() >= ARRIVAL_DEADLINE_HOUR) {
+	if (torontoNow.getHours() >= dispatchPolicy.shifts.arrivalDeadlineHourLocal) {
 		throw error(400, 'Must arrive before 9:00 AM');
 	}
 

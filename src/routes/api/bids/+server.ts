@@ -24,10 +24,9 @@ import {
 } from '$lib/server/realtime/managerSse';
 import { sendNotification } from '$lib/server/services/notifications';
 import logger from '$lib/server/logger';
+import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
-const TORONTO_TZ = 'America/Toronto';
-const SHIFT_START_HOUR = 7;
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const INSTANT_MODE_CUTOFF_MS = dispatchPolicy.bidding.instantModeCutoffHours * 60 * 60 * 1000;
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -107,16 +106,16 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	// Belt-and-suspenders: if < 24h to shift, treat as instant regardless of stored mode
 	const parsed = parseISO(window.assignmentDate);
-	const toronto = toZonedTime(parsed, TORONTO_TZ);
+	const toronto = toZonedTime(parsed, dispatchPolicy.timezone.toronto);
 	const shiftStart = set(startOfDay(toronto), {
-		hours: SHIFT_START_HOUR,
+		hours: dispatchPolicy.shifts.startHourLocal,
 		minutes: 0,
 		seconds: 0,
 		milliseconds: 0
 	});
 	const timeUntilShiftMs = shiftStart.getTime() - now.getTime();
 	const effectiveMode =
-		timeUntilShiftMs <= TWENTY_FOUR_HOURS_MS && window.mode === 'competitive'
+		timeUntilShiftMs <= INSTANT_MODE_CUTOFF_MS && window.mode === 'competitive'
 			? 'instant'
 			: window.mode;
 

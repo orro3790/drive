@@ -17,8 +17,7 @@ import { user } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { updateDriverMetrics } from '$lib/server/services/metrics';
 import { checkAndApplyFlag, type FlaggingResult } from '$lib/server/services/flagging';
-
-const BATCH_SIZE = 50;
+import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
 interface PerformanceCheckSummary {
 	driversChecked: number;
@@ -56,8 +55,8 @@ export const GET: RequestHandler = async ({ request }) => {
 		log.info({ driverCount: drivers.length }, 'Found drivers to process');
 
 		// Process in batches to avoid timeout
-		for (let i = 0; i < drivers.length; i += BATCH_SIZE) {
-			const batch = drivers.slice(i, i + BATCH_SIZE);
+		for (let i = 0; i < drivers.length; i += dispatchPolicy.jobs.performanceCheckBatchSize) {
+			const batch = drivers.slice(i, i + dispatchPolicy.jobs.performanceCheckBatchSize);
 			const batchResults = await Promise.allSettled(
 				batch.map(async (driver) => {
 					// Update metrics first
@@ -89,7 +88,10 @@ export const GET: RequestHandler = async ({ request }) => {
 			}
 
 			log.debug(
-				{ batch: Math.floor(i / BATCH_SIZE) + 1, processed: i + batch.length },
+				{
+					batch: Math.floor(i / dispatchPolicy.jobs.performanceCheckBatchSize) + 1,
+					processed: i + batch.length
+				},
 				'Batch processed'
 			);
 		}

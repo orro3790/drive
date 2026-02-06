@@ -15,14 +15,10 @@ import { eq, sql } from 'drizzle-orm';
 import { format, toZonedTime } from 'date-fns-tz';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { createBidWindow } from '$lib/server/services/bidding';
-import {
-	notifyAvailableDriversForEmergency,
-	sendManagerAlert
-} from '$lib/server/services/notifications';
+import { notifyAvailableDriversForEmergency } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
 import logger from '$lib/server/logger';
-
-const TORONTO_TZ = 'America/Toronto';
+import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
 export const POST: RequestHandler = async ({ locals, params }) => {
 	if (!locals.user) {
@@ -64,16 +60,16 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 	}
 
 	// Verify assignment is for today
-	const today = format(toZonedTime(new Date(), TORONTO_TZ), 'yyyy-MM-dd');
+	const today = format(toZonedTime(new Date(), dispatchPolicy.timezone.toronto), 'yyyy-MM-dd');
 	if (assignment.date !== today) {
-		throw error(400, 'Emergency reopen is only available for today\'s assignments');
+		throw error(400, "Emergency reopen is only available for today's assignments");
 	}
 
 	// Create emergency bid window
 	const result = await createBidWindow(id, {
 		mode: 'emergency',
 		trigger: 'manager',
-		payBonusPercent: 20
+		payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent
 	});
 
 	if (!result.success) {
@@ -111,7 +107,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 			routeName: assignment.routeName,
 			warehouseName: assignment.warehouseName,
 			date: assignment.date,
-			payBonusPercent: 20
+			payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent
 		});
 	} catch (err) {
 		log.warn({ error: err }, 'Emergency notification dispatch failed');

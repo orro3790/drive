@@ -235,6 +235,7 @@ Designed to work with the Driver Ops design system.
 
 	// Scroll container ref for virtualization
 	let scrollContainerRef = $state<HTMLElement | null>(null);
+	let scrollAreaWidth = $state(0);
 
 	// Mobile detection (600px breakpoint)
 	const MOBILE_BREAKPOINT = 600;
@@ -305,6 +306,9 @@ Designed to work with the Driver Ops design system.
 		return reactiveTable.getState().pagination.pageSize;
 	});
 
+	// Column resizing support
+	const isResizingEnabled = $derived(!!reactiveTable.options.enableColumnResizing);
+
 	// Column span for empty/loading states
 	const visibleLeafColumnsCount = $derived.by(() => {
 		trackTable();
@@ -314,14 +318,14 @@ Designed to work with the Driver Ops design system.
 		visibleLeafColumnsCount +
 			(selectionVisible ? 1 : 0) +
 			(showExpand ? 1 : 0) +
-			(showIndex ? 1 : 0)
+			(showIndex ? 1 : 0) +
+			(isResizingEnabled ? 1 : 0)
 	);
 
-	// Column resizing support: calculate table width from column sizes
+	// Calculate table width from column sizes
 	// Performance: This derived recalculates on table state changes, but the
 	// calculation is O(n) where n = column count (typically 10-20). The DOM
 	// only updates when the actual width value changes.
-	const isResizingEnabled = $derived(!!reactiveTable.options.enableColumnResizing);
 	const tableWidth = $derived.by(() => {
 		if (!isResizingEnabled) return undefined;
 		trackTable();
@@ -335,6 +339,13 @@ Designed to work with the Driver Ops design system.
 			total += col.getSize();
 		}
 		return total;
+	});
+
+	// Resolved table width: at least as wide as the scroll area so rows fill the container,
+	// but grows when columns exceed the container (enabling horizontal scroll).
+	const resolvedTableWidth = $derived.by(() => {
+		if (!tableWidth) return undefined;
+		return Math.max(scrollAreaWidth, tableWidth);
 	});
 
 	// Get all column definitions for the mobile detail panel
@@ -405,11 +416,11 @@ Designed to work with the Driver Ops design system.
 				{/if}
 			</div>
 		{/if}
-		<div class="data-table-scroll-area" bind:this={scrollContainerRef}>
+		<div class="data-table-scroll-area" bind:this={scrollContainerRef} bind:clientWidth={scrollAreaWidth}>
 			<table
 				class="data-table"
 				class:table-fixed={isResizingEnabled}
-				style:width={tableWidth ? `${tableWidth}px` : undefined}
+				style:width={resolvedTableWidth ? `${resolvedTableWidth}px` : undefined}
 			>
 				<DataTableHeader
 					{table}
@@ -417,6 +428,7 @@ Designed to work with the Driver Ops design system.
 					showSelection={selectionVisible}
 					{showExpand}
 					{headers}
+					showFiller={isResizingEnabled}
 				/>
 				{#if loading}
 					<tbody>
@@ -466,6 +478,7 @@ Designed to work with the Driver Ops design system.
 						{cellComponents}
 						{isMobile}
 						onMobileRowTap={disableMobileDetail ? undefined : handleMobileRowTap}
+						showFiller={isResizingEnabled}
 					/>
 				{:else}
 					<DataTableBody
@@ -485,6 +498,7 @@ Designed to work with the Driver Ops design system.
 						{cellComponents}
 						{isMobile}
 						onMobileRowTap={disableMobileDetail ? undefined : handleMobileRowTap}
+						showFiller={isResizingEnabled}
 					/>
 				{/if}
 			</table>
@@ -700,8 +714,8 @@ Designed to work with the Driver Ops design system.
 	   smaller than their content, with text truncating via ellipsis */
 	.data-table.table-fixed {
 		table-layout: fixed;
-		width: auto; /* Override max-content; actual width set via inline style */
-		min-width: 0; /* Allow fixed-width tables to be narrower than container */
+		width: auto;
+		min-width: 0;
 	}
 
 	.state-cell {
