@@ -18,9 +18,7 @@ import { db } from '$lib/server/db';
 import { assignments, routes } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { sendNotification } from '$lib/server/services/notifications';
-import { CONFIRMATION_DEPLOYMENT_DATE } from '$lib/server/services/confirmations';
-
-const TORONTO_TZ = 'America/Toronto';
+import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
 export const GET: RequestHandler = async ({ request }) => {
 	const authHeader = request.headers.get('authorization')?.trim();
@@ -31,8 +29,11 @@ export const GET: RequestHandler = async ({ request }) => {
 
 	const log = logger.child({ cron: 'send-confirmation-reminders' });
 	const startedAt = Date.now();
-	const nowToronto = toZonedTime(new Date(), TORONTO_TZ);
-	const targetDate = format(addDays(nowToronto, 3), 'yyyy-MM-dd');
+	const nowToronto = toZonedTime(new Date(), dispatchPolicy.timezone.toronto);
+	const targetDate = format(
+		addDays(nowToronto, dispatchPolicy.confirmation.reminderLeadDays),
+		'yyyy-MM-dd'
+	);
 
 	log.info({ targetDate }, 'Starting confirmation reminders cron');
 
@@ -52,7 +53,7 @@ export const GET: RequestHandler = async ({ request }) => {
 					eq(assignments.status, 'scheduled'),
 					isNotNull(assignments.userId),
 					isNull(assignments.confirmedAt),
-					gte(assignments.date, CONFIRMATION_DEPLOYMENT_DATE)
+					gte(assignments.date, dispatchPolicy.confirmation.deploymentDate)
 				)
 			);
 

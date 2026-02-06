@@ -25,12 +25,10 @@ import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { format, toZonedTime } from 'date-fns-tz';
 import { set, startOfDay } from 'date-fns';
 import logger from '$lib/server/logger';
-
-const TORONTO_TZ = 'America/Toronto';
-const ARRIVAL_DEADLINE_HOUR = 9;
+import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
 function getTorontoNow(): Date {
-	return toZonedTime(new Date(), TORONTO_TZ);
+	return toZonedTime(new Date(), dispatchPolicy.timezone.toronto);
 }
 
 function getTorontoDateString(date: Date): string {
@@ -39,7 +37,7 @@ function getTorontoDateString(date: Date): string {
 
 function getArrivalDeadline(date: Date): Date {
 	return set(startOfDay(date), {
-		hours: ARRIVAL_DEADLINE_HOUR,
+		hours: dispatchPolicy.shifts.arrivalDeadlineHourLocal,
 		minutes: 0,
 		seconds: 0,
 		milliseconds: 0
@@ -148,7 +146,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 			const result = await createBidWindow(candidate.assignmentId, {
 				mode: 'emergency',
 				trigger: 'no_show',
-				payBonusPercent: 20,
+				payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent,
 				allowPastShift: true
 			});
 
@@ -166,10 +164,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 							})
 							.where(eq(driverMetrics.userId, candidate.driverId));
 					} catch (error) {
-						log.warn(
-							{ driverId: candidate.driverId, error },
-							'Failed to increment noShows metric'
-						);
+						log.warn({ driverId: candidate.driverId, error }, 'Failed to increment noShows metric');
 					}
 				}
 
@@ -195,7 +190,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 						routeName: candidate.routeName ?? 'Unknown Route',
 						warehouseName: candidate.warehouseName ?? 'Unknown Warehouse',
 						date: candidate.assignmentDate,
-						payBonusPercent: 20
+						payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent
 					});
 					driversNotified += notifiedCount;
 				} catch (error) {

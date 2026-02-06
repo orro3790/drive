@@ -20,11 +20,7 @@ import logger from '$lib/server/logger';
 import { createBidWindow } from '$lib/server/services/bidding';
 import { sendNotification } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
-import { CONFIRMATION_DEPLOYMENT_DATE } from '$lib/server/services/confirmations';
-
-const TORONTO_TZ = 'America/Toronto';
-const SHIFT_START_HOUR = 7;
-const CONFIRMATION_DEADLINE_HOURS = 48;
+import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
 export const GET: RequestHandler = async ({ request }) => {
 	const authHeader = request.headers.get('authorization')?.trim();
@@ -36,7 +32,7 @@ export const GET: RequestHandler = async ({ request }) => {
 	const log = logger.child({ cron: 'auto-drop-unconfirmed' });
 	const startedAt = Date.now();
 	const now = new Date();
-	const nowToronto = toZonedTime(now, TORONTO_TZ);
+	const nowToronto = toZonedTime(now, dispatchPolicy.timezone.toronto);
 
 	log.info('Starting auto-drop unconfirmed cron');
 
@@ -57,7 +53,7 @@ export const GET: RequestHandler = async ({ request }) => {
 					eq(assignments.status, 'scheduled'),
 					isNotNull(assignments.userId),
 					isNull(assignments.confirmedAt),
-					gte(assignments.date, CONFIRMATION_DEPLOYMENT_DATE)
+					gte(assignments.date, dispatchPolicy.confirmation.deploymentDate)
 				)
 			);
 
@@ -68,16 +64,16 @@ export const GET: RequestHandler = async ({ request }) => {
 		for (const candidate of candidates) {
 			// Check if past the 48h deadline
 			const parsed = parseISO(candidate.date);
-			const toronto = toZonedTime(parsed, TORONTO_TZ);
+			const toronto = toZonedTime(parsed, dispatchPolicy.timezone.toronto);
 			const shiftStart = set(toronto, {
-				hours: SHIFT_START_HOUR,
+				hours: dispatchPolicy.shifts.startHourLocal,
 				minutes: 0,
 				seconds: 0,
 				milliseconds: 0
 			});
 			const hoursUntilShift = (shiftStart.getTime() - nowToronto.getTime()) / (1000 * 60 * 60);
 
-			if (hoursUntilShift > CONFIRMATION_DEADLINE_HOURS) {
+			if (hoursUntilShift > dispatchPolicy.confirmation.deadlineHoursBeforeShift) {
 				continue; // Not past deadline yet
 			}
 

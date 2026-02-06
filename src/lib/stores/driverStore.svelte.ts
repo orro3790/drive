@@ -6,8 +6,14 @@
  */
 
 import type { Driver, DriverUpdate } from '$lib/schemas/driver';
+import { driverSchema } from '$lib/schemas/driver';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import * as m from '$lib/paraglide/messages.js';
+import {
+	dispatchPolicy,
+	getAttendanceThreshold,
+	isRewardEligible
+} from '$lib/config/dispatchPolicy';
 
 const state = $state<{
 	drivers: Driver[];
@@ -18,6 +24,57 @@ const state = $state<{
 	isLoading: false,
 	error: null
 });
+
+function deriveHealthState(
+	driver: Pick<Driver, 'isFlagged' | 'attendanceRate' | 'totalShifts' | 'completionRate'>
+): Driver['healthState'] {
+	if (driver.isFlagged) {
+		return 'flagged';
+	}
+
+	const attendanceThreshold = getAttendanceThreshold(driver.totalShifts);
+	if (driver.attendanceRate < attendanceThreshold) {
+		return 'at_risk';
+	}
+
+	if (
+		driver.attendanceRate <
+		attendanceThreshold + dispatchPolicy.flagging.ui.watchBandAboveThreshold
+	) {
+		return 'watch';
+	}
+
+	if (
+		isRewardEligible(driver.totalShifts, driver.attendanceRate) &&
+		driver.completionRate >= dispatchPolicy.flagging.reward.minAttendanceRate
+	) {
+		return 'high_performer';
+	}
+
+	return 'healthy';
+}
+
+function parseDriverPatch(input: unknown): Partial<Driver> {
+	const parsed = driverSchema.partial().safeParse(input);
+	if (!parsed.success) {
+		throw new Error('Invalid driver payload');
+	}
+
+	return parsed.data;
+}
+
+function mergeDriver(existing: Driver, patch: Partial<Driver>): Driver {
+	const merged: Driver = {
+		...existing,
+		...patch,
+		attendanceThreshold: getAttendanceThreshold(patch.totalShifts ?? existing.totalShifts ?? 0)
+	};
+
+	return {
+		...merged,
+		healthState: deriveHealthState(merged)
+	};
+}
 
 export const driverStore = {
 	get drivers() {
@@ -43,7 +100,11 @@ export const driverStore = {
 				throw new Error('Failed to load drivers');
 			}
 			const data = await res.json();
-			state.drivers = data.drivers;
+			const parsed = driverSchema.array().safeParse(data.drivers);
+			if (!parsed.success) {
+				throw new Error('Invalid drivers response');
+			}
+			state.drivers = parsed.data;
 		} catch (err) {
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.drivers_load_error());
@@ -93,7 +154,8 @@ export const driverStore = {
 			}
 
 			const { driver } = await res.json();
-			state.drivers = state.drivers.map((d) => (d.id === id ? driver : d));
+			const parsedDriver = parseDriverPatch(driver);
+			state.drivers = state.drivers.map((d) => (d.id === id ? mergeDriver(d, parsedDriver) : d));
 			toastStore.success(m.drivers_updated_success());
 		} catch {
 			// Rollback
@@ -115,7 +177,8 @@ export const driverStore = {
 			}
 
 			const { driver } = await res.json();
-			state.drivers = state.drivers.map((d) => (d.id === id ? driver : d));
+			const parsedDriver = parseDriverPatch(driver);
+			state.drivers = state.drivers.map((d) => (d.id === id ? mergeDriver(d, parsedDriver) : d));
 			toastStore.success(m.drivers_unflagged_success());
 		} catch {
 			// Rollback

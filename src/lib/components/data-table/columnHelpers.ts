@@ -243,22 +243,22 @@ export function createColumnHelper<TData extends RowData>() {
 		const estimatedWidths = estimateHeaderWidths(options);
 		const estimatedMinWidth = estimatedWidths?.minWidth;
 		const estimatedDefaultWidth = estimatedWidths?.defaultWidth;
+		const hasExplicitWidth = typeof options.width === 'number';
+		const hasExplicitMinWidth = typeof options.minWidth === 'number';
 		let size = options.width;
 		let minSize = options.minWidth;
 		const maxSize = options.maxWidth;
 
-		if (typeof estimatedMinWidth === 'number') {
-			minSize =
-				typeof minSize === 'number' ? Math.max(minSize, estimatedMinWidth) : estimatedMinWidth;
+		if (!hasExplicitMinWidth && !hasExplicitWidth && typeof estimatedMinWidth === 'number') {
+			minSize = estimatedMinWidth;
 		}
 
 		if (typeof minSize === 'number') {
 			props.minSize = minSize;
 		}
 
-		if (typeof estimatedDefaultWidth === 'number') {
-			size =
-				typeof size === 'number' ? Math.max(size, estimatedDefaultWidth) : estimatedDefaultWidth;
+		if (!hasExplicitWidth && typeof estimatedDefaultWidth === 'number') {
+			size = estimatedDefaultWidth;
 		}
 
 		if (typeof minSize === 'number') {

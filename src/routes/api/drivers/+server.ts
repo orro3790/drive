@@ -10,8 +10,50 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { driverMetrics, user } from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
+import { assignments, driverMetrics, user, warehouses } from '$lib/server/db/schema';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import {
+	dispatchPolicy,
+	getAttendanceThreshold,
+	isRewardEligible
+} from '$lib/config/dispatchPolicy';
+
+type DriverHealthState = 'flagged' | 'at_risk' | 'watch' | 'healthy' | 'high_performer';
+
+type PrimaryWarehouse = {
+	warehouseId: string;
+	warehouseName: string;
+	completedShiftCount: number;
+};
+
+function deriveHealthState(driver: {
+	isFlagged: boolean;
+	totalShifts: number;
+	attendanceRate: number;
+	completionRate: number;
+}): DriverHealthState {
+	if (driver.isFlagged) {
+		return 'flagged';
+	}
+
+	const threshold = getAttendanceThreshold(driver.totalShifts);
+	if (driver.attendanceRate < threshold) {
+		return 'at_risk';
+	}
+
+	if (driver.attendanceRate < threshold + dispatchPolicy.flagging.ui.watchBandAboveThreshold) {
+		return 'watch';
+	}
+
+	if (
+		isRewardEligible(driver.totalShifts, driver.attendanceRate) &&
+		driver.completionRate >= dispatchPolicy.flagging.reward.minAttendanceRate
+	) {
+		return 'high_performer';
+	}
+
+	return 'healthy';
+}
 
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user) {
@@ -45,15 +87,105 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.where(eq(user.role, 'driver'))
 		.orderBy(user.name);
 
+	const completedAssignmentCounts = await db
+		.select({
+			driverId: assignments.userId,
+			warehouseId: assignments.warehouseId,
+			warehouseName: warehouses.name,
+			completedShiftCount: sql<number>`count(*)::int`
+		})
+		.from(assignments)
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.where(and(eq(assignments.status, 'completed'), isNotNull(assignments.userId)))
+		.groupBy(assignments.userId, assignments.warehouseId, warehouses.name);
+
+	const primaryWarehouseByDriver = new Map<string, PrimaryWarehouse>();
+	for (const row of completedAssignmentCounts) {
+		if (!row.driverId) {
+			continue;
+		}
+
+		const current = primaryWarehouseByDriver.get(row.driverId);
+		if (
+			!current ||
+			row.completedShiftCount > current.completedShiftCount ||
+			(row.completedShiftCount === current.completedShiftCount &&
+				row.warehouseName.localeCompare(current.warehouseName) < 0)
+		) {
+			primaryWarehouseByDriver.set(row.driverId, {
+				warehouseId: row.warehouseId,
+				warehouseName: row.warehouseName,
+				completedShiftCount: row.completedShiftCount
+			});
+		}
+	}
+
+	const avgParcelsByDriver = new Map(
+		drivers.map((driver) => [driver.id, driver.avgParcelsDelivered])
+	);
+	const cohortTotals = new Map<string, { sum: number; count: number }>();
+
+	for (const [driverId, primaryWarehouse] of primaryWarehouseByDriver.entries()) {
+		const avgParcels = avgParcelsByDriver.get(driverId);
+		if (avgParcels === null || avgParcels === undefined) {
+			continue;
+		}
+
+		const current = cohortTotals.get(primaryWarehouse.warehouseId);
+		if (!current) {
+			cohortTotals.set(primaryWarehouse.warehouseId, { sum: avgParcels, count: 1 });
+			continue;
+		}
+
+		cohortTotals.set(primaryWarehouse.warehouseId, {
+			sum: current.sum + avgParcels,
+			count: current.count + 1
+		});
+	}
+
+	const cohortAverages = new Map<string, number>();
+	for (const [warehouseId, { sum, count }] of cohortTotals.entries()) {
+		if (count > 0) {
+			cohortAverages.set(warehouseId, sum / count);
+		}
+	}
+
 	// Map null metrics to defaults
-	const driversWithDefaults = drivers.map((driver) => ({
-		...driver,
-		totalShifts: driver.totalShifts ?? 0,
-		completedShifts: driver.completedShifts ?? 0,
-		attendanceRate: driver.attendanceRate ?? 0,
-		completionRate: driver.completionRate ?? 0,
-		avgParcelsDelivered: driver.avgParcelsDelivered ?? 0
-	}));
+	const driversWithDefaults = drivers.map((driver) => {
+		const totalShifts = driver.totalShifts ?? 0;
+		const completedShifts = driver.completedShifts ?? 0;
+		const attendanceRate = driver.attendanceRate ?? 0;
+		const completionRate = driver.completionRate ?? 0;
+		const avgParcelsDelivered = driver.avgParcelsDelivered ?? 0;
+		const primaryWarehouse = primaryWarehouseByDriver.get(driver.id) ?? null;
+		const warehouseCohortAvgParcels = primaryWarehouse
+			? (cohortAverages.get(primaryWarehouse.warehouseId) ?? null)
+			: null;
+		const avgParcelsDeltaVsCohort =
+			driver.avgParcelsDelivered !== null && warehouseCohortAvgParcels !== null
+				? driver.avgParcelsDelivered - warehouseCohortAvgParcels
+				: null;
+
+		return {
+			...driver,
+			totalShifts,
+			completedShifts,
+			attendanceRate,
+			completionRate,
+			avgParcelsDelivered,
+			primaryWarehouseId: primaryWarehouse?.warehouseId ?? null,
+			primaryWarehouseName: primaryWarehouse?.warehouseName ?? null,
+			warehouseCohortAvgParcels,
+			avgParcelsDeltaVsCohort,
+			attendanceThreshold: getAttendanceThreshold(totalShifts),
+			healthState: deriveHealthState({
+				isFlagged: driver.isFlagged,
+				totalShifts,
+				attendanceRate,
+				completionRate
+			})
+		};
+	});
 
 	return json({ drivers: driversWithDefaults });
 };

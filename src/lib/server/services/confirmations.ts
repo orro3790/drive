@@ -13,24 +13,20 @@ import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import { toZonedTime, format } from 'date-fns-tz';
 import { addDays, addHours, parseISO, set } from 'date-fns';
 import logger from '$lib/server/logger';
-
-const TORONTO_TZ = 'America/Toronto';
-const SHIFT_START_HOUR = 7;
-const CONFIRMATION_WINDOW_DAYS = 7;
-const CONFIRMATION_DEADLINE_HOURS = 48;
+import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
 /** Set to the date confirmations go live. Pre-existing assignments are skipped. */
-export const CONFIRMATION_DEPLOYMENT_DATE = '2026-03-01';
+export const CONFIRMATION_DEPLOYMENT_DATE = dispatchPolicy.confirmation.deploymentDate;
 
 function getNowToronto(): Date {
-	return toZonedTime(new Date(), TORONTO_TZ);
+	return toZonedTime(new Date(), dispatchPolicy.timezone.toronto);
 }
 
 function getShiftStart(dateString: string): Date {
 	const parsed = parseISO(dateString);
-	const toronto = toZonedTime(parsed, TORONTO_TZ);
+	const toronto = toZonedTime(parsed, dispatchPolicy.timezone.toronto);
 	return set(toronto, {
-		hours: SHIFT_START_HOUR,
+		hours: dispatchPolicy.shifts.startHourLocal,
 		minutes: 0,
 		seconds: 0,
 		milliseconds: 0
@@ -50,8 +46,8 @@ export interface ConfirmationWindow {
  */
 export function calculateConfirmationDeadline(assignmentDate: string): ConfirmationWindow {
 	const shiftStart = getShiftStart(assignmentDate);
-	const opensAt = addDays(shiftStart, -CONFIRMATION_WINDOW_DAYS);
-	const deadline = addHours(shiftStart, -CONFIRMATION_DEADLINE_HOURS);
+	const opensAt = addDays(shiftStart, -dispatchPolicy.confirmation.windowDaysBeforeShift);
+	const deadline = addHours(shiftStart, -dispatchPolicy.confirmation.deadlineHoursBeforeShift);
 	return { opensAt, deadline };
 }
 
@@ -161,7 +157,7 @@ export interface UnconfirmedAssignment {
  */
 export async function getUnconfirmedAssignments(userId: string): Promise<UnconfirmedAssignment[]> {
 	const now = getNowToronto();
-	const todayString = format(now, 'yyyy-MM-dd', { timeZone: TORONTO_TZ });
+	const todayString = format(now, 'yyyy-MM-dd', { timeZone: dispatchPolicy.timezone.toronto });
 
 	const rows = await db
 		.select({

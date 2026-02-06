@@ -14,6 +14,7 @@ import { eq } from 'drizzle-orm';
 import { addHours } from 'date-fns';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
+import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -92,7 +93,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	// Server-calculated delivered count
 	const parcelsDelivered = shift.parcelsStart - parcelsReturned;
 	const completedAt = new Date();
-	const editableUntil = addHours(completedAt, 1);
+	const editableUntil = addHours(completedAt, dispatchPolicy.shifts.completionEditWindowHours);
 
 	// Update shift record
 	const [updatedShift] = await db

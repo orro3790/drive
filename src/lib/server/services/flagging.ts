@@ -14,15 +14,11 @@ import { updateDriverMetrics } from '$lib/server/services/metrics';
 import { sendNotification } from '$lib/server/services/notifications';
 import { broadcastDriverFlagged } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
-
-const PRE_10_SHIFT_THRESHOLD = 0.8;
-const POST_10_SHIFT_THRESHOLD = 0.7;
-const REWARD_MIN_SHIFTS = 20;
-const REWARD_ATTENDANCE_THRESHOLD = 0.95;
-const GRACE_PERIOD_DAYS = 7;
-const DEFAULT_WEEKLY_CAP = 4;
-const REWARD_WEEKLY_CAP = 6;
-const MIN_WEEKLY_CAP = 1;
+import {
+	dispatchPolicy,
+	getAttendanceThreshold,
+	isRewardEligible
+} from '$lib/config/dispatchPolicy';
 
 export interface FlaggingResult {
 	userId: string;
@@ -35,14 +31,6 @@ export interface FlaggingResult {
 	warningSent: boolean;
 	gracePenaltyApplied: boolean;
 	rewardApplied: boolean;
-}
-
-function getAttendanceThreshold(totalShifts: number): number {
-	return totalShifts < 10 ? PRE_10_SHIFT_THRESHOLD : POST_10_SHIFT_THRESHOLD;
-}
-
-function isRewardEligible(totalShifts: number, attendanceRate: number): boolean {
-	return totalShifts >= REWARD_MIN_SHIFTS && attendanceRate >= REWARD_ATTENDANCE_THRESHOLD;
 }
 
 export async function checkAndApplyFlag(userId: string): Promise<FlaggingResult | null> {
@@ -93,12 +81,14 @@ export async function checkAndApplyFlag(userId: string): Promise<FlaggingResult 
 	const threshold = getAttendanceThreshold(totalShifts);
 	const rewardEligible = isRewardEligible(totalShifts, attendanceRate);
 	const shouldBeFlagged = totalShifts > 0 && attendanceRate < threshold;
-	const baseWeeklyCap = rewardEligible ? REWARD_WEEKLY_CAP : DEFAULT_WEEKLY_CAP;
+	const baseWeeklyCap = rewardEligible
+		? dispatchPolicy.flagging.weeklyCap.reward
+		: dispatchPolicy.flagging.weeklyCap.base;
 
 	const now = new Date();
 	let nextIsFlagged = userRecord.isFlagged;
 	let nextFlagWarningDate = userRecord.flagWarningDate;
-	let nextWeeklyCap = baseWeeklyCap;
+	let nextWeeklyCap: number = baseWeeklyCap;
 	let warningSent = false;
 	let gracePenaltyApplied = false;
 
@@ -110,9 +100,9 @@ export async function checkAndApplyFlag(userId: string): Promise<FlaggingResult 
 		}
 
 		if (nextFlagWarningDate) {
-			const graceEndsAt = addDays(nextFlagWarningDate, GRACE_PERIOD_DAYS);
+			const graceEndsAt = addDays(nextFlagWarningDate, dispatchPolicy.flagging.gracePeriodDays);
 			if (graceEndsAt <= now) {
-				nextWeeklyCap = Math.max(baseWeeklyCap - 1, MIN_WEEKLY_CAP);
+				nextWeeklyCap = Math.max(baseWeeklyCap - 1, dispatchPolicy.flagging.weeklyCap.min);
 				gracePenaltyApplied = nextWeeklyCap < baseWeeklyCap;
 			}
 		}

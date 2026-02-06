@@ -7,6 +7,14 @@
 
 import { z } from 'zod';
 
+export const driverHealthStateSchema = z.enum([
+	'flagged',
+	'at_risk',
+	'watch',
+	'healthy',
+	'high_performer'
+]);
+
 /**
  * Driver with metrics (as returned from API)
  */
@@ -24,7 +32,13 @@ export const driverSchema = z.object({
 	completedShifts: z.number().int().default(0),
 	attendanceRate: z.number().min(0).max(1).default(0),
 	completionRate: z.number().min(0).max(1).default(0),
-	avgParcelsDelivered: z.number().min(0).default(0)
+	avgParcelsDelivered: z.number().min(0).default(0),
+	primaryWarehouseId: z.string().nullable(),
+	primaryWarehouseName: z.string().nullable(),
+	warehouseCohortAvgParcels: z.number().min(0).nullable(),
+	avgParcelsDeltaVsCohort: z.number().nullable(),
+	attendanceThreshold: z.number().min(0).max(1),
+	healthState: driverHealthStateSchema
 });
 
 export type Driver = z.infer<typeof driverSchema>;

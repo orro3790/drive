@@ -49,6 +49,8 @@ Priority: cellComponents > cells > columnDef.cell > default rendering
 		isMobile?: boolean;
 		/** Handler called when a row is tapped on mobile to open detail panel */
 		onMobileRowTap?: (row: RowType) => void;
+		/** Show an empty filler column at the end to absorb remaining width */
+		showFiller?: boolean;
 	};
 
 	let {
@@ -67,7 +69,8 @@ Priority: cellComponents > cells > columnDef.cell > default rendering
 		cells,
 		cellComponents,
 		isMobile = false,
-		onMobileRowTap
+		onMobileRowTap,
+		showFiller = false
 	}: Props = $props();
 
 	type ReactiveTable<T> = Table<T> & { track?: () => void };
@@ -362,6 +365,9 @@ Priority: cellComponents > cells > columnDef.cell > default rendering
 					{/if}
 				</td>
 			{/each}
+			{#if showFiller}
+				<td class="col-filler"></td>
+			{/if}
 		</tr>
 	{/each}
 </tbody>
@@ -586,5 +592,20 @@ Priority: cellComponents > cells > columnDef.cell > default rendering
 
 	.sizing-fill {
 		width: 100%;
+	}
+
+	.col-filler {
+		width: auto;
+		padding: 0;
+		background: var(--surface-primary);
+		border-bottom: var(--border-width-thin) solid var(--border-primary);
+	}
+
+	.data-table-row:hover .col-filler {
+		background: var(--interactive-hover);
+	}
+
+	.data-table-row.row-active .col-filler {
+		background: var(--interactive-hover);
 	}
 </style>

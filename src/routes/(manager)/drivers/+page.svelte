@@ -1,11 +1,11 @@
 <!--
 	Driver Management Page (Manager Dashboard)
 
-	Displays all drivers with their metrics and flag status.
+	Displays all drivers with their metrics and health status.
 	Allows managers to:
 	- View driver metrics (attendance, completion rates)
 	- Adjust weekly cap (1-6)
-	- Unflag drivers
+	- Unflag drivers and monitor health state
 
 	Uses DataTable with Drive tabs/toolbar pattern.
 -->
@@ -21,11 +21,12 @@
 		createColumnHelper,
 		type SortingState,
 		type PaginationState,
-		type CellRendererContext
+		type CellRendererContext,
+		type HeaderRendererContext
 	} from '$lib/components/data-table';
 	import PageWithDetailPanel from '$lib/components/PageWithDetailPanel.svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
-	import Chip from '$lib/components/primitives/Chip.svelte';
+	import Tooltip from '$lib/components/primitives/Tooltip.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import ConfirmationDialog from '$lib/components/ConfirmationDialog.svelte';
 	import { driverStore } from '$lib/stores/driverStore.svelte';
@@ -44,6 +45,32 @@
 	let sorting = $state<SortingState>([]);
 	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
 
+	const healthSortOrder: Record<Driver['healthState'], number> = {
+		flagged: 0,
+		at_risk: 1,
+		watch: 2,
+		healthy: 3,
+		high_performer: 4
+	};
+
+	const globalAttendanceAverage = $derived.by(() => {
+		if (driverStore.drivers.length === 0) return 0;
+		const total = driverStore.drivers.reduce((sum, driver) => sum + driver.attendanceRate, 0);
+		return total / driverStore.drivers.length;
+	});
+
+	const globalCompletionAverage = $derived.by(() => {
+		if (driverStore.drivers.length === 0) return 0;
+		const total = driverStore.drivers.reduce((sum, driver) => sum + driver.completionRate, 0);
+		return total / driverStore.drivers.length;
+	});
+
+	const globalParcelsAverage = $derived.by(() => {
+		if (driverStore.drivers.length === 0) return 0;
+		const total = driverStore.drivers.reduce((sum, driver) => sum + driver.avgParcelsDelivered, 0);
+		return total / driverStore.drivers.length;
+	});
+
 	const helper = createColumnHelper<Driver>();
 
 	const columns = [
@@ -51,7 +78,7 @@
 			header: m.common_name(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 240,
+			width: 260,
 			minWidth: 200,
 			stickyLeft: true,
 			mobileVisible: true,
@@ -65,41 +92,46 @@
 			minWidth: 260,
 			mobileVisible: false
 		}),
-		helper.display({
-			id: 'phone',
+		helper.text('phone', {
 			header: m.drivers_header_phone(),
+			sortable: true,
 			sizing: 'fixed',
-			width: 140
+			width: 170
 		}),
-		helper.display({
-			id: 'attendance',
+		helper.accessor('healthRank', (row) => healthSortOrder[row.healthState], {
+			header: m.drivers_header_health(),
+			sortable: true,
+			sizing: 'fixed',
+			width: 170,
+			minWidth: 150
+		}),
+		helper.accessor('attendancePercent', (row) => row.attendanceRate, {
 			header: m.drivers_header_attendance(),
+			sortable: true,
 			sizing: 'fixed',
-			width: 110
+			width: 220,
+			minWidth: 180
 		}),
-		helper.display({
-			id: 'completion',
+		helper.accessor('completionPercent', (row) => row.completionRate, {
 			header: m.drivers_header_completion(),
+			sortable: true,
 			sizing: 'fixed',
-			width: 110
+			width: 220,
+			minWidth: 180
 		}),
-		helper.number('avgParcelsDelivered', {
+		helper.accessor('avgParcelsDelivered', (row) => row.avgParcelsDelivered, {
 			header: m.drivers_header_avg_parcels(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 140
+			width: 280,
+			minWidth: 240
 		}),
-		helper.display({
-			id: 'weeklyCap',
+		helper.accessor('weeklyCap', (row) => row.weeklyCap, {
 			header: m.drivers_header_weekly_cap(),
+			sortable: true,
 			sizing: 'fixed',
-			width: 110
-		}),
-		helper.display({
-			id: 'flagStatus',
-			header: m.drivers_header_flag_status(),
-			sizing: 'fixed',
-			width: 120
+			width: 150,
+			minWidth: 130
 		})
 	];
 
@@ -138,12 +170,77 @@
 	);
 	const hasChanges = $derived(!!selectedDriver && formWeeklyCap !== selectedDriver.weeklyCap);
 
+	function getHealthLabel(healthState: Driver['healthState']) {
+		switch (healthState) {
+			case 'flagged':
+				return m.drivers_health_flagged();
+			case 'at_risk':
+				return m.drivers_health_at_risk();
+			case 'watch':
+				return m.drivers_health_watch();
+			case 'high_performer':
+				return m.drivers_health_high_performer();
+			default:
+				return m.drivers_health_healthy();
+		}
+	}
+
+	function getHealthTone(healthState: Driver['healthState']) {
+		switch (healthState) {
+			case 'flagged':
+				return 'error';
+			case 'at_risk':
+				return 'warning';
+			case 'watch':
+				return 'neutral';
+			case 'high_performer':
+				return 'success';
+			default:
+				return 'success';
+		}
+	}
+
 	function formatPercent(rate: number) {
 		return `${Math.round(rate * 100)}%`;
 	}
 
+	function formatPercentDelta(deltaPercent: number) {
+		const rounded = Math.round(deltaPercent * 10) / 10;
+		if (Math.abs(rounded) < 0.05) {
+			return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(0)}%`;
+		}
+		const prefix = rounded > 0 ? '+' : '';
+		return `${prefix}${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(rounded)}%`;
+	}
+
 	function formatAverageParcels(value: number) {
-		return Math.round(value).toLocaleString();
+		return new Intl.NumberFormat(undefined, {
+			maximumFractionDigits: 1
+		}).format(value);
+	}
+
+	function formatParcelsDelta(delta: number) {
+		const roundedDelta = Math.round(delta * 10) / 10;
+		if (Math.abs(roundedDelta) < 0.05) {
+			return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(0);
+		}
+		const prefix = roundedDelta > 0 ? '+' : '';
+		return `${prefix}${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(roundedDelta)}`;
+	}
+
+	function getHeaderTooltip(columnId: HeaderRendererContext['columnId']) {
+		switch (columnId) {
+			case 'attendancePercent':
+				return m.drivers_tooltip_attendance();
+			case 'completionPercent':
+				return m.drivers_tooltip_completion();
+			case 'avgParcelsDelivered':
+				return m.drivers_tooltip_avg_parcels();
+			case 'healthRank':
+				return m.drivers_tooltip_health();
+			default:
+				return '';
+		}
 	}
 
 	function formatDate(date: Date | string | null) {
@@ -225,6 +322,12 @@
 	});
 </script>
 
+{#snippet headerWithTooltip(ctx: HeaderRendererContext)}
+	<Tooltip tooltip={getHeaderTooltip(ctx.columnId)} delay={250} focusable={false}>
+		<span class="header-with-tooltip">{ctx.headerText}</span>
+	</Tooltip>
+{/snippet}
+
 {#snippet phoneCell(ctx: CellRendererContext<Driver>)}
 	{#if ctx.row.phone}
 		<span class="phone">{ctx.row.phone}</span>
@@ -233,36 +336,53 @@
 	{/if}
 {/snippet}
 
+{#snippet healthCell(ctx: CellRendererContext<Driver>)}
+	{@render healthIndicator(ctx.row.healthState)}
+{/snippet}
+
+{#snippet healthIndicator(healthState: Driver['healthState'])}
+	<span class="health-indicator">
+		<span class={`health-indicator-dot tone-${getHealthTone(healthState)}`} aria-hidden="true"></span>
+		<span class="health-indicator-label">{getHealthLabel(healthState)}</span>
+	</span>
+{/snippet}
+
 {#snippet attendanceCell(ctx: CellRendererContext<Driver>)}
-	<span class="metric" class:low={ctx.row.attendanceRate < 0.7}>
-		{formatPercent(ctx.row.attendanceRate)}
+	{@const deltaPercent = (ctx.row.attendanceRate - globalAttendanceAverage) * 100}
+	<span class="metric-cell">
+		<span class="metric-value">{formatPercent(ctx.row.attendanceRate)}</span>
+		<span class="metric-delta" class:positive={deltaPercent > 0} class:negative={deltaPercent < 0}>
+			({formatPercentDelta(deltaPercent)})
+		</span>
 	</span>
 {/snippet}
 
 {#snippet completionCell(ctx: CellRendererContext<Driver>)}
-	<span class="metric" class:low={ctx.row.completionRate < 0.7}>
-		{formatPercent(ctx.row.completionRate)}
+	{@const deltaPercent = (ctx.row.completionRate - globalCompletionAverage) * 100}
+	<span class="metric-cell">
+		<span class="metric-value">{formatPercent(ctx.row.completionRate)}</span>
+		<span class="metric-delta" class:positive={deltaPercent > 0} class:negative={deltaPercent < 0}>
+			({formatPercentDelta(deltaPercent)})
+		</span>
 	</span>
 {/snippet}
 
 {#snippet avgParcelsCell(ctx: CellRendererContext<Driver>)}
-	<span class="metric">
-		{formatAverageParcels(ctx.row.avgParcelsDelivered)}
+	{@const delta = ctx.row.avgParcelsDelivered - globalParcelsAverage}
+	<span class="metric-cell">
+		<span class="variance-value">{formatAverageParcels(ctx.row.avgParcelsDelivered)}</span>
+		<span
+			class="metric-delta"
+			class:positive={delta > 0}
+			class:negative={delta < 0}
+		>
+			({formatParcelsDelta(delta)})
+		</span>
 	</span>
 {/snippet}
 
 {#snippet weeklyCapCell(ctx: CellRendererContext<Driver>)}
-	<span class="weekly-cap">{ctx.row.weeklyCap} days</span>
-{/snippet}
-
-{#snippet flagStatusCell(ctx: CellRendererContext<Driver>)}
-	{#if ctx.row.isFlagged}
-		<Chip variant="status" status="error" label={m.drivers_flag_flagged()} size="xs" />
-	{:else if ctx.row.flagWarningDate}
-		<Chip variant="status" status="warning" label={m.drivers_flag_warning()} size="xs" />
-	{:else}
-		<Chip variant="status" status="success" label={m.drivers_flag_good()} size="xs" />
-	{/if}
+	<span class="weekly-cap-value">{ctx.row.weeklyCap}</span>
 {/snippet}
 
 {#snippet tabsSnippet()}
@@ -297,13 +417,13 @@
 		</div>
 		<div class="detail-row">
 			<dt>{m.drivers_detail_attendance()}</dt>
-			<dd class:low={driver.attendanceRate < 0.7}>
+			<dd class:low={driver.attendanceRate < driver.attendanceThreshold}>
 				{formatPercent(driver.attendanceRate)}
 			</dd>
 		</div>
 		<div class="detail-row">
 			<dt>{m.drivers_detail_completion()}</dt>
-			<dd class:low={driver.completionRate < 0.7}>
+			<dd>
 				{formatPercent(driver.completionRate)}
 			</dd>
 		</div>
@@ -316,15 +436,9 @@
 			<dd>{driver.weeklyCap} days</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_flag_status()}</dt>
+			<dt>{m.drivers_detail_health()}</dt>
 			<dd>
-				{#if driver.isFlagged}
-					<Chip variant="status" status="error" label={m.drivers_flag_flagged()} size="xs" />
-				{:else if driver.flagWarningDate}
-					<Chip variant="status" status="warning" label={m.drivers_flag_warning()} size="xs" />
-				{:else}
-					<Chip variant="status" status="success" label={m.drivers_flag_good()} size="xs" />
-				{/if}
+				{@render healthIndicator(driver.healthState)}
 			</dd>
 		</div>
 		{#if driver.flagWarningDate}
@@ -366,13 +480,13 @@
 		</div>
 		<div class="detail-row">
 			<dt>{m.drivers_detail_attendance()}</dt>
-			<dd class:low={driver.attendanceRate < 0.7}>
+			<dd class:low={driver.attendanceRate < driver.attendanceThreshold}>
 				{formatPercent(driver.attendanceRate)}
 			</dd>
 		</div>
 		<div class="detail-row">
 			<dt>{m.drivers_detail_completion()}</dt>
-			<dd class:low={driver.completionRate < 0.7}>
+			<dd>
 				{formatPercent(driver.completionRate)}
 			</dd>
 		</div>
@@ -391,15 +505,9 @@
 			</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_flag_status()}</dt>
+			<dt>{m.drivers_detail_health()}</dt>
 			<dd>
-				{#if driver.isFlagged}
-					<Chip variant="status" status="error" label={m.drivers_flag_flagged()} size="xs" />
-				{:else if driver.flagWarningDate}
-					<Chip variant="status" status="warning" label={m.drivers_flag_warning()} size="xs" />
-				{:else}
-					<Chip variant="status" status="success" label={m.drivers_flag_good()} size="xs" />
-				{/if}
+				{@render healthIndicator(driver.healthState)}
 			</dd>
 		</div>
 		{#if driver.flagWarningDate}
@@ -482,19 +590,25 @@
 		showColumnVisibility
 		showExport
 		showWideModeToggle
+		headers={{
+			healthRank: headerWithTooltip,
+			attendancePercent: headerWithTooltip,
+			completionPercent: headerWithTooltip,
+			avgParcelsDelivered: headerWithTooltip
+		}}
+		cellComponents={{
+			phone: phoneCell,
+			healthRank: healthCell,
+			attendancePercent: attendanceCell,
+			completionPercent: completionCell,
+			avgParcelsDelivered: avgParcelsCell,
+			weeklyCap: weeklyCapCell
+		}}
 		isWideMode={ctx.isWideMode}
 		onWideModeChange={ctx.onWideModeChange}
 		onMobileDetailOpen={syncSelectedDriver}
 		exportFilename="drivers"
 		tabs={tabsSnippet}
-		cellComponents={{
-			phone: phoneCell,
-			attendance: attendanceCell,
-			completion: completionCell,
-			avgParcelsDelivered: avgParcelsCell,
-			weeklyCap: weeklyCapCell,
-			flagStatus: flagStatusCell
-		}}
 		activeRowId={selectedDriverId ?? undefined}
 		onRowClick={handleRowClick}
 		mobileDetailContent={mobileDetail}
@@ -538,7 +652,21 @@
 {/if}
 
 <style>
-	/* Phone cell styling */
+	.header-with-tooltip {
+		display: block;
+		flex: 1;
+		min-width: 0;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		letter-spacing: 0.02em;
+		line-height: 1.2;
+		text-transform: uppercase;
+	}
+
 	.phone {
 		color: var(--text-normal);
 		font-family: var(--font-mono);
@@ -550,18 +678,80 @@
 		font-style: italic;
 	}
 
-	/* Metric styling */
-	.metric {
+	.health-indicator {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		line-height: 1.2;
 		color: var(--text-normal);
+	}
+
+	.health-indicator-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 999px;
+		background: currentColor;
+		flex-shrink: 0;
+	}
+
+	.health-indicator-dot.tone-error {
+		background: var(--status-error);
+	}
+
+	.health-indicator-dot.tone-warning {
+		background: var(--status-warning);
+	}
+
+	.health-indicator-dot.tone-neutral {
+		background: var(--text-muted);
+	}
+
+	.health-indicator-dot.tone-success {
+		background: var(--status-success);
+	}
+
+	.metric-cell {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		min-width: 0;
+	}
+
+	.metric-value {
+		min-width: 3.5ch;
+		text-align: right;
 		font-variant-numeric: tabular-nums;
-	}
-
-	.metric.low {
-		color: var(--status-error);
-	}
-
-	.weekly-cap {
 		color: var(--text-normal);
+	}
+
+	.metric-delta {
+		font-size: var(--font-size-sm);
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+
+	.metric-delta.positive {
+		color: var(--status-success);
+	}
+
+	.metric-delta.negative {
+		color: var(--status-warning);
+	}
+
+	.variance-value {
+		min-width: 4ch;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-normal);
+	}
+
+	.weekly-cap-value {
+		font-size: var(--font-size-sm);
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
 	}
 
 	/* Detail panel */
