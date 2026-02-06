@@ -115,8 +115,6 @@ Priority: cellComponents > cells > columnDef.cell > default rendering
 		return reactiveTable.getState().columnSizing as Record<string, number>;
 	});
 
-	const hasColumnSizing = $derived(Object.keys(columnSizing).length > 0);
-
 	// Derive column pinning state for reactivity
 	const columnPinning = $derived.by(() => {
 		reactiveTable.track?.();
@@ -306,8 +304,10 @@ Priority: cellComponents > cells > columnDef.cell > default rendering
 				{@const pinnedPosition = cell.column.getIsPinned()}
 				{@const pinnedOffset = getPinnedOffset(cell)}
 				{@const isResizingEnabled = table.options.enableColumnResizing}
-				{@const shouldApplySizing = isResizingEnabled && hasColumnSizing}
-				{@const dynamicWidth = shouldApplySizing ? cell.column.getSize() : undefined}
+				{@const shouldApplySizing = isResizingEnabled}
+				{@const dynamicWidth = shouldApplySizing
+					? (columnSizing[cell.column.id] ?? cell.column.getSize())
+					: undefined}
 				{@const cellContext = {
 					value: getCellValue(cell),
 					row: rowData,

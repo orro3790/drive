@@ -6,6 +6,7 @@
 
 import type { AssignmentStatus, CancelReason } from '$lib/schemas/assignment';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
+import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
 
 export type ShiftData = {
@@ -99,6 +100,10 @@ export const scheduleStore = {
 	},
 
 	async cancel(assignmentId: string, reason: CancelReason) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
 		state.isCancelling = true;
 
 		try {
@@ -136,6 +141,10 @@ export const scheduleStore = {
 	},
 
 	async startShift(assignmentId: string, parcelsStart: number) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
 		state.isStartingShift = true;
 
 		try {
@@ -182,6 +191,10 @@ export const scheduleStore = {
 	},
 
 	async completeShift(assignmentId: string, parcelsDelivered: number, parcelsReturned: number) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
 		state.isCompletingShift = true;
 
 		try {

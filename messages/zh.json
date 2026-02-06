@@ -127,6 +127,8 @@
 	"schedule_cancel_success": "已取消排班。",
 	"schedule_cancel_error": "取消排班失败。",
 	"schedule_load_error": "加载排班失败。",
+	"offline_banner_message": "您当前处于离线状态，部分功能不可用。",
+	"offline_requires_connectivity": "此操作需要网络连接。",
 	"schedule_cancel_reason_vehicle_breakdown": "车辆故障",
 	"schedule_cancel_reason_medical_emergency": "医疗紧急情况",
 	"schedule_cancel_reason_family_emergency": "家庭紧急情况",

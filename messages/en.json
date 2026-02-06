@@ -302,6 +302,8 @@
 	"schedule_cancel_success": "Assignment cancelled.",
 	"schedule_cancel_error": "Unable to cancel assignment.",
 	"schedule_load_error": "Failed to load schedule.",
+	"offline_banner_message": "You're offline. Some features are unavailable.",
+	"offline_requires_connectivity": "This action requires connectivity.",
 	"schedule_cancel_reason_vehicle_breakdown": "Vehicle breakdown",
 	"schedule_cancel_reason_medical_emergency": "Medical emergency",
 	"schedule_cancel_reason_family_emergency": "Family emergency",

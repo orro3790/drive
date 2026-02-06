@@ -5,6 +5,7 @@
  */
 
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
+import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
 
 export type BidStatus = 'pending' | 'won' | 'lost';
@@ -116,6 +117,10 @@ export const bidsStore = {
 	},
 
 	async submitBid(assignmentId: string) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
 		state.submittingAssignmentId = assignmentId;
 
 		try {

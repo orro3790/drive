@@ -7,6 +7,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import AppSidebar from '$lib/components/app-shell/AppSidebar.svelte';
+	import OfflineBanner from '$lib/components/app-shell/OfflineBanner.svelte';
 	import PageHeader from '$lib/components/app-shell/PageHeader.svelte';
 
 	let { children }: { children: Snippet } = $props();
@@ -16,6 +17,7 @@
 	<AppSidebar role="driver" />
 	<div class="main-area">
 		<PageHeader />
+		<OfflineBanner />
 		<main class="content">
 			{@render children()}
 		</main>
