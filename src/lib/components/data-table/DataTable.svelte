@@ -100,6 +100,9 @@ Designed to work with the Driver Ops design system.
 		/** Tabs snippet (left chrome) */
 		tabs?: Snippet;
 
+		/** Filter chips snippet (between tabs and actions in chrome) */
+		filters?: Snippet;
+
 		/** Toolbar snippet (right chrome) - rendered FIRST before built-in buttons */
 		toolbar?: Snippet;
 
@@ -193,6 +196,7 @@ Designed to work with the Driver Ops design system.
 		getDisabledSelectionReason,
 		activeRowId,
 		tabs,
+		filters,
 		toolbar,
 		selection,
 		footer,
@@ -285,7 +289,7 @@ Designed to work with the Driver Ops design system.
 	const selectionVisible = $derived(showSelection ?? !!reactiveTable.options.enableRowSelection);
 	const showWideToggle = $derived(showWideModeToggle && !isMobile);
 	const hasChrome = $derived(
-		!!tabs || !!toolbar || !!selection || showColumnVisibility || showExport || showWideToggle
+		!!tabs || !!filters || !!toolbar || !!selection || showColumnVisibility || showExport || showWideToggle
 	);
 	const hasActions = $derived(
 		!!toolbar || !!selection || showColumnVisibility || showExport || showWideToggle
@@ -358,6 +362,11 @@ Designed to work with the Driver Ops design system.
 						</div>
 					{/if}
 				</div>
+				{#if filters}
+					<div class="chrome-filters">
+						{@render filters()}
+					</div>
+				{/if}
 				{#if hasActions}
 					<div class="chrome-actions">
 						<div class="chrome-actions-inner" bind:clientWidth={actionsWidth}>
@@ -598,6 +607,21 @@ Designed to work with the Driver Ops design system.
 	.data-table-chrome.is-stacked .chrome-tabs :global([role='tab'][aria-selected='true']),
 	.data-table-chrome .chrome-tabs :global(button[aria-selected='true']) {
 		background: var(--surface-primary);
+	}
+
+	.chrome-filters {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-1);
+		align-items: center;
+		flex: 1;
+		min-width: 0;
+		padding: var(--spacing-1) 0;
+	}
+
+	.data-table-chrome.is-stacked .chrome-filters {
+		width: 100%;
+		padding: var(--spacing-2) var(--spacing-3);
 	}
 
 	.chrome-actions {

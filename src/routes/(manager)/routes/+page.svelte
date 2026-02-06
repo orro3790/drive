@@ -78,7 +78,7 @@
 	// Filter state
 	let warehouseFilter = $state('');
 	let statusFilter = $state<RouteStatus | ''>('');
-	let dateFilter = $state('');
+	let dateFilter = $state(toLocalYmd());
 
 	// Table state
 	let sorting = $state<SortingState>([]);
@@ -182,6 +182,21 @@
 		applyFilters();
 	}
 
+	function clearDateFilter() {
+		dateFilter = toLocalYmd();
+		applyFilters();
+	}
+
+	function clearWarehouseFilter() {
+		warehouseFilter = '';
+		applyFilters();
+	}
+
+	function clearStatusFilter() {
+		statusFilter = '';
+		applyFilters();
+	}
+
 	function formatDate(dateStr: string) {
 		const date = new Date(dateStr + 'T00:00:00');
 		return date.toLocaleDateString(undefined, {
@@ -189,6 +204,19 @@
 			month: 'short',
 			day: 'numeric'
 		});
+	}
+
+	function formatDateChipLabel(dateStr: string): string {
+		if (!dateStr) return 'Today';
+		const today = toLocalYmd();
+		if (dateStr === today) return 'Today';
+		const [y, mo, d] = dateStr.split('-').map(Number);
+		const date = new Date(y, mo - 1, d);
+		const nowYear = new Date().getFullYear();
+		if (y !== nowYear) {
+			return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+		}
+		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 	}
 
 	function formatBidWindowLabel(isoString: string) {
@@ -336,6 +364,12 @@
 		{ value: '', label: m.route_filter_warehouse_all() },
 		...warehouseOptions
 	]);
+
+	const warehouseChipLabel = $derived(
+		warehouseFilter
+			? warehouseStore.warehouses.find((w) => w.id === warehouseFilter)?.name ?? ''
+			: ''
+	);
 
 	const warehouseFormOptions = $derived(warehouseOptions);
 
@@ -561,7 +595,6 @@
 	// Load data on mount
 	onMount(() => {
 		warehouseStore.load();
-		dateFilter = toLocalYmd();
 		applyFilters();
 		startRealtime();
 	});
@@ -634,6 +667,30 @@
 	<IconButton tooltip={m.table_columns_reset_sizes()} onclick={resetFilters}>
 		<Icon><Reset /></Icon>
 	</IconButton>
+{/snippet}
+
+{#snippet filtersSnippet()}
+	<Chip
+		label={formatDateChipLabel(dateFilter)}
+		size="sm"
+		onDismiss={dateFilter !== toLocalYmd() ? clearDateFilter : undefined}
+	/>
+	{#if warehouseFilter && warehouseChipLabel}
+		<Chip
+			label={warehouseChipLabel}
+			size="sm"
+			onDismiss={clearWarehouseFilter}
+		/>
+	{/if}
+	{#if statusFilter}
+		<Chip
+			variant="status"
+			status={statusFilter === 'assigned' ? 'success' : statusFilter === 'bidding' ? 'info' : 'warning'}
+			label={statusLabels[statusFilter]}
+			size="sm"
+			onDismiss={clearStatusFilter}
+		/>
+	{/if}
 {/snippet}
 
 {#snippet routeDetailInfo(route: RouteWithWarehouse)}
@@ -946,6 +1003,7 @@
 			onMobileDetailOpen={syncSelectedRoute}
 			exportFilename="routes"
 			tabs={tabsSnippet}
+			filters={filtersSnippet}
 			toolbar={toolbarSnippet}
 			cellComponents={{
 				driver: driverCell,
