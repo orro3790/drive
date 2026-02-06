@@ -214,11 +214,13 @@ export const scheduleStore = {
 							isCancelable: false,
 							shift: {
 								id: shift.id,
+								arrivedAt: item.shift?.arrivedAt ?? null,
 								parcelsStart: shift.parcelsStart,
 								parcelsDelivered: null,
 								parcelsReturned: null,
 								startedAt: shift.startedAt,
-								completedAt: null
+								completedAt: null,
+								editableUntil: null
 							}
 						}
 					: item
@@ -264,11 +266,13 @@ export const scheduleStore = {
 							isCancelable: false,
 							shift: {
 								id: shift.id,
+								arrivedAt: item.shift?.arrivedAt ?? null,
 								parcelsStart: shift.parcelsStart,
 								parcelsDelivered: shift.parcelsDelivered,
 								parcelsReturned: shift.parcelsReturned,
 								startedAt: shift.startedAt,
-								completedAt: shift.completedAt
+								completedAt: shift.completedAt,
+								editableUntil: shift.editableUntil ?? null
 							}
 						}
 					: item
