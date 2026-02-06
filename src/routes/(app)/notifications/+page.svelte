@@ -12,16 +12,13 @@ Uses notificationsStore for data loading and optimistic read updates.
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
-	import DataTablePagination from '$lib/components/data-table/DataTablePagination.svelte';
 	import NotificationItem from '$lib/components/notifications/NotificationItem.svelte';
 	import CheckCircleIcon from '$lib/components/icons/CheckCircleIcon.svelte';
 	import { notificationsStore } from '$lib/stores/notificationsStore.svelte';
 	import { getTimeGroup } from '$lib/utils/date/formatting';
 
 	const hasUnread = $derived(notificationsStore.unreadCount > 0);
-	const pagination = $derived(notificationsStore.pagination);
-	const canPreviousPage = $derived(pagination.pageIndex > 0);
-	const canNextPage = $derived(pagination.pageIndex < pagination.pageCount - 1);
+	let sentinelEl = $state<HTMLDivElement | null>(null);
 	const groupedNotifications = $derived.by(() => {
 		const groups: { key: string; label: string; items: typeof notificationsStore.notifications }[] =
 			[];
@@ -58,26 +55,27 @@ Uses notificationsStore for data loading and optimistic read updates.
 		void notificationsStore.markRead(notificationId);
 	}
 
-	function goToFirstPage() {
-		void notificationsStore.loadPage(0);
-	}
-
-	function goToPreviousPage() {
-		if (!canPreviousPage) return;
-		void notificationsStore.loadPage(pagination.pageIndex - 1);
-	}
-
-	function goToNextPage() {
-		if (!canNextPage) return;
-		void notificationsStore.loadPage(pagination.pageIndex + 1);
-	}
-
-	function goToLastPage() {
-		void notificationsStore.loadPage(pagination.pageCount - 1);
-	}
-
 	onMount(() => {
 		void notificationsStore.loadPage(0);
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0]?.isIntersecting) {
+					void notificationsStore.loadMore();
+				}
+			},
+			{ rootMargin: '200px' }
+		);
+
+		$effect(() => {
+			if (sentinelEl) {
+				const target = sentinelEl;
+				observer.observe(target);
+				return () => observer.unobserve(target);
+			}
+		});
+
+		return () => observer.disconnect();
 	});
 </script>
 
@@ -134,18 +132,11 @@ Uses notificationsStore for data loading and optimistic read updates.
 						{/each}
 					</div>
 
-					{#if pagination.pageCount > 1}
-						<div class="notifications-pagination">
-							<DataTablePagination
-								currentPage={pagination.pageIndex}
-								pageCount={pagination.pageCount}
-								{canPreviousPage}
-								{canNextPage}
-								onFirstPage={goToFirstPage}
-								onPreviousPage={goToPreviousPage}
-								onNextPage={goToNextPage}
-								onLastPage={goToLastPage}
-							/>
+					{#if notificationsStore.hasMore}
+						<div class="scroll-sentinel" bind:this={sentinelEl}>
+							{#if notificationsStore.isLoadingMore}
+								<Spinner size={20} label={m.common_loading()} />
+							{/if}
 						</div>
 					{/if}
 				{/if}
@@ -175,7 +166,6 @@ Uses notificationsStore for data loading and optimistic read updates.
 		align-items: center;
 		gap: var(--spacing-3);
 		padding: var(--spacing-4) var(--spacing-4) var(--spacing-3);
-		border-bottom: var(--border-width-thin) solid var(--border-primary);
 	}
 
 	.header-text {
@@ -186,7 +176,7 @@ Uses notificationsStore for data loading and optimistic read updates.
 
 	.header-text h1 {
 		margin: 0;
-		font-size: var(--font-size-xl);
+		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-semibold);
 		color: var(--text-normal);
 	}
@@ -272,8 +262,11 @@ Uses notificationsStore for data loading and optimistic read updates.
 		gap: var(--spacing-2);
 	}
 
-	.notifications-pagination {
-		margin-top: var(--spacing-2);
+	.scroll-sentinel {
+		display: flex;
+		justify-content: center;
+		padding: var(--spacing-3);
+		min-height: 1px;
 	}
 
 	@media (max-width: 768px) {
@@ -297,7 +290,7 @@ Uses notificationsStore for data loading and optimistic read updates.
 		}
 
 		.header-text h1 {
-			font-size: var(--font-size-lg);
+			font-size: var(--font-size-base);
 		}
 
 		.card-body {

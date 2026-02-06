@@ -10,9 +10,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
 	import { appSidebarStore } from '$lib/stores/app-shell/appSidebarStore.svelte';
-	import { notificationsStore } from '$lib/stores/notificationsStore.svelte';
 	import { getLocale, setLocale, type Locale } from '$lib/paraglide/runtime.js';
 	import * as m from '$lib/paraglide/messages.js';
 	import { authClient } from '$lib/auth-client';
@@ -21,7 +19,6 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import Award from '$lib/components/icons/Award.svelte';
 	import Calendar from '$lib/components/icons/Calendar.svelte';
 	import Home from '$lib/components/icons/Home.svelte';
-	import BellRinging from '$lib/components/icons/BellRinging.svelte';
 	import Building from '$lib/components/icons/Building.svelte';
 	import Driver from '$lib/components/icons/Driver.svelte';
 	import Route from '$lib/components/icons/Route.svelte';
@@ -47,7 +44,6 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	const isExpanded = $derived(appSidebarStore.state.state === 'expanded');
 	const isMobile = $derived(appSidebarStore.state.isMobile);
 	let currentPath = $derived($page.url.pathname);
-	const unreadCount = $derived(notificationsStore.unreadCount);
 
 	const driverNavItems: NavItem[] = [
 		{
@@ -67,12 +63,6 @@ Mobile: Hidden by default, hamburger in header opens overlay
 			label: () => m.nav_bids(),
 			Icon: Award,
 			path: '/bids'
-		},
-		{
-			id: 'notifications',
-			label: () => m.nav_notifications(),
-			Icon: BellRinging,
-			path: '/notifications'
 		}
 	];
 
@@ -94,12 +84,6 @@ Mobile: Hidden by default, hamburger in header opens overlay
 			label: () => m.nav_warehouses(),
 			Icon: Building,
 			path: '/warehouses'
-		},
-		{
-			id: 'notifications',
-			label: () => m.nav_notifications(),
-			Icon: BellRinging,
-			path: '/notifications'
 		}
 	];
 
@@ -114,13 +98,6 @@ Mobile: Hidden by default, hamburger in header opens overlay
 		goto(path);
 	}
 
-	function formatBadgeCount(count: number) {
-		if (count > 99) return '99+';
-		return count.toString();
-	}
-
-	const unreadBadgeLabel = $derived(unreadCount > 0 ? formatBadgeCount(unreadCount) : null);
-
 	// Responsive breakpoint detection
 	$effect(() => {
 		const checkMobile = () => {
@@ -129,10 +106,6 @@ Mobile: Hidden by default, hamburger in header opens overlay
 		checkMobile();
 		window.addEventListener('resize', checkMobile);
 		return () => window.removeEventListener('resize', checkMobile);
-	});
-
-	onMount(() => {
-		void notificationsStore.loadPage(0);
 	});
 
 	// Language toggle (hidden until we need multi-language support)
@@ -187,7 +160,6 @@ Mobile: Hidden by default, hamburger in header opens overlay
 					label={label()}
 					onClick={() => handleNavClick(path)}
 					selected={isSelected(path)}
-					badgeLabel={id === 'notifications' ? unreadBadgeLabel : null}
 				>
 					{#snippet icon()}
 						<Icon><NavIcon /></Icon>

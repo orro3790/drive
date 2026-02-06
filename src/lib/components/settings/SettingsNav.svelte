@@ -113,20 +113,6 @@ Uses SidebarItem for consistent styling with app sidebar.
 		justify-content: center;
 	}
 
-	/* Override SidebarItem's accent color for settings nav - use subtle hover instead */
-	.nav-item-bridge :global(.nav-item.selected) {
-		background-color: var(--interactive-hover);
-		color: var(--text-normal);
-	}
-
-	.nav-item-bridge :global(.nav-item.selected:hover) {
-		background-color: var(--interactive-hover);
-	}
-
-	.nav-item-bridge :global(.nav-item.selected .icon) {
-		color: var(--text-normal);
-	}
-
 	.group-label {
 		font-size: var(--font-size-sm);
 		color: var(--text-muted);
