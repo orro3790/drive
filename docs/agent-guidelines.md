@@ -531,7 +531,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 Current state:
 
-- No standardized unit-test runner is configured yet in this repo.
+- Vitest is the standardized unit/integration test runner (`pnpm test`).
 - `@playwright/test` is installed for future E2E coverage.
 
 If you add tests:

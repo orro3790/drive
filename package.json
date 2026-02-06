@@ -10,6 +10,8 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
 		"validate": "pnpm lint && pnpm check",
@@ -36,7 +38,8 @@
 		"svelte-check": "^4.3.5",
 		"tsx": "^4.21.0",
 		"typescript": "^5.9.3",
-		"vite": "^7.3.1"
+		"vite": "^7.3.1",
+		"vitest": "^4.0.18"
 	},
 	"dependencies": {
 		"@axiomhq/pino": "^1.4.0",
