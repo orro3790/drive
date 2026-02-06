@@ -10,7 +10,7 @@
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { format, parseISO, formatDistanceToNow, differenceInMinutes } from 'date-fns';
 	import Button from '$lib/components/primitives/Button.svelte';
@@ -48,7 +48,6 @@
 
 	// Edit countdown timer
 	let editMinutesRemaining = $state(0);
-	let editTimer: ReturnType<typeof setInterval> | null = null;
 
 	type ShiftStep =
 		| 'arrive'
@@ -89,20 +88,14 @@
 		if (shift?.shift?.editableUntil) {
 			const remaining = differenceInMinutes(new Date(shift.shift.editableUntil), new Date());
 			editMinutesRemaining = Math.max(0, remaining);
-			if (editMinutesRemaining <= 0 && editTimer) {
-				clearInterval(editTimer);
-				editTimer = null;
-			}
 		}
 	}
 
 	$effect(() => {
 		if (shiftStep === 'completed-editable') {
 			updateEditCountdown();
-			editTimer = setInterval(updateEditCountdown, 30_000);
-		} else if (editTimer) {
-			clearInterval(editTimer);
-			editTimer = null;
+			const timer = setInterval(updateEditCountdown, 30_000);
+			return () => clearInterval(timer);
 		}
 	});
 
@@ -226,7 +219,7 @@
 		const returnedValue = typeof parcelsReturned === 'number' ? parcelsReturned : 0;
 
 		if (shift.shift?.parcelsStart !== null && returnedValue > (shift.shift?.parcelsStart ?? 0)) {
-			completeError = m.shift_complete_summary_returning({ count: String(returnedValue) }) + ' exceeds start count';
+			completeError = m.shift_complete_returned_exceeds();
 			return;
 		}
 
@@ -261,7 +254,7 @@
 		const pr = editParcelsReturned === '' ? undefined : (editParcelsReturned as number);
 
 		if (ps !== undefined && pr !== undefined && pr > ps) {
-			editError = 'Returns cannot exceed starting parcels';
+			editError = m.shift_complete_returned_exceeds();
 			return;
 		}
 
@@ -274,12 +267,6 @@
 
 	onMount(() => {
 		dashboardStore.load();
-	});
-
-	onDestroy(() => {
-		if (editTimer) {
-			clearInterval(editTimer);
-		}
 	});
 </script>
 

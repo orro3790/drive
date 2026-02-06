@@ -420,6 +420,7 @@
 	"shift_complete_returned_label": "How many returns?",
 	"shift_complete_returned_placeholder": "Enter returned count",
 	"shift_complete_returned_required": "Return count is required.",
+	"shift_complete_returned_exceeds": "Returns cannot exceed starting parcels.",
 	"shift_complete_confirm_button": "Finish Shift",
 	"shift_complete_success": "Shift completed.",
 	"shift_complete_error": "Unable to complete shift.",
