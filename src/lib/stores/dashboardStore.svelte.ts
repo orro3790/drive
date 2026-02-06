@@ -12,11 +12,13 @@ import * as m from '$lib/paraglide/messages.js';
 
 export type ShiftData = {
 	id: string;
+	arrivedAt: string | null;
 	parcelsStart: number | null;
 	parcelsDelivered: number | null;
 	parcelsReturned: number | null;
 	startedAt: string | null;
 	completedAt: string | null;
+	editableUntil: string | null;
 };
 
 export type DashboardAssignment = {
@@ -31,6 +33,7 @@ export type DashboardAssignment = {
 	warehouseName: string;
 	isCancelable: boolean;
 	isLateCancel: boolean;
+	isArrivable: boolean;
 	isStartable: boolean;
 	isCompletable: boolean;
 	shift: ShiftData | null;
@@ -77,8 +80,10 @@ const state = $state<{
 	unconfirmedShifts: UnconfirmedShift[];
 	isNewDriver: boolean;
 	isLoading: boolean;
+	isArriving: boolean;
 	isStartingShift: boolean;
 	isCompletingShift: boolean;
+	isEditingShift: boolean;
 	isCancelling: boolean;
 	isConfirming: boolean;
 	error: string | null;
@@ -96,8 +101,10 @@ const state = $state<{
 	unconfirmedShifts: [],
 	isNewDriver: false,
 	isLoading: false,
+	isArriving: false,
 	isStartingShift: false,
 	isCompletingShift: false,
+	isEditingShift: false,
 	isCancelling: false,
 	isConfirming: false,
 	error: null
@@ -131,11 +138,17 @@ export const dashboardStore = {
 	get isLoading() {
 		return state.isLoading;
 	},
+	get isArriving() {
+		return state.isArriving;
+	},
 	get isStartingShift() {
 		return state.isStartingShift;
 	},
 	get isCompletingShift() {
 		return state.isCompletingShift;
+	},
+	get isEditingShift() {
+		return state.isEditingShift;
 	},
 	get isCancelling() {
 		return state.isCancelling;
@@ -182,6 +195,38 @@ export const dashboardStore = {
 		}
 	},
 
+	async arrive(assignmentId: string) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
+		state.isArriving = true;
+
+		try {
+			const res = await fetch('/api/shifts/arrive', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ assignmentId })
+			});
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => null);
+				throw new Error(data?.message ?? m.shift_arrive_error());
+			}
+
+			await this.load();
+
+			toastStore.success(m.shift_arrive_success());
+			return true;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : m.shift_arrive_error();
+			toastStore.error(message);
+			return false;
+		} finally {
+			state.isArriving = false;
+		}
+	},
+
 	async startShift(assignmentId: string, parcelsStart: number) {
 		if (!ensureOnlineForWrite()) {
 			return false;
@@ -200,7 +245,6 @@ export const dashboardStore = {
 				throw new Error('Failed to start shift');
 			}
 
-			// Reload dashboard to get updated state
 			await this.load();
 
 			toastStore.success(m.shift_start_success());
@@ -213,7 +257,7 @@ export const dashboardStore = {
 		}
 	},
 
-	async completeShift(assignmentId: string, parcelsDelivered: number, parcelsReturned: number) {
+	async completeShift(assignmentId: string, parcelsReturned: number) {
 		if (!ensureOnlineForWrite()) {
 			return false;
 		}
@@ -224,14 +268,13 @@ export const dashboardStore = {
 			const res = await fetch('/api/shifts/complete', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ assignmentId, parcelsDelivered, parcelsReturned })
+				body: JSON.stringify({ assignmentId, parcelsReturned })
 			});
 
 			if (!res.ok) {
 				throw new Error('Failed to complete shift');
 			}
 
-			// Reload dashboard to get updated state
 			await this.load();
 
 			toastStore.success(m.shift_complete_success());
@@ -241,6 +284,46 @@ export const dashboardStore = {
 			return false;
 		} finally {
 			state.isCompletingShift = false;
+		}
+	},
+
+	async editShift(
+		assignmentId: string,
+		parcelsStart?: number,
+		parcelsReturned?: number
+	) {
+		if (!ensureOnlineForWrite()) {
+			return false;
+		}
+
+		state.isEditingShift = true;
+
+		try {
+			const body: Record<string, number> = {};
+			if (parcelsStart !== undefined) body.parcelsStart = parcelsStart;
+			if (parcelsReturned !== undefined) body.parcelsReturned = parcelsReturned;
+
+			const res = await fetch(`/api/shifts/${assignmentId}/edit`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => null);
+				throw new Error(data?.message ?? m.shift_edit_error());
+			}
+
+			await this.load();
+
+			toastStore.success(m.shift_edit_success());
+			return true;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : m.shift_edit_error();
+			toastStore.error(message);
+			return false;
+		} finally {
+			state.isEditingShift = false;
 		}
 	},
 
@@ -314,7 +397,6 @@ export const dashboardStore = {
 				throw new Error('Failed to cancel assignment');
 			}
 
-			// Reload dashboard to get updated state
 			await this.load();
 
 			toastStore.success(m.schedule_cancel_success());

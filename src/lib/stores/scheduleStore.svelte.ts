@@ -11,11 +11,13 @@ import * as m from '$lib/paraglide/messages.js';
 
 export type ShiftData = {
 	id: string;
+	arrivedAt: string | null;
 	parcelsStart: number | null;
 	parcelsDelivered: number | null;
 	parcelsReturned: number | null;
 	startedAt: string | null;
 	completedAt: string | null;
+	editableUntil: string | null;
 };
 
 export type ScheduleAssignment = {
@@ -30,6 +32,7 @@ export type ScheduleAssignment = {
 	warehouseName: string;
 	isCancelable: boolean;
 	isLateCancel: boolean;
+	isArrivable: boolean;
 	isStartable: boolean;
 	isCompletable: boolean;
 	shift: ShiftData | null;
@@ -231,7 +234,7 @@ export const scheduleStore = {
 		}
 	},
 
-	async completeShift(assignmentId: string, parcelsDelivered: number, parcelsReturned: number) {
+	async completeShift(assignmentId: string, parcelsReturned: number) {
 		if (!ensureOnlineForWrite()) {
 			return false;
 		}
@@ -242,7 +245,7 @@ export const scheduleStore = {
 			const res = await fetch('/api/shifts/complete', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ assignmentId, parcelsDelivered, parcelsReturned })
+				body: JSON.stringify({ assignmentId, parcelsReturned })
 			});
 
 			if (!res.ok) {

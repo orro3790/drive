@@ -2,7 +2,7 @@
 	Driver Dashboard
 
 	Main landing page for drivers showing:
-	- Today's shift (if any) with start/complete actions
+	- Today's shift with multi-step workflow (arrive → inventory → delivering → complete → editable → locked)
 	- This week and next week schedule summaries
 	- Personal metrics (attendance, completion rates)
 	- Pending bids with countdown timers
@@ -10,9 +10,9 @@
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { format, parseISO, formatDistanceToNow } from 'date-fns';
+	import { format, parseISO, formatDistanceToNow, differenceInMinutes } from 'date-fns';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
@@ -32,16 +32,79 @@
 	let cancelReason = $state<CancelReason | ''>('');
 	let cancelError = $state<string | null>(null);
 
-	// Shift start modal state
-	let startTarget = $state<DashboardAssignment | null>(null);
+	// Shift start (inventory) state
 	let parcelsStart = $state<number | ''>('');
 	let startError = $state<string | null>(null);
 
-	// Shift complete modal state
-	let completeTarget = $state<DashboardAssignment | null>(null);
-	let parcelsDelivered = $state<number | ''>('');
+	// Shift complete state
 	let parcelsReturned = $state<number | ''>(0);
 	let completeError = $state<string | null>(null);
+
+	// Shift edit state
+	let isEditing = $state(false);
+	let editParcelsStart = $state<number | ''>('');
+	let editParcelsReturned = $state<number | ''>(0);
+	let editError = $state<string | null>(null);
+
+	// Edit countdown timer
+	let editMinutesRemaining = $state(0);
+	let editTimer: ReturnType<typeof setInterval> | null = null;
+
+	type ShiftStep =
+		| 'arrive'
+		| 'inventory'
+		| 'delivering'
+		| 'completing'
+		| 'completed-editable'
+		| 'completed-locked'
+		| null;
+
+	let completingStep = $state(false);
+
+	const shiftStep: ShiftStep = $derived.by(() => {
+		const shift = dashboardStore.todayShift;
+		if (!shift) return null;
+
+		// No shift record yet or not arrived
+		if (!shift.shift?.arrivedAt) return 'arrive';
+
+		// Arrived but no inventory yet
+		if (shift.shift.parcelsStart === null) return 'inventory';
+
+		// Inventory done but not completed
+		if (!shift.shift.completedAt) {
+			return completingStep ? 'completing' : 'delivering';
+		}
+
+		// Completed — check edit window
+		if (shift.shift.editableUntil && new Date() < new Date(shift.shift.editableUntil)) {
+			return 'completed-editable';
+		}
+
+		return 'completed-locked';
+	});
+
+	function updateEditCountdown() {
+		const shift = dashboardStore.todayShift;
+		if (shift?.shift?.editableUntil) {
+			const remaining = differenceInMinutes(new Date(shift.shift.editableUntil), new Date());
+			editMinutesRemaining = Math.max(0, remaining);
+			if (editMinutesRemaining <= 0 && editTimer) {
+				clearInterval(editTimer);
+				editTimer = null;
+			}
+		}
+	}
+
+	$effect(() => {
+		if (shiftStep === 'completed-editable') {
+			updateEditCountdown();
+			editTimer = setInterval(updateEditCountdown, 30_000);
+		} else if (editTimer) {
+			clearInterval(editTimer);
+			editTimer = null;
+		}
+	});
 
 	const statusLabels: Record<AssignmentStatus, string> = {
 		scheduled: m.schedule_status_scheduled(),
@@ -92,6 +155,10 @@
 		return `${Math.round(rate * 100)}%`;
 	}
 
+	function formatTime(isoString: string) {
+		return format(parseISO(isoString), 'h:mm a');
+	}
+
 	// Cancel modal functions
 	function openCancelModal(assignment: DashboardAssignment) {
 		cancelTarget = assignment;
@@ -118,67 +185,101 @@
 		}
 	}
 
-	// Shift start modal functions
-	function openStartModal(assignment: DashboardAssignment) {
-		startTarget = assignment;
-		parcelsStart = '';
-		startError = null;
+	// Arrive
+	async function handleArrive() {
+		const shift = dashboardStore.todayShift;
+		if (!shift) return;
+		await dashboardStore.arrive(shift.id);
 	}
 
-	function closeStartModal() {
-		startTarget = null;
-		parcelsStart = '';
-		startError = null;
-	}
-
-	async function submitStartShift() {
-		if (!startTarget) return;
-		if (parcelsStart === '' || parcelsStart < 0) {
+	// Start (inventory submission)
+	async function submitInventory() {
+		const shift = dashboardStore.todayShift;
+		if (!shift) return;
+		if (parcelsStart === '' || parcelsStart < 1) {
 			startError = m.shift_start_parcels_required();
 			return;
 		}
 
-		const success = await dashboardStore.startShift(startTarget.id, parcelsStart);
+		const success = await dashboardStore.startShift(shift.id, parcelsStart);
 		if (success) {
-			closeStartModal();
+			parcelsStart = '';
+			startError = null;
 		}
 	}
 
-	// Shift complete modal functions
-	function openCompleteModal(assignment: DashboardAssignment) {
-		completeTarget = assignment;
-		parcelsDelivered = '';
+	// Complete
+	function openCompleteStep() {
 		parcelsReturned = 0;
 		completeError = null;
+		completingStep = true;
 	}
 
-	function closeCompleteModal() {
-		completeTarget = null;
-		parcelsDelivered = '';
-		parcelsReturned = 0;
-		completeError = null;
-	}
-
-	async function submitCompleteShift() {
-		if (!completeTarget) return;
-		if (parcelsDelivered === '' || parcelsDelivered < 0) {
-			completeError = m.shift_complete_delivered_required();
+	async function submitComplete() {
+		const shift = dashboardStore.todayShift;
+		if (!shift) return;
+		if (parcelsReturned === '') {
+			completeError = m.shift_complete_returned_required();
 			return;
 		}
 
-		const returnedValue = parcelsReturned === '' ? 0 : parcelsReturned;
-		const success = await dashboardStore.completeShift(
-			completeTarget.id,
-			parcelsDelivered,
-			returnedValue
-		);
+		const returnedValue = typeof parcelsReturned === 'number' ? parcelsReturned : 0;
+
+		if (shift.shift?.parcelsStart !== null && returnedValue > (shift.shift?.parcelsStart ?? 0)) {
+			completeError = m.shift_complete_summary_returning({ count: String(returnedValue) }) + ' exceeds start count';
+			return;
+		}
+
+		const success = await dashboardStore.completeShift(shift.id, returnedValue);
 		if (success) {
-			closeCompleteModal();
+			completingStep = false;
+			parcelsReturned = 0;
+			completeError = null;
+		}
+	}
+
+	// Edit
+	function openEditMode() {
+		const shift = dashboardStore.todayShift?.shift;
+		if (!shift) return;
+		editParcelsStart = shift.parcelsStart ?? '';
+		editParcelsReturned = shift.parcelsReturned ?? 0;
+		editError = null;
+		isEditing = true;
+	}
+
+	function closeEditMode() {
+		isEditing = false;
+		editError = null;
+	}
+
+	async function submitEdit() {
+		const shift = dashboardStore.todayShift;
+		if (!shift) return;
+
+		const ps = editParcelsStart === '' ? undefined : editParcelsStart;
+		const pr = editParcelsReturned === '' ? undefined : (editParcelsReturned as number);
+
+		if (ps !== undefined && pr !== undefined && pr > ps) {
+			editError = 'Returns cannot exceed starting parcels';
+			return;
+		}
+
+		const success = await dashboardStore.editShift(shift.id, ps, pr);
+		if (success) {
+			isEditing = false;
+			editError = null;
 		}
 	}
 
 	onMount(() => {
 		dashboardStore.load();
+	});
+
+	onDestroy(() => {
+		if (editTimer) {
+			clearInterval(editTimer);
+		}
 	});
 </script>
 
@@ -218,39 +319,254 @@
 					</div>
 
 					{#if dashboardStore.todayShift}
-						{@const shift = dashboardStore.todayShift}
+						{@const todayShift = dashboardStore.todayShift}
 						<div class="today-card">
 							<div class="card-header">
 								<div class="card-summary">
-									<p class="today-date">{formatAssignmentDate(shift.date)}</p>
-									<p class="today-route">{shift.routeName}</p>
-									<p class="today-warehouse">{shift.warehouseName}</p>
+									<p class="today-date">{formatAssignmentDate(todayShift.date)}</p>
+									<p class="today-route">{todayShift.routeName}</p>
+									<p class="today-warehouse">{todayShift.warehouseName}</p>
 								</div>
 								<Chip
 									variant="status"
-									status={statusChips[shift.status]}
-									label={statusLabels[shift.status]}
+									status={statusChips[todayShift.status]}
+									label={statusLabels[todayShift.status]}
 									size="xs"
 								/>
 							</div>
 
-							{#if shift.isStartable || shift.isCompletable || shift.isCancelable}
-								<div class="card-actions">
-									{#if shift.isStartable}
-										<Button variant="primary" size="small" onclick={() => openStartModal(shift)}>
+							<!-- Step 1: Arrive -->
+							{#if shiftStep === 'arrive'}
+								<div class="step-content">
+									<Button
+										variant="primary"
+										fill
+										isLoading={dashboardStore.isArriving}
+										onclick={handleArrive}
+									>
+										{m.shift_arrive_button()}
+									</Button>
+								</div>
+							{/if}
+
+							<!-- Step 2: Inventory -->
+							{#if shiftStep === 'inventory'}
+								<div class="step-content">
+									{#if todayShift.shift?.arrivedAt}
+										<p class="step-info">
+											{m.shift_arrive_arrived_at({ time: formatTime(todayShift.shift.arrivedAt) })}
+										</p>
+									{/if}
+									<form
+										class="inline-form"
+										onsubmit={(e) => {
+											e.preventDefault();
+											submitInventory();
+										}}
+									>
+										<div class="form-field">
+											<label for="parcels-start">{m.shift_start_parcels_label()}</label>
+											<input
+												id="parcels-start"
+												type="number"
+												class="number-input"
+												class:has-error={startError}
+												min="1"
+												max="999"
+												placeholder={m.shift_start_parcels_placeholder()}
+												bind:value={parcelsStart}
+												oninput={() => (startError = null)}
+											/>
+											{#if startError}
+												<p class="field-error">{startError}</p>
+											{/if}
+										</div>
+										<Button
+											variant="primary"
+											type="submit"
+											fill
+											isLoading={dashboardStore.isStartingShift}
+										>
 											{m.shift_start_button()}
 										</Button>
-									{/if}
-									{#if shift.isCompletable}
-										<Button variant="primary" size="small" onclick={() => openCompleteModal(shift)}>
-											{m.shift_complete_button()}
+									</form>
+								</div>
+							{/if}
+
+							<!-- Step 3: Delivering -->
+							{#if shiftStep === 'delivering'}
+								<div class="step-content">
+									<p class="step-status">{m.shift_delivering_status()}</p>
+									<p class="step-info">
+										{m.shift_delivering_parcels({ count: String(todayShift.shift?.parcelsStart ?? 0) })}
+									</p>
+									<Button
+										variant="primary"
+										fill
+										onclick={openCompleteStep}
+									>
+										{m.shift_complete_button()}
+									</Button>
+								</div>
+							{/if}
+
+							<!-- Step 4: Completing (returns entry) -->
+							{#if shiftStep === 'completing'}
+								<div class="step-content">
+									<form
+										class="inline-form"
+										onsubmit={(e) => {
+											e.preventDefault();
+											submitComplete();
+										}}
+									>
+										<div class="form-field">
+											<label for="parcels-returned">{m.shift_complete_returned_label()}</label>
+											<input
+												id="parcels-returned"
+												type="number"
+												class="number-input"
+												class:has-error={completeError}
+												min="0"
+												max={todayShift.shift?.parcelsStart ?? 999}
+												placeholder={m.shift_complete_returned_placeholder()}
+												bind:value={parcelsReturned}
+												oninput={() => (completeError = null)}
+											/>
+											{#if completeError}
+												<p class="field-error">{completeError}</p>
+											{/if}
+										</div>
+
+										<div class="delivery-summary">
+											<p>
+												{m.shift_complete_summary_started({ count: String(todayShift.shift?.parcelsStart ?? 0) })}
+											</p>
+											<p>
+												{m.shift_complete_summary_returning({ count: String(typeof parcelsReturned === 'number' ? parcelsReturned : 0) })}
+											</p>
+											<p class="summary-delivered">
+												{m.shift_complete_summary_delivered({
+													count: String(
+														(todayShift.shift?.parcelsStart ?? 0) -
+															(typeof parcelsReturned === 'number' ? parcelsReturned : 0)
+													)
+												})}
+											</p>
+										</div>
+
+										<Button
+											variant="primary"
+											type="submit"
+											fill
+											isLoading={dashboardStore.isCompletingShift}
+										>
+											{m.shift_complete_confirm_button()}
+										</Button>
+									</form>
+								</div>
+							{/if}
+
+							<!-- Step 5: Completed (editable) -->
+							{#if shiftStep === 'completed-editable'}
+								<div class="step-content">
+									{#if isEditing}
+										<form
+											class="inline-form"
+											onsubmit={(e) => {
+												e.preventDefault();
+												submitEdit();
+											}}
+										>
+											<div class="form-field">
+												<label for="edit-parcels-start">{m.shift_start_parcels_label()}</label>
+												<input
+													id="edit-parcels-start"
+													type="number"
+													class="number-input"
+													class:has-error={editError}
+													min="1"
+													max="999"
+													bind:value={editParcelsStart}
+													oninput={() => (editError = null)}
+												/>
+											</div>
+											<div class="form-field">
+												<label for="edit-parcels-returned">{m.shift_complete_returned_label()}</label>
+												<input
+													id="edit-parcels-returned"
+													type="number"
+													class="number-input"
+													class:has-error={editError}
+													min="0"
+													max={typeof editParcelsStart === 'number' ? editParcelsStart : 999}
+													bind:value={editParcelsReturned}
+													oninput={() => (editError = null)}
+												/>
+											</div>
+											{#if editError}
+												<p class="field-error">{editError}</p>
+											{/if}
+											<div class="edit-actions">
+												<Button variant="secondary" fill onclick={closeEditMode}>
+													{m.common_cancel()}
+												</Button>
+												<Button
+													variant="primary"
+													type="submit"
+													fill
+													isLoading={dashboardStore.isEditingShift}
+												>
+													{m.common_save()}
+												</Button>
+											</div>
+										</form>
+									{:else}
+										<div class="delivery-summary">
+											<p>
+												{m.shift_complete_summary_started({ count: String(todayShift.shift?.parcelsStart ?? 0) })}
+											</p>
+											<p>
+												{m.shift_complete_summary_returning({ count: String(todayShift.shift?.parcelsReturned ?? 0) })}
+											</p>
+											<p class="summary-delivered">
+												{m.shift_complete_summary_delivered({ count: String(todayShift.shift?.parcelsDelivered ?? 0) })}
+											</p>
+										</div>
+										<p class="edit-countdown">
+											{m.shift_edit_window_remaining({ minutes: String(editMinutesRemaining) })}
+										</p>
+										<Button variant="secondary" fill onclick={openEditMode}>
+											{m.shift_edit_button()}
 										</Button>
 									{/if}
-									{#if shift.isCancelable}
-										<Button variant="danger" size="small" onclick={() => openCancelModal(shift)}>
-											{m.schedule_cancel_button()}
-										</Button>
-									{/if}
+								</div>
+							{/if}
+
+							<!-- Step 6: Completed (locked) -->
+							{#if shiftStep === 'completed-locked'}
+								<div class="step-content">
+									<div class="delivery-summary">
+										<p>
+											{m.shift_complete_summary_started({ count: String(todayShift.shift?.parcelsStart ?? 0) })}
+										</p>
+										<p>
+											{m.shift_complete_summary_returning({ count: String(todayShift.shift?.parcelsReturned ?? 0) })}
+										</p>
+										<p class="summary-delivered">
+											{m.shift_complete_summary_delivered({ count: String(todayShift.shift?.parcelsDelivered ?? 0) })}
+										</p>
+									</div>
+									<p class="edit-locked">{m.shift_edit_contact_manager()}</p>
+								</div>
+							{/if}
+
+							<!-- Cancel button (available in early steps) -->
+							{#if todayShift.isCancelable && (shiftStep === 'arrive' || shiftStep === 'inventory')}
+								<div class="card-actions">
+									<Button variant="danger" size="small" onclick={() => openCancelModal(todayShift)}>
+										{m.schedule_cancel_button()}
+									</Button>
 								</div>
 							{/if}
 						</div>
@@ -459,99 +775,6 @@
 	</Modal>
 {/if}
 
-<!-- Start Shift Modal -->
-{#if startTarget}
-	<Modal title={m.shift_start_modal_title()} onClose={closeStartModal}>
-		<form
-			class="modal-form"
-			onsubmit={(event) => {
-				event.preventDefault();
-				submitStartShift();
-			}}
-		>
-			<div class="form-field">
-				<label for="parcels-start">{m.shift_start_parcels_label()}</label>
-				<input
-					id="parcels-start"
-					type="number"
-					class="number-input"
-					class:has-error={startError}
-					min="0"
-					max="999"
-					placeholder={m.shift_start_parcels_placeholder()}
-					bind:value={parcelsStart}
-					oninput={() => (startError = null)}
-				/>
-				{#if startError}
-					<p class="field-error">{startError}</p>
-				{/if}
-			</div>
-
-			<div class="modal-actions">
-				<Button variant="secondary" onclick={closeStartModal} fill>
-					{m.common_cancel()}
-				</Button>
-				<Button variant="primary" type="submit" fill isLoading={dashboardStore.isStartingShift}>
-					{m.shift_start_confirm_button()}
-				</Button>
-			</div>
-		</form>
-	</Modal>
-{/if}
-
-<!-- Complete Shift Modal -->
-{#if completeTarget}
-	<Modal title={m.shift_complete_modal_title()} onClose={closeCompleteModal}>
-		<form
-			class="modal-form"
-			onsubmit={(event) => {
-				event.preventDefault();
-				submitCompleteShift();
-			}}
-		>
-			<div class="form-field">
-				<label for="parcels-delivered">{m.shift_complete_delivered_label()}</label>
-				<input
-					id="parcels-delivered"
-					type="number"
-					class="number-input"
-					class:has-error={completeError}
-					min="0"
-					max="999"
-					placeholder={m.shift_complete_delivered_placeholder()}
-					bind:value={parcelsDelivered}
-					oninput={() => (completeError = null)}
-				/>
-				{#if completeError}
-					<p class="field-error">{completeError}</p>
-				{/if}
-			</div>
-
-			<div class="form-field">
-				<label for="parcels-returned">{m.shift_complete_returned_label()}</label>
-				<input
-					id="parcels-returned"
-					type="number"
-					class="number-input"
-					min="0"
-					max="999"
-					placeholder={m.shift_complete_returned_placeholder()}
-					bind:value={parcelsReturned}
-				/>
-			</div>
-
-			<div class="modal-actions">
-				<Button variant="secondary" onclick={closeCompleteModal} fill>
-					{m.common_cancel()}
-				</Button>
-				<Button variant="primary" type="submit" fill isLoading={dashboardStore.isCompletingShift}>
-					{m.shift_complete_confirm_button()}
-				</Button>
-			</div>
-		</form>
-	</Modal>
-{/if}
-
 <style>
 	.page-surface {
 		min-height: 100vh;
@@ -677,6 +900,73 @@
 	.card-actions {
 		display: flex;
 		justify-content: flex-end;
+		gap: var(--spacing-2);
+	}
+
+	/* Step Content */
+	.step-content {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+	}
+
+	.step-status {
+		margin: 0;
+		font-size: var(--font-size-base);
+		font-weight: var(--font-weight-semibold);
+		color: var(--accent-primary);
+	}
+
+	.step-info {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+	}
+
+	/* Inline Form */
+	.inline-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+	}
+
+	/* Delivery Summary */
+	.delivery-summary {
+		padding: var(--spacing-3);
+		border-radius: var(--radius-base);
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
+	}
+
+	.delivery-summary p {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+		line-height: 1.6;
+	}
+
+	.delivery-summary .summary-delivered {
+		font-weight: var(--font-weight-semibold);
+		color: var(--text-normal);
+	}
+
+	/* Edit */
+	.edit-countdown {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--text-muted);
+		text-align: center;
+	}
+
+	.edit-locked {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--text-muted);
+		text-align: center;
+	}
+
+	.edit-actions {
+		display: flex;
 		gap: var(--spacing-2);
 	}
 
@@ -847,13 +1137,7 @@
 		color: var(--status-warning);
 	}
 
-	/* Modal Styles */
-	.modal-form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-3);
-	}
-
+	/* Form Styles */
 	.form-field {
 		display: flex;
 		flex-direction: column;
@@ -902,6 +1186,13 @@
 		background: color-mix(in srgb, var(--status-warning) 15%, transparent);
 		color: var(--status-warning);
 		font-size: var(--font-size-sm);
+	}
+
+	/* Modal Styles */
+	.modal-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
 	}
 
 	.modal-actions {

@@ -32,7 +32,6 @@
 
 	// Shift complete modal state
 	let completeTarget = $state<ScheduleAssignment | null>(null);
-	let parcelsDelivered = $state<number | ''>('');
 	let parcelsReturned = $state<number | ''>(0);
 	let completeError = $state<string | null>(null);
 
@@ -179,31 +178,25 @@
 	// Shift complete modal functions
 	function openCompleteModal(assignment: ScheduleAssignment) {
 		completeTarget = assignment;
-		parcelsDelivered = '';
 		parcelsReturned = 0;
 		completeError = null;
 	}
 
 	function closeCompleteModal() {
 		completeTarget = null;
-		parcelsDelivered = '';
 		parcelsReturned = 0;
 		completeError = null;
 	}
 
 	async function submitCompleteShift() {
 		if (!completeTarget) return;
-		if (parcelsDelivered === '' || parcelsDelivered < 0) {
-			completeError = m.shift_complete_delivered_required();
+		if (parcelsReturned === '') {
+			completeError = m.shift_complete_returned_required();
 			return;
 		}
 
-		const returnedValue = parcelsReturned === '' ? 0 : parcelsReturned;
-		const success = await scheduleStore.completeShift(
-			completeTarget.id,
-			parcelsDelivered,
-			returnedValue
-		);
+		const returnedValue = typeof parcelsReturned === 'number' ? parcelsReturned : 0;
+		const success = await scheduleStore.completeShift(completeTarget.id, returnedValue);
 		if (success) {
 			closeCompleteModal();
 		}
@@ -525,34 +518,21 @@
 			}}
 		>
 			<div class="form-field">
-				<label for="parcels-delivered">{m.shift_complete_delivered_label()}</label>
-				<input
-					id="parcels-delivered"
-					type="number"
-					class="number-input"
-					class:has-error={completeError}
-					min="0"
-					max="999"
-					placeholder={m.shift_complete_delivered_placeholder()}
-					bind:value={parcelsDelivered}
-					oninput={() => (completeError = null)}
-				/>
-				{#if completeError}
-					<p class="field-error">{completeError}</p>
-				{/if}
-			</div>
-
-			<div class="form-field">
 				<label for="parcels-returned">{m.shift_complete_returned_label()}</label>
 				<input
 					id="parcels-returned"
 					type="number"
 					class="number-input"
+					class:has-error={completeError}
 					min="0"
-					max="999"
+					max={completeTarget?.shift?.parcelsStart ?? 999}
 					placeholder={m.shift_complete_returned_placeholder()}
 					bind:value={parcelsReturned}
+					oninput={() => (completeError = null)}
 				/>
+				{#if completeError}
+					<p class="field-error">{completeError}</p>
+				{/if}
 			</div>
 
 			<div class="modal-actions">
