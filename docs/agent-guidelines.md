@@ -364,7 +364,7 @@ Get driver performance metrics (cached separately for offline use).
 		completedShifts: number;
 		attendanceRate: number;
 		completionRate: number;
-	};
+	}
 }
 ```
 
@@ -490,11 +490,13 @@ export const scheduleStore = {
 ```
 
 **When to use:**
+
 - POST/PATCH/DELETE operations
 - Any state mutation that requires server persistence
 - Before optimistic updates that depend on server state
 
 **Do NOT use for:**
+
 - Read operations (GET requests) - these are cached offline
 - Local-only state changes (UI toggles, form state)
 

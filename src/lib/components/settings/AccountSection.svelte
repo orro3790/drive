@@ -543,9 +543,7 @@ Displays and updates user's account info, password, and preferences.
 								{#snippet leadingIcon()}
 									<IconButton
 										tooltip={showNewPassword ? m.auth_hide_password() : m.auth_show_password()}
-										aria-label={showNewPassword
-											? m.auth_hide_password()
-											: m.auth_show_password()}
+										aria-label={showNewPassword ? m.auth_hide_password() : m.auth_show_password()}
 										ariaPressed={showNewPassword}
 										noBackground
 										disabled={isPasswordSaving}

@@ -88,16 +88,19 @@ Available in `src/lib/components/`:
 Dark/light theme toggle with localStorage persistence and no-flash bootstrap.
 
 **Utilities** (`src/lib/utils/theme.ts`):
+
 - `applyTheme(theme: 'dark' | 'light')` - Apply theme to DOM and persist to localStorage
 - `getDomTheme()` - Read currently applied theme
 - `getStoredTheme()` - Read persisted theme from localStorage
 
 **Implementation**:
+
 - Theme attribute: `html[data-theme="dark"|"light"]`
 - No-flash bootstrap: `src/app.html` applies stored theme before first paint
 - Color tokens automatically switch via CSS custom properties in `src/app.css`
 
 **Usage**:
+
 ```typescript
 import { applyTheme, getDomTheme } from '$lib/utils/theme';
 
@@ -168,20 +171,24 @@ All operations in Toronto/Eastern time. Server time = local time.
 ### Offline Strategy
 
 **Service Worker Caching** (`src/service-worker.ts`):
+
 - Stale-while-revalidate strategy for read-only API endpoints
 - Cached endpoints: `/api/assignments/mine`, `/api/preferences`, `/api/metrics`, `/api/dashboard`
 - Automatic cache refresh on reconnection
 
 **Connectivity Guards** (`src/lib/stores/helpers/connectivity.ts`):
+
 - All write operations (create, update, delete) require connectivity
 - `ensureOnlineForWrite()` - Shows toast error if offline, returns false
 - Used in all stores before mutations (bids, preferences, assignments, etc.)
 
 **UI Indicators**:
+
 - `OfflineBanner` component displays when `navigator.onLine` is false
 - No offline write queue - actions fail fast with clear messaging
 
 **Pattern**:
+
 ```typescript
 import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 

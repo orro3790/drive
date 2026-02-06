@@ -127,12 +127,11 @@ const storedTheme = getStoredTheme(); // 'dark' | 'light' | null
 	}
 </script>
 
-<button onclick={() => setTheme(currentTheme === 'dark' ? 'light' : 'dark')}>
-	Toggle Theme
-</button>
+<button onclick={() => setTheme(currentTheme === 'dark' ? 'light' : 'dark')}> Toggle Theme </button>
 ```
 
 **Rules**:
+
 - Never hardcode colors - always use CSS tokens
 - Never read/write localStorage directly - use theme utilities
 - Theme switching is client-side only (no server persistence)
