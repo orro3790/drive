@@ -183,12 +183,12 @@ A 28×28px icon-only button with tooltip support and multiple visual states.
 	.icon-button:hover:not(:disabled):not(.active):not(.aria-disabled):not(.no-background):not(
 			.success
 		) {
-		background: var(--interactive-hover);
+		background: color-mix(in srgb, var(--text-normal) 8%, transparent);
 		color: var(--text-normal);
 	}
 
 	.icon-button.active:not(.no-background):not(.success) {
-		background: var(--interactive-hover);
+		background: color-mix(in srgb, var(--text-normal) 10%, transparent);
 		color: var(--text-normal);
 	}
 

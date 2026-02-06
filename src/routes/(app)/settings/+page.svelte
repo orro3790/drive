@@ -194,7 +194,7 @@
 		border-right: 1px solid var(--border-muted);
 		display: flex;
 		flex-direction: column;
-		background: var(--surface-secondary);
+		background: var(--surface-primary);
 		overflow-y: auto;
 	}
 

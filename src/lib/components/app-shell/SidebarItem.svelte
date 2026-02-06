@@ -70,7 +70,7 @@
 		overflow: hidden;
 		border-radius: var(--radius-base);
 		background: transparent;
-		color: var(--text-normal);
+		color: var(--text-muted);
 		cursor: pointer;
 		transition:
 			background-color 0.15s ease,
@@ -106,7 +106,7 @@
 	}
 
 	.nav-item:hover {
-		background-color: var(--interactive-hover);
+		background-color: color-mix(in srgb, var(--text-normal) 6%, transparent);
 		color: var(--text-normal);
 	}
 

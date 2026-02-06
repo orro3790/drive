@@ -132,7 +132,7 @@
 	}
 
 	.notification-item:hover {
-		background: var(--interactive-hover);
+		background: color-mix(in srgb, var(--text-normal) 4%, transparent);
 	}
 
 	.icon-circle {
