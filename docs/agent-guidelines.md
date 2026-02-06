@@ -351,6 +351,25 @@ Get driver dashboard overview data.
 
 **Auth:** Required (driver role only)
 
+#### `GET /api/metrics`
+
+Get driver performance metrics (cached separately for offline use).
+
+**Response:**
+
+```typescript
+{
+	metrics: {
+		totalShifts: number;
+		completedShifts: number;
+		attendanceRate: number;
+		completionRate: number;
+	}
+}
+```
+
+**Auth:** Required (driver role only)
+
 #### `POST /api/users/fcm-token`
 
 Register or update user's FCM token for push notifications.
@@ -428,6 +447,58 @@ export const scheduleStore = {
 - Single `$state` object per store
 - Components only call store methods, never mutate directly
 - All API calls owned by store
+
+### Connectivity Guards
+
+All write operations MUST use `ensureOnlineForWrite()` before mutating server state.
+
+```typescript
+import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
+
+export const scheduleStore = {
+	async cancel(assignmentId: string, reason: CancelReason) {
+		// Guard: prevent write when offline
+		if (!ensureOnlineForWrite()) {
+			return false; // Toast shown automatically
+		}
+
+		state.isCancelling = true;
+
+		try {
+			const res = await fetch(`/api/assignments/${assignmentId}/cancel`, {
+				method: 'PATCH',
+				body: JSON.stringify({ reason })
+			});
+
+			if (!res.ok) throw new Error('Failed to cancel');
+
+			// Update local state
+			state.assignments = state.assignments.map((a) =>
+				a.id === assignmentId ? { ...a, status: 'cancelled' } : a
+			);
+
+			toastStore.success('Assignment cancelled');
+			return true;
+		} catch (err) {
+			toastStore.error('Failed to cancel assignment');
+			return false;
+		} finally {
+			state.isCancelling = false;
+		}
+	}
+};
+```
+
+**When to use:**
+
+- POST/PATCH/DELETE operations
+- Any state mutation that requires server persistence
+- Before optimistic updates that depend on server state
+
+**Do NOT use for:**
+
+- Read operations (GET requests) - these are cached offline
+- Local-only state changes (UI toggles, form state)
 
 ---
 

@@ -11,18 +11,49 @@ Displays and updates user's account info, password, and preferences.
 	import SettingsRow from './SettingsRow.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
-	import Chip from '$lib/components/primitives/Chip.svelte';
+
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import Eye from '$lib/components/icons/Eye.svelte';
 	import EyeOff from '$lib/components/icons/EyeOff.svelte';
+	import Sun from '$lib/components/icons/Sun.svelte';
+	import Moon from '$lib/components/icons/Moon.svelte';
+	import Select from '$lib/components/Select.svelte';
 	import DriverPreferencesSection from './DriverPreferencesSection.svelte';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import type { User } from '$lib/types/user';
 	import { userProfileUpdateSchema } from '$lib/schemas/user-settings';
+	import { getDomTheme, applyTheme, type Theme } from '$lib/utils/theme';
+	import { getLocale, setLocale, locales, type Locale } from '$lib/paraglide/runtime.js';
+	import { browser } from '$app/environment';
 
 	let { user }: { user: User | null } = $props();
 
+	// Theme
+	let currentTheme = $state<Theme>(getDomTheme() ?? 'dark');
+
+	function setTheme(theme: Theme) {
+		currentTheme = theme;
+		applyTheme(theme);
+	}
+
+	// Language
+	const LANGUAGE_LABELS: Record<string, string> = {
+		en: 'English',
+		zh: '中文'
+	};
+	const currentLocale = $derived(browser ? getLocale() : 'en');
+	const languageOptions = locales.map((locale) => ({
+		value: locale,
+		label: LANGUAGE_LABELS[locale] ?? locale
+	}));
+
+	function handleLanguageChange(newLocale: string | number) {
+		if (newLocale === currentLocale) return;
+		setLocale(newLocale as Locale);
+	}
+
+	type AccountField = 'name' | 'email' | 'phone';
 	type AccountErrors = Partial<Record<'name' | 'email' | 'phone', string[]>>;
 	type PasswordErrors = Partial<Record<'current' | 'next' | 'confirm', string[]>>;
 
@@ -54,13 +85,15 @@ Displays and updates user's account info, password, and preferences.
 		user?.role === 'manager' ? m.settings_account_role_manager() : m.settings_account_role_driver()
 	);
 
-	const hasAccountChanges = $derived.by(() => {
-		return (
-			accountForm.name.trim() !== accountBaseline.name ||
-			accountForm.email.trim().toLowerCase() !== accountBaseline.email.toLowerCase() ||
-			accountForm.phone.trim() !== accountBaseline.phone.trim()
-		);
-	});
+	const hasPasswordInput = $derived.by(
+		() =>
+			passwordForm.current.trim().length > 0 ||
+			passwordForm.next.trim().length > 0 ||
+			passwordForm.confirm.trim().length > 0
+	);
+	const hasPasswordErrors = $derived(
+		Boolean(passwordErrors.current || passwordErrors.next || passwordErrors.confirm)
+	);
 
 	const passwordFormSchema = z.object({
 		currentPassword: z.string().min(1),
@@ -90,12 +123,7 @@ Displays and updates user's account info, password, and preferences.
 		passwordErrors = { ...passwordErrors, [field]: undefined };
 	}
 
-	function resetAccountForm() {
-		accountForm = { ...accountBaseline };
-		accountErrors = {};
-	}
-
-	function applyAccountErrors(issues: ZodIssue[]) {
+	function mapAccountErrors(issues: ZodIssue[]): AccountErrors {
 		const nextErrors: AccountErrors = {};
 		for (const issue of issues) {
 			const field = issue.path[0];
@@ -113,7 +141,30 @@ Displays and updates user's account info, password, and preferences.
 				nextErrors.phone = [m.settings_account_phone_invalid()];
 			}
 		}
-		accountErrors = nextErrors;
+		return nextErrors;
+	}
+
+	function normalizeAccountField(field: AccountField, value: string): string {
+		if (field === 'email') {
+			return value.trim().toLowerCase();
+		}
+
+		return value.trim();
+	}
+
+	function buildAccountPayload(source: { name: string; email: string; phone: string }) {
+		return {
+			name: source.name.trim(),
+			email: source.email.trim().toLowerCase(),
+			phone: source.phone.trim() || null
+		};
+	}
+
+	function hasAccountFieldChanges(field: AccountField): boolean {
+		return (
+			normalizeAccountField(field, accountForm[field]) !==
+			normalizeAccountField(field, accountBaseline[field])
+		);
 	}
 
 	function applyPasswordErrors(issues: ZodIssue[]) {
@@ -133,29 +184,23 @@ Displays and updates user's account info, password, and preferences.
 		passwordErrors = nextErrors;
 	}
 
-	async function handleAccountSave() {
-		if (!user || isAccountSaving || !hasAccountChanges) return;
+	async function handleAccountFieldSave(field: AccountField) {
+		if (!user || isAccountSaving || !hasAccountFieldChanges(field)) return;
 
-		accountErrors = {};
-		const payload = {
-			name: accountForm.name.trim(),
-			email: accountForm.email.trim().toLowerCase(),
-			phone: accountForm.phone.trim() || null
+		accountErrors = { ...accountErrors, [field]: undefined };
+		const draft = {
+			...accountBaseline,
+			[field]: accountForm[field]
 		};
+		const payload = buildAccountPayload(draft);
 
 		const result = userProfileUpdateSchema.safeParse(payload);
 		if (!result.success) {
-			applyAccountErrors(result.error.issues);
+			const nextErrors = mapAccountErrors(result.error.issues);
+			accountErrors = { ...accountErrors, [field]: nextErrors[field] };
 			return;
 		}
 
-		const previous = { ...accountBaseline };
-		accountBaseline = {
-			name: payload.name,
-			email: payload.email,
-			phone: payload.phone ?? ''
-		};
-		accountForm = { ...accountBaseline };
 		isAccountSaving = true;
 
 		try {
@@ -167,34 +212,37 @@ Displays and updates user's account info, password, and preferences.
 			const data = await res.json().catch(() => ({}));
 			if (!res.ok) {
 				if (res.status === 409 && data?.error === 'email_taken') {
-					accountErrors = { email: [m.settings_account_email_taken()] };
-					accountBaseline = previous;
-					isAccountSaving = false;
+					accountErrors = { ...accountErrors, email: [m.settings_account_email_taken()] };
 					return;
 				}
 				throw new Error('account-update-failed');
 			}
 
-			accountForm = {
+			const nextBaseline = {
 				name: data.user?.name ?? payload.name,
 				email: data.user?.email ?? payload.email,
 				phone: data.user?.phone ?? payload.phone ?? ''
 			};
-			accountBaseline = { ...accountForm };
-			accountErrors = {};
+			accountBaseline = { ...nextBaseline };
+			accountForm = {
+				...accountForm,
+				[field]: nextBaseline[field]
+			};
+			accountErrors = { ...accountErrors, [field]: undefined };
 			toastStore.success(m.settings_account_save_success());
 		} catch {
-			accountBaseline = previous;
-			accountForm = { ...previous };
 			toastStore.error(m.settings_account_save_error());
 		} finally {
 			isAccountSaving = false;
 		}
 	}
 
-	function handleAccountSubmit(event: Event) {
-		event.preventDefault();
-		void handleAccountSave();
+	function resetPasswordForm() {
+		passwordForm = { current: '', next: '', confirm: '' };
+		passwordErrors = {};
+		showCurrentPassword = false;
+		showNewPassword = false;
+		showConfirmPassword = false;
 	}
 
 	async function handlePasswordSave() {
@@ -241,8 +289,7 @@ Displays and updates user's account info, password, and preferences.
 				throw new Error('password-update-failed');
 			}
 
-			passwordForm = { current: '', next: '', confirm: '' };
-			passwordErrors = {};
+			resetPasswordForm();
 			toastStore.success(m.settings_password_update_success());
 		} catch {
 			toastStore.error(m.settings_password_update_error());
@@ -265,7 +312,7 @@ Displays and updates user's account info, password, and preferences.
 				desc={m.settings_account_description()}
 				id="account-section"
 			/>
-			<form class="settings-form" onsubmit={handleAccountSubmit}>
+			<div class="settings-form">
 				<SettingsGrid>
 					<SettingsRow ariaDisabled={isAccountSaving}>
 						{#snippet label()}
@@ -284,6 +331,9 @@ Displays and updates user's account info, password, and preferences.
 								onInput={(value) => {
 									accountForm.name = value;
 									clearAccountError('name');
+								}}
+								onSave={() => {
+									void handleAccountFieldSave('name');
 								}}
 							/>
 						{/snippet}
@@ -312,6 +362,9 @@ Displays and updates user's account info, password, and preferences.
 								onInput={(value) => {
 									accountForm.email = value;
 									clearAccountError('email');
+								}}
+								onSave={() => {
+									void handleAccountFieldSave('email');
 								}}
 							/>
 						{/snippet}
@@ -342,6 +395,9 @@ Displays and updates user's account info, password, and preferences.
 									accountForm.phone = value;
 									clearAccountError('phone');
 								}}
+								onSave={() => {
+									void handleAccountFieldSave('phone');
+								}}
 							/>
 						{/snippet}
 						{#snippet children()}
@@ -356,38 +412,54 @@ Displays and updates user's account info, password, and preferences.
 							<div class="title">{m.settings_account_role_label()}</div>
 						{/snippet}
 						{#snippet control()}
-							<Chip
-								label={roleLabel}
-								variant="tag"
-								color="var(--interactive-accent)"
-								size="sm"
-								ariaLabel={`${m.settings_account_role_label()}: ${roleLabel}`}
+							<span class="role-value">{roleLabel}</span>
+						{/snippet}
+					</SettingsRow>
+
+					<SettingsRow>
+						{#snippet label()}
+							<div class="title">{m.settings_theme_label()}</div>
+							<div class="desc">{m.settings_theme_desc()}</div>
+						{/snippet}
+						{#snippet control()}
+							<IconButton
+								tooltip={m.settings_theme_dark()}
+								aria-label={m.settings_theme_dark()}
+								isActive={currentTheme === 'dark'}
+								onclick={() => setTheme('dark')}
+							>
+								<Icon><Moon /></Icon>
+							</IconButton>
+							<IconButton
+								tooltip={m.settings_theme_light()}
+								aria-label={m.settings_theme_light()}
+								isActive={currentTheme === 'light'}
+								onclick={() => setTheme('light')}
+							>
+								<Icon><Sun /></Icon>
+							</IconButton>
+						{/snippet}
+					</SettingsRow>
+
+					<SettingsRow>
+						{#snippet label()}
+							<div class="title">{m.settings_language_label()}</div>
+							<div class="desc">{m.settings_language_desc()}</div>
+						{/snippet}
+						{#snippet control()}
+							<Select
+								fitContent
+								id="ui-language"
+								name="uiLanguage"
+								options={languageOptions}
+								value={currentLocale}
+								onChange={handleLanguageChange}
+								aria-label={m.settings_language_label()}
 							/>
 						{/snippet}
 					</SettingsRow>
 				</SettingsGrid>
-				<div class="settings-card-footer">
-					<div class="settings-actions">
-						<Button
-							variant="secondary"
-							size="small"
-							type="button"
-							onclick={resetAccountForm}
-							disabled={!hasAccountChanges || isAccountSaving}
-						>
-							{m.common_cancel()}
-						</Button>
-						<Button
-							size="small"
-							type="submit"
-							isLoading={isAccountSaving}
-							disabled={!hasAccountChanges || isAccountSaving}
-						>
-							{m.common_save()}
-						</Button>
-					</div>
-				</div>
-			</form>
+			</div>
 		</div>
 
 		<div class="settings-card">
@@ -396,7 +468,7 @@ Displays and updates user's account info, password, and preferences.
 				desc={m.settings_password_description()}
 				id="password-section"
 			/>
-			<form class="settings-form" onsubmit={handlePasswordSubmit}>
+			<form class="password-form" onsubmit={handlePasswordSubmit} novalidate>
 				<SettingsGrid>
 					<SettingsRow ariaDisabled={isPasswordSaving}>
 						{#snippet label()}
@@ -418,7 +490,7 @@ Displays and updates user's account info, password, and preferences.
 									clearPasswordError('current');
 								}}
 							>
-								{#snippet trailingIcon()}
+								{#snippet leadingIcon()}
 									<IconButton
 										tooltip={showCurrentPassword ? m.auth_hide_password() : m.auth_show_password()}
 										aria-label={showCurrentPassword
@@ -468,7 +540,7 @@ Displays and updates user's account info, password, and preferences.
 									clearPasswordError('confirm');
 								}}
 							>
-								{#snippet trailingIcon()}
+								{#snippet leadingIcon()}
 									<IconButton
 										tooltip={showNewPassword ? m.auth_hide_password() : m.auth_show_password()}
 										aria-label={showNewPassword ? m.auth_hide_password() : m.auth_show_password()}
@@ -515,7 +587,7 @@ Displays and updates user's account info, password, and preferences.
 									clearPasswordError('confirm');
 								}}
 							>
-								{#snippet trailingIcon()}
+								{#snippet leadingIcon()}
 									<IconButton
 										tooltip={showConfirmPassword ? m.auth_hide_password() : m.auth_show_password()}
 										aria-label={showConfirmPassword
@@ -544,17 +616,25 @@ Displays and updates user's account info, password, and preferences.
 						{/snippet}
 					</SettingsRow>
 				</SettingsGrid>
-				<div class="settings-card-footer">
-					<div class="settings-actions">
-						<Button
-							size="small"
-							type="submit"
-							isLoading={isPasswordSaving}
-							disabled={isPasswordSaving}
-						>
-							{m.settings_password_update_button()}
-						</Button>
-					</div>
+
+				<div class="password-actions">
+					<Button
+						variant="secondary"
+						size="small"
+						type="button"
+						onclick={resetPasswordForm}
+						disabled={(!hasPasswordInput && !hasPasswordErrors) || isPasswordSaving}
+					>
+						{m.common_cancel()}
+					</Button>
+					<Button
+						size="small"
+						type="submit"
+						isLoading={isPasswordSaving}
+						disabled={isPasswordSaving}
+					>
+						{m.settings_password_update_button()}
+					</Button>
 				</div>
 			</form>
 		</div>
@@ -583,21 +663,32 @@ Displays and updates user's account info, password, and preferences.
 		width: 100%;
 	}
 
-	.settings-card-footer {
+	.password-form {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+
+	.password-form :global(.setting-row) {
+		border-bottom: none;
+		padding: var(--spacing-2) 0;
+	}
+
+	.password-actions {
 		display: flex;
 		justify-content: flex-end;
-		border-top: var(--border-width-thin) solid var(--border-muted);
+		gap: var(--spacing-2);
+		align-items: center;
 		padding-top: var(--spacing-3);
 	}
 
-	.settings-actions {
-		display: flex;
-		gap: var(--spacing-2);
-		align-items: center;
+	.role-value {
+		font-size: var(--font-size-base);
+		color: var(--text-muted);
 	}
 
 	.field-error {
-		margin: var(--spacing-3) 0 0;
+		margin: 0;
 		font-size: var(--font-size-sm);
 		color: var(--status-error);
 	}

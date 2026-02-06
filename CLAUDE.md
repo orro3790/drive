@@ -77,11 +77,37 @@ Driver-facing endpoints in `src/routes/api/`:
 
 Available in `src/lib/components/`:
 
-- `app-shell/` - AppSidebar, PageHeader, SidebarItem
+- `app-shell/` - AppSidebar, PageHeader, SidebarItem, OfflineBanner
 - `primitives/` - Button, Modal, Checkbox, Chip, Toggle, etc.
 - `data-table/` - Full TanStack table system with filtering, pagination
 - `icons/` - Icon components
 - Combobox, Select, DatePicker, ConfirmationDialog, ToastContainer
+
+### Theme System
+
+Dark/light theme toggle with localStorage persistence and no-flash bootstrap.
+
+**Utilities** (`src/lib/utils/theme.ts`):
+
+- `applyTheme(theme: 'dark' | 'light')` - Apply theme to DOM and persist to localStorage
+- `getDomTheme()` - Read currently applied theme
+- `getStoredTheme()` - Read persisted theme from localStorage
+
+**Implementation**:
+
+- Theme attribute: `html[data-theme="dark"|"light"]`
+- No-flash bootstrap: `src/app.html` applies stored theme before first paint
+- Color tokens automatically switch via CSS custom properties in `src/app.css`
+
+**Usage**:
+
+```typescript
+import { applyTheme, getDomTheme } from '$lib/utils/theme';
+
+// Toggle theme
+const current = getDomTheme() ?? 'dark';
+applyTheme(current === 'dark' ? 'light' : 'dark');
+```
 
 ## State Stores
 
@@ -144,8 +170,37 @@ All operations in Toronto/Eastern time. Server time = local time.
 
 ### Offline Strategy
 
-- Read operations: Cache locally
-- Write operations: Require connectivity (show clear "no connection" state)
+**Service Worker Caching** (`src/service-worker.ts`):
+
+- Stale-while-revalidate strategy for read-only API endpoints
+- Cached endpoints: `/api/assignments/mine`, `/api/preferences`, `/api/metrics`, `/api/dashboard`
+- Automatic cache refresh on reconnection
+
+**Connectivity Guards** (`src/lib/stores/helpers/connectivity.ts`):
+
+- All write operations (create, update, delete) require connectivity
+- `ensureOnlineForWrite()` - Shows toast error if offline, returns false
+- Used in all stores before mutations (bids, preferences, assignments, etc.)
+
+**UI Indicators**:
+
+- `OfflineBanner` component displays when `navigator.onLine` is false
+- No offline write queue - actions fail fast with clear messaging
+
+**Pattern**:
+
+```typescript
+import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
+
+async function submitBid(assignmentId: string) {
+  if (!ensureOnlineForWrite()) {
+    return false; // Toast shown automatically
+  }
+
+  // Proceed with mutation
+  await fetch('/api/bids', { method: 'POST', ... });
+}
+```
 
 ### Mobile
 
