@@ -8,6 +8,7 @@
  */
 
 import type { GeneratedUser } from './users';
+import { random, randomInt } from '../utils/runtime';
 
 export interface GeneratedMetric {
 	userId: string;
@@ -30,7 +31,7 @@ export function generateMetrics(drivers: GeneratedUser[]): GeneratedMetric[] {
 		const tier = selectPerformanceTier();
 
 		// Generate total shifts (10-100 depending on how long they've been around)
-		const totalShifts = 10 + Math.floor(Math.random() * 90);
+		const totalShifts = 10 + randomInt(0, 90);
 
 		// Generate rates based on tier
 		const { attendanceRate, completionRate } = generateRatesForTier(tier);
@@ -53,7 +54,7 @@ export function generateMetrics(drivers: GeneratedUser[]): GeneratedMetric[] {
 type PerformanceTier = 'high' | 'medium' | 'low';
 
 function selectPerformanceTier(): PerformanceTier {
-	const roll = Math.random();
+	const roll = random();
 	if (roll < 0.7) return 'high';
 	if (roll < 0.9) return 'medium';
 	return 'low';
@@ -83,5 +84,5 @@ function generateRatesForTier(tier: PerformanceTier): {
 }
 
 function randomInRange(min: number, max: number): number {
-	return Math.round((min + Math.random() * (max - min)) * 100) / 100;
+	return Math.round((min + random() * (max - min)) * 100) / 100;
 }

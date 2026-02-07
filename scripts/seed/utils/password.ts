@@ -7,6 +7,7 @@
 
 import { scryptAsync } from '@noble/hashes/scrypt.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
+import { TextEncoder } from 'node:util';
 
 const SCRYPT_CONFIG = {
 	N: 16384,
@@ -15,8 +16,12 @@ const SCRYPT_CONFIG = {
 	dkLen: 64
 };
 
-export async function hashPassword(password: string): Promise<string> {
-	const salt = bytesToHex(randomBytes(16));
+export async function hashPassword(password: string, deterministicSalt?: string): Promise<string> {
+	const salt = deterministicSalt
+		? bytesToHex(new TextEncoder().encode(deterministicSalt).slice(0, 16))
+				.padEnd(32, '0')
+				.slice(0, 32)
+		: bytesToHex(randomBytes(16));
 	const key = await scryptAsync(password.normalize('NFKC'), salt, {
 		N: SCRYPT_CONFIG.N,
 		r: SCRYPT_CONFIG.r,

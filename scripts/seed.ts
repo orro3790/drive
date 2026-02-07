@@ -7,12 +7,14 @@
  * Usage:
  *   pnpm seed           # Dev mode: 10 drivers
  *   pnpm seed:staging   # Staging mode: 100 drivers
+ *   pnpm seed -- --deterministic --seed=42 --anchor-date=2026-02-01
  */
 
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq, inArray } from 'drizzle-orm';
 import { config } from 'dotenv';
+import { faker } from '@faker-js/faker';
 
 // Schema imports
 import { user, account } from '../src/lib/server/db/auth-schema';
@@ -42,6 +44,7 @@ import { generateAssignments } from './seed/generators/assignments';
 import { generateRouteCompletions } from './seed/generators/route-completions';
 import { generateBidding } from './seed/generators/bidding';
 import { generateNotifications } from './seed/generators/notifications';
+import { configureSeedRuntime, getSeedNow } from './seed/utils/runtime';
 
 config();
 
@@ -245,7 +248,7 @@ async function seed(seedConfig: SeedConfig) {
 			userId: p.userId,
 			preferredDays: p.preferredDays,
 			preferredRoutes: p.preferredRoutes,
-			updatedAt: new Date()
+			updatedAt: getSeedNow()
 		}))
 	);
 	console.log(`   Created ${prefsData.length} preference records`);
@@ -260,7 +263,7 @@ async function seed(seedConfig: SeedConfig) {
 			completedShifts: m.completedShifts,
 			attendanceRate: m.attendanceRate,
 			completionRate: m.completionRate,
-			updatedAt: new Date()
+			updatedAt: getSeedNow()
 		}))
 	);
 	console.log(`   Created ${metricsData.length} metric records`);
@@ -415,10 +418,53 @@ async function seed(seedConfig: SeedConfig) {
 async function main() {
 	const args = process.argv.slice(2);
 	const isStaging = args.includes('--staging');
-	const seedConfig = getConfig(isStaging);
+	const deterministic = args.includes('--deterministic');
+
+	const seedArg = args.find((arg) => arg.startsWith('--seed='));
+	const seedFromEquals = seedArg ? Number(seedArg.split('=')[1]) : null;
+	const seedFromNext = (() => {
+		const seedIndex = args.indexOf('--seed');
+		if (seedIndex === -1) return null;
+		const next = args[seedIndex + 1];
+		return next ? Number(next) : null;
+	})();
+	const seedValue = Number.isFinite(seedFromEquals) ? seedFromEquals : seedFromNext;
+
+	const anchorArg = args.find((arg) => arg.startsWith('--anchor-date='));
+	const anchorFromEquals = anchorArg ? anchorArg.split('=')[1] : null;
+	const anchorFromNext = (() => {
+		const anchorIndex = args.indexOf('--anchor-date');
+		if (anchorIndex === -1) return null;
+		return args[anchorIndex + 1] ?? null;
+	})();
+	const anchorDate = anchorFromEquals ?? anchorFromNext;
+
+	configureSeedRuntime({
+		deterministic,
+		seed: seedValue ?? undefined,
+		anchorDate: anchorDate ?? undefined
+	});
+	if (seedValue !== null && Number.isFinite(seedValue)) {
+		faker.seed(seedValue);
+	}
+	if (anchorDate) {
+		faker.setDefaultRefDate(new Date(`${anchorDate}T12:00:00.000Z`));
+	}
+
+	const seedConfig = getConfig(isStaging, {
+		deterministic,
+		seed: seedValue ?? null,
+		anchorDate: anchorDate ?? null
+	});
 
 	console.log(`\n🌱 Drive Seed Script`);
 	console.log(`Mode: ${isStaging ? 'STAGING' : 'DEV'}`);
+	if (deterministic) {
+		console.log(`Deterministic mode: ON${seedValue !== null ? ` (seed=${seedValue})` : ''}`);
+		if (anchorDate) {
+			console.log(`Anchor date: ${anchorDate}`);
+		}
+	}
 
 	await clearData();
 	await seed(seedConfig);

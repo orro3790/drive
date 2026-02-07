@@ -11,6 +11,9 @@ export interface SeedConfig {
 	routes: number;
 	pastWeeks: number;
 	futureWeeks: number;
+	deterministic: boolean;
+	seed: number | null;
+	anchorDate: string | null;
 }
 
 export const DEV_CONFIG: SeedConfig = {
@@ -19,7 +22,10 @@ export const DEV_CONFIG: SeedConfig = {
 	warehouses: 2,
 	routes: 10,
 	pastWeeks: 2,
-	futureWeeks: 2
+	futureWeeks: 2,
+	deterministic: false,
+	seed: null,
+	anchorDate: null
 };
 
 export const STAGING_CONFIG: SeedConfig = {
@@ -28,9 +34,26 @@ export const STAGING_CONFIG: SeedConfig = {
 	warehouses: 4,
 	routes: 40,
 	pastWeeks: 3,
-	futureWeeks: 2
+	futureWeeks: 2,
+	deterministic: false,
+	seed: null,
+	anchorDate: null
 };
 
-export function getConfig(isStaging: boolean): SeedConfig {
-	return isStaging ? STAGING_CONFIG : DEV_CONFIG;
+export function getConfig(
+	isStaging: boolean,
+	runtimeOptions?: {
+		deterministic?: boolean;
+		seed?: number | null;
+		anchorDate?: string | null;
+	}
+): SeedConfig {
+	const base = isStaging ? STAGING_CONFIG : DEV_CONFIG;
+
+	return {
+		...base,
+		deterministic: runtimeOptions?.deterministic ?? false,
+		seed: runtimeOptions?.seed ?? null,
+		anchorDate: runtimeOptions?.anchorDate ?? null
+	};
 }
