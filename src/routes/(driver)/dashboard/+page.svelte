@@ -19,6 +19,11 @@
 	import Select from '$lib/components/Select.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
+	import {
+		deriveAssignmentLifecycleState,
+		getAssignmentActions,
+		type AssignmentLifecycleActionId
+	} from '$lib/config/driverLifecycleIa';
 	import { dashboardStore, type DashboardAssignment } from '$lib/stores/dashboardStore.svelte';
 	import {
 		cancelReasonValues,
@@ -58,29 +63,61 @@
 		| 'completed-locked'
 		| null;
 
+	type DashboardActionId = Extract<
+		AssignmentLifecycleActionId,
+		| 'confirm_shift'
+		| 'arrive_on_site'
+		| 'record_inventory'
+		| 'complete_shift'
+		| 'edit_completion'
+		| 'cancel_shift'
+	>;
+
 	let completingStep = $state(false);
 
-	const shiftStep: ShiftStep = $derived.by(() => {
+	const todayLifecycleState = $derived.by(() => {
 		const shift = dashboardStore.todayShift;
 		if (!shift) return null;
 
-		// No shift record yet or not arrived
-		if (!shift.shift?.arrivedAt) return 'arrive';
+		return deriveAssignmentLifecycleState(shift);
+	});
 
-		// Arrived but no inventory yet
-		if (shift.shift.parcelsStart === null) return 'inventory';
-
-		// Inventory done but not completed
-		if (!shift.shift.completedAt) {
-			return completingStep ? 'completing' : 'delivering';
+	const todayActions = $derived.by(() => {
+		const shift = dashboardStore.todayShift;
+		if (!shift) {
+			return [] as DashboardActionId[];
 		}
 
-		// Completed — check edit window
-		if (shift.shift.editableUntil && new Date() < new Date(shift.shift.editableUntil)) {
-			return 'completed-editable';
-		}
+		return getAssignmentActions(shift, 'dashboard').filter(
+			(actionId): actionId is DashboardActionId =>
+				actionId === 'confirm_shift' ||
+				actionId === 'arrive_on_site' ||
+				actionId === 'record_inventory' ||
+				actionId === 'complete_shift' ||
+				actionId === 'edit_completion' ||
+				actionId === 'cancel_shift'
+		);
+	});
 
-		return 'completed-locked';
+	function hasTodayAction(actionId: DashboardActionId) {
+		return todayActions.includes(actionId);
+	}
+
+	const shiftStep: ShiftStep = $derived.by(() => {
+		switch (todayLifecycleState) {
+			case 'scheduled_today_arrive':
+				return 'arrive';
+			case 'active_inventory':
+				return 'inventory';
+			case 'active_delivering':
+				return completingStep ? 'completing' : 'delivering';
+			case 'completed_editable':
+				return 'completed-editable';
+			case 'completed_locked':
+				return 'completed-locked';
+			default:
+				return null;
+		}
 	});
 
 	function updateEditCountdown() {
@@ -565,7 +602,7 @@
 							{/if}
 
 							<!-- Cancel button (available in early steps) -->
-							{#if todayShift.isCancelable && (shiftStep === 'arrive' || shiftStep === 'inventory')}
+							{#if hasTodayAction('cancel_shift')}
 								<div class="card-actions">
 									<Button variant="danger" size="small" onclick={() => openCancelModal(todayShift)}>
 										{m.schedule_cancel_button()}
@@ -825,7 +862,7 @@
 	.dashboard-section {
 		background: var(--surface-primary);
 		border-radius: var(--radius-lg);
-		padding: var(--spacing-4);
+		padding: 0;
 		box-shadow: var(--shadow-sm);
 	}
 

@@ -12,6 +12,7 @@
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import Lightning from '$lib/components/icons/Lightning.svelte';
+	import { getBidWindowPrimaryAction } from '$lib/config/driverLifecycleIa';
 	import { bidsStore, type BidStatus } from '$lib/stores/bidsStore.svelte';
 
 	const statusLabels: Record<BidStatus, string> = {
@@ -46,6 +47,11 @@
 
 	async function handleSubmitBid(assignmentId: string) {
 		await bidsStore.submitBid(assignmentId);
+	}
+
+	function getBidActionLabel(mode: 'competitive' | 'instant' | 'emergency') {
+		const actionId = getBidWindowPrimaryAction({ mode });
+		return actionId === 'submit_bid' ? m.bids_submit_button() : m.bids_accept_button();
 	}
 
 	onMount(() => {
@@ -128,7 +134,7 @@
 											isLoading={bidsStore.isSubmitting(window.assignmentId)}
 											disabled={bidsStore.submittingAssignmentId !== null}
 										>
-											{isEmergency ? m.bids_accept_button() : m.bids_submit_button()}
+											{getBidActionLabel(window.mode)}
 										</Button>
 									</div>
 								</div>
