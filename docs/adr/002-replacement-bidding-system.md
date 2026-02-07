@@ -32,16 +32,19 @@ Replace FCFS with a **three-mode bidding system** (competitive, instant, emergen
 ### Bidding Modes
 
 **Competitive** (> 24h before shift):
+
 - Window closes 24h before shift start
 - Multiple drivers can bid; highest score wins
 - If no bids received: transitions to instant mode
 
 **Instant** (≤ 24h before shift):
+
 - Window closes at shift start time
 - First driver to accept wins immediately
 - No scoring, no waiting
 
 **Emergency** (manager-triggered or 9 AM no-show auto-detection):
+
 - Always instant-assign (first to accept wins)
 - Optional pay bonus (default 20%, stored as `payBonusPercent`)
 - Closes at shift start or end of day

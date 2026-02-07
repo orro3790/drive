@@ -15,7 +15,8 @@
 		getPaginationRowModel,
 		createColumnHelper,
 		type SortingState,
-		type PaginationState
+		type PaginationState,
+		type CellRendererContext
 	} from '$lib/components/data-table';
 	import PageWithDetailPanel from '$lib/components/PageWithDetailPanel.svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
@@ -28,6 +29,8 @@
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Filter from '$lib/components/icons/Filter.svelte';
 	import Reset from '$lib/components/icons/Reset.svelte';
+	import TrendUp from '$lib/components/icons/TrendUp.svelte';
+	import TrendDown from '$lib/components/icons/TrendDown.svelte';
 	import { warehouseStore, type WarehouseWithRouteCount } from '$lib/stores/warehouseStore.svelte';
 	import { warehouseCreateSchema, warehouseUpdateSchema } from '$lib/schemas/warehouse';
 
@@ -254,6 +257,19 @@
 	function handleRowClick(warehouse: WarehouseWithRouteCount, _event: MouseEvent) {
 		syncSelectedWarehouse(warehouse);
 	}
+
+	type TrendTone = 'positive' | 'negative' | 'neutral';
+
+	function getTrendTone(delta: number, increaseIsPositive: boolean): TrendTone {
+		if (delta === 0) return 'neutral';
+		const isImprovement = increaseIsPositive ? delta > 0 : delta < 0;
+		return isImprovement ? 'positive' : 'negative';
+	}
+
+	function formatSignedDelta(delta: number): string {
+		if (delta > 0) return `+${delta}`;
+		return `${delta}`;
+	}
 </script>
 
 {#snippet tabsSnippet()}
@@ -278,6 +294,35 @@
 	</IconButton>
 {/snippet}
 
+{#snippet trendMetric(value: number, delta: number, increaseIsPositive: boolean)}
+	{@const tone = getTrendTone(delta, increaseIsPositive)}
+	<span class="metric-cell">
+		<span class="metric-value">{value}</span>
+		<span
+			class="metric-trend"
+			class:positive={tone === 'positive'}
+			class:negative={tone === 'negative'}
+		>
+			<span class="metric-change">
+				<span class="metric-delta">{formatSignedDelta(delta)}</span>
+				{#if delta > 0}
+					<span class="metric-trend-icon"><Icon><TrendUp /></Icon></span>
+				{:else if delta < 0}
+					<span class="metric-trend-icon"><Icon><TrendDown /></Icon></span>
+				{/if}
+			</span>
+		</span>
+	</span>
+{/snippet}
+
+{#snippet assignedDriversCell(ctx: CellRendererContext<WarehouseWithRouteCount>)}
+	{@render trendMetric(ctx.row.assignedDriversNext7, ctx.row.assignedDriversDelta7, true)}
+{/snippet}
+
+{#snippet unfilledRoutesCell(ctx: CellRendererContext<WarehouseWithRouteCount>)}
+	{@render trendMetric(ctx.row.unfilledRoutesNext7, ctx.row.unfilledRoutesDelta7, false)}
+{/snippet}
+
 {#snippet warehouseDetailInfo(warehouse: WarehouseWithRouteCount)}
 	<dl class="detail-list">
 		<div class="detail-row">
@@ -294,11 +339,15 @@
 		</div>
 		<div class="detail-row">
 			<dt>{m.warehouse_detail_assigned_drivers()}</dt>
-			<dd>{warehouse.assignedDriversNext7}</dd>
+			<dd class="metric-detail">
+				{@render trendMetric(warehouse.assignedDriversNext7, warehouse.assignedDriversDelta7, true)}
+			</dd>
 		</div>
 		<div class="detail-row">
 			<dt>{m.warehouse_detail_unfilled_routes()}</dt>
-			<dd>{warehouse.unfilledRoutesNext7}</dd>
+			<dd class="metric-detail">
+				{@render trendMetric(warehouse.unfilledRoutesNext7, warehouse.unfilledRoutesDelta7, false)}
+			</dd>
 		</div>
 		<div class="detail-row">
 			<dt>{m.warehouse_detail_open_bid_windows()}</dt>
@@ -417,9 +466,14 @@
 		isWideMode={ctx.isWideMode}
 		onWideModeChange={ctx.onWideModeChange}
 		onMobileDetailOpen={syncSelectedWarehouse}
+		stateStorageKey="warehouses"
 		exportFilename="warehouses"
 		tabs={tabsSnippet}
 		toolbar={toolbarSnippet}
+		cellComponents={{
+			assignedDriversNext7: assignedDriversCell,
+			unfilledRoutesNext7: unfilledRoutesCell
+		}}
 		activeRowId={selectedWarehouseId ?? undefined}
 		onRowClick={handleRowClick}
 		mobileDetailContent={mobileDetail}
@@ -611,6 +665,69 @@
 			transparent var(--radius-lg),
 			var(--surface-primary) calc(var(--radius-lg) + 0.5px)
 		);
+	}
+
+	.metric-cell {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.metric-value {
+		color: var(--text-normal);
+	}
+
+	.metric-trend {
+		display: inline-flex;
+		align-items: center;
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+
+	.metric-trend::before {
+		content: '(';
+	}
+
+	.metric-trend::after {
+		content: ')';
+	}
+
+	.metric-change {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+	}
+
+	.metric-trend.positive {
+		color: var(--status-success);
+	}
+
+	.metric-trend.negative {
+		color: var(--status-error);
+	}
+
+	.metric-trend-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 14px;
+		height: 14px;
+	}
+
+	.metric-trend-icon :global(.icon) {
+		width: 14px;
+		height: 14px;
+	}
+
+	.metric-delta {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.detail-row dd.metric-detail {
+		display: inline-flex;
+		align-items: center;
 	}
 
 	/* Detail panel */

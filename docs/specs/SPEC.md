@@ -116,11 +116,11 @@ A bid window opens when an assignment becomes unfilled due to:
 
 ### Bid Window Modes
 
-| Mode            | Trigger                              | Duration                  | Resolution              |
-| --------------- | ------------------------------------ | ------------------------- | ----------------------- |
-| **Competitive** | > 24h before shift                   | Closes 24h before shift   | Highest score wins      |
-| **Instant**     | ≤ 24h before shift, or no comp bids  | Closes at shift start     | First to accept wins    |
-| **Emergency**   | Manager-triggered or 9 AM no-show    | Closes at shift start/EOD | First to accept + bonus |
+| Mode            | Trigger                             | Duration                  | Resolution              |
+| --------------- | ----------------------------------- | ------------------------- | ----------------------- |
+| **Competitive** | > 24h before shift                  | Closes 24h before shift   | Highest score wins      |
+| **Instant**     | ≤ 24h before shift, or no comp bids | Closes at shift start     | First to accept wins    |
+| **Emergency**   | Manager-triggered or 9 AM no-show   | Closes at shift start/EOD | First to accept + bonus |
 
 - Competitive windows with no bids automatically transition to instant mode
 - Emergency mode includes an optional pay bonus (default 20%)

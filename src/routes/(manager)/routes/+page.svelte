@@ -367,7 +367,7 @@
 
 	const warehouseChipLabel = $derived(
 		warehouseFilter
-			? warehouseStore.warehouses.find((w) => w.id === warehouseFilter)?.name ?? ''
+			? (warehouseStore.warehouses.find((w) => w.id === warehouseFilter)?.name ?? '')
 			: ''
 	);
 
@@ -571,11 +571,7 @@
 	}
 
 	function canEmergencyReopen(route: RouteWithWarehouse) {
-		return (
-			!!route.assignmentId &&
-			route.status === 'unfilled' &&
-			dateFilter === toLocalYmd()
-		);
+		return !!route.assignmentId && route.status === 'unfilled' && dateFilter === toLocalYmd();
 	}
 
 	function openEmergencyConfirm(route: RouteWithWarehouse, event: MouseEvent) {
@@ -656,6 +652,14 @@
 {/snippet}
 
 {#snippet toolbarSnippet()}
+	<span class="date-view-chip">
+		<Chip
+			label={formatDateChipLabel(dateFilter)}
+			size="sm"
+			onDismiss={dateFilter !== toLocalYmd() ? clearDateFilter : undefined}
+		/>
+	</span>
+
 	<IconButton tooltip={m.table_filter_label()} onclick={() => (showFilterDrawer = true)}>
 		<Icon><Filter /></Icon>
 	</IconButton>
@@ -670,22 +674,17 @@
 {/snippet}
 
 {#snippet filtersSnippet()}
-	<Chip
-		label={formatDateChipLabel(dateFilter)}
-		size="sm"
-		onDismiss={dateFilter !== toLocalYmd() ? clearDateFilter : undefined}
-	/>
 	{#if warehouseFilter && warehouseChipLabel}
-		<Chip
-			label={warehouseChipLabel}
-			size="sm"
-			onDismiss={clearWarehouseFilter}
-		/>
+		<Chip label={warehouseChipLabel} size="sm" onDismiss={clearWarehouseFilter} />
 	{/if}
 	{#if statusFilter}
 		<Chip
 			variant="status"
-			status={statusFilter === 'assigned' ? 'success' : statusFilter === 'bidding' ? 'info' : 'warning'}
+			status={statusFilter === 'assigned'
+				? 'success'
+				: statusFilter === 'bidding'
+					? 'info'
+					: 'warning'}
 			label={statusLabels[statusFilter]}
 			size="sm"
 			onDismiss={clearStatusFilter}
@@ -750,7 +749,9 @@
 					fill
 					onclick={(e) => openEmergencyConfirm(route, e)}
 					disabled={!route.assignmentId || routeStore.isEmergencyReopening(route.assignmentId)}
-					isLoading={route.assignmentId ? routeStore.isEmergencyReopening(route.assignmentId) : false}
+					isLoading={route.assignmentId
+						? routeStore.isEmergencyReopening(route.assignmentId)
+						: false}
 				>
 					{m.manager_emergency_reopen_button()}
 				</Button>
@@ -1001,6 +1002,7 @@
 			isWideMode={ctx.isWideMode}
 			onWideModeChange={ctx.onWideModeChange}
 			onMobileDetailOpen={syncSelectedRoute}
+			stateStorageKey="routes"
 			exportFilename="routes"
 			tabs={tabsSnippet}
 			filters={filtersSnippet}
@@ -1449,6 +1451,20 @@
 			transparent var(--radius-lg),
 			var(--surface-primary) calc(var(--radius-lg) + 0.5px)
 		);
+	}
+
+	.date-view-chip {
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.date-view-chip :global(.chip) {
+		background: var(--interactive-accent);
+		color: var(--text-on-accent);
+	}
+
+	.date-view-chip :global(.chip-dismiss) {
+		opacity: 0.75;
 	}
 
 	/* Filter drawer form */

@@ -12,7 +12,9 @@ import * as m from '$lib/paraglide/messages.js';
 export type WarehouseWithRouteCount = Warehouse & {
 	routeCount: number;
 	assignedDriversNext7: number;
+	assignedDriversDelta7: number;
 	unfilledRoutesNext7: number;
+	unfilledRoutesDelta7: number;
 	openBidWindows: number;
 	managerCount: number;
 };
@@ -77,7 +79,9 @@ export const warehouseStore = {
 			updatedAt: now,
 			routeCount: 0,
 			assignedDriversNext7: 0,
+			assignedDriversDelta7: 0,
 			unfilledRoutesNext7: 0,
+			unfilledRoutesDelta7: 0,
 			openBidWindows: 0,
 			managerCount: 0
 		};

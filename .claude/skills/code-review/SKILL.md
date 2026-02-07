@@ -1,60 +1,42 @@
 ---
 name: code-review
-description: Self-reviews implementation before submitting PR. Catches bugs, security issues, and quality problems.
+description: Code review workflows for thorough review and senior-level second opinions. Use when reviewing code changes, PRs, or implementation plans.
 ---
 
 # Code Review
 
-Perform a thorough self-review of your implementation before submitting a PR.
+Thin dispatcher that scopes the review and delegates to the `code-reviewer` subagent.
 
-## Review Checklist
+## Workflow
 
-When conducting a code review, evaluate:
+### 1. Determine Scope
 
-- **Functional Correctness** — Does the code do what it's supposed to? Are edge cases handled?
-- **Maintainability and Design** — Is the code clean, well-organized, and following project patterns?
-- **Security and Compliance** — No hardcoded secrets, proper input validation, safe API usage
-- **Architecture and Patterns** — Follows existing project conventions and patterns
-- **Error Handling** — Proper exception handling, meaningful error messages
+Figure out what to review from user input or context:
 
-## Process
+- **Explicit files/paths** — User named specific files
+- **Git diff** — Run `git diff` or `git diff origin/develop...HEAD` to get changes
+- **PR** — Use `gh pr diff` if a PR number is given
+- **"Review my recent work"** — Use `git diff --stat origin/develop...HEAD` to summarize, confirm scope with user
 
-### 1. Review Changed Files
+### 2. Determine Review Type
 
-```bash
-git diff --name-only origin/develop...HEAD
-```
+- **Standard** (default): Fresh review of the code
+- **Senior**: Second opinion on an existing review — user provides or references the initial review
 
-### 2. For Each File
+### 3. Dispatch to Subagent
 
-Read the file and evaluate against the checklist above.
+Launch the `code-reviewer` agent via the Task tool:
 
-### 3. Report Findings
+- Pass the scope (file list, diff, or PR reference)
+- Pass the review type
+- Run in background if the diff is large, so the user can continue working
 
-```markdown
-## Code Review Results
+### 4. Present Findings
 
-| Category               | Status   | Notes   |
-| ---------------------- | -------- | ------- |
-| Functional correctness | ✅/⚠️/❌ | Details |
-| Maintainability        | ✅/⚠️/❌ | Details |
-| Security               | ✅/⚠️/❌ | Details |
-| Architecture           | ✅/⚠️/❌ | Details |
-| Error handling         | ✅/⚠️/❌ | Details |
+When the subagent returns:
 
-### Issues Found
-
-1. **[Severity]** Description and location
-2. ...
-
-### Verdict
-
-PASS / NEEDS FIXES
-```
-
-## Severity Levels
-
-- **Critical**: Security vulnerabilities, data loss risks, crashes
-- **High**: Bugs that affect users, broken functionality
-- **Medium**: Code quality issues, missing validation
-- **Low**: Style issues, minor improvements
+1. Show the findings table to the user
+2. Ask: **"Would you like me to apply these fixes? (yes / no / selective)"**
+   - If "selective," ask which specific fixes to apply
+   - If "yes," apply fixes one category at a time with progress updates
+   - After applying, run linter and tests to verify no regressions

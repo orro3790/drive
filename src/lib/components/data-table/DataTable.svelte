@@ -25,8 +25,9 @@ Designed to work with the Driver Ops design system.
 ```
 -->
 <script lang="ts" generics="RowType">
+	import { onDestroy } from 'svelte';
 	import type { Snippet } from 'svelte';
-	import type { Table } from '@tanstack/table-core';
+	import type { ColumnSizingState, Table, TableState, VisibilityState } from '@tanstack/table-core';
 	import type {
 		RowClickHandler,
 		RowClassFn,
@@ -50,6 +51,11 @@ Designed to work with the Driver Ops design system.
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import ViewportWide from '$lib/components/icons/ViewportWide.svelte';
+	import {
+		createTableStatePersister,
+		loadPersistedTableState,
+		type PersistedTableState
+	} from './persistTableState';
 
 	type Props = {
 		/** The TanStack Table instance */
@@ -177,6 +183,9 @@ Designed to work with the Driver Ops design system.
 
 		/** Callback when mobile detail panel opens */
 		onMobileDetailOpen?: MobileDetailOpenHandler<RowType>;
+
+		/** localStorage key used to persist column visibility and column sizing */
+		stateStorageKey?: string;
 	};
 
 	let {
@@ -221,7 +230,8 @@ Designed to work with the Driver Ops design system.
 		disableMobileDetail = false,
 		mobileDetailContent,
 		mobileDetailTitle,
-		onMobileDetailOpen
+		onMobileDetailOpen,
+		stateStorageKey
 	}: Props = $props();
 
 	// Layout measurement state
@@ -290,7 +300,13 @@ Designed to work with the Driver Ops design system.
 	const selectionVisible = $derived(showSelection ?? !!reactiveTable.options.enableRowSelection);
 	const showWideToggle = $derived(showWideModeToggle && !isMobile);
 	const hasChrome = $derived(
-		!!tabs || !!filters || !!toolbar || !!selection || showColumnVisibility || showExport || showWideToggle
+		!!tabs ||
+			!!filters ||
+			!!toolbar ||
+			!!selection ||
+			showColumnVisibility ||
+			showExport ||
+			showWideToggle
 	);
 	const hasActions = $derived(
 		!!toolbar || !!selection || showColumnVisibility || showExport || showWideToggle
@@ -352,6 +368,91 @@ Designed to work with the Driver Ops design system.
 	const allColumnDefs = $derived.by(() => {
 		trackTable();
 		return reactiveTable.getAllColumns().map((c) => c.columnDef);
+	});
+
+	type PersistedLayoutState = Pick<PersistedTableState, 'columnVisibility' | 'columnSizing'>;
+	type TableStatePersister = ReturnType<typeof createTableStatePersister>;
+
+	const tableLayoutStorageId = $derived(
+		stateStorageKey ? `data-table-layout:v1:${stateStorageKey}` : null
+	);
+
+	let tableStatePersister = $state<TableStatePersister | null>(null);
+	let activeTableStorageId = $state<string | null>(null);
+	let canPersistTableState = $state(false);
+
+	function parseVisibilityState(value: unknown): VisibilityState | undefined {
+		if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+		const next: VisibilityState = {};
+		for (const [columnId, visible] of Object.entries(value)) {
+			if (typeof visible === 'boolean') {
+				next[columnId] = visible;
+			}
+		}
+		return next;
+	}
+
+	function parseColumnSizingState(value: unknown): ColumnSizingState | undefined {
+		if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+		const next: ColumnSizingState = {};
+		for (const [columnId, width] of Object.entries(value)) {
+			if (typeof width === 'number' && Number.isFinite(width)) {
+				next[columnId] = width;
+			}
+		}
+		return next;
+	}
+
+	function getLayoutState(state: TableState): PersistedLayoutState {
+		return {
+			columnVisibility: state.columnVisibility,
+			columnSizing: state.columnSizing
+		};
+	}
+
+	$effect(() => {
+		const storageId = tableLayoutStorageId;
+
+		if (typeof window === 'undefined' || !storageId) {
+			tableStatePersister?.flush();
+			tableStatePersister = null;
+			activeTableStorageId = null;
+			canPersistTableState = false;
+			return;
+		}
+
+		if (activeTableStorageId === storageId && tableStatePersister) {
+			canPersistTableState = true;
+			return;
+		}
+
+		canPersistTableState = false;
+		tableStatePersister?.flush();
+
+		const persistedState = loadPersistedTableState(storageId);
+		const visibilityState = parseVisibilityState(persistedState?.columnVisibility);
+		if (visibilityState) {
+			table.setColumnVisibility(visibilityState);
+		}
+
+		const columnSizingState = parseColumnSizingState(persistedState?.columnSizing);
+		if (columnSizingState) {
+			table.setColumnSizing(columnSizingState);
+		}
+
+		tableStatePersister = createTableStatePersister(storageId);
+		activeTableStorageId = storageId;
+		canPersistTableState = true;
+	});
+
+	$effect(() => {
+		if (!canPersistTableState || !tableStatePersister) return;
+		trackTable();
+		tableStatePersister.persist(getLayoutState(reactiveTable.getState()));
+	});
+
+	onDestroy(() => {
+		tableStatePersister?.flush();
 	});
 </script>
 
@@ -416,7 +517,11 @@ Designed to work with the Driver Ops design system.
 				{/if}
 			</div>
 		{/if}
-		<div class="data-table-scroll-area" bind:this={scrollContainerRef} bind:clientWidth={scrollAreaWidth}>
+		<div
+			class="data-table-scroll-area"
+			bind:this={scrollContainerRef}
+			bind:clientWidth={scrollAreaWidth}
+		>
 			<table
 				class="data-table"
 				class:table-fixed={isResizingEnabled}

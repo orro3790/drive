@@ -58,24 +58,28 @@ Uses notificationsStore for data loading and optimistic read updates.
 	onMount(() => {
 		void notificationsStore.loadPage(0);
 
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0]?.isIntersecting) {
-					void notificationsStore.loadMore();
-				}
-			},
-			{ rootMargin: '200px' }
-		);
-
 		$effect(() => {
-			if (sentinelEl) {
-				const target = sentinelEl;
-				observer.observe(target);
-				return () => observer.unobserve(target);
-			}
-		});
+			if (!sentinelEl) return;
 
-		return () => observer.disconnect();
+			const root = sentinelEl.closest('[data-scroll-root]') as HTMLElement | null;
+			const target = sentinelEl;
+			const observer = new IntersectionObserver(
+				(entries) => {
+					if (entries.some((entry) => entry.isIntersecting)) {
+						void notificationsStore.loadMore();
+					}
+				},
+				{
+					root,
+					rootMargin: '0px 0px 240px 0px',
+					threshold: 0.01
+				}
+			);
+
+			observer.observe(target);
+
+			return () => observer.disconnect();
+		});
 	});
 </script>
 
@@ -147,7 +151,7 @@ Uses notificationsStore for data loading and optimistic read updates.
 
 <style>
 	.notifications-surface {
-		min-height: 100vh;
+		min-height: 100%;
 		background: var(--surface-inset);
 	}
 

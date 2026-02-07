@@ -97,7 +97,10 @@
 			type="button"
 			class="chip-dismiss"
 			aria-label="Remove"
-			onclick={(e) => { e.stopPropagation(); onDismiss(); }}
+			onclick={(e) => {
+				e.stopPropagation();
+				onDismiss();
+			}}
 		>
 			<XIcon />
 		</button>

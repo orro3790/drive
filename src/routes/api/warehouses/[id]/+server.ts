@@ -17,23 +17,25 @@ import {
 	warehouseManagers
 } from '$lib/server/db/schema';
 import { warehouseUpdateSchema } from '$lib/schemas/warehouse';
-import { and, count, eq, gte, lte, ne, sql } from 'drizzle-orm';
+import { and, count, eq, gte, lt, ne, sql } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
 import { addDays } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
 
 const TORONTO_TZ = 'America/Toronto';
 
-function getTorontoDateRange() {
+function getTorontoDateRanges() {
 	const torontoNow = toZonedTime(new Date(), TORONTO_TZ);
+	const currentStartDate = format(torontoNow, 'yyyy-MM-dd');
 	return {
-		startDate: format(torontoNow, 'yyyy-MM-dd'),
-		endDate: format(addDays(torontoNow, 7), 'yyyy-MM-dd')
+		currentStartDate,
+		currentEndDateExclusive: format(addDays(torontoNow, 7), 'yyyy-MM-dd'),
+		previousStartDate: format(addDays(torontoNow, -7), 'yyyy-MM-dd')
 	};
 }
 
 async function getWarehouseMetrics(warehouseId: string) {
-	const { startDate, endDate } = getTorontoDateRange();
+	const { currentStartDate, currentEndDateExclusive, previousStartDate } = getTorontoDateRanges();
 
 	const [routeCountRows, assignmentRows, openBidWindowRows, managerCountRows] = await Promise.all([
 		db
@@ -42,15 +44,17 @@ async function getWarehouseMetrics(warehouseId: string) {
 			.where(eq(routes.warehouseId, warehouseId)),
 		db
 			.select({
-				assignedDriversNext7: sql<number>`count(distinct ${assignments.userId})`,
-				unfilledRoutesNext7: sql<number>`count(*) filter (where ${assignments.status} = 'unfilled')`
+				assignedDriversNext7: sql<number>`count(distinct ${assignments.userId}) filter (where ${assignments.date} >= ${currentStartDate} and ${assignments.date} < ${currentEndDateExclusive})`,
+				assignedDriversPrevious7: sql<number>`count(distinct ${assignments.userId}) filter (where ${assignments.date} >= ${previousStartDate} and ${assignments.date} < ${currentStartDate})`,
+				unfilledRoutesNext7: sql<number>`count(*) filter (where ${assignments.status} = 'unfilled' and ${assignments.date} >= ${currentStartDate} and ${assignments.date} < ${currentEndDateExclusive})`,
+				unfilledRoutesPrevious7: sql<number>`count(*) filter (where ${assignments.status} = 'unfilled' and ${assignments.date} >= ${previousStartDate} and ${assignments.date} < ${currentStartDate})`
 			})
 			.from(assignments)
 			.where(
 				and(
 					eq(assignments.warehouseId, warehouseId),
-					gte(assignments.date, startDate),
-					lte(assignments.date, endDate),
+					gte(assignments.date, previousStartDate),
+					lt(assignments.date, currentEndDateExclusive),
 					ne(assignments.status, 'cancelled')
 				)
 			),
@@ -69,11 +73,17 @@ async function getWarehouseMetrics(warehouseId: string) {
 	const assignmentCounts = assignmentRows[0];
 	const openBidWindowCount = openBidWindowRows[0];
 	const managerCountResult = managerCountRows[0];
+	const assignedDriversNext7 = assignmentCounts?.assignedDriversNext7 ?? 0;
+	const assignedDriversPrevious7 = assignmentCounts?.assignedDriversPrevious7 ?? 0;
+	const unfilledRoutesNext7 = assignmentCounts?.unfilledRoutesNext7 ?? 0;
+	const unfilledRoutesPrevious7 = assignmentCounts?.unfilledRoutesPrevious7 ?? 0;
 
 	return {
 		routeCount: routeCountResult?.count ?? 0,
-		assignedDriversNext7: assignmentCounts?.assignedDriversNext7 ?? 0,
-		unfilledRoutesNext7: assignmentCounts?.unfilledRoutesNext7 ?? 0,
+		assignedDriversNext7,
+		assignedDriversDelta7: assignedDriversNext7 - assignedDriversPrevious7,
+		unfilledRoutesNext7,
+		unfilledRoutesDelta7: unfilledRoutesNext7 - unfilledRoutesPrevious7,
 		openBidWindows: openBidWindowCount?.count ?? 0,
 		managerCount: managerCountResult?.count ?? 0
 	};

@@ -16,7 +16,7 @@ import {
 	warehouseManagers
 } from '$lib/server/db/schema';
 import { warehouseCreateSchema } from '$lib/schemas/warehouse';
-import { and, count, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import { getManagerWarehouseIds } from '$lib/server/services/managers';
 import { createAuditLog } from '$lib/server/services/audit';
 import { addDays } from 'date-fns';
@@ -24,11 +24,13 @@ import { format, toZonedTime } from 'date-fns-tz';
 
 const TORONTO_TZ = 'America/Toronto';
 
-function getTorontoDateRange() {
+function getTorontoDateRanges() {
 	const torontoNow = toZonedTime(new Date(), TORONTO_TZ);
+	const currentStartDate = format(torontoNow, 'yyyy-MM-dd');
 	return {
-		startDate: format(torontoNow, 'yyyy-MM-dd'),
-		endDate: format(addDays(torontoNow, 7), 'yyyy-MM-dd')
+		currentStartDate,
+		currentEndDateExclusive: format(addDays(torontoNow, 7), 'yyyy-MM-dd'),
+		previousStartDate: format(addDays(torontoNow, -7), 'yyyy-MM-dd')
 	};
 }
 
@@ -47,7 +49,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		return json({ warehouses: [] });
 	}
 
-	const { startDate, endDate } = getTorontoDateRange();
+	const { currentStartDate, currentEndDateExclusive, previousStartDate } = getTorontoDateRanges();
 
 	const [warehouseList, assignmentCounts, openBidWindowCounts, managerCounts] = await Promise.all([
 		db
@@ -68,15 +70,17 @@ export const GET: RequestHandler = async ({ locals }) => {
 		db
 			.select({
 				warehouseId: assignments.warehouseId,
-				assignedDriversNext7: sql<number>`count(distinct ${assignments.userId})`,
-				unfilledRoutesNext7: sql<number>`count(*) filter (where ${assignments.status} = 'unfilled')`
+				assignedDriversNext7: sql<number>`count(distinct ${assignments.userId}) filter (where ${assignments.date} >= ${currentStartDate} and ${assignments.date} < ${currentEndDateExclusive})`,
+				assignedDriversPrevious7: sql<number>`count(distinct ${assignments.userId}) filter (where ${assignments.date} >= ${previousStartDate} and ${assignments.date} < ${currentStartDate})`,
+				unfilledRoutesNext7: sql<number>`count(*) filter (where ${assignments.status} = 'unfilled' and ${assignments.date} >= ${currentStartDate} and ${assignments.date} < ${currentEndDateExclusive})`,
+				unfilledRoutesPrevious7: sql<number>`count(*) filter (where ${assignments.status} = 'unfilled' and ${assignments.date} >= ${previousStartDate} and ${assignments.date} < ${currentStartDate})`
 			})
 			.from(assignments)
 			.where(
 				and(
 					inArray(assignments.warehouseId, accessibleWarehouses),
-					gte(assignments.date, startDate),
-					lte(assignments.date, endDate),
+					gte(assignments.date, previousStartDate),
+					lt(assignments.date, currentEndDateExclusive),
 					ne(assignments.status, 'cancelled')
 				)
 			)
@@ -114,10 +118,17 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 	const warehousesWithMetrics = warehouseList.map((warehouse) => {
 		const assignmentCounts = assignmentCountsByWarehouse.get(warehouse.id);
+		const assignedDriversNext7 = assignmentCounts?.assignedDriversNext7 ?? 0;
+		const assignedDriversPrevious7 = assignmentCounts?.assignedDriversPrevious7 ?? 0;
+		const unfilledRoutesNext7 = assignmentCounts?.unfilledRoutesNext7 ?? 0;
+		const unfilledRoutesPrevious7 = assignmentCounts?.unfilledRoutesPrevious7 ?? 0;
+
 		return {
 			...warehouse,
-			assignedDriversNext7: assignmentCounts?.assignedDriversNext7 ?? 0,
-			unfilledRoutesNext7: assignmentCounts?.unfilledRoutesNext7 ?? 0,
+			assignedDriversNext7,
+			assignedDriversDelta7: assignedDriversNext7 - assignedDriversPrevious7,
+			unfilledRoutesNext7,
+			unfilledRoutesDelta7: unfilledRoutesNext7 - unfilledRoutesPrevious7,
 			openBidWindows: openBidWindowsByWarehouse.get(warehouse.id) ?? 0,
 			managerCount: managerCountsByWarehouse.get(warehouse.id) ?? 0
 		};
@@ -176,7 +187,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 				...created,
 				routeCount: 0,
 				assignedDriversNext7: 0,
+				assignedDriversDelta7: 0,
 				unfilledRoutesNext7: 0,
+				unfilledRoutesDelta7: 0,
 				openBidWindows: 0,
 				managerCount: 1
 			}

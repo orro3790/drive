@@ -181,6 +181,7 @@
 	showWideModeToggle
 	{isWideMode}
 	onWideModeChange={(value) => onWideModeChange?.(value)}
+	stateStorageKey="bid-windows"
 	exportFilename="bid-windows"
 	{tabs}
 	{toolbar}
