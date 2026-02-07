@@ -10,6 +10,7 @@ import type { NotificationType } from '../../../src/lib/schemas/api/notification
 import { notificationTypeValues } from '../../../src/lib/schemas/api/notifications';
 import type { GeneratedAssignment } from './assignments';
 import type { GeneratedUser } from './users';
+import { getSeedNow } from '../utils/runtime';
 
 export interface RouteInfo {
 	id: string;
@@ -95,7 +96,7 @@ export function generateNotifications(
 	routes: RouteInfo[]
 ): GeneratedNotification[] {
 	const notifications: GeneratedNotification[] = [];
-	const now = new Date();
+	const now = getSeedNow();
 	const timeOffsets = [
 		subMinutes(now, 5),
 		subMinutes(now, 42),

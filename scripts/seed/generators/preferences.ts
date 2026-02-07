@@ -5,6 +5,7 @@
  */
 
 import type { GeneratedUser } from './users';
+import { random, randomInt } from '../utils/runtime';
 
 export interface GeneratedPreference {
 	userId: string;
@@ -26,11 +27,11 @@ export function generatePreferences(
 		if (driver.role !== 'driver') continue;
 
 		// Generate 3-6 preferred days (weighted toward weekdays)
-		const numDays = 3 + Math.floor(Math.random() * 4);
+		const numDays = 3 + randomInt(0, 4);
 		const preferredDays = selectPreferredDays(numDays);
 
 		// Generate 1-3 preferred routes
-		const numRoutes = 1 + Math.floor(Math.random() * 3);
+		const numRoutes = 1 + randomInt(0, 3);
 		const preferredRoutes = selectRandomItems(routeIds, numRoutes);
 
 		preferences.push({
@@ -63,10 +64,10 @@ function selectPreferredDays(count: number): number[] {
 	const totalWeight = dayWeights.reduce((sum, d) => sum + d.weight, 0);
 
 	while (selected.size < count && selected.size < 7) {
-		let random = Math.random() * totalWeight;
+		let weightedRoll = random() * totalWeight;
 		for (const { day, weight } of dayWeights) {
-			random -= weight;
-			if (random <= 0 && !selected.has(day)) {
+			weightedRoll -= weight;
+			if (weightedRoll <= 0 && !selected.has(day)) {
 				selected.add(day);
 				break;
 			}
@@ -75,7 +76,7 @@ function selectPreferredDays(count: number): number[] {
 		if (selected.size < count) {
 			const remaining = dayWeights.filter((d) => !selected.has(d.day));
 			if (remaining.length > 0) {
-				const pick = remaining[Math.floor(Math.random() * remaining.length)];
+				const pick = remaining[randomInt(0, remaining.length)];
 				selected.add(pick.day);
 			}
 		}
@@ -88,6 +89,10 @@ function selectPreferredDays(count: number): number[] {
  * Select random items from an array without duplicates.
  */
 function selectRandomItems<T>(items: T[], count: number): T[] {
-	const shuffled = [...items].sort(() => Math.random() - 0.5);
+	const shuffled = [...items];
+	for (let i = shuffled.length - 1; i > 0; i--) {
+		const j = randomInt(0, i + 1);
+		[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+	}
 	return shuffled.slice(0, Math.min(count, items.length));
 }

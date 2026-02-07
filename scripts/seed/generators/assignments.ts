@@ -21,6 +21,7 @@ import {
 	toTorontoDateString,
 	getTorontoToday
 } from '../utils/dates';
+import { getSeedNow, random, randomInt } from '../utils/runtime';
 
 export interface GeneratedAssignment {
 	routeId: string;
@@ -112,7 +113,7 @@ export function generateAssignments(
 					date: dateString,
 					status,
 					assignedBy,
-					assignedAt: eligibleDriverId ? new Date() : null
+					assignedAt: eligibleDriverId ? getSeedNow() : null
 				};
 
 				const assignmentIndex = assignments.length;
@@ -168,7 +169,7 @@ function findEligibleDriver(
 	if (eligibleDrivers.length === 0) return null;
 
 	// Randomly select from eligible (in real scheduling, this uses scoring)
-	return eligibleDrivers[Math.floor(Math.random() * eligibleDrivers.length)].id;
+	return eligibleDrivers[randomInt(0, eligibleDrivers.length)].id;
 }
 
 function determineStatus(
@@ -179,7 +180,7 @@ function determineStatus(
 
 	if (isPastDate(dateString)) {
 		// Past: 85% completed, 10% cancelled, 5% unfilled
-		const roll = Math.random();
+		const roll = random();
 		if (roll < 0.85) return 'completed';
 		if (roll < 0.95) return 'cancelled';
 		return 'unfilled';
@@ -187,7 +188,7 @@ function determineStatus(
 
 	if (isToday(dateString)) {
 		// Today: 50% active, 30% completed (morning shifts done), 20% scheduled (afternoon)
-		const roll = Math.random();
+		const roll = random();
 		if (roll < 0.5) return 'active';
 		if (roll < 0.8) return 'completed';
 		return 'scheduled';
@@ -202,10 +203,10 @@ function createShiftForStatus(
 	dateString: string,
 	status: 'completed' | 'cancelled' | 'active'
 ): GeneratedShift {
-	const parcelsStart = 100 + Math.floor(Math.random() * 100); // 100-200
+	const parcelsStart = 100 + randomInt(0, 100); // 100-200
 
 	if (status === 'completed') {
-		const deliveryRate = 0.9 + Math.random() * 0.1; // 90-100%
+		const deliveryRate = 0.9 + random() * 0.1; // 90-100%
 		const parcelsDelivered = Math.floor(parcelsStart * deliveryRate);
 		const parcelsReturned = parcelsStart - parcelsDelivered;
 
@@ -223,7 +224,7 @@ function createShiftForStatus(
 	}
 
 	if (status === 'cancelled') {
-		const cancelReason = CANCEL_REASONS[Math.floor(Math.random() * CANCEL_REASONS.length)];
+		const cancelReason = CANCEL_REASONS[randomInt(0, CANCEL_REASONS.length)];
 
 		return {
 			assignmentIndex,

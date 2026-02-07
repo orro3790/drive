@@ -10,6 +10,7 @@ import { addHours } from 'date-fns';
 import type { GeneratedAssignment } from './assignments';
 import type { GeneratedUser } from './users';
 import { isPastDate, randomTimeOnDate } from '../utils/dates';
+import { random, randomInt } from '../utils/runtime';
 
 export interface GeneratedBidWindow {
 	assignmentIndex: number;
@@ -66,7 +67,7 @@ export function generateBidding(
 
 		// Generate 3-8 bids from random eligible drivers (some future windows have none)
 		const shouldHaveNoBids = !isPast && i % 7 === 0;
-		const numBids = shouldHaveNoBids ? 0 : 3 + Math.floor(Math.random() * 6);
+		const numBids = shouldHaveNoBids ? 0 : 3 + randomInt(0, 6);
 		const bidders = numBids === 0 ? [] : selectRandomDrivers(eligibleDrivers, numBids);
 
 		// Calculate scores and determine winner
@@ -128,7 +129,11 @@ export function generateBidding(
 }
 
 function selectRandomDrivers(drivers: GeneratedUser[], count: number): GeneratedUser[] {
-	const shuffled = [...drivers].sort(() => Math.random() - 0.5);
+	const shuffled = [...drivers];
+	for (let i = shuffled.length - 1; i > 0; i--) {
+		const j = randomInt(0, i + 1);
+		[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+	}
 	return shuffled.slice(0, Math.min(count, drivers.length));
 }
 
@@ -141,10 +146,10 @@ function selectRandomDrivers(drivers: GeneratedUser[], count: number): Generated
  */
 function calculateBidScore(): number {
 	// Generate score components
-	const completionRate = 0.7 + Math.random() * 0.3; // 70-100%
-	const routeFamiliarity = Math.random(); // 0-100% normalized
-	const attendanceRate = 0.7 + Math.random() * 0.3; // 70-100%
-	const preferenceBonus = Math.random(); // 0-100%
+	const completionRate = 0.7 + random() * 0.3; // 70-100%
+	const routeFamiliarity = random(); // 0-100% normalized
+	const attendanceRate = 0.7 + random() * 0.3; // 70-100%
+	const preferenceBonus = random(); // 0-100%
 
 	const score =
 		completionRate * 0.4 + routeFamiliarity * 0.3 + attendanceRate * 0.2 + preferenceBonus * 0.1;
@@ -154,5 +159,5 @@ function calculateBidScore(): number {
 
 function randomBidTime(opensAt: Date, closesAt: Date): Date {
 	const range = closesAt.getTime() - opensAt.getTime();
-	return new Date(opensAt.getTime() + Math.random() * range);
+	return new Date(opensAt.getTime() + random() * range);
 }

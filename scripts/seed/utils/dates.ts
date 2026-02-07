@@ -6,6 +6,7 @@
 
 import { toZonedTime, format } from 'date-fns-tz';
 import { addDays, addWeeks, startOfDay, subWeeks } from 'date-fns';
+import { getSeedNow, randomInt } from './runtime';
 
 export const TORONTO_TZ = 'America/Toronto';
 
@@ -39,7 +40,7 @@ export function getTorontoDayOfWeek(date: Date): number {
  * Get today's date in Toronto timezone (start of day)
  */
 export function getTorontoToday(): Date {
-	return startOfDay(toZonedTime(new Date(), TORONTO_TZ));
+	return startOfDay(toZonedTime(getSeedNow(), TORONTO_TZ));
 }
 
 /**
@@ -116,7 +117,7 @@ export function isFutureDate(dateString: string): boolean {
  */
 export function randomTimeOnDate(dateString: string, startHour = 6, endHour = 20): Date {
 	const [year, month, day] = dateString.split('-').map(Number);
-	const hour = startHour + Math.floor(Math.random() * (endHour - startHour));
-	const minute = Math.floor(Math.random() * 60);
+	const hour = randomInt(startHour, endHour);
+	const minute = randomInt(0, 60);
 	return new Date(year, month - 1, day, hour, minute);
 }
