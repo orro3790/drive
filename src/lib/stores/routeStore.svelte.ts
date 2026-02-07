@@ -386,9 +386,7 @@ export const routeStore = {
 				driverName: null
 			});
 
-			toastStore.success(
-				m.manager_emergency_reopen_success({ count: data.notifiedCount ?? 0 })
-			);
+			toastStore.success(m.manager_emergency_reopen_success({ count: data.notifiedCount ?? 0 }));
 			return { ok: true, notifiedCount: data.notifiedCount };
 		} catch {
 			toastStore.error(m.manager_emergency_reopen_error());

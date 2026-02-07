@@ -164,16 +164,15 @@
 <style>
 	.settings-surface {
 		width: 100%;
-		height: 100%;
+		min-height: 100%;
 	}
 
 	.settings-centered-layout {
 		width: 100%;
-		height: 100%;
+		min-height: 100%;
 		display: flex;
 		justify-content: center;
 		padding: var(--spacing-4) 0 var(--spacing-4) var(--spacing-4);
-		min-height: 0;
 	}
 
 	.settings-unified-card {
@@ -181,8 +180,8 @@
 		flex-direction: row;
 		width: 100%;
 		max-width: 1200px;
-		height: 100%;
-		overflow: hidden;
+		min-height: 100%;
+		overflow: visible;
 		background: var(--surface-primary);
 		border-radius: var(--radius-lg) 0 0 var(--radius-lg);
 		box-shadow: var(--shadow-base);
@@ -195,15 +194,14 @@
 		display: flex;
 		flex-direction: column;
 		background: var(--surface-primary);
-		overflow-y: auto;
 	}
 
 	.settings-content-area {
 		flex: 1;
 		min-width: 0;
+		min-height: 0;
 		display: flex;
 		flex-direction: column;
-		overflow-y: auto;
 		background: var(--surface-primary);
 	}
 

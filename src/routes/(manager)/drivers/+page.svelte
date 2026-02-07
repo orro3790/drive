@@ -342,7 +342,8 @@
 
 {#snippet healthIndicator(healthState: Driver['healthState'])}
 	<span class="health-indicator">
-		<span class={`health-indicator-dot tone-${getHealthTone(healthState)}`} aria-hidden="true"></span>
+		<span class={`health-indicator-dot tone-${getHealthTone(healthState)}`} aria-hidden="true"
+		></span>
 		<span class="health-indicator-label">{getHealthLabel(healthState)}</span>
 	</span>
 {/snippet}
@@ -371,11 +372,7 @@
 	{@const delta = ctx.row.avgParcelsDelivered - globalParcelsAverage}
 	<span class="metric-cell">
 		<span class="variance-value">{formatAverageParcels(ctx.row.avgParcelsDelivered)}</span>
-		<span
-			class="metric-delta"
-			class:positive={delta > 0}
-			class:negative={delta < 0}
-		>
+		<span class="metric-delta" class:positive={delta > 0} class:negative={delta < 0}>
 			({formatParcelsDelta(delta)})
 		</span>
 	</span>
@@ -607,6 +604,7 @@
 		isWideMode={ctx.isWideMode}
 		onWideModeChange={ctx.onWideModeChange}
 		onMobileDetailOpen={syncSelectedDriver}
+		stateStorageKey="drivers"
 		exportFilename="drivers"
 		tabs={tabsSnippet}
 		activeRowId={selectedDriverId ?? undefined}

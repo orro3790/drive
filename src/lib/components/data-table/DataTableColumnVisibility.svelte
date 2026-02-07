@@ -85,9 +85,15 @@
 	});
 
 	const hasCustomSizes = $derived(Object.keys(columnSizing).length > 0);
+	const hasHiddenColumns = $derived.by(() => {
+		reactiveTable.track?.();
+		return Object.values(columnVisibility).some((visible) => visible === false);
+	});
+	const hasCustomizedLayout = $derived(hasCustomSizes || hasHiddenColumns);
 
-	function resetAllColumnSizes() {
+	function resetAllColumnPreferences() {
 		table.resetColumnSizing();
+		table.resetColumnVisibility();
 	}
 </script>
 
@@ -135,9 +141,9 @@
 					<button
 						type="button"
 						class="menu-item reset-btn"
-						disabled={!hasCustomSizes}
+						disabled={!hasCustomizedLayout}
 						onmousedown={(event) => event.stopPropagation()}
-						onclick={resetAllColumnSizes}
+						onclick={resetAllColumnPreferences}
 					>
 						<span class="label">{m.table_columns_reset_sizes()}</span>
 					</button>

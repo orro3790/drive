@@ -16,7 +16,7 @@
 	<AppSidebar role="manager" />
 	<div class="main-area">
 		<PageHeader />
-		<main class="content">
+		<main class="content" data-scroll-root>
 			{@render children()}
 		</main>
 	</div>
@@ -26,6 +26,7 @@
 	.app-shell {
 		display: flex;
 		height: 100vh;
+		height: 100dvh;
 		background: var(--surface-inset);
 		overflow: hidden;
 	}
@@ -36,6 +37,7 @@
 		flex-direction: column;
 		min-width: 0;
 		min-height: 0;
+		overflow: hidden;
 	}
 
 	.content {
@@ -43,6 +45,9 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		overflow: hidden;
+		overflow-x: hidden;
+		overflow-y: auto;
+		overscroll-behavior-y: contain;
+		-webkit-overflow-scrolling: touch;
 	}
 </style>

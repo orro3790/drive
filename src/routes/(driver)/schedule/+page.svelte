@@ -549,7 +549,7 @@
 
 <style>
 	.page-surface {
-		min-height: 100vh;
+		min-height: 100%;
 		background: var(--surface-inset);
 	}
 
