@@ -93,12 +93,12 @@ Spawn exploratory sub-agents when needed to verify:
 
 Label each finding based on **user impact**:
 
-| Severity | Definition |
-|----------|------------|
-| Critical | Data loss, security breach, or complete failure |
-| High | User-facing bugs or significant UX issues |
-| Medium | Maintainability issues or minor friction |
-| Low | Code style, minor optimization, theoretical concern |
+| Severity | Definition                                          |
+| -------- | --------------------------------------------------- |
+| Critical | Data loss, security breach, or complete failure     |
+| High     | User-facing bugs or significant UX issues           |
+| Medium   | Maintainability issues or minor friction            |
+| Low      | Code style, minor optimization, theoretical concern |
 
 ### 6. YAGNI Filter
 
@@ -134,10 +134,10 @@ Reviewed: [scope description]
 
 ### Findings
 
-| # | Finding | Severity | Category | YAGNI Risk | Fix |
-|---|---------|----------|----------|------------|-----|
-| 1 | [Description] | High | Correctness | Low | [Brief fix] |
-| 2 | [Description] | Medium | Design | Medium | [Brief fix] |
+| #   | Finding       | Severity | Category    | YAGNI Risk | Fix         |
+| --- | ------------- | -------- | ----------- | ---------- | ----------- |
+| 1   | [Description] | High     | Correctness | Low        | [Brief fix] |
+| 2   | [Description] | Medium   | Design      | Medium     | [Brief fix] |
 
 ### Summary
 

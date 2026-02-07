@@ -22,27 +22,21 @@ import {
 	bids
 } from '$lib/server/db/schema';
 import { and, asc, eq, gte, lt } from 'drizzle-orm';
-import { addDays, parseISO, differenceInCalendarDays } from 'date-fns';
+import { addDays } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
 import { getWeekStart } from '$lib/server/services/scheduling';
 import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
+import { getUnconfirmedAssignments } from '$lib/server/services/confirmations';
 import {
-	calculateConfirmationDeadline,
-	getUnconfirmedAssignments
-} from '$lib/server/services/confirmations';
+	createAssignmentLifecycleContext,
+	deriveAssignmentLifecycle
+} from '$lib/server/services/assignmentLifecycle';
 import logger from '$lib/server/logger';
 
 const TORONTO_TZ = 'America/Toronto';
 
 function toTorontoDateString(date: Date): string {
 	return format(toZonedTime(date, TORONTO_TZ), 'yyyy-MM-dd');
-}
-
-function getHoursUntilShift(dateString: string, nowToronto: Date): number {
-	const torontoToday = format(nowToronto, 'yyyy-MM-dd');
-	const dayDiff = differenceInCalendarDays(parseISO(dateString), parseISO(torontoToday));
-	const currentMinutes = nowToronto.getHours() * 60 + nowToronto.getMinutes();
-	return (dayDiff * 24 * 60 - currentMinutes) / 60;
 }
 
 export const GET: RequestHandler = async ({ locals }) => {
@@ -73,8 +67,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 	const weekStartString = toTorontoDateString(weekStart);
 	const nextWeekStartString = toTorontoDateString(nextWeekStart);
 	const windowEndString = toTorontoDateString(windowEnd);
-	const torontoNow = toZonedTime(new Date(), TORONTO_TZ);
-	const torontoToday = format(torontoNow, 'yyyy-MM-dd');
+	const lifecycleContext = createAssignmentLifecycleContext();
+	const torontoToday = lifecycleContext.torontoToday;
 
 	// Parallel queries for performance
 	const [assignmentRows, metricsRow, pendingBidsRows] = await Promise.all([
@@ -134,47 +128,33 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 	// Process assignments
 	const processedAssignments = assignmentRows.map((assignment) => {
-		const isCancelable = assignment.date > torontoToday && assignment.status !== 'cancelled';
-		const hoursUntilShift = getHoursUntilShift(assignment.date, torontoNow);
-		const isLateCancel = isCancelable && hoursUntilShift <= 48;
-		const isToday = assignment.date === torontoToday;
-		const isArrivable =
-			isToday &&
-			assignment.status === 'scheduled' &&
-			assignment.confirmedAt !== null &&
-			!assignment.shiftArrivedAt;
-		const isStartable =
-			assignment.status === 'active' &&
-			assignment.shiftArrivedAt !== null &&
-			assignment.parcelsStart === null;
-		const isCompletable =
-			assignment.status === 'active' &&
-			assignment.parcelsStart !== null &&
-			assignment.shiftCompletedAt === null;
-
-		// Confirmation window data
-		const { opensAt, deadline } = calculateConfirmationDeadline(assignment.date);
-		const isConfirmable =
-			!assignment.confirmedAt &&
-			assignment.status === 'scheduled' &&
-			torontoNow >= opensAt &&
-			torontoNow <= deadline;
+		const lifecycle = deriveAssignmentLifecycle(
+			{
+				assignmentDate: assignment.date,
+				assignmentStatus: assignment.status,
+				confirmedAt: assignment.confirmedAt,
+				shiftArrivedAt: assignment.shiftArrivedAt,
+				parcelsStart: assignment.parcelsStart,
+				shiftCompletedAt: assignment.shiftCompletedAt
+			},
+			lifecycleContext
+		);
 
 		return {
 			id: assignment.id,
 			date: assignment.date,
 			status: assignment.status,
 			confirmedAt: assignment.confirmedAt?.toISOString() ?? null,
-			confirmationOpensAt: opensAt.toISOString(),
-			confirmationDeadline: deadline.toISOString(),
-			isConfirmable,
+			confirmationOpensAt: lifecycle.confirmationOpensAt.toISOString(),
+			confirmationDeadline: lifecycle.confirmationDeadline.toISOString(),
+			isConfirmable: lifecycle.isConfirmable,
 			routeName: assignment.routeName,
 			warehouseName: assignment.warehouseName,
-			isCancelable,
-			isLateCancel,
-			isArrivable,
-			isStartable,
-			isCompletable,
+			isCancelable: lifecycle.isCancelable,
+			isLateCancel: lifecycle.isLateCancel,
+			isArrivable: lifecycle.isArrivable,
+			isStartable: lifecycle.isStartable,
+			isCompletable: lifecycle.isCompletable,
 			shift: assignment.shiftId
 				? {
 						id: assignment.shiftId,
