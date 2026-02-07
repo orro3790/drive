@@ -1,0 +1,110 @@
+name: Cron Jobs
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+    - cron: '0 * * * *'
+    - cron: '0 13,14 * * *'
+    - cron: '59 4 * * 1'
+    - cron: '0 6 * * *'
+    - cron: '0 1 * * *'
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+    inputs:
+      route:
+        description: Cron endpoint path to invoke
+        required: true
+        type: choice
+        options:
+          - /api/cron/close-bid-windows
+          - /api/cron/auto-drop-unconfirmed
+          - /api/cron/no-show-detection
+          - /api/cron/lock-preferences
+          - /api/cron/shift-reminders
+          - /api/cron/performance-check
+          - /api/cron/send-confirmation-reminders
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    permissions: {}
+    concurrency:
+      group: cron-${{ github.workflow }}-${{ github.event_name == 'schedule' && github.event.schedule || github.event.inputs.route || 'manual' }}
+      cancel-in-progress: false
+    steps:
+      - name: Resolve route
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          MANUAL_ROUTE: ${{ github.event.inputs.route }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            route="$MANUAL_ROUTE"
+          else
+            case "$SCHEDULE" in
+              '*/15 * * * *') route='/api/cron/close-bid-windows' ;;
+              '0 * * * *') route='/api/cron/auto-drop-unconfirmed' ;;
+              '0 13,14 * * *') route='/api/cron/no-show-detection' ;;
+              '59 4 * * 1') route='/api/cron/lock-preferences' ;;
+              '0 6 * * *') route='/api/cron/shift-reminders' ;;
+              '0 1 * * *') route='/api/cron/performance-check' ;;
+              '0 11 * * *') route='/api/cron/send-confirmation-reminders' ;;
+              *)
+                echo "Unsupported schedule: $SCHEDULE"
+                exit 1
+                ;;
+            esac
+          fi
+
+          echo "route=$route" >> "$GITHUB_OUTPUT"
+
+      - name: Invoke endpoint
+        env:
+          CRON_BASE_URL: ${{ secrets.CRON_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ROUTE: ${{ steps.resolve.outputs.route }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_BASE_URL:-}" ]; then
+            echo 'Missing required secret: CRON_BASE_URL'
+            exit 1
+          fi
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo 'Missing required secret: CRON_SECRET'
+            exit 1
+          fi
+
+          base="${CRON_BASE_URL%/}"
+          url="${base}${ROUTE}"
+
+          echo "Calling ${url}"
+
+          response_file="$(mktemp)"
+          status_code="$(
+            curl \
+              --silent \
+              --show-error \
+              --location \
+              --retry 3 \
+              --retry-all-errors \
+              --retry-delay 2 \
+              --max-time 60 \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              --header 'User-Agent: github-actions-cron/1.0' \
+              --output "${response_file}" \
+              --write-out '%{http_code}' \
+              "${url}"
+          )"
+
+          cat "${response_file}"
+          echo
+
+          if [ "${status_code}" -lt 200 ] || [ "${status_code}" -ge 300 ]; then
+            echo "Endpoint call failed with HTTP ${status_code}"
+            exit 1
+          fi
