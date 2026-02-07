@@ -15,6 +15,10 @@ import { addHours } from 'date-fns';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import {
+	createAssignmentLifecycleContext,
+	deriveAssignmentLifecycle
+} from '$lib/server/services/assignmentLifecycle';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -40,7 +44,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			id: assignments.id,
 			userId: assignments.userId,
 			routeId: assignments.routeId,
-			status: assignments.status
+			date: assignments.date,
+			status: assignments.status,
+			confirmedAt: assignments.confirmedAt
 		})
 		.from(assignments)
 		.where(eq(assignments.id, assignmentId));
@@ -67,6 +73,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const [shift] = await db
 		.select({
 			id: shifts.id,
+			arrivedAt: shifts.arrivedAt,
 			parcelsStart: shifts.parcelsStart,
 			completedAt: shifts.completedAt
 		})
@@ -75,6 +82,23 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	if (!shift) {
 		throw error(404, 'Shift not found — start shift first');
+	}
+
+	const lifecycleContext = createAssignmentLifecycleContext();
+	const lifecycle = deriveAssignmentLifecycle(
+		{
+			assignmentDate: assignment.date,
+			assignmentStatus: assignment.status,
+			confirmedAt: assignment.confirmedAt,
+			shiftArrivedAt: shift.arrivedAt,
+			parcelsStart: shift.parcelsStart,
+			shiftCompletedAt: shift.completedAt
+		},
+		lifecycleContext
+	);
+
+	if (!lifecycle.isCompletable) {
+		throw error(409, 'Assignment is not ready to complete');
 	}
 
 	if (shift.completedAt) {

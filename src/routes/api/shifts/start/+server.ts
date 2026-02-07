@@ -12,6 +12,10 @@ import { shiftStartSchema } from '$lib/schemas/shift';
 import { eq } from 'drizzle-orm';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
+import {
+	createAssignmentLifecycleContext,
+	deriveAssignmentLifecycle
+} from '$lib/server/services/assignmentLifecycle';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -36,7 +40,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.select({
 			id: assignments.id,
 			userId: assignments.userId,
-			status: assignments.status
+			date: assignments.date,
+			status: assignments.status,
+			confirmedAt: assignments.confirmedAt
 		})
 		.from(assignments)
 		.where(eq(assignments.id, assignmentId));
@@ -60,13 +66,31 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.select({
 			id: shifts.id,
 			arrivedAt: shifts.arrivedAt,
-			parcelsStart: shifts.parcelsStart
+			parcelsStart: shifts.parcelsStart,
+			completedAt: shifts.completedAt
 		})
 		.from(shifts)
 		.where(eq(shifts.assignmentId, assignmentId));
 
 	if (!shift) {
 		throw error(404, 'Shift not found — arrive first');
+	}
+
+	const lifecycleContext = createAssignmentLifecycleContext();
+	const lifecycle = deriveAssignmentLifecycle(
+		{
+			assignmentDate: assignment.date,
+			assignmentStatus: assignment.status,
+			confirmedAt: assignment.confirmedAt,
+			shiftArrivedAt: shift.arrivedAt,
+			parcelsStart: shift.parcelsStart,
+			shiftCompletedAt: shift.completedAt
+		},
+		lifecycleContext
+	);
+
+	if (!lifecycle.isStartable) {
+		throw error(409, 'Assignment is not ready to start');
 	}
 
 	if (!shift.arrivedAt) {
