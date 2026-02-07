@@ -1,32 +1,3 @@
 {
-	"crons": [
-		{
-			"path": "/api/cron/lock-preferences",
-			"schedule": "59 4 * * 1"
-		},
-		{
-			"path": "/api/cron/close-bid-windows",
-			"schedule": "15 5 * * *"
-		},
-		{
-			"path": "/api/cron/shift-reminders",
-			"schedule": "0 6 * * *"
-		},
-		{
-			"path": "/api/cron/no-show-detection",
-			"schedule": "0 14 * * *"
-		},
-		{
-			"path": "/api/cron/performance-check",
-			"schedule": "0 1 * * *"
-		},
-		{
-			"path": "/api/cron/auto-drop-unconfirmed",
-			"schedule": "0 15 * * *"
-		},
-		{
-			"path": "/api/cron/send-confirmation-reminders",
-			"schedule": "0 11 * * *"
-		}
-	]
+	"crons": []
 }
