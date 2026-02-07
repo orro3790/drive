@@ -311,12 +311,12 @@ Persisted in database, shown in inbox:
 
 ---
 
-## Scheduled Jobs (Vercel Cron)
+## Scheduled Jobs (GitHub Actions Cron)
 
 | Job               | Schedule             | Description                                            |
 | ----------------- | -------------------- | ------------------------------------------------------ |
 | Lock preferences  | Sunday 23:59 Toronto | Freeze preferences, generate Week N+2 schedule         |
-| Close bid windows | Every minute         | Check for expired windows, run scoring, assign winners |
+| Close bid windows | Every 15 minutes     | Check for expired windows, run scoring, assign winners |
 | Performance check | Daily (time TBD)     | Recalculate metrics, apply flag logic                  |
 | No-show detection | Daily after start    | Detect no-shows, open bid windows, alert managers      |
 | Send reminders    | Daily (morning)      | Shift reminders for today's assignments                |

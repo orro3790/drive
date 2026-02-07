@@ -654,7 +654,7 @@ Edit parcel counts within 1-hour window after completion. Can update parcelsStar
 
 ## Cron Jobs
 
-Automated jobs configured in `vercel.json` with `CRON_SECRET` authentication.
+Automated jobs configured in `.github/workflows/cron-jobs.yml` with `CRON_BASE_URL` and `CRON_SECRET` repository secrets. Vercel cron entries are intentionally disabled to avoid duplicate invocations.
 
 ### `GET /api/cron/auto-drop-unconfirmed`
 
