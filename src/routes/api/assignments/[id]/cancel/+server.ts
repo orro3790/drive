@@ -14,14 +14,14 @@ import { db } from '$lib/server/db';
 import { assignments, driverMetrics } from '$lib/server/db/schema';
 import { assignmentCancelSchema } from '$lib/schemas/assignment';
 import { and, eq, sql } from 'drizzle-orm';
-import { format, toZonedTime } from 'date-fns-tz';
 import { sendManagerAlert } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
 import { createBidWindow } from '$lib/server/services/bidding';
-import { calculateConfirmationDeadline } from '$lib/server/services/confirmations';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
-
-const TORONTO_TZ = 'America/Toronto';
+import {
+	createAssignmentLifecycleContext,
+	deriveAssignmentLifecycle
+} from '$lib/server/services/assignmentLifecycle';
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (!locals.user) {
@@ -64,15 +64,25 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(409, 'Assignment already cancelled');
 	}
 
-	const torontoNow = toZonedTime(new Date(), TORONTO_TZ);
-	const torontoToday = format(torontoNow, 'yyyy-MM-dd');
-	if (existing.date <= torontoToday) {
+	const lifecycleContext = createAssignmentLifecycleContext();
+	const lifecycle = deriveAssignmentLifecycle(
+		{
+			assignmentDate: existing.date,
+			assignmentStatus: existing.status,
+			confirmedAt: existing.confirmedAt,
+			shiftArrivedAt: null,
+			parcelsStart: null,
+			shiftCompletedAt: null
+		},
+		lifecycleContext
+	);
+
+	if (!lifecycle.isCancelable) {
 		throw error(400, 'Assignments must be cancelled in advance');
 	}
 
-	// Check for late cancellation: confirmed + past 48h deadline
-	const { deadline } = calculateConfirmationDeadline(existing.date);
-	const isLateCancellation = existing.confirmedAt !== null && torontoNow > deadline;
+	// Check for late cancellation using lifecycle contract boundaries
+	const isLateCancellation = existing.confirmedAt !== null && lifecycle.isLateCancel;
 
 	// Cancel the assignment
 	const [updated] = await db

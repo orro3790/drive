@@ -10,10 +10,12 @@ import { db } from '$lib/server/db';
 import { assignments, shifts } from '$lib/server/db/schema';
 import { shiftArriveSchema } from '$lib/schemas/shift';
 import { eq } from 'drizzle-orm';
-import { format, toZonedTime } from 'date-fns-tz';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
-import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import {
+	createAssignmentLifecycleContext,
+	deriveAssignmentLifecycle
+} from '$lib/server/services/assignmentLifecycle';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -54,34 +56,33 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	// Check date is today (Toronto time)
-	const torontoNow = toZonedTime(new Date(), dispatchPolicy.timezone.toronto);
-	const torontoToday = format(torontoNow, 'yyyy-MM-dd');
-
-	if (assignment.date !== torontoToday) {
-		throw error(400, 'Can only arrive on the assignment date');
-	}
-
-	// Check assignment status
-	if (assignment.status !== 'scheduled') {
-		throw error(400, 'Assignment is not in scheduled status');
-	}
-
-	// Must be confirmed first
-	if (!assignment.confirmedAt) {
-		throw error(400, 'Assignment must be confirmed before arrival');
-	}
-
-	// Check time: must be before 9 AM Toronto time
-	if (torontoNow.getHours() >= dispatchPolicy.shifts.arrivalDeadlineHourLocal) {
-		throw error(400, 'Must arrive before 9:00 AM');
-	}
-
-	// Check for existing shift (already arrived)
+	// Check for existing shift record
 	const [existingShift] = await db
-		.select({ id: shifts.id })
+		.select({
+			id: shifts.id,
+			arrivedAt: shifts.arrivedAt,
+			parcelsStart: shifts.parcelsStart,
+			completedAt: shifts.completedAt
+		})
 		.from(shifts)
 		.where(eq(shifts.assignmentId, assignmentId));
+
+	const lifecycleContext = createAssignmentLifecycleContext();
+	const lifecycle = deriveAssignmentLifecycle(
+		{
+			assignmentDate: assignment.date,
+			assignmentStatus: assignment.status,
+			confirmedAt: assignment.confirmedAt,
+			shiftArrivedAt: existingShift?.arrivedAt ?? null,
+			parcelsStart: existingShift?.parcelsStart ?? null,
+			shiftCompletedAt: existingShift?.completedAt ?? null
+		},
+		lifecycleContext
+	);
+
+	if (!lifecycle.isArrivable) {
+		throw error(409, 'Assignment is not ready for arrival');
+	}
 
 	if (existingShift) {
 		throw error(409, 'Already arrived');

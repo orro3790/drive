@@ -6,7 +6,7 @@
 		},
 		{
 			"path": "/api/cron/close-bid-windows",
-			"schedule": "*/15 * * * *"
+			"schedule": "15 5 * * *"
 		},
 		{
 			"path": "/api/cron/shift-reminders",
@@ -14,7 +14,7 @@
 		},
 		{
 			"path": "/api/cron/no-show-detection",
-			"schedule": "0 13,14 * * *"
+			"schedule": "0 14 * * *"
 		},
 		{
 			"path": "/api/cron/performance-check",
@@ -22,7 +22,7 @@
 		},
 		{
 			"path": "/api/cron/auto-drop-unconfirmed",
-			"schedule": "0 * * * *"
+			"schedule": "0 15 * * *"
 		},
 		{
 			"path": "/api/cron/send-confirmation-reminders",
