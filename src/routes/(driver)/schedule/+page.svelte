@@ -14,6 +14,10 @@
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import { scheduleStore, type ScheduleAssignment } from '$lib/stores/scheduleStore.svelte';
 	import {
+		getAssignmentActions,
+		type AssignmentLifecycleActionId
+	} from '$lib/config/driverLifecycleIa';
+	import {
 		cancelReasonValues,
 		type AssignmentStatus,
 		type CancelReason
@@ -122,6 +126,68 @@
 			if (now < opensAt) return 'not_open';
 		}
 		return 'none';
+	}
+
+	type ScheduleActionId = Extract<
+		AssignmentLifecycleActionId,
+		'confirm_shift' | 'record_inventory' | 'complete_shift' | 'cancel_shift'
+	>;
+
+	function getScheduleActions(assignment: ScheduleAssignment): ScheduleActionId[] {
+		return getAssignmentActions(assignment, 'schedule').filter(
+			(actionId): actionId is ScheduleActionId =>
+				actionId === 'confirm_shift' ||
+				actionId === 'record_inventory' ||
+				actionId === 'complete_shift' ||
+				actionId === 'cancel_shift'
+		);
+	}
+
+	function getScheduleActionLabel(actionId: ScheduleActionId) {
+		switch (actionId) {
+			case 'confirm_shift':
+				return m.schedule_confirm_button();
+			case 'record_inventory':
+				return m.shift_start_button();
+			case 'complete_shift':
+				return m.shift_complete_button();
+			case 'cancel_shift':
+				return m.schedule_cancel_button();
+		}
+	}
+
+	function getScheduleActionVariant(actionId: ScheduleActionId): 'primary' | 'danger' {
+		return actionId === 'cancel_shift' ? 'danger' : 'primary';
+	}
+
+	function isScheduleActionLoading(actionId: ScheduleActionId): boolean {
+		switch (actionId) {
+			case 'confirm_shift':
+				return scheduleStore.isConfirming;
+			case 'record_inventory':
+				return scheduleStore.isStartingShift;
+			case 'complete_shift':
+				return scheduleStore.isCompletingShift;
+			case 'cancel_shift':
+				return scheduleStore.isCancelling;
+		}
+	}
+
+	function handleScheduleAction(actionId: ScheduleActionId, assignment: ScheduleAssignment) {
+		switch (actionId) {
+			case 'confirm_shift':
+				scheduleStore.confirmShift(assignment.id);
+				return;
+			case 'record_inventory':
+				openStartModal(assignment);
+				return;
+			case 'complete_shift':
+				openCompleteModal(assignment);
+				return;
+			case 'cancel_shift':
+				openCancelModal(assignment);
+				return;
+		}
 	}
 
 	function openCancelModal(assignment: ScheduleAssignment) {
@@ -244,7 +310,6 @@
 					{:else}
 						<div class="assignment-list">
 							{#each thisWeekAssignments as assignment (assignment.id)}
-								{@const confirmState = getConfirmationState(assignment)}
 								<div class="assignment-card" class:cancelled={assignment.status === 'cancelled'}>
 									<div class="card-header">
 										<div class="card-summary">
@@ -259,14 +324,14 @@
 												label={statusLabels[assignment.status]}
 												size="xs"
 											/>
-											{#if confirmState === 'confirmed'}
+											{#if getConfirmationState(assignment) === 'confirmed'}
 												<Chip
 													variant="status"
 													status="success"
 													label={m.schedule_confirmed_chip()}
 													size="xs"
 												/>
-											{:else if confirmState === 'confirmable'}
+											{:else if getConfirmationState(assignment) === 'confirmable'}
 												<Chip
 													variant="status"
 													status="warning"
@@ -275,7 +340,7 @@
 													})}
 													size="xs"
 												/>
-											{:else if confirmState === 'not_open'}
+											{:else if getConfirmationState(assignment) === 'not_open'}
 												<Chip
 													variant="status"
 													status="neutral"
@@ -288,46 +353,19 @@
 										</div>
 									</div>
 
-									{#if assignment.isStartable || assignment.isCompletable || assignment.isConfirmable || assignment.isCancelable}
+									{#if getScheduleActions(assignment).length > 0}
 										<div class="card-actions">
-											{#if assignment.isConfirmable}
+											{#each getScheduleActions(assignment) as actionId (actionId)}
 												<Button
-													variant="primary"
+													variant={getScheduleActionVariant(actionId)}
 													size="small"
-													fill
-													isLoading={scheduleStore.isConfirming}
-													onclick={() => scheduleStore.confirmShift(assignment.id)}
+													fill={actionId === 'confirm_shift'}
+													isLoading={isScheduleActionLoading(actionId)}
+													onclick={() => handleScheduleAction(actionId, assignment)}
 												>
-													{m.schedule_confirm_button()}
+													{getScheduleActionLabel(actionId)}
 												</Button>
-											{/if}
-											{#if assignment.isStartable}
-												<Button
-													variant="primary"
-													size="small"
-													onclick={() => openStartModal(assignment)}
-												>
-													{m.shift_start_button()}
-												</Button>
-											{/if}
-											{#if assignment.isCompletable}
-												<Button
-													variant="primary"
-													size="small"
-													onclick={() => openCompleteModal(assignment)}
-												>
-													{m.shift_complete_button()}
-												</Button>
-											{/if}
-											{#if assignment.isCancelable}
-												<Button
-													variant="danger"
-													size="small"
-													onclick={() => openCancelModal(assignment)}
-												>
-													{m.schedule_cancel_button()}
-												</Button>
-											{/if}
+											{/each}
 										</div>
 									{/if}
 								</div>
@@ -354,7 +392,6 @@
 					{:else}
 						<div class="assignment-list">
 							{#each nextWeekAssignments as assignment (assignment.id)}
-								{@const confirmState = getConfirmationState(assignment)}
 								<div class="assignment-card" class:cancelled={assignment.status === 'cancelled'}>
 									<div class="card-header">
 										<div class="card-summary">
@@ -369,14 +406,14 @@
 												label={statusLabels[assignment.status]}
 												size="xs"
 											/>
-											{#if confirmState === 'confirmed'}
+											{#if getConfirmationState(assignment) === 'confirmed'}
 												<Chip
 													variant="status"
 													status="success"
 													label={m.schedule_confirmed_chip()}
 													size="xs"
 												/>
-											{:else if confirmState === 'confirmable'}
+											{:else if getConfirmationState(assignment) === 'confirmable'}
 												<Chip
 													variant="status"
 													status="warning"
@@ -385,7 +422,7 @@
 													})}
 													size="xs"
 												/>
-											{:else if confirmState === 'not_open'}
+											{:else if getConfirmationState(assignment) === 'not_open'}
 												<Chip
 													variant="status"
 													status="neutral"
@@ -398,28 +435,19 @@
 										</div>
 									</div>
 
-									{#if assignment.isConfirmable || assignment.isCancelable}
+									{#if getScheduleActions(assignment).length > 0}
 										<div class="card-actions">
-											{#if assignment.isConfirmable}
+											{#each getScheduleActions(assignment) as actionId (actionId)}
 												<Button
-													variant="primary"
+													variant={getScheduleActionVariant(actionId)}
 													size="small"
-													fill
-													isLoading={scheduleStore.isConfirming}
-													onclick={() => scheduleStore.confirmShift(assignment.id)}
+													fill={actionId === 'confirm_shift'}
+													isLoading={isScheduleActionLoading(actionId)}
+													onclick={() => handleScheduleAction(actionId, assignment)}
 												>
-													{m.schedule_confirm_button()}
+													{getScheduleActionLabel(actionId)}
 												</Button>
-											{/if}
-											{#if assignment.isCancelable}
-												<Button
-													variant="danger"
-													size="small"
-													onclick={() => openCancelModal(assignment)}
-												>
-													{m.schedule_cancel_button()}
-												</Button>
-											{/if}
+											{/each}
 										</div>
 									{/if}
 								</div>
