@@ -61,7 +61,7 @@ Business logic in `src/lib/server/services/`:
 - `flagging.ts` - Driver performance flagging (`checkDriverForFlagging`)
 - `metrics.ts` - Driver metrics calculation (`recalculateDriverMetrics`)
 - `managers.ts` - Manager access control (`getManagerWarehouseIds`, `canManagerAccessWarehouse`, `getRouteManager`)
-- `health.ts` - Driver health scoring and star progression (planned for DRV-bjh implementation)
+- `health.ts` - Driver health scoring and star progression (`computeDailyScore`, `evaluateWeek`, `runDailyHealthEvaluation`, `runWeeklyHealthEvaluation`)
 
 See `docs/agent-guidelines.md` for detailed usage patterns.
 

@@ -306,6 +306,51 @@ const routes = await db.select().from(routes).where(inArray(routes.warehouseId, 
 - Managers ↔ Warehouses: many-to-many via `warehouseManagers` junction table
 - Routes → Manager: optional one-to-many via `routes.managerId` (primary manager for a route)
 
+#### `health.ts`
+
+Driver health scoring (daily 0-100 score) and star progression (weekly 0-4 stars) with hard-stop resets. See `docs/plans/driver-health-gamification.md` for full specification.
+
+**Key Functions:**
+
+- `computeDailyScore(userId)` - Compute daily health score for a driver (attendance 50%, completion 30%, reliability 20%). Returns `DailyScoreResult` or null for new drivers.
+- `evaluateWeek(userId, weekStart)` - Evaluate weekly star progression based on qualifying week criteria (100% attendance, 95%+ completion, 0 no-shows, 0 late cancellations). Returns `WeeklyEvalResult`.
+- `runDailyHealthEvaluation()` - Batch runner for daily score computation across all drivers (cron job). Sends corrective warnings if needed.
+- `runWeeklyHealthEvaluation()` - Batch runner for weekly star evaluation across all drivers (cron job). Sends streak notifications.
+
+**Hard-Stop Rules:**
+
+- Any no-show OR 2+ late cancellations in rolling 30 days caps score at 49 and resets stars to 0
+- Hard-stop events set `assignmentPoolEligible = false` (requires manager intervention)
+
+**Usage:**
+
+```typescript
+import { computeDailyScore, evaluateWeek } from '$lib/server/services/health';
+
+// Compute daily score for a driver
+const result = await computeDailyScore(driverId);
+if (result) {
+	console.log(`Score: ${result.score}, Hard-stop: ${result.hardStopTriggered}`);
+}
+
+// Evaluate weekly progression (call after week closes)
+const weekResult = await evaluateWeek(driverId, lastMonday);
+if (weekResult.qualified) {
+	console.log(`Star progression: ${weekResult.previousStars} → ${weekResult.newStars}`);
+}
+
+// Cron job usage
+const dailyResult = await runDailyHealthEvaluation();
+console.log(`Scored ${dailyResult.scored} drivers, ${dailyResult.correctiveWarnings} warnings sent`);
+```
+
+**Notifications Sent:**
+
+- `corrective_warning` - Completion rate below 80% (daily, max 1 per recovery window)
+- `streak_advanced` - Weekly streak increased (weekly, on qualifying week)
+- `streak_reset` - Weekly streak reset to 0 (weekly, on hard-stop)
+- `bonus_eligible` - Reached 4 stars (weekly, milestone)
+
 ---
 
 ## Component Patterns
