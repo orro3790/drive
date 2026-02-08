@@ -18,15 +18,19 @@ import { ac, admin, manager } from './permissions';
 
 /**
  * Derive auth base URL:
- * 1. Use BETTER_AUTH_URL if explicitly set (custom domain)
- * 2. Otherwise, omit — Better Auth infers from the request Host header.
- *    Works for dev (localhost/LAN), Vercel production, and preview deploys.
- *    Note: VERCEL_URL is NOT used because it returns a deployment-specific
- *    URL that doesn't match the domain the browser actually accessed.
+ * 1. Use BETTER_AUTH_URL if explicitly set (custom domain override)
+ * 2. Use VERCEL_PROJECT_PRODUCTION_URL — the stable production domain
+ *    (NOT VERCEL_URL, which gives a deployment-hash URL that doesn't
+ *    match what the browser actually accessed)
+ * 3. In dev, omit — Better Auth infers from the request Host header,
+ *    so both localhost and LAN IPs work automatically.
  */
 function getAuthBaseUrl(): string | undefined {
 	if (env.BETTER_AUTH_URL) {
 		return env.BETTER_AUTH_URL;
+	}
+	if (env.VERCEL_PROJECT_PRODUCTION_URL) {
+		return `https://${env.VERCEL_PROJECT_PRODUCTION_URL}`;
 	}
 	return undefined;
 }
