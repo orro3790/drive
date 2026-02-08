@@ -417,8 +417,7 @@
 	"shift_start_success": "清點已記錄。",
 	"shift_start_error": "無法記錄清點。",
 
-	"shift_delivering_status": "派送中...",
-	"shift_delivering_parcels": "起始 {count} 個包裹",
+	"shift_delivering_status": "派送緊 {count} 個包裹",
 
 	"shift_complete_button": "完成班次",
 	"shift_complete_modal_title": "完成班次",
