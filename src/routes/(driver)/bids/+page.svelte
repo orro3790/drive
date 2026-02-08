@@ -199,7 +199,7 @@
 	.header-text h1 {
 		margin: 0;
 		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -225,10 +225,10 @@
 		background: var(--surface-primary);
 		border-radius: var(--radius-lg);
 		padding: var(--spacing-4);
-		box-shadow: var(--shadow-sm);
+		box-shadow: var(--shadow-base);
 	}
 
-	@media (max-width: 600px) {
+	@media (max-width: 767px) {
 		.bids-section {
 			padding: 0;
 		}
@@ -241,7 +241,7 @@
 	.section-header h2 {
 		margin: 0;
 		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -295,7 +295,7 @@
 		align-items: center;
 		gap: var(--spacing-1);
 		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--status-success);
 		margin-bottom: var(--spacing-1);
 	}
@@ -321,7 +321,7 @@
 	.bid-date {
 		margin: 0;
 		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 

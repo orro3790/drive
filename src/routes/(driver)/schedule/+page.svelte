@@ -9,6 +9,7 @@
 	import { addDays, format, getWeek, parseISO } from 'date-fns';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
+	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import CancelShiftModal from '$lib/components/driver/CancelShiftModal.svelte';
@@ -428,16 +429,20 @@
 		>
 			<div class="form-field">
 				<label for="parcels-start">{m.shift_start_parcels_label()}</label>
-				<input
+				<InlineEditor
 					id="parcels-start"
-					type="number"
-					class="number-input"
-					class:has-error={startError}
+					inputType="number"
+					inputmode="numeric"
+					mode="form"
+					hasError={!!startError}
 					min="0"
 					max="999"
 					placeholder={m.shift_start_parcels_placeholder()}
-					bind:value={parcelsStart}
-					oninput={() => (startError = null)}
+					value={parcelsStart === '' ? '' : String(parcelsStart)}
+					onInput={(v) => {
+						parcelsStart = v === '' ? '' : Number(v);
+						startError = null;
+					}}
 				/>
 				{#if startError}
 					<p class="field-error">{startError}</p>
@@ -467,16 +472,20 @@
 		>
 			<div class="form-field">
 				<label for="parcels-returned">{m.shift_complete_returned_label()}</label>
-				<input
+				<InlineEditor
 					id="parcels-returned"
-					type="number"
-					class="number-input"
-					class:has-error={completeError}
+					inputType="number"
+					inputmode="numeric"
+					mode="form"
+					hasError={!!completeError}
 					min="0"
 					max={completeTarget?.shift?.parcelsStart ?? 999}
 					placeholder={m.shift_complete_returned_placeholder()}
-					bind:value={parcelsReturned}
-					oninput={() => (completeError = null)}
+					value={parcelsReturned === '' ? '' : String(parcelsReturned)}
+					onInput={(v) => {
+						parcelsReturned = v === '' ? '' : Number(v);
+						completeError = null;
+					}}
 				/>
 				{#if completeError}
 					<p class="field-error">{completeError}</p>
@@ -517,7 +526,7 @@
 	.header-text h1 {
 		margin: 0;
 		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -543,7 +552,7 @@
 		background: var(--surface-primary);
 		border-radius: var(--radius-lg);
 		padding: var(--spacing-4);
-		box-shadow: var(--shadow-sm);
+		box-shadow: var(--shadow-base);
 	}
 
 	.section-header {
@@ -556,7 +565,7 @@
 	.section-header h2 {
 		margin: 0;
 		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -622,7 +631,7 @@
 	.assignment-date {
 		margin: 0;
 		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -669,30 +678,6 @@
 		color: var(--text-normal);
 	}
 
-	.number-input {
-		width: 100%;
-		padding: var(--spacing-2) var(--spacing-3);
-		font-size: var(--font-size-base);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-base);
-		background: var(--surface-primary);
-		color: var(--text-normal);
-		transition: border-color 0.15s ease;
-	}
-
-	.number-input:focus {
-		outline: none;
-		border-color: var(--accent-primary);
-	}
-
-	.number-input.has-error {
-		border-color: var(--status-error);
-	}
-
-	.number-input::placeholder {
-		color: var(--text-muted);
-	}
-
 	.field-error {
 		margin: 0;
 		font-size: var(--font-size-sm);
@@ -705,7 +690,7 @@
 		margin-top: var(--spacing-2);
 	}
 
-	@media (max-width: 600px) {
+	@media (max-width: 767px) {
 		.schedule-section {
 			padding: 0;
 		}

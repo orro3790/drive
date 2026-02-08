@@ -17,6 +17,7 @@
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
+	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import CancelShiftModal from '$lib/components/driver/CancelShiftModal.svelte';
 	import Announcement from '$lib/components/icons/Announcement.svelte';
@@ -444,16 +445,20 @@
 									>
 										<div class="form-field">
 											<label for="parcels-start">{m.shift_start_parcels_label()}</label>
-											<input
+											<InlineEditor
 												id="parcels-start"
-												type="number"
-												class="number-input"
-												class:has-error={startError}
+												inputType="number"
+												inputmode="numeric"
+												mode="form"
+												hasError={!!startError}
 												min="1"
 												max="999"
 												placeholder={m.shift_start_parcels_placeholder()}
-												bind:value={parcelsStart}
-												oninput={() => (startError = null)}
+												value={parcelsStart === '' ? '' : String(parcelsStart)}
+												onInput={(v) => {
+													parcelsStart = v === '' ? '' : Number(v);
+													startError = null;
+												}}
 											/>
 											{#if startError}
 												<p class="field-error">{startError}</p>
@@ -504,16 +509,20 @@
 									>
 										<div class="form-field">
 											<label for="parcels-returned">{m.shift_complete_returned_label()}</label>
-											<input
+											<InlineEditor
 												id="parcels-returned"
-												type="number"
-												class="number-input"
-												class:has-error={completeError}
+												inputType="number"
+												inputmode="numeric"
+												mode="form"
+												hasError={!!completeError}
 												min="0"
 												max={todayShift.shift?.parcelsStart ?? 999}
 												placeholder={m.shift_complete_returned_placeholder()}
-												bind:value={parcelsReturned}
-												oninput={() => (completeError = null)}
+												value={parcelsReturned === '' ? '' : String(parcelsReturned)}
+												onInput={(v) => {
+													parcelsReturned = v === '' ? '' : Number(v);
+													completeError = null;
+												}}
 											/>
 											{#if completeError}
 												<p class="field-error">{completeError}</p>
@@ -566,30 +575,38 @@
 										>
 											<div class="form-field">
 												<label for="edit-parcels-start">{m.shift_start_parcels_label()}</label>
-												<input
+												<InlineEditor
 													id="edit-parcels-start"
-													type="number"
-													class="number-input"
-													class:has-error={editError}
+													inputType="number"
+													inputmode="numeric"
+													mode="form"
+													hasError={!!editError}
 													min="1"
 													max="999"
-													bind:value={editParcelsStart}
-													oninput={() => (editError = null)}
+													value={editParcelsStart === '' ? '' : String(editParcelsStart)}
+													onInput={(v) => {
+														editParcelsStart = v === '' ? '' : Number(v);
+														editError = null;
+													}}
 												/>
 											</div>
 											<div class="form-field">
 												<label for="edit-parcels-returned"
 													>{m.shift_complete_returned_label()}</label
 												>
-												<input
+												<InlineEditor
 													id="edit-parcels-returned"
-													type="number"
-													class="number-input"
-													class:has-error={editError}
+													inputType="number"
+													inputmode="numeric"
+													mode="form"
+													hasError={!!editError}
 													min="0"
 													max={typeof editParcelsStart === 'number' ? editParcelsStart : 999}
-													bind:value={editParcelsReturned}
-													oninput={() => (editError = null)}
+													value={editParcelsReturned === '' ? '' : String(editParcelsReturned)}
+													onInput={(v) => {
+														editParcelsReturned = v === '' ? '' : Number(v);
+														editError = null;
+													}}
 												/>
 											</div>
 											{#if editError}
@@ -892,7 +909,7 @@
 	.header-text h1 {
 		margin: 0;
 		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -918,7 +935,7 @@
 		background: var(--surface-primary);
 		border-radius: var(--radius-lg);
 		padding: var(--spacing-4);
-		box-shadow: var(--shadow-sm);
+		box-shadow: var(--shadow-base);
 	}
 
 	.section-header {
@@ -931,7 +948,7 @@
 	.section-header h2 {
 		margin: 0;
 		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -943,7 +960,7 @@
 		padding: var(--spacing-3) var(--spacing-4);
 		background: var(--surface-primary);
 		border-radius: var(--radius-lg);
-		box-shadow: var(--shadow-sm);
+		box-shadow: var(--shadow-base);
 	}
 
 	.welcome-banner-header {
@@ -964,7 +981,7 @@
 	.welcome-banner-intro h3 {
 		margin: 0;
 		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -993,8 +1010,8 @@
 		gap: var(--spacing-2);
 		padding: var(--spacing-2) var(--spacing-3);
 		border-radius: var(--radius-base);
-		background: color-mix(in srgb, var(--accent-primary) 10%, var(--surface-primary));
-		border: 1px solid color-mix(in srgb, var(--accent-primary) 30%, var(--border-primary));
+		background: color-mix(in srgb, var(--interactive-accent) 10%, var(--surface-primary));
+		border: 1px solid color-mix(in srgb, var(--interactive-accent) 30%, var(--border-primary));
 	}
 
 	.next-action-label {
@@ -1007,7 +1024,7 @@
 	.next-action-value {
 		margin: 0;
 		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -1027,7 +1044,7 @@
 	.today-date {
 		margin: 0;
 		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -1059,8 +1076,8 @@
 	.step-status {
 		margin: 0;
 		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
-		color: var(--accent-primary);
+		font-weight: var(--font-weight-medium);
+		color: var(--interactive-accent);
 	}
 
 	.step-info {
@@ -1092,7 +1109,7 @@
 	}
 
 	.delivery-summary .summary-delivered {
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -1197,7 +1214,7 @@
 	.metric-value {
 		margin: 0;
 		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -1296,30 +1313,6 @@
 		color: var(--text-normal);
 	}
 
-	.number-input {
-		width: 100%;
-		padding: var(--spacing-2) var(--spacing-3);
-		font-size: var(--font-size-base);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-base);
-		background: var(--surface-primary);
-		color: var(--text-normal);
-		transition: border-color 0.15s ease;
-	}
-
-	.number-input:focus {
-		outline: none;
-		border-color: var(--accent-primary);
-	}
-
-	.number-input.has-error {
-		border-color: var(--status-error);
-	}
-
-	.number-input::placeholder {
-		color: var(--text-muted);
-	}
-
 	.field-error {
 		margin: 0;
 		font-size: var(--font-size-sm);
@@ -1327,7 +1320,7 @@
 	}
 
 	/* Responsive */
-	@media (max-width: 600px) {
+	@media (max-width: 767px) {
 		.dashboard-section {
 			padding: 0;
 		}

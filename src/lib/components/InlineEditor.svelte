@@ -29,6 +29,9 @@
 		inputmode,
 		inputType = 'text',
 		autocomplete,
+		min,
+		max,
+		hasError = false,
 		class: className = '',
 		onInput,
 		onSave,
@@ -63,6 +66,12 @@
 		inputType?: 'text' | 'tel' | 'email' | 'url' | 'password' | 'number';
 		/** Autocomplete attribute */
 		autocomplete?: string;
+		/** HTML min attribute (for number inputs) */
+		min?: string | number;
+		/** HTML max attribute (for number inputs) */
+		max?: string | number;
+		/** Whether the input has a validation error */
+		hasError?: boolean;
 		/** Additional CSS classes */
 		class?: string;
 		/** Called on each input change */
@@ -130,7 +139,7 @@
 	}
 </script>
 
-<div class="ie-row {normalizedSize} {variant}" class:disabled>
+<div class="ie-row {normalizedSize} {variant}" class:disabled class:has-error={hasError}>
 	{#if leadingIcon}
 		<div class="ie-leading">
 			{@render leadingIcon()}
@@ -148,6 +157,8 @@
 		{required}
 		{inputmode}
 		{autocomplete}
+		{min}
+		{max}
 		aria-label={ariaLabel}
 		value={localValue}
 		oninput={handleInput}
@@ -195,6 +206,11 @@
 	/* Focus state */
 	.ie-row:focus-within {
 		border-color: var(--interactive-accent);
+	}
+
+	/* Error state */
+	.ie-row.has-error {
+		border-color: var(--status-error);
 	}
 
 	/* Disabled state */
