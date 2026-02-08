@@ -20,6 +20,7 @@
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import CancelShiftModal from '$lib/components/driver/CancelShiftModal.svelte';
+	import HealthCard from '$lib/components/driver/HealthCard.svelte';
 	import Announcement from '$lib/components/icons/Announcement.svelte';
 	import XIcon from '$lib/components/icons/XIcon.svelte';
 	import {
@@ -52,6 +53,7 @@
 	// Edit countdown timer
 	let editMinutesRemaining = $state(0);
 	let dismissedNewDriverBanner = $state(false);
+	let metricsExpanded = $state(false);
 
 	const NEW_DRIVER_BANNER_DISMISS_KEY = 'drive.dashboard.new-driver-banner.dismissed';
 
@@ -817,30 +819,48 @@
 					</section>
 				</div>
 
-				<!-- Metrics -->
-				<section class="dashboard-section">
-					<div class="section-header">
-						<h2>{m.dashboard_metrics_section()}</h2>
-					</div>
+				<!-- Health Card -->
+				<HealthCard />
 
-					<div class="metrics-grid">
-						<div class="metric-card">
-							<p class="metric-value">{formatPercentage(dashboardStore.metrics.attendanceRate)}</p>
-							<p class="metric-label">{m.dashboard_metrics_attendance()}</p>
+				<!-- Raw Metrics (collapsible) -->
+				<section class="dashboard-section metrics-section">
+					<button
+						type="button"
+						class="metrics-toggle"
+						onclick={() => (metricsExpanded = !metricsExpanded)}
+						aria-expanded={metricsExpanded}
+						aria-controls="metrics-content"
+					>
+						<h2>{m.dashboard_metrics_section()}</h2>
+						<span class="toggle-label">
+							{metricsExpanded ? m.dashboard_metrics_hide() : m.dashboard_metrics_show()}
+						</span>
+					</button>
+
+					{#if metricsExpanded}
+						<div id="metrics-content" class="metrics-grid">
+							<div class="metric-card">
+								<p class="metric-value">
+									{formatPercentage(dashboardStore.metrics.attendanceRate)}
+								</p>
+								<p class="metric-label">{m.dashboard_metrics_attendance()}</p>
+							</div>
+							<div class="metric-card">
+								<p class="metric-value">
+									{formatPercentage(dashboardStore.metrics.completionRate)}
+								</p>
+								<p class="metric-label">{m.dashboard_metrics_completion()}</p>
+							</div>
+							<div class="metric-card">
+								<p class="metric-value">{dashboardStore.metrics.totalShifts}</p>
+								<p class="metric-label">{m.dashboard_metrics_total_shifts()}</p>
+							</div>
+							<div class="metric-card">
+								<p class="metric-value">{dashboardStore.metrics.completedShifts}</p>
+								<p class="metric-label">{m.dashboard_metrics_completed_shifts()}</p>
+							</div>
 						</div>
-						<div class="metric-card">
-							<p class="metric-value">{formatPercentage(dashboardStore.metrics.completionRate)}</p>
-							<p class="metric-label">{m.dashboard_metrics_completion()}</p>
-						</div>
-						<div class="metric-card">
-							<p class="metric-value">{dashboardStore.metrics.totalShifts}</p>
-							<p class="metric-label">{m.dashboard_metrics_total_shifts()}</p>
-						</div>
-						<div class="metric-card">
-							<p class="metric-value">{dashboardStore.metrics.completedShifts}</p>
-							<p class="metric-label">{m.dashboard_metrics_completed_shifts()}</p>
-						</div>
-					</div>
+					{/if}
 				</section>
 
 				<!-- Pending Bids -->
@@ -1197,15 +1217,49 @@
 		color: var(--text-normal);
 	}
 
-	/* Metrics Grid */
+	/* Metrics (collapsible) */
+	.metrics-section {
+		padding: 0;
+	}
+
+	.metrics-toggle {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		width: 100%;
+		padding: var(--spacing-3) var(--spacing-4);
+		background: none;
+		border: none;
+		cursor: pointer;
+		border-radius: var(--radius-lg);
+		transition: background var(--transition-duration-100) var(--transition-ease);
+	}
+
+	.metrics-toggle:hover {
+		background: var(--interactive-hover);
+	}
+
+	.metrics-toggle h2 {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-muted);
+	}
+
+	.toggle-label {
+		font-size: var(--font-size-xs);
+		color: var(--text-faint);
+	}
+
 	.metrics-grid {
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-3);
+		gap: var(--spacing-2);
+		padding: 0 var(--spacing-4) var(--spacing-3);
 	}
 
 	.metric-card {
-		padding: var(--spacing-3);
+		padding: var(--spacing-2);
 		border-radius: var(--radius-base);
 		background: var(--surface-secondary);
 		text-align: center;
@@ -1213,7 +1267,7 @@
 
 	.metric-value {
 		margin: 0;
-		font-size: var(--font-size-xl);
+		font-size: var(--font-size-md);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}

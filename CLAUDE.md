@@ -90,7 +90,12 @@ Available in `src/lib/components/`:
 - `primitives/` - Button, Modal, Checkbox, Chip, Toggle, etc.
 - `data-table/` - Full TanStack table system with filtering, pagination
 - `icons/` - Icon components
+- `driver/` - HealthCard (health score, stars, streak, simulation preview), CancelShiftModal
 - Combobox, Select, DatePicker, ConfirmationDialog, ToastContainer
+
+**Shared Types** (`src/lib/schemas/`):
+
+- `health.ts` - `HealthResponse` type for `/api/driver-health` endpoint and HealthCard component
 
 ### Theme System
 

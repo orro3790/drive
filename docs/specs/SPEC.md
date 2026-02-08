@@ -253,12 +253,12 @@ After **20 confirmed shifts** with attendance **≥ 95%**: weekly cap increases 
 
 ### Driver App (Mobile-First)
 
-| Route            | Description                                                           |
-| ---------------- | --------------------------------------------------------------------- |
-| `/`              | Dashboard: today's shift, this week, next week, metrics, pending bids |
-| `/schedule`      | Full schedule view, mark unavailable                                  |
-| `/settings`      | Account info, preferences (work days, top 3 routes)                   |
-| `/notifications` | Inbox with notification history                                       |
+| Route            | Description                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| `/`              | Dashboard: today's shift, health card (score/stars/streak), this week, next week, pending bids |
+| `/schedule`      | Full schedule view, mark unavailable                                                           |
+| `/settings`      | Account info, preferences (work days, top 3 routes)                                            |
+| `/notifications` | Inbox with notification history                                                                |
 
 ### Manager Dashboard (Web)
 

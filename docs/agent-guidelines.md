@@ -463,7 +463,7 @@ Get driver dashboard overview data including unconfirmed shifts and shift workfl
 	todayShift: DashboardAssignment | null; // Includes isArrivable, shift.arrivedAt, shift.editableUntil
 	thisWeek: { weekStart: string; assignedDays: number; assignments: DashboardAssignment[] };
 	nextWeek: { weekStart: string; assignedDays: number; assignments: DashboardAssignment[] };
-	metrics: { totalShifts: number; completedShifts: number; attendanceRate: number; completionRate: number };
+	metrics: { totalShifts: number; completedShifts: number; attendanceRate: number; completionRate: number }; // UI: shown in collapsible section below health card
 	pendingBids: PendingBid[];
 	needsConfirmation: UnconfirmedAssignment[]; // Shifts requiring confirmation
 	isNewDriver: boolean;
@@ -476,6 +476,8 @@ Get driver dashboard overview data including unconfirmed shifts and shift workfl
 // - shift.arrivedAt: ISO timestamp when driver arrived on-site
 // - shift.editableUntil: ISO timestamp of 1-hour edit window expiration
 ```
+
+**UI Note:** Dashboard features HealthCard (score/stars/streak) as the primary metric display. Raw metrics (attendance/completion rates) are available in a collapsible section for details.
 
 **Auth:** Required (driver role only)
 
