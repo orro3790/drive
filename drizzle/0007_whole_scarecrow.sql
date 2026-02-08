@@ -1,0 +1,1 @@
+DROP INDEX "idx_health_snapshots_user_date";

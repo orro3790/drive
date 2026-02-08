@@ -5,7 +5,11 @@
  */
 
 import * as m from '$lib/paraglide/messages.js';
-import { cancelReasonValues, type AssignmentStatus, type CancelReason } from '$lib/schemas/assignment';
+import {
+	cancelReasonValues,
+	type AssignmentStatus,
+	type CancelReason
+} from '$lib/schemas/assignment';
 import type { BidStatus } from '$lib/stores/bidsStore.svelte';
 import type { SelectOption } from '$lib/schemas/ui/select';
 

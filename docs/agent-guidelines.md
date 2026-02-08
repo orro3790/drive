@@ -92,6 +92,13 @@ Push notification service using Firebase Cloud Messaging (FCM) for sending time-
 - `manual` - Manager message
 - `schedule_locked` - Preferences locked
 - `assignment_confirmed` - New shift assigned
+- `confirmation_reminder` - 72h before shift confirmation deadline
+- `shift_auto_dropped` - Unconfirmed shift auto-dropped at 48h
+- `emergency_route_available` - Emergency bid window opened
+- `streak_advanced` - Weekly streak increased (health system)
+- `streak_reset` - Weekly streak reset to 0 (health system)
+- `bonus_eligible` - Milestone reward reached (health system)
+- `corrective_warning` - Completion rate below 80% (health system)
 
 **Usage:**
 

@@ -36,7 +36,7 @@
 	}
 </script>
 
-<Modal title={m.schedule_cancel_modal_title()} onClose={onClose}>
+<Modal title={m.schedule_cancel_modal_title()} {onClose}>
 	<form
 		class="modal-form"
 		onsubmit={(event) => {
