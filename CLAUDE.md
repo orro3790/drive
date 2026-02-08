@@ -72,6 +72,7 @@ For deeper conventions and patterns, start at `documentation/agent-guidelines/in
 Driver-facing endpoints in `src/routes/api/`:
 
 - `GET /api/dashboard` - Driver dashboard overview (today's shift with arrivedAt/editableUntil/isArrivable, week summaries, metrics, pending bids, unconfirmed shifts)
+- `GET /api/driver-health` - Driver health state (score, stars, streak, hard-stop flags, next milestone, simulation rewards, recent score history; neutral onboarding state for new drivers)
 - `GET /api/notifications` - In-app notifications list (paginated)
 - `PATCH /api/notifications/[id]/read` - Mark notification as read
 - `POST /api/notifications/mark-all-read` - Mark all notifications as read
@@ -139,7 +140,7 @@ Svelte 5 stores in `src/lib/stores/`:
 7. **Bidding system**: Bid windows ✓, scoring algorithm ✓, mode system ✓ (competitive/instant/emergency)
 8. **Shift confirmations**: Mandatory 48h confirmation ✓, auto-drop ✓, reminders ✓
 9. **Capacitor wrapper**: Push notifications
-10. **Cron jobs**: Lock preferences, close bid windows ✓, metrics, auto-drop unconfirmed ✓, confirmation reminders ✓
+10. **Cron jobs**: Lock preferences, close bid windows ✓, metrics, auto-drop unconfirmed ✓, confirmation reminders ✓, health daily/weekly ✓
 
 ## Key Business Rules
 

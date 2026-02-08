@@ -498,6 +498,47 @@ Get driver performance metrics (cached separately for offline use).
 
 **Auth:** Required (driver role only)
 
+#### `GET /api/driver-health`
+
+Read-only driver health state: score, stars, streak, hard-stop flags, next milestone, simulation rewards, and recent score history.
+
+**Response:**
+
+```typescript
+{
+	score: number | null; // null for onboarding drivers
+	stars: number; // 0-4
+	streakWeeks: number;
+	eliteThreshold: number; // from dispatchPolicy
+	maxStars: number;
+	hardStop: {
+		triggered: boolean; // derived from state table (canonical)
+		assignmentPoolEligible: boolean;
+		requiresManagerIntervention: boolean;
+		reasons: string[];
+	};
+	nextMilestone: {
+		targetStars: number;
+		currentStars: number;
+	};
+	simulation: {
+		bonusEligible: boolean;
+		bonusPercent: number;
+		label: 'simulation';
+	};
+	recentScores: Array<{
+		date: string;
+		score: number;
+		attendanceRate: number;
+		completionRate: number;
+		hardStopTriggered: boolean;
+	}>;
+	isOnboarding: boolean;
+}
+```
+
+**Auth:** Required (driver role only). Returns neutral onboarding state for new drivers with no health data.
+
 #### `POST /api/users/fcm-token`
 
 Register or update user's FCM token for push notifications.
@@ -756,6 +797,31 @@ Resolves or transitions expired bid windows based on mode.
    - **Instant/emergency without bids**: Close window, alert manager
 
 **Returns:** `{ success, processed, resolved, transitioned, closed, errors }`
+
+#### `GET /api/cron/health-daily`
+
+**Schedule:** Daily at 2:00 AM Toronto time (7:00 AM UTC), after performance-check.
+
+**Process:**
+
+1. Compute daily health score for all active drivers
+2. Persist snapshot and update current state
+3. Send corrective warnings for completion < 80% (deduplicated per recovery window)
+
+**Returns:** `{ success, summary: { evaluated, scored, skippedNewDrivers, correctiveWarnings, errors, elapsedMs } }`
+
+#### `GET /api/cron/health-weekly`
+
+**Schedule:** Monday at 3:00 AM Toronto time (8:00 AM UTC).
+
+**Process:**
+
+1. Evaluate the just-completed week (previous Monday–Sunday) for all active drivers
+2. Check qualifying-week criteria (100% attendance, ≥95% completion, 0 no-shows, 0 late cancellations)
+3. Increment/reset stars and streak based on qualification or hard-stop events
+4. Send streak_advanced, streak_reset, or bonus_eligible notifications
+
+**Returns:** `{ success, summary: { evaluated, qualified, hardStopResets, neutral, errors, elapsedMs } }`
 
 ---
 
