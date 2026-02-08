@@ -2,7 +2,8 @@
 	Driver Bids Page
 
 	Displays available bid windows and driver's submitted bids.
-	Emergency routes are visually distinct with green accent and bonus badge.
+	Design follows dashboard/schedule/notification-item patterns: flat rows,
+	single accent per status, icon anchors, tag chips for metadata.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
@@ -10,8 +11,12 @@
 	import { parseISO, formatDistanceToNow } from 'date-fns';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
+	import IconBase from '$lib/components/primitives/Icon.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
+	import Gavel from '$lib/components/icons/Gavel.svelte';
 	import Lightning from '$lib/components/icons/Lightning.svelte';
+	import RouteIcon from '$lib/components/icons/Route.svelte';
+	import WarehouseIcon from '$lib/components/icons/Warehouse.svelte';
 	import { getBidWindowPrimaryAction } from '$lib/config/driverLifecycleIa';
 	import { bidStatusLabels, bidStatusChipVariants } from '$lib/config/lifecycleLabels';
 	import { formatAssignmentDate } from '$lib/utils/date/formatting';
@@ -44,6 +49,18 @@
 		bidsStore.loadAll();
 	});
 </script>
+
+{#snippet routeChipIcon()}
+	<IconBase size="small">
+		<RouteIcon />
+	</IconBase>
+{/snippet}
+
+{#snippet warehouseChipIcon()}
+	<IconBase size="small">
+		<WarehouseIcon />
+	</IconBase>
+{/snippet}
 
 <svelte:head>
 	<title>{m.bids_page_title()} | Drive</title>
@@ -80,48 +97,66 @@
 							<p class="empty-message">{m.bids_available_empty_message()}</p>
 						</div>
 					{:else}
-						<div class="bid-list">
+						<div class="assignment-list">
 							{#each bidsStore.availableWindows as window (window.id)}
 								{@const isEmergency = window.mode === 'emergency'}
-								<div class="bid-card" class:emergency={isEmergency}>
-									<div class="card-header">
-										<div class="card-summary">
-											{#if isEmergency}
-												<div class="emergency-label">
-													<Lightning stroke="var(--status-success)" />
-													<span>{m.bids_emergency_label()}</span>
-												</div>
-											{/if}
-											<p class="bid-date">{formatAssignmentDate(window.assignmentDate)}</p>
-											<p class="bid-route">{window.routeName}</p>
-											<p class="bid-warehouse">{window.warehouseName}</p>
-										</div>
-										<div class="card-meta">
-											{#if isEmergency && window.payBonusPercent > 0}
-												<Chip
-													variant="status"
-													status="success"
-													label={m.bids_emergency_bonus({ bonus: window.payBonusPercent })}
-													size="xs"
-												/>
-											{/if}
-											{#if !isEmergency}
-												<p class="closes-at">{formatClosesAt(window.closesAt)}</p>
-											{:else}
-												<p class="closes-at">{m.bids_emergency_first_come()}</p>
-											{/if}
-										</div>
+								<div
+									class="assignment-item"
+									style="--icon-accent: var({isEmergency ? '--status-success' : '--status-info'});"
+								>
+									<div class="icon-circle" aria-hidden="true">
+										{#if isEmergency}
+											<Lightning />
+										{:else}
+											<Gavel />
+										{/if}
 									</div>
-									<div class="card-actions">
-										<Button
-											variant="primary"
-											size="small"
-											onclick={() => handleSubmitBid(window.assignmentId)}
-											isLoading={bidsStore.isSubmitting(window.assignmentId)}
-											disabled={bidsStore.submittingAssignmentId !== null}
-										>
-											{getBidActionLabel(window.mode)}
-										</Button>
+									<div class="assignment-content">
+										<div class="assignment-header">
+											<div class="header-left">
+												<span class="assignment-date">{formatAssignmentDate(window.assignmentDate)}</span>
+												{#if isEmergency}
+													<span class="header-muted">{m.bids_emergency_first_come()}</span>
+												{:else}
+													<span class="header-muted">{formatClosesAt(window.closesAt)}</span>
+												{/if}
+											</div>
+											<div class="header-right">
+												{#if isEmergency && window.payBonusPercent > 0}
+													<Chip
+														variant="status"
+														status="success"
+														label={m.bids_emergency_bonus({ bonus: window.payBonusPercent })}
+														size="xs"
+													/>
+												{/if}
+												<Button
+													variant="primary"
+													size="small"
+													onclick={() => handleSubmitBid(window.assignmentId)}
+													isLoading={bidsStore.isSubmitting(window.assignmentId)}
+													disabled={bidsStore.submittingAssignmentId !== null}
+												>
+													{getBidActionLabel(window.mode)}
+												</Button>
+											</div>
+										</div>
+										<div class="assignment-meta">
+											<Chip
+												variant="tag"
+												size="xs"
+												color="var(--text-muted)"
+												label={window.routeName}
+												icon={routeChipIcon}
+											/>
+											<Chip
+												variant="tag"
+												size="xs"
+												color="var(--text-muted)"
+												label={window.warehouseName}
+												icon={warehouseChipIcon}
+											/>
+										</div>
 									</div>
 								</div>
 							{/each}
@@ -145,27 +180,49 @@
 							<p class="empty-message">{m.bids_my_empty_message()}</p>
 						</div>
 					{:else}
-						<div class="bid-list">
+						<div class="assignment-list">
 							{#each bidsStore.myBids as bid (bid.id)}
-								<div class="bid-card" class:resolved={bid.status !== 'pending'}>
-									<div class="card-header">
-										<div class="card-summary">
-											<p class="bid-date">{formatAssignmentDate(bid.assignmentDate)}</p>
-											<p class="bid-route">{bid.routeName}</p>
-											<p class="bid-warehouse">{bid.warehouseName}</p>
-										</div>
-										<Chip
-											variant="status"
-											status={bidStatusChipVariants[bid.status]}
-											label={bidStatusLabels[bid.status]}
-											size="xs"
-										/>
+								{@const isResolved = bid.status !== 'pending'}
+								{@const iconAccent = bid.status === 'won' ? '--status-success' : bid.status === 'lost' ? '--text-muted' : '--status-info'}
+								<div
+									class="assignment-item"
+									class:resolved={isResolved}
+									style="--icon-accent: var({iconAccent});"
+								>
+									<div class="icon-circle" aria-hidden="true">
+										<Gavel />
 									</div>
-									<div class="card-footer">
-										<p class="submitted-at">{formatSubmittedAt(bid.bidAt)}</p>
-										{#if bid.status === 'pending'}
-											<p class="closes-at">{formatClosesAt(bid.windowClosesAt)}</p>
-										{/if}
+									<div class="assignment-content">
+										<div class="assignment-header">
+											<div class="header-left">
+												<span class="assignment-date">{formatAssignmentDate(bid.assignmentDate)}</span>
+												<span class="header-muted">{formatSubmittedAt(bid.bidAt)}</span>
+											</div>
+											<div class="header-right">
+												<Chip
+													variant="status"
+													status={bidStatusChipVariants[bid.status]}
+													label={bidStatusLabels[bid.status]}
+													size="xs"
+												/>
+											</div>
+										</div>
+										<div class="assignment-meta">
+											<Chip
+												variant="tag"
+												size="xs"
+												color="var(--text-muted)"
+												label={bid.routeName}
+												icon={routeChipIcon}
+											/>
+											<Chip
+												variant="tag"
+												size="xs"
+												color="var(--text-muted)"
+												label={bid.warehouseName}
+												icon={warehouseChipIcon}
+											/>
+										</div>
 									</div>
 								</div>
 							{/each}
@@ -179,7 +236,7 @@
 
 <style>
 	.page-surface {
-		min-height: 100%;
+		flex: 1;
 		background: var(--surface-inset);
 	}
 
@@ -187,13 +244,22 @@
 		max-width: 720px;
 		margin: 0 auto;
 		padding: var(--spacing-4);
+		width: 100%;
 	}
 
 	.page-header {
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
 		gap: var(--spacing-3);
 		margin-bottom: var(--spacing-5);
+	}
+
+	.header-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-1);
+		padding-left: var(--spacing-2);
 	}
 
 	.header-text h1 {
@@ -204,7 +270,7 @@
 	}
 
 	.header-text p {
-		margin: var(--spacing-1) 0 0;
+		margin: 0;
 		font-size: var(--font-size-sm);
 		color: var(--text-muted);
 	}
@@ -215,41 +281,126 @@
 		padding: var(--spacing-8);
 	}
 
+	/* Sections */
 	.bids-sections {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-6);
+		gap: var(--spacing-5);
 	}
 
 	.bids-section {
-		background: var(--surface-primary);
-		border-radius: var(--radius-lg);
-		padding: var(--spacing-4);
-		box-shadow: var(--shadow-base);
-	}
-
-	@media (max-width: 767px) {
-		.bids-section {
-			padding: 0;
-		}
+		display: flex;
+		flex-direction: column;
 	}
 
 	.section-header {
-		margin-bottom: var(--spacing-3);
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0 var(--spacing-3);
+		margin-bottom: var(--spacing-2);
 	}
 
 	.section-header h2 {
 		margin: 0;
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-faint);
+		text-transform: uppercase;
+		letter-spacing: var(--letter-spacing-sm);
+	}
+
+	/* Icon circle — tinted with accent color */
+	.icon-circle {
+		width: 32px;
+		height: 32px;
+		border-radius: var(--radius-full);
+		display: grid;
+		place-items: center;
+		background: color-mix(in srgb, var(--icon-accent) 12%, transparent);
+		color: var(--icon-accent);
+		flex-shrink: 0;
+	}
+
+	.icon-circle :global(svg) {
+		width: 20px;
+		height: 20px;
+	}
+
+	/* Assignment items */
+	.assignment-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+	}
+
+	.assignment-item {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: var(--spacing-3);
+		padding: var(--spacing-3);
+		border-radius: var(--radius-lg);
+		transition: background 150ms ease;
+	}
+
+	.assignment-item:hover {
+		background: color-mix(in srgb, var(--text-normal) 4%, transparent);
+	}
+
+	.assignment-item.resolved {
+		opacity: 0.55;
+	}
+
+	.assignment-content {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+		min-width: 0;
+	}
+
+	.assignment-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: var(--spacing-2);
+	}
+
+	.header-left {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.header-right {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		flex-shrink: 0;
+	}
+
+	.assignment-date {
 		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
+		line-height: 1.3;
 	}
 
+	.header-muted {
+		font-size: var(--font-size-xs);
+		color: var(--text-muted);
+	}
+
+	.assignment-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-1);
+		align-items: center;
+	}
+
+	/* Empty States */
 	.empty-state {
-		padding: var(--spacing-4);
-		border-radius: var(--radius-base);
-		background: var(--surface-secondary);
-		border: none;
+		padding: var(--spacing-1) var(--spacing-3);
 	}
 
 	.empty-title {
@@ -265,106 +416,40 @@
 		color: var(--text-muted);
 	}
 
-	.bid-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-3);
+	/* Responsive */
+	@media (max-width: 767px) {
+		.page-stage {
+			padding: var(--spacing-2);
+		}
+
+		.page-header {
+			gap: var(--spacing-2);
+			margin-bottom: var(--spacing-3);
+		}
+
+		.header-text h1 {
+			font-size: var(--font-size-lg);
+		}
+
+		.assignment-item {
+			gap: var(--spacing-2);
+			padding: var(--spacing-2);
+		}
+
+		.icon-circle {
+			width: 28px;
+			height: 28px;
+		}
+
+		.icon-circle :global(svg) {
+			width: 14px;
+			height: 14px;
+		}
 	}
 
-	.bid-card {
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-base);
-		padding: var(--spacing-3);
-		background: var(--surface-secondary);
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-3);
-	}
-
-	.bid-card.emergency {
-		border: 2px solid var(--status-success);
-		background: color-mix(in srgb, var(--status-success) 4%, var(--surface-secondary));
-	}
-
-	.bid-card.resolved {
-		opacity: 0.7;
-	}
-
-	.emergency-label {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-1);
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-		color: var(--status-success);
-		margin-bottom: var(--spacing-1);
-	}
-
-	.emergency-label :global(svg) {
-		width: 16px;
-		height: 16px;
-	}
-
-	.card-header {
-		display: flex;
-		justify-content: space-between;
-		gap: var(--spacing-2);
-		align-items: flex-start;
-	}
-
-	.card-summary {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-1);
-	}
-
-	.bid-date {
-		margin: 0;
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-medium);
-		color: var(--text-normal);
-	}
-
-	.bid-route {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-normal);
-	}
-
-	.bid-warehouse {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-muted);
-	}
-
-	.card-meta {
-		text-align: right;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: var(--spacing-1);
-	}
-
-	.closes-at {
-		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--text-muted);
-	}
-
-	.card-actions {
-		display: flex;
-		justify-content: flex-end;
-	}
-
-	.card-footer {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-
-	.submitted-at {
-		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--text-muted);
+	@media (pointer: coarse) {
+		.assignment-item {
+			min-height: 44px;
+		}
 	}
 </style>
