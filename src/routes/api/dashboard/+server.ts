@@ -122,7 +122,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			.innerJoin(assignments, eq(bids.assignmentId, assignments.id))
 			.innerJoin(routes, eq(assignments.routeId, routes.id))
 			.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
-			.where(and(eq(bids.userId, locals.user.id), eq(bids.status, 'pending')))
+			.where(and(eq(bids.userId, locals.user.id), eq(bids.status, 'pending'), gte(bids.windowClosesAt, new Date())))
 			.orderBy(asc(bids.windowClosesAt))
 	]);
 

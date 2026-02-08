@@ -20,12 +20,14 @@ export const dispatchPolicy = {
 		instantModeCutoffHours: 24,
 		emergencyBonusPercent: 20,
 		familiarityNormalizationCap: 20,
+		healthNormalizationCap: 96,
+		seniorityCapMonths: 12,
 		preferenceTopN: 3,
 		scoreWeights: {
-			completionRate: 0.4,
-			routeFamiliarity: 0.3,
-			attendanceRate: 0.2,
-			routePreferenceBonus: 0.1
+			health: 0.45,
+			routeFamiliarity: 0.25,
+			seniority: 0.15,
+			routePreferenceBonus: 0.15
 		}
 	},
 	flagging: {
@@ -102,22 +104,30 @@ export function isRewardEligible(totalShifts: number, attendanceRate: number): b
 }
 
 type BidScoreInputs = {
-	completionRate: number;
+	healthScore: number;
 	routeFamiliarityCount: number;
-	attendanceRate: number;
+	tenureMonths: number;
 	preferredRouteIds: readonly string[];
 	routeId: string;
 };
 
 export function calculateBidScoreParts({
-	completionRate,
+	healthScore,
 	routeFamiliarityCount,
-	attendanceRate,
+	tenureMonths,
 	preferredRouteIds,
 	routeId
 }: BidScoreInputs) {
+	const healthNormalized = Math.min(
+		healthScore / dispatchPolicy.bidding.healthNormalizationCap,
+		1
+	);
 	const familiarityNormalized = Math.min(
 		routeFamiliarityCount / dispatchPolicy.bidding.familiarityNormalizationCap,
+		1
+	);
+	const seniorityNormalized = Math.min(
+		tenureMonths / dispatchPolicy.bidding.seniorityCapMonths,
 		1
 	);
 	const preferenceBonus = preferredRouteIds
@@ -126,18 +136,18 @@ export function calculateBidScoreParts({
 		? 1
 		: 0;
 
-	const completionRatePart = completionRate * dispatchPolicy.bidding.scoreWeights.completionRate;
+	const healthPart = healthNormalized * dispatchPolicy.bidding.scoreWeights.health;
 	const routeFamiliarityPart =
 		familiarityNormalized * dispatchPolicy.bidding.scoreWeights.routeFamiliarity;
-	const attendanceRatePart = attendanceRate * dispatchPolicy.bidding.scoreWeights.attendanceRate;
+	const seniorityPart = seniorityNormalized * dispatchPolicy.bidding.scoreWeights.seniority;
 	const routePreferenceBonusPart =
 		preferenceBonus * dispatchPolicy.bidding.scoreWeights.routePreferenceBonus;
 
 	return {
-		completionRatePart,
+		healthPart,
 		routeFamiliarityPart,
-		attendanceRatePart,
+		seniorityPart,
 		routePreferenceBonusPart,
-		total: completionRatePart + routeFamiliarityPart + attendanceRatePart + routePreferenceBonusPart
+		total: healthPart + routeFamiliarityPart + seniorityPart + routePreferenceBonusPart
 	};
 }

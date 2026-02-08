@@ -877,8 +877,7 @@
 				{#if dashboardStore.unconfirmedShifts.length > 0}
 					<section class="dashboard-section">
 						<div class="section-header">
-							<h2>{m.dashboard_confirm_section()}</h2>
-							<span class="section-count">{dashboardStore.unconfirmedShifts.length}</span>
+							<h2>{m.dashboard_confirm_section()} ({dashboardStore.unconfirmedShifts.length})</h2>
 						</div>
 
 						<div class="assignment-list">
@@ -1071,12 +1070,6 @@
 		color: var(--text-faint);
 		text-transform: uppercase;
 		letter-spacing: var(--letter-spacing-sm);
-	}
-
-	.section-count {
-		font-size: var(--font-size-xs);
-		font-weight: var(--font-weight-medium);
-		color: var(--text-muted);
 	}
 
 	/* Icon circle — tinted with accent color */

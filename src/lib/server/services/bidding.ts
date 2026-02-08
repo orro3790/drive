@@ -10,6 +10,7 @@ import {
 	assignments,
 	bids,
 	bidWindows,
+	driverHealthState,
 	driverMetrics,
 	driverPreferences,
 	notifications,
@@ -25,9 +26,9 @@ import {
 	sendNotification
 } from '$lib/server/services/notifications';
 import { createAuditLog, type AuditActor } from '$lib/server/services/audit';
-import { and, eq, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
 import { toZonedTime } from 'date-fns-tz';
-import { addHours, parseISO, set, startOfDay } from 'date-fns';
+import { addHours, differenceInMonths, parseISO, set, startOfDay } from 'date-fns';
 import logger from '$lib/server/logger';
 import { getWeekStart, canDriverTakeAssignment } from './scheduling';
 import {
@@ -343,13 +344,15 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 }
 
 async function calculateBidScore(userId: string, routeId: string): Promise<number> {
-	const [metrics] = await db
-		.select({
-			completionRate: driverMetrics.completionRate,
-			attendanceRate: driverMetrics.attendanceRate
-		})
-		.from(driverMetrics)
-		.where(eq(driverMetrics.userId, userId));
+	const [healthState] = await db
+		.select({ currentScore: driverHealthState.currentScore })
+		.from(driverHealthState)
+		.where(eq(driverHealthState.userId, userId));
+
+	const [driver] = await db
+		.select({ createdAt: user.createdAt })
+		.from(user)
+		.where(eq(user.id, userId));
 
 	const [routeFamiliarity] = await db
 		.select({ completionCount: routeCompletions.completionCount })
@@ -361,14 +364,16 @@ async function calculateBidScore(userId: string, routeId: string): Promise<numbe
 		.from(driverPreferences)
 		.where(eq(driverPreferences.userId, userId));
 
-	const completionRate = metrics?.completionRate ?? 0;
-	const attendanceRate = metrics?.attendanceRate ?? 0;
+	const healthScore = healthState?.currentScore ?? 0;
+	const tenureMonths = driver?.createdAt
+		? differenceInMonths(new Date(), driver.createdAt)
+		: 0;
 	const preferredRoutes = preferences?.preferredRoutes ?? [];
 
 	return calculateBidScoreParts({
-		completionRate,
+		healthScore,
 		routeFamiliarityCount: routeFamiliarity?.completionCount ?? 0,
-		attendanceRate,
+		tenureMonths,
 		preferredRouteIds: preferredRoutes,
 		routeId
 	}).total;
@@ -472,7 +477,48 @@ export async function resolveBidWindow(
 		return a.bidAt.getTime() - b.bidAt.getTime();
 	});
 
-	const winner = scoredBids[0];
+	// Same-day conflict guard: check which bidders already have an assignment for this date
+	const bidderIds = scoredBids.map((b) => b.userId);
+	const conflicts = await db
+		.select({ userId: assignments.userId })
+		.from(assignments)
+		.where(
+			and(
+				inArray(assignments.userId, bidderIds),
+				eq(assignments.date, assignment.date),
+				ne(assignments.id, assignment.id),
+				ne(assignments.status, 'cancelled')
+			)
+		);
+	const conflictSet = new Set(conflicts.map((c) => c.userId));
+
+	const winner = scoredBids.find((b) => !conflictSet.has(b.userId));
+
+	if (!winner) {
+		log.info({ assignmentId: assignment.id }, 'All bidders have same-day conflicts');
+
+		if (window.mode === 'competitive') {
+			await transitionToInstantMode(bidWindowId);
+			return {
+				resolved: false,
+				bidCount: scoredBids.length,
+				reason: 'transitioned_to_instant',
+				transitioned: true
+			};
+		}
+
+		try {
+			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
+				routeName: assignment.routeName,
+				date: assignment.date
+			});
+		} catch {
+			// Best-effort alert
+		}
+
+		return { resolved: false, bidCount: scoredBids.length, reason: 'all_bidders_conflicted' };
+	}
+
 	const resolvedAt = new Date();
 
 	await db.transaction(async (tx) => {
@@ -677,6 +723,22 @@ export async function instantAssign(
 				.select({ date: assignments.date })
 				.from(assignments)
 				.where(eq(assignments.id, assignmentId));
+
+			// Same-day conflict guard
+			const [existingSameDay] = await tx
+				.select({ id: assignments.id })
+				.from(assignments)
+				.where(
+					and(
+						eq(assignments.userId, userId),
+						eq(assignments.date, assignment.date),
+						ne(assignments.id, assignmentId),
+						ne(assignments.status, 'cancelled')
+					)
+				);
+			if (existingSameDay) {
+				return { instantlyAssigned: false, error: 'You already have a shift on this date' };
+			}
 
 			const shiftStart = getShiftStartTime(assignment.date);
 

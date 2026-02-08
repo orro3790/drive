@@ -216,11 +216,16 @@ Svelte 5 stores in `src/lib/stores/`:
 ### Bid Scoring (Competitive Mode)
 
 ```
-score = (completion_rate * 0.4) +
-        (route_familiarity * 0.3) +
-        (attendance_rate * 0.2) +
-        (preference_bonus * 0.1)
+score = (health * 0.45) +
+        (familiarity * 0.25) +
+        (seniority * 0.15) +
+        (preference * 0.15)
 ```
+
+- **Health**: `min(driverHealthState.currentScore / 96, 1)` — composite quality signal
+- **Familiarity**: `min(routeCompletions.completionCount / 20, 1)` — route experience
+- **Seniority**: `min(tenureMonths / 12, 1)` — loyalty reward
+- **Preference**: Binary — route in driver's top 3 preferred → 1, else 0
 
 ### Dispatch Policy Configuration
 
