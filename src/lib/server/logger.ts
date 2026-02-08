@@ -41,17 +41,39 @@ function getTransport() {
 	return undefined;
 }
 
-const logger = pino({
+const baseLoggerConfig = {
 	level: dev ? 'debug' : 'info',
 	formatters: {
-		level: (label) => ({ level: label })
+		level: (label: string) => ({ level: label })
 	},
 	timestamp: pino.stdTimeFunctions.isoTime,
 	base: {
 		service: 'drive'
-	},
-	transport: getTransport()
-});
+	}
+};
+
+function createLogger() {
+	const transport = getTransport();
+
+	try {
+		return pino({
+			...baseLoggerConfig,
+			transport
+		});
+	} catch (error) {
+		if (
+			transport &&
+			error instanceof Error &&
+			error.message.includes('unable to determine transport target')
+		) {
+			return pino(baseLoggerConfig);
+		}
+
+		throw error;
+	}
+}
+
+const logger = createLogger();
 
 /**
  * Create a child logger with context fields

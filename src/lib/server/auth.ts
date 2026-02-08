@@ -27,8 +27,8 @@ function getAuthBaseUrl(): string | undefined {
 	if (env.BETTER_AUTH_URL) {
 		return env.BETTER_AUTH_URL;
 	}
-	if (env.VERCEL_URL) {
-		return `https://${env.VERCEL_URL}`;
+	if (env.VERCEL_PROJECT_PRODUCTION_URL) {
+		return `https://${env.VERCEL_PROJECT_PRODUCTION_URL}`;
 	}
 	return undefined;
 }
