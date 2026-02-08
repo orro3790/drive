@@ -40,7 +40,8 @@ Displays and updates user's account info, password, and preferences.
 	// Language
 	const LANGUAGE_LABELS: Record<string, string> = {
 		en: 'English',
-		zh: '中文'
+		zh: '中文',
+		'zh-Hant': '粵語'
 	};
 	const currentLocale = $derived(browser ? getLocale() : 'en');
 	const languageOptions = locales.map((locale) => ({
