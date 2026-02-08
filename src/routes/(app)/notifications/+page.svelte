@@ -181,7 +181,7 @@ Uses notificationsStore for data loading and optimistic read updates.
 	.header-text h1 {
 		margin: 0;
 		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -205,7 +205,7 @@ Uses notificationsStore for data loading and optimistic read updates.
 		max-width: 720px;
 		width: 100%;
 		align-self: center;
-		box-shadow: var(--shadow-sm);
+		box-shadow: var(--shadow-base);
 		overflow: hidden;
 	}
 
@@ -257,7 +257,7 @@ Uses notificationsStore for data loading and optimistic read updates.
 		font-size: var(--font-size-xs);
 		color: var(--text-faint);
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: var(--letter-spacing-sm);
 	}
 
 	.group-items {
@@ -273,24 +273,14 @@ Uses notificationsStore for data loading and optimistic read updates.
 		min-height: 1px;
 	}
 
-	@media (max-width: 768px) {
+	@media (max-width: 767px) {
 		.notifications-stage {
-			padding: var(--spacing-3);
+			padding: var(--spacing-2);
 		}
 
 		.card-header {
 			padding: var(--spacing-3);
 			gap: var(--spacing-2);
-		}
-
-		.card-body {
-			padding: var(--spacing-2) var(--spacing-3) var(--spacing-3);
-		}
-	}
-
-	@media (max-width: 480px) {
-		.notifications-stage {
-			padding: var(--spacing-2);
 		}
 
 		.header-text h1 {
