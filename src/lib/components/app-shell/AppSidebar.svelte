@@ -112,13 +112,16 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	const SHOW_LANGUAGE_TOGGLE = false;
 	const LANG_LABELS: Record<Locale, string> = {
 		en: 'EN',
-		zh: '中文'
+		zh: '中文',
+		'zh-Hant': '粵語'
 	};
 
+	const LOCALE_CYCLE: Locale[] = ['en', 'zh', 'zh-Hant'];
 	const currentLocale = $derived(getLocale());
 
 	function handleLanguageToggle() {
-		const newLocale = currentLocale === 'en' ? 'zh' : 'en';
+		const idx = LOCALE_CYCLE.indexOf(currentLocale);
+		const newLocale = LOCALE_CYCLE[(idx + 1) % LOCALE_CYCLE.length];
 		setLocale(newLocale);
 	}
 
