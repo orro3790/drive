@@ -239,16 +239,16 @@
 							<div class="contribution-row" class:negative={row.total < 0}>
 								<span class="contribution-label">{row.label}</span>
 								<span class="contribution-calc">
-									{row.count} × <span class="per-point" class:per-point-positive={row.perPoint > 0} class:per-point-negative={row.perPoint < 0}>({row.perPoint > 0 ? '+' : ''}{row.perPoint})</span>
+									{row.count} × ({row.perPoint > 0 ? '+' : ''}{row.perPoint})
 								</span>
-								<span class="contribution-total" class:negative-text={row.total < 0}>
+								<span class="contribution-total" class:positive-text={row.total > 0} class:negative-text={row.total < 0}>
 									{row.total > 0 ? '+' : ''}{row.total}
 								</span>
 							</div>
 						{/each}
 						<div class="contribution-row contribution-net">
 							<span class="contribution-label">{m.dashboard_health_contributions_total()}</span>
-							<span class="contribution-total" class:negative-text={contributionsTotal < 0}>
+							<span class="contribution-total" class:positive-text={contributionsTotal > 0} class:negative-text={contributionsTotal < 0}>
 								{contributionsTotal > 0 ? '+' : ''}{contributionsTotal}
 							</span>
 						</div>
@@ -538,12 +538,8 @@
 		color: var(--text-normal);
 	}
 
-	.per-point-positive {
+	.positive-text {
 		color: var(--status-success);
-	}
-
-	.per-point-negative {
-		color: var(--status-error);
 	}
 
 	.negative-text {
