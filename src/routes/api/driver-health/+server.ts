@@ -2,12 +2,13 @@
  * Driver Health API
  *
  * GET /api/driver-health - Get health data for current driver:
- * - Current score (0-100)
+ * - Current score (additive points)
  * - Stars (0-4) and streak weeks
- * - Elite threshold marker
+ * - Tier threshold marker (96 pts = Tier II)
  * - Hard-stop flags and reasons
  * - Next milestone info
  * - Simulation rewards preview
+ * - Contributions breakdown (point sources)
  * - Recent score history (last 7 snapshots)
  *
  * Read-only, driver-scoped. New drivers receive a neutral onboarding state.
@@ -19,6 +20,7 @@ import { db } from '$lib/server/db';
 import { driverHealthState, driverHealthSnapshots } from '$lib/server/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { computeContributions } from '$lib/server/services/health';
 import type { HealthResponse } from '$lib/schemas/health';
 
 export const GET: RequestHandler = async ({ locals }) => {
@@ -38,8 +40,6 @@ export const GET: RequestHandler = async ({ locals }) => {
 			.select({
 				evaluatedAt: driverHealthSnapshots.evaluatedAt,
 				score: driverHealthSnapshots.score,
-				attendanceRate: driverHealthSnapshots.attendanceRate,
-				completionRate: driverHealthSnapshots.completionRate,
 				hardStopTriggered: driverHealthSnapshots.hardStopTriggered,
 				reasons: driverHealthSnapshots.reasons
 			})
@@ -55,10 +55,11 @@ export const GET: RequestHandler = async ({ locals }) => {
 	// New driver or no health state yet — return neutral onboarding state
 	if (!state) {
 		return json({
+			tier: 'I' as const,
 			score: null,
 			stars: 0,
 			streakWeeks: 0,
-			eliteThreshold: health.eliteThreshold,
+			tierThreshold: health.tierThreshold,
 			maxStars: health.maxStars,
 			hardStop: {
 				triggered: false,
@@ -75,24 +76,30 @@ export const GET: RequestHandler = async ({ locals }) => {
 				bonusPercent: health.simulationBonus.fourStarBonusPercent,
 				label: 'simulation'
 			},
+			contributions: null,
 			recentScores: [],
 			isOnboarding: true
 		} satisfies HealthResponse);
 	}
 
-	// Hard-stop: derive from state table (canonical source of truth).
-	// Pool eligibility is a one-way latch in the health service — once tripped,
-	// only manager intervention can reinstate. Snapshot may lag behind state.
+	// Compute live contributions
+	const { contributions, score } = await computeContributions(userId);
+
+	// Hard-stop: derive from state table (canonical source of truth)
 	const hardStopActive = !state.assignmentPoolEligible || state.requiresManagerIntervention;
 	const latestSnapshot = recentSnapshots[0];
 	const hardStopReasons =
 		hardStopActive && latestSnapshot?.hardStopTriggered ? (latestSnapshot.reasons ?? []) : [];
 
+	// Tier II at tierThreshold points
+	const tier = score >= health.tierThreshold ? 'II' : 'I';
+
 	return json({
-		score: state.currentScore,
+		tier: tier as 'I' | 'II',
+		score,
 		stars: state.stars,
 		streakWeeks: state.streakWeeks,
-		eliteThreshold: health.eliteThreshold,
+		tierThreshold: health.tierThreshold,
 		maxStars: health.maxStars,
 		hardStop: {
 			triggered: hardStopActive,
@@ -109,11 +116,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 			bonusPercent: health.simulationBonus.fourStarBonusPercent,
 			label: 'simulation'
 		},
+		contributions,
 		recentScores: recentSnapshots.map((s) => ({
 			date: s.evaluatedAt,
 			score: s.score,
-			attendanceRate: s.attendanceRate,
-			completionRate: s.completionRate,
 			hardStopTriggered: s.hardStopTriggered
 		})),
 		isOnboarding: false

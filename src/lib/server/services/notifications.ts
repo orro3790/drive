@@ -64,20 +64,20 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 		body: 'Your shift starts today. Check the app for details.'
 	},
 	bid_open: {
-		title: 'Bid Window Open',
-		body: 'A new shift is available for bidding. Place your bid now!'
+		title: 'Shift Available',
+		body: 'A shift is available for bidding. Place your bid now!'
 	},
 	bid_won: {
-		title: 'Bid Won!',
-		body: 'Congratulations! You won the bid for your requested shift.'
+		title: 'Bid Won',
+		body: 'You\'ve won the bid. You are now assigned this shift.'
 	},
 	bid_lost: {
-		title: 'Bid Not Selected',
-		body: 'Another driver was selected for this shift. Keep bidding!'
+		title: 'Bid Not Won',
+		body: 'Another driver was selected for this shift. No changes to your schedule.'
 	},
 	shift_cancelled: {
 		title: 'Shift Cancelled',
-		body: 'Your scheduled shift has been cancelled. Check the app for details.'
+		body: 'Your shift has been removed from your schedule.'
 	},
 	warning: {
 		title: 'Account Warning',
@@ -93,15 +93,15 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	},
 	assignment_confirmed: {
 		title: 'Shift Assigned',
-		body: 'You have been assigned a new shift. Check your schedule.'
+		body: 'You are now assigned a new shift. Check your schedule for details.'
 	},
 	route_unfilled: {
 		title: 'Route Unfilled',
 		body: 'A route at your warehouse has no driver assigned.'
 	},
 	route_cancelled: {
-		title: 'Driver Cancelled',
-		body: 'A driver has cancelled their assignment.'
+		title: 'Route Cancelled',
+		body: 'This route has been cancelled and removed from affected schedules.'
 	},
 	driver_no_show: {
 		title: 'Driver No-Show',
@@ -113,10 +113,10 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	},
 	shift_auto_dropped: {
 		title: 'Shift Dropped',
-		body: "Your shift was dropped because it wasn't confirmed in time."
+		body: "Your shift was not confirmed in time and has been removed from your schedule."
 	},
 	emergency_route_available: {
-		title: 'Priority Route Available',
+		title: 'Shift Available',
 		body: 'An urgent route is available with a bonus. First to accept gets it.'
 	},
 	streak_advanced: {
@@ -459,13 +459,14 @@ export async function notifyAvailableDriversForEmergency(
 		return 0;
 	}
 
+	const dateLabel = format(toZonedTime(parseISO(date), TORONTO_TZ), 'EEE, MMM d');
 	const bonusText = payBonusPercent > 0 ? ` +${payBonusPercent}% bonus.` : '';
-	const body = `${routeName} at ${warehouseName} needs a driver urgently.${bonusText} First to accept gets it.`;
+	const body = `${routeName} at ${warehouseName} needs a driver on ${dateLabel}.${bonusText} First to accept gets it.`;
 
 	const notificationRecords = eligibleDriverIds.map((driverId) => ({
 		userId: driverId,
 		type: 'emergency_route_available' as const,
-		title: 'Priority Route Available',
+		title: 'Shift Available',
 		body,
 		data: {
 			assignmentId,
@@ -498,7 +499,7 @@ export async function notifyAvailableDriversForEmergency(
 					try {
 						await messaging.send({
 							token: userData.fcmToken,
-							notification: { title: 'Priority Route Available', body },
+							notification: { title: 'Shift Available', body },
 							data: {
 								assignmentId,
 								routeName,

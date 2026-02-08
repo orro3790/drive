@@ -89,6 +89,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		.update(assignments)
 		.set({
 			status: 'cancelled',
+			cancelType: isLateCancellation ? 'late' : 'driver',
 			updatedAt: new Date()
 		})
 		.where(and(eq(assignments.id, id), eq(assignments.userId, locals.user.id)))

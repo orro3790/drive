@@ -38,7 +38,9 @@ export const driverSchema = z.object({
 	warehouseCohortAvgParcels: z.number().min(0).nullable(),
 	avgParcelsDeltaVsCohort: z.number().nullable(),
 	attendanceThreshold: z.number().min(0).max(1),
-	healthState: driverHealthStateSchema
+	healthState: driverHealthStateSchema,
+	// Health pool eligibility (from driverHealthState table)
+	assignmentPoolEligible: z.boolean().default(true)
 });
 
 export type Driver = z.infer<typeof driverSchema>;
@@ -47,11 +49,13 @@ export type Driver = z.infer<typeof driverSchema>;
  * Schema for updating a driver (PATCH)
  * - weeklyCap: 1-6 days per week
  * - unflag: set to true to remove flag status
+ * - reinstate: set to true to restore assignment pool eligibility after hard-stop
  */
 export const driverUpdateSchema = z
 	.object({
 		weeklyCap: z.number().int().min(1).max(6).optional(),
-		unflag: z.boolean().optional()
+		unflag: z.boolean().optional(),
+		reinstate: z.boolean().optional()
 	})
 	.strict()
 	.refine((data) => Object.keys(data).length > 0, {

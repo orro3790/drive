@@ -10,7 +10,13 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, driverMetrics, user, warehouses } from '$lib/server/db/schema';
+import {
+	assignments,
+	driverHealthState,
+	driverMetrics,
+	user,
+	warehouses
+} from '$lib/server/db/schema';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import {
 	dispatchPolicy,
@@ -64,7 +70,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	// Get all drivers with their metrics
+	// Get all drivers with their metrics and health state
 	const drivers = await db
 		.select({
 			id: user.id,
@@ -80,10 +86,13 @@ export const GET: RequestHandler = async ({ locals }) => {
 			completedShifts: driverMetrics.completedShifts,
 			attendanceRate: driverMetrics.attendanceRate,
 			completionRate: driverMetrics.completionRate,
-			avgParcelsDelivered: driverMetrics.avgParcelsDelivered
+			avgParcelsDelivered: driverMetrics.avgParcelsDelivered,
+			// Health state
+			assignmentPoolEligible: driverHealthState.assignmentPoolEligible
 		})
 		.from(user)
 		.leftJoin(driverMetrics, eq(user.id, driverMetrics.userId))
+		.leftJoin(driverHealthState, eq(user.id, driverHealthState.userId))
 		.where(eq(user.role, 'driver'))
 		.orderBy(user.name);
 
@@ -183,7 +192,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				totalShifts,
 				attendanceRate,
 				completionRate
-			})
+			}),
+			assignmentPoolEligible: driver.assignmentPoolEligible ?? true
 		};
 	});
 

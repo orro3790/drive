@@ -1,7 +1,10 @@
 /**
  * Driver Health Service
  *
- * Daily 0-100 scoring and weekly 0-4 star progression with hard-stop resets.
+ * Additive point-based scoring and weekly 0-4 star progression with hard-stop resets.
+ * Each shift event earns/costs discrete points. Score accumulates since last reset.
+ * Tier II activates at 96 points (= 1 perfect month of 4 shifts/week × 4 weeks × 6 pts/shift).
+ *
  * See docs/plans/driver-health-gamification.md for full specification.
  */
 
@@ -9,6 +12,7 @@ import { db } from '$lib/server/db';
 import {
 	assignments,
 	bidWindows,
+	bids,
 	driverHealthSnapshots,
 	driverHealthState,
 	driverMetrics,
@@ -23,6 +27,7 @@ import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { createAuditLog } from '$lib/server/services/audit';
 import { sendNotification } from '$lib/server/services/notifications';
+import type { HealthContributions } from '$lib/schemas/health';
 
 const TORONTO_TZ = dispatchPolicy.timezone.toronto;
 
@@ -31,7 +36,7 @@ function torontoToday(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Rolling-window event counts
+// Rolling-window event counts (for hard-stop / pool eligibility checks)
 // ---------------------------------------------------------------------------
 
 interface RollingCounts {
@@ -41,19 +46,12 @@ interface RollingCounts {
 
 /**
  * Count no-shows and late cancellations for a driver in the last N days.
- *
- * - No-shows: bid windows with trigger='no_show' for this user's assignments
- *   where the assignment date falls within the window.
- * - Late cancellations: cancelled assignments that were confirmed, with
- *   assignment date in the window. Late cancellations are by definition <=48h
- *   before the shift, so the assignment date is a reliable proxy.
  */
 async function getRollingCounts(userId: string, windowDays: number): Promise<RollingCounts> {
 	const nowToronto = toZonedTime(new Date(), TORONTO_TZ);
 	const cutoffDate = format(subDays(nowToronto, windowDays), 'yyyy-MM-dd');
 	const todayStr = format(nowToronto, 'yyyy-MM-dd');
 
-	// No-shows: assignments for this driver that triggered no-show bid windows
 	const [noShowResult] = await db
 		.select({ count: sql<number>`count(distinct ${assignments.id})::int` })
 		.from(assignments)
@@ -69,7 +67,6 @@ async function getRollingCounts(userId: string, windowDays: number): Promise<Rol
 			)
 		);
 
-	// Late cancellations: confirmed assignments that were cancelled, date in window
 	const [lateCancelResult] = await db
 		.select({ count: sql<number>`count(*)::int` })
 		.from(assignments)
@@ -89,6 +86,226 @@ async function getRollingCounts(userId: string, windowDays: number): Promise<Rol
 	};
 }
 
+/**
+ * Check whether any hard-stop events occurred after a given date.
+ */
+async function hasNewHardStopEvents(userId: string, afterDate: Date): Promise<boolean> {
+	const afterStr = format(afterDate, 'yyyy-MM-dd');
+	const nowToronto = toZonedTime(new Date(), TORONTO_TZ);
+	const todayStr = format(nowToronto, 'yyyy-MM-dd');
+
+	const [noShowResult] = await db
+		.select({ count: sql<number>`count(distinct ${assignments.id})::int` })
+		.from(assignments)
+		.innerJoin(
+			bidWindows,
+			and(eq(bidWindows.assignmentId, assignments.id), eq(bidWindows.trigger, 'no_show'))
+		)
+		.where(
+			and(
+				eq(assignments.userId, userId),
+				sql`${assignments.date} > ${afterStr}`,
+				lte(assignments.date, todayStr)
+			)
+		);
+
+	const [lateCancelResult] = await db
+		.select({ count: sql<number>`count(*)::int` })
+		.from(assignments)
+		.where(
+			and(
+				eq(assignments.userId, userId),
+				eq(assignments.status, 'cancelled'),
+				isNotNull(assignments.confirmedAt),
+				sql`${assignments.date} > ${afterStr}`,
+				lte(assignments.date, todayStr)
+			)
+		);
+
+	const newNoShows = noShowResult?.count ?? 0;
+	const newLateCancels = lateCancelResult?.count ?? 0;
+
+	return newNoShows > 0 || newLateCancels >= dispatchPolicy.health.lateCancelThreshold;
+}
+
+// ---------------------------------------------------------------------------
+// Additive contribution computation
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute additive point contributions for a driver since their last score reset.
+ * Returns the breakdown of each event type and the total score (floored at 0).
+ */
+export async function computeContributions(userId: string): Promise<{
+	contributions: HealthContributions;
+	score: number;
+}> {
+	const pts = dispatchPolicy.health.points;
+
+	// Get lastScoreResetAt from health state (null = count from all time)
+	const [stateRow] = await db
+		.select({ lastScoreResetAt: driverHealthState.lastScoreResetAt })
+		.from(driverHealthState)
+		.where(eq(driverHealthState.userId, userId));
+
+	const sinceDate = stateRow?.lastScoreResetAt
+		? format(stateRow.lastScoreResetAt, 'yyyy-MM-dd')
+		: '1970-01-01';
+
+	const todayStr = torontoToday();
+
+	// Run all count queries in parallel
+	const [
+		confirmedResult,
+		arrivedOnTimeResult,
+		completedResult,
+		highDeliveryResult,
+		autoDropResult,
+		lateCancelResult,
+		bidPickupResult,
+		urgentPickupResult
+	] = await Promise.all([
+		// Confirmed on time: assignments with confirmedAt, active statuses, since date
+		db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(assignments)
+			.where(
+				and(
+					eq(assignments.userId, userId),
+					isNotNull(assignments.confirmedAt),
+					sql`${assignments.status} IN ('scheduled', 'active', 'completed')`,
+					gte(assignments.date, sinceDate),
+					lte(assignments.date, todayStr)
+				)
+			),
+
+		// Arrived on time: shifts with arrivedAt before 9 AM Toronto
+		db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(shifts)
+			.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
+			.where(
+				and(
+					eq(assignments.userId, userId),
+					isNotNull(shifts.arrivedAt),
+					sql`extract(hour from ${shifts.arrivedAt} at time zone 'America/Toronto') < ${dispatchPolicy.shifts.arrivalDeadlineHourLocal}`,
+					gte(assignments.date, sinceDate),
+					lte(assignments.date, todayStr)
+				)
+			),
+
+		// Completed shifts
+		db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(shifts)
+			.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
+			.where(
+				and(
+					eq(assignments.userId, userId),
+					isNotNull(shifts.completedAt),
+					gte(assignments.date, sinceDate),
+					lte(assignments.date, todayStr)
+				)
+			),
+
+		// High delivery (95%+): completed shifts where (parcelsStart - parcelsReturned) / parcelsStart >= 0.95
+		db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(shifts)
+			.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
+			.where(
+				and(
+					eq(assignments.userId, userId),
+					isNotNull(shifts.completedAt),
+					isNotNull(shifts.parcelsStart),
+					sql`${shifts.parcelsStart} > 0`,
+					sql`(${shifts.parcelsStart} - coalesce(${shifts.parcelsReturned}, 0))::float / ${shifts.parcelsStart} >= 0.95`,
+					gte(assignments.date, sinceDate),
+					lte(assignments.date, todayStr)
+				)
+			),
+
+		// Auto-drops
+		db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(assignments)
+			.where(
+				and(
+					eq(assignments.userId, userId),
+					sql`${assignments.cancelType} = 'auto_drop'`,
+					gte(assignments.date, sinceDate),
+					lte(assignments.date, todayStr)
+				)
+			),
+
+		// Late cancellations
+		db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(assignments)
+			.where(
+				and(
+					eq(assignments.userId, userId),
+					sql`${assignments.cancelType} = 'late'`,
+					gte(assignments.date, sinceDate),
+					lte(assignments.date, todayStr)
+				)
+			),
+
+		// Bid pickups (competitive mode)
+		db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(bids)
+			.innerJoin(bidWindows, eq(bidWindows.assignmentId, bids.assignmentId))
+			.where(
+				and(
+					eq(bids.userId, userId),
+					eq(bids.status, 'won'),
+					eq(bidWindows.mode, 'competitive'),
+					gte(bids.bidAt, stateRow?.lastScoreResetAt ?? new Date('1970-01-01'))
+				)
+			),
+
+		// Urgent pickups (instant/emergency mode)
+		db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(bids)
+			.innerJoin(bidWindows, eq(bidWindows.assignmentId, bids.assignmentId))
+			.where(
+				and(
+					eq(bids.userId, userId),
+					eq(bids.status, 'won'),
+					sql`${bidWindows.mode} IN ('instant', 'emergency')`,
+					gte(bids.bidAt, stateRow?.lastScoreResetAt ?? new Date('1970-01-01'))
+				)
+			)
+	]);
+
+	const confirmedCount = confirmedResult[0]?.count ?? 0;
+	const arrivedOnTimeCount = arrivedOnTimeResult[0]?.count ?? 0;
+	const completedCount = completedResult[0]?.count ?? 0;
+	const highDeliveryCount = highDeliveryResult[0]?.count ?? 0;
+	const autoDropCount = autoDropResult[0]?.count ?? 0;
+	const lateCancelCount = lateCancelResult[0]?.count ?? 0;
+	const bidPickupCount = bidPickupResult[0]?.count ?? 0;
+	const urgentPickupCount = urgentPickupResult[0]?.count ?? 0;
+
+	const contributions: HealthContributions = {
+		confirmedOnTime: { count: confirmedCount, points: confirmedCount * pts.confirmedOnTime },
+		arrivedOnTime: { count: arrivedOnTimeCount, points: arrivedOnTimeCount * pts.arrivedOnTime },
+		completedShifts: { count: completedCount, points: completedCount * pts.completedShift },
+		highDelivery: { count: highDeliveryCount, points: highDeliveryCount * pts.highDelivery },
+		bidPickups: { count: bidPickupCount, points: bidPickupCount * pts.bidPickup },
+		urgentPickups: { count: urgentPickupCount, points: urgentPickupCount * pts.urgentPickup },
+		autoDrops: { count: autoDropCount, points: autoDropCount * pts.autoDrop },
+		lateCancellations: { count: lateCancelCount, points: lateCancelCount * pts.lateCancel }
+	};
+
+	const rawTotal = Object.values(contributions).reduce((sum, line) => sum + line.points, 0);
+	const score = Math.max(0, rawTotal);
+
+	return { contributions, score };
+}
+
 // ---------------------------------------------------------------------------
 // Daily score computation
 // ---------------------------------------------------------------------------
@@ -96,8 +313,7 @@ async function getRollingCounts(userId: string, windowDays: number): Promise<Rol
 export interface DailyScoreResult {
 	userId: string;
 	score: number;
-	attendanceRate: number;
-	completionRate: number;
+	contributions: HealthContributions;
 	noShowCount30d: number;
 	lateCancellationCount30d: number;
 	hardStopTriggered: boolean;
@@ -107,50 +323,29 @@ export interface DailyScoreResult {
 /**
  * Compute the daily health score for a single driver.
  *
- * Score = attendance(50) + completion(30) + reliability(20)
- * Hard-stop: any no-show OR >=2 late cancellations in rolling 30 days caps
- * score at 49.
+ * Score is an additive sum of event points since last reset.
+ * Hard-stop: any no-show OR >=2 late cancellations in rolling 30 days
+ * triggers pool removal (but no longer caps score).
  */
 export async function computeDailyScore(userId: string): Promise<DailyScoreResult | null> {
 	const [metrics] = await db
-		.select({
-			totalShifts: driverMetrics.totalShifts,
-			completedShifts: driverMetrics.completedShifts,
-			attendanceRate: driverMetrics.attendanceRate,
-			completionRate: driverMetrics.completionRate
-		})
+		.select({ totalShifts: driverMetrics.totalShifts })
 		.from(driverMetrics)
 		.where(eq(driverMetrics.userId, userId));
 
 	if (!metrics || metrics.totalShifts === 0) {
-		// New driver with no shifts — neutral state, no score
 		return null;
 	}
 
-	const { attendanceRate, completionRate } = metrics;
+	const { contributions, score } = await computeContributions(userId);
 	const rolling = await getRollingCounts(userId, dispatchPolicy.health.lateCancelRollingDays);
 	const reasons: string[] = [];
 
-	// Base score components (each rate is 0-1, scaled to weight)
-	const weights = dispatchPolicy.health.scoreWeights;
-	const attendanceComponent = attendanceRate * weights.attendance;
-	const completionComponent = completionRate * weights.completion;
-
-	// Reliability component: inverse of penalty events in rolling window
-	// 0 events = full 20 points, each event deducts proportionally
-	const totalEvents = rolling.noShowCount30d + rolling.lateCancellationCount30d;
-	const reliabilityComponent = Math.max(0, weights.reliability - totalEvents * 5);
-
-	let baseScore = Math.round(attendanceComponent + completionComponent + reliabilityComponent);
-	baseScore = Math.max(0, Math.min(100, baseScore));
-
-	// Hard-stop check
 	const hardStopTriggered =
 		rolling.noShowCount30d > 0 ||
 		rolling.lateCancellationCount30d >= dispatchPolicy.health.lateCancelThreshold;
 
 	if (hardStopTriggered) {
-		baseScore = Math.min(baseScore, dispatchPolicy.health.hardStopScoreCap);
 		if (rolling.noShowCount30d > 0) {
 			reasons.push(`No-show in last ${dispatchPolicy.health.lateCancelRollingDays} days`);
 		}
@@ -161,18 +356,10 @@ export async function computeDailyScore(userId: string): Promise<DailyScoreResul
 		}
 	}
 
-	// Corrective state: completion below threshold
-	if (completionRate < dispatchPolicy.health.correctiveCompletionThreshold) {
-		reasons.push(
-			`Completion rate ${(completionRate * 100).toFixed(0)}% below ${dispatchPolicy.health.correctiveCompletionThreshold * 100}% threshold`
-		);
-	}
-
 	return {
 		userId,
-		score: baseScore,
-		attendanceRate,
-		completionRate,
+		score,
+		contributions,
 		noShowCount30d: rolling.noShowCount30d,
 		lateCancellationCount30d: rolling.lateCancellationCount30d,
 		hardStopTriggered,
@@ -192,39 +379,57 @@ async function persistDailyScore(result: DailyScoreResult, evaluatedAt: string):
 			userId: result.userId,
 			evaluatedAt,
 			score: result.score,
-			attendanceRate: result.attendanceRate,
-			completionRate: result.completionRate,
+			attendanceRate: 0,
+			completionRate: 0,
 			lateCancellationCount30d: result.lateCancellationCount30d,
 			noShowCount30d: result.noShowCount30d,
 			hardStopTriggered: result.hardStopTriggered,
-			reasons: result.reasons
+			reasons: result.reasons,
+			contributions: result.contributions
 		})
 		.onConflictDoUpdate({
 			target: [driverHealthSnapshots.userId, driverHealthSnapshots.evaluatedAt],
 			set: {
 				score: result.score,
-				attendanceRate: result.attendanceRate,
-				completionRate: result.completionRate,
+				attendanceRate: 0,
+				completionRate: 0,
 				lateCancellationCount30d: result.lateCancellationCount30d,
 				noShowCount30d: result.noShowCount30d,
 				hardStopTriggered: result.hardStopTriggered,
-				reasons: result.reasons
+				reasons: result.reasons,
+				contributions: result.contributions
 			}
 		});
 
-	// Update current state (score only).
-	// Pool eligibility is a one-way latch: hard-stop removes from pool, but only
-	// a manager action can reinstate. We never set assignmentPoolEligible=true here.
+	// Update current state
 	const upsertBase: Record<string, unknown> = {
 		currentScore: result.score,
 		updatedAt: new Date()
 	};
 
 	if (result.hardStopTriggered) {
-		Object.assign(upsertBase, {
-			assignmentPoolEligible: false,
-			requiresManagerIntervention: true
-		});
+		const [currentState] = await db
+			.select({ reinstatedAt: driverHealthState.reinstatedAt })
+			.from(driverHealthState)
+			.where(eq(driverHealthState.userId, result.userId));
+
+		let shouldDisablePool = true;
+
+		if (currentState?.reinstatedAt) {
+			const newEvents = await hasNewHardStopEvents(result.userId, currentState.reinstatedAt);
+			if (!newEvents) {
+				shouldDisablePool = false;
+			} else {
+				upsertBase.reinstatedAt = null;
+			}
+		}
+
+		if (shouldDisablePool) {
+			Object.assign(upsertBase, {
+				assignmentPoolEligible: false,
+				requiresManagerIntervention: true
+			});
+		}
 	}
 
 	await db
@@ -356,13 +561,10 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 	const cancelledAssignments = weekAssignments.filter((a) => a.status === 'cancelled');
 	const totalAssignments = weekAssignments.length;
 
-	// Attendance: all non-cancelled assignments must be completed
 	const nonCancelledCount = totalAssignments - cancelledAssignments.length;
 	const weekAttendance =
 		nonCancelledCount > 0 ? completedAssignments.length / nonCancelledCount : 0;
 
-	// Week-specific completion rate (not all-time from driverMetrics).
-	// The daily score uses all-time rates; weekly qualification uses this-week-only.
 	const weekShifts = await db
 		.select({
 			parcelsStart: shifts.parcelsStart,
@@ -387,7 +589,6 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 				weekShifts.length
 			: 0;
 
-	// No-shows this week (subset of rolling — check assignments in this week specifically)
 	const weekNoShows = await db
 		.select({ count: sql<number>`count(distinct ${assignments.id})::int` })
 		.from(assignments)
@@ -404,7 +605,6 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 		);
 	const weekNoShowCount = weekNoShows[0]?.count ?? 0;
 
-	// Late cancellations this week
 	const weekLateCancels = await db
 		.select({ count: sql<number>`count(*)::int` })
 		.from(assignments)
@@ -441,9 +641,6 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 		}
 	}
 
-	// Streak counts cumulative qualifying weeks (not consecutive).
-	// Non-qualifying weeks (without hard-stop) leave streak unchanged.
-	// Only hard-stop events reset streak to 0 (handled above).
 	const newStreak = qualified ? previousStreak + 1 : previousStreak;
 	const newStars = qualified
 		? Math.min(previousStars + 1, dispatchPolicy.health.maxStars)
@@ -474,12 +671,11 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
  */
 async function persistWeeklyEval(result: WeeklyEvalResult): Promise<void> {
 	if (result.neutral) {
-		return; // No state change for zero-assignment weeks
+		return;
 	}
 
 	const now = new Date();
 
-	// Build upsert set — pool eligibility is a one-way latch (same as daily).
 	const weeklyUpsert: Record<string, unknown> = {
 		streakWeeks: result.newStreak,
 		stars: result.newStars,
@@ -490,8 +686,26 @@ async function persistWeeklyEval(result: WeeklyEvalResult): Promise<void> {
 		weeklyUpsert.lastQualifiedWeekStart = result.weekStart;
 	}
 	if (result.hardStopReset) {
-		weeklyUpsert.assignmentPoolEligible = false;
-		weeklyUpsert.requiresManagerIntervention = true;
+		const [currentState] = await db
+			.select({ reinstatedAt: driverHealthState.reinstatedAt })
+			.from(driverHealthState)
+			.where(eq(driverHealthState.userId, result.userId));
+
+		let shouldDisablePool = true;
+
+		if (currentState?.reinstatedAt) {
+			const newEvents = await hasNewHardStopEvents(result.userId, currentState.reinstatedAt);
+			if (!newEvents) {
+				shouldDisablePool = false;
+			} else {
+				weeklyUpsert.reinstatedAt = null;
+			}
+		}
+
+		if (shouldDisablePool) {
+			weeklyUpsert.assignmentPoolEligible = false;
+			weeklyUpsert.requiresManagerIntervention = true;
+		}
 	}
 
 	await db
@@ -521,7 +735,6 @@ async function persistWeeklyEval(result: WeeklyEvalResult): Promise<void> {
 			customBody: `Great work! You earned star ${result.newStars} of ${dispatchPolicy.health.maxStars}.`
 		});
 
-		// Bonus eligibility at max stars
 		if (result.newStars === dispatchPolicy.health.maxStars) {
 			await sendNotification(result.userId, 'bonus_eligible', {
 				customBody: `Congratulations! You reached ${dispatchPolicy.health.maxStars} stars and qualify for a +${dispatchPolicy.health.simulationBonus.fourStarBonusPercent}% bonus preview.`
@@ -529,7 +742,6 @@ async function persistWeeklyEval(result: WeeklyEvalResult): Promise<void> {
 		}
 	}
 
-	// Audit log for state transitions
 	await createAuditLog({
 		entityType: 'driver_health',
 		entityId: result.userId,
@@ -575,7 +787,6 @@ export async function runDailyHealthEvaluation(): Promise<DailyHealthRunResult> 
 	const start = Date.now();
 	const today = torontoToday();
 
-	// Get all active drivers
 	const drivers = await db.select({ id: user.id }).from(user).where(eq(user.role, 'driver'));
 
 	let scored = 0;
@@ -599,9 +810,15 @@ export async function runDailyHealthEvaluation(): Promise<DailyHealthRunResult> 
 					await persistDailyScore(result, today);
 					scored++;
 
-					// Send corrective warning if completion below threshold,
-					// but only if no corrective_warning was sent in the recovery window
-					if (result.completionRate < dispatchPolicy.health.correctiveCompletionThreshold) {
+					// Corrective warning check uses driverMetrics.completionRate
+					const [driverMetricsRow] = await db
+						.select({ completionRate: driverMetrics.completionRate })
+						.from(driverMetrics)
+						.where(eq(driverMetrics.userId, driver.id));
+
+					const completionRate = driverMetricsRow?.completionRate ?? 1;
+
+					if (completionRate < dispatchPolicy.health.correctiveCompletionThreshold) {
 						const recoveryCutoff = subDays(
 							new Date(),
 							dispatchPolicy.health.correctiveRecoveryDays
@@ -666,7 +883,6 @@ export async function runWeeklyHealthEvaluation(): Promise<WeeklyHealthRunResult
 	const log = logger.child({ operation: 'runWeeklyHealthEvaluation' });
 	const start = Date.now();
 
-	// The week that just ended: previous Monday
 	const nowToronto = toZonedTime(new Date(), TORONTO_TZ);
 	const thisMonday = startOfWeek(nowToronto, { weekStartsOn: 1 });
 	const lastMonday = subDays(thisMonday, 7);

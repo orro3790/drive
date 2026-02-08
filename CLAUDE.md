@@ -157,10 +157,10 @@ Svelte 5 stores in `src/lib/stores/`:
 
 ### Shift Confirmations
 
+- Every shift must be manually confirmed by the driver
 - Confirmation window: 7 days to 48 hours before shift
 - 72h before: reminder notification sent
 - 48h before: unconfirmed shifts auto-dropped and reopened for bidding
-- Deployment date: 2026-03-01 (pre-existing assignments skip confirmation)
 
 ### Arrival & Shift Lifecycle
 

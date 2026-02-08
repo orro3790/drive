@@ -1,51 +1,27 @@
 /*═══════════════════════════════════════════════════════════════════════════
-  FONT FACES — Geist (default) & NanumSquareNeo (Korean)
+  FONT FACES — JetBrains Mono (default) & NanumSquareNeo (Korean)
   ═══════════════════════════════════════════════════════════════════════════*/
 
-/* Geist — Default font family */
+/* JetBrains Mono — Default font family (monospace, OFL licensed) */
 @font-face {
-	font-family: 'Geist';
-	src: url('/fonts/Geist-Regular.woff2') format('woff2');
+	font-family: 'JetBrains Mono';
+	src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
 	font-weight: 400;
 	font-style: normal;
 	font-display: swap;
 }
 
 @font-face {
-	font-family: 'Geist';
-	src: url('/fonts/Geist-Medium.woff2') format('woff2');
+	font-family: 'JetBrains Mono';
+	src: url('/fonts/JetBrainsMono-Medium.woff2') format('woff2');
 	font-weight: 500;
 	font-style: normal;
 	font-display: swap;
 }
 
 @font-face {
-	font-family: 'Geist';
-	src: url('/fonts/Geist-Bold.woff2') format('woff2');
-	font-weight: 700;
-	font-style: normal;
-	font-display: swap;
-}
-
-@font-face {
-	font-family: 'GeistMono';
-	src: url('/fonts/GeistMono-Regular.woff2') format('woff2');
-	font-weight: 400;
-	font-style: normal;
-	font-display: swap;
-}
-
-@font-face {
-	font-family: 'GeistMono';
-	src: url('/fonts/GeistMono-Medium.woff2') format('woff2');
-	font-weight: 500;
-	font-style: normal;
-	font-display: swap;
-}
-
-@font-face {
-	font-family: 'GeistMono';
-	src: url('/fonts/GeistMono-Bold.woff2') format('woff2');
+	font-family: 'JetBrains Mono';
+	src: url('/fonts/JetBrainsMono-Bold.woff2') format('woff2');
 	font-weight: 700;
 	font-style: normal;
 	font-display: swap;
@@ -84,7 +60,7 @@
 
 /* Korean language typography override */
 :lang(ko) {
-	--font-family-base: 'NanumSquareNeo', 'Geist', system-ui, -apple-system, sans-serif;
+	--font-family-base: 'NanumSquareNeo', 'JetBrains Mono', system-ui, -apple-system, sans-serif;
 }
 
 :root {
@@ -92,8 +68,8 @@
 	  TYPOGRAPHY
 	  ═══════════════════════════════════════════════════════════════════════════*/
 
-	--font-family-base: 'Geist', system-ui, -apple-system, sans-serif;
-	--font-family-mono: 'GeistMono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	--font-family-base: 'JetBrains Mono', system-ui, -apple-system, sans-serif;
+	--font-family-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
 	/* Font Weights */
 	--font-weight-medium: 500; /* section headers, modal headers, titles, notice banners */
@@ -362,7 +338,7 @@ ol {
 
 html {
 	height: 100%;
-	overflow-x: hidden; /* Prevent horizontal scroll from animated assets */
+	overflow: hidden; /* All layouts handle their own scrolling via .content */
 	font-size: 16px; /* sets the root font size for rem calculations */
 	font-weight: 400;
 }
@@ -372,7 +348,7 @@ body {
 	line-height: var(--line-height-base);
 	color: var(--text-normal);
 	background-color: var(--surface-secondary);
-	overflow-x: hidden; /* Prevent horizontal scroll from animated assets */
+	overflow: hidden; /* All layouts handle their own scrolling via .content */
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	min-height: 100vh;
@@ -623,7 +599,6 @@ button:disabled,
 	.page-stage {
 		padding: var(--spacing-3) 0 var(--spacing-3) var(--spacing-3);
 		gap: var(--spacing-3);
-		background: var(--surface-primary);
 	}
 
 	.page-content {

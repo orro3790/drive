@@ -80,6 +80,12 @@ export const GET: RequestHandler = async ({ request }) => {
 			try {
 				const originalUserId = candidate.userId!;
 
+				// Set cancelType on the assignment before creating bid window
+				await db
+					.update(assignments)
+					.set({ cancelType: 'auto_drop', updatedAt: now })
+					.where(eq(assignments.id, candidate.id));
+
 				// Increment autoDroppedShifts metric
 				await db
 					.update(driverMetrics)

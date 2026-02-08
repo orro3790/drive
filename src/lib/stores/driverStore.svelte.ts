@@ -141,6 +141,21 @@ export const driverStore = {
 		this._unflagInDb(id, original);
 	},
 
+	/**
+	 * Reinstate a driver into the assignment pool (optimistic)
+	 */
+	reinstate(id: string) {
+		const original = state.drivers.find((d) => d.id === id);
+		if (!original) return;
+
+		// Optimistic update
+		state.drivers = state.drivers.map((d) =>
+			d.id === id ? { ...d, assignmentPoolEligible: true } : d
+		);
+
+		this._reinstateInDb(id, original);
+	},
+
 	async _updateInDb(id: string, data: DriverUpdate, original: Driver) {
 		try {
 			const res = await fetch(`/api/drivers/${id}`, {
@@ -184,6 +199,29 @@ export const driverStore = {
 			// Rollback
 			state.drivers = state.drivers.map((d) => (d.id === id ? original : d));
 			toastStore.error(m.drivers_unflag_error());
+		}
+	},
+
+	async _reinstateInDb(id: string, original: Driver) {
+		try {
+			const res = await fetch(`/api/drivers/${id}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ reinstate: true })
+			});
+
+			if (!res.ok) {
+				throw new Error('Failed to reinstate driver');
+			}
+
+			const { driver } = await res.json();
+			const parsedDriver = parseDriverPatch(driver);
+			state.drivers = state.drivers.map((d) => (d.id === id ? mergeDriver(d, parsedDriver) : d));
+			toastStore.success(m.drivers_reinstated_success());
+		} catch {
+			// Rollback
+			state.drivers = state.drivers.map((d) => (d.id === id ? original : d));
+			toastStore.error(m.drivers_reinstate_error());
 		}
 	}
 };

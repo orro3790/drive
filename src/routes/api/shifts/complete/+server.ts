@@ -7,10 +7,10 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, shifts } from '$lib/server/db/schema';
+import { assignments, driverMetrics, shifts } from '$lib/server/db/schema';
 import { recordRouteCompletion, updateDriverMetrics } from '$lib/server/services/metrics';
 import { shiftCompleteSchema } from '$lib/schemas/shift';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { addHours } from 'date-fns';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
@@ -138,6 +138,17 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			completedAt: shifts.completedAt,
 			editableUntil: shifts.editableUntil
 		});
+
+	// Check if high delivery (95%+) → increment highDeliveryCount
+	if (shift.parcelsStart > 0 && parcelsDelivered / shift.parcelsStart >= 0.95) {
+		await db
+			.update(driverMetrics)
+			.set({
+				highDeliveryCount: sql`${driverMetrics.highDeliveryCount} + 1`,
+				updatedAt: new Date()
+			})
+			.where(eq(driverMetrics.userId, locals.user.id));
+	}
 
 	// Update assignment status to completed
 	await db
