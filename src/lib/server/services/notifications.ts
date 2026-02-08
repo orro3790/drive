@@ -44,7 +44,11 @@ export type NotificationType =
 	| 'driver_no_show'
 	| 'confirmation_reminder'
 	| 'shift_auto_dropped'
-	| 'emergency_route_available';
+	| 'emergency_route_available'
+	| 'streak_advanced'
+	| 'streak_reset'
+	| 'bonus_eligible'
+	| 'corrective_warning';
 
 /**
  * Subset of notification types used for manager alerts.
@@ -114,6 +118,22 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	emergency_route_available: {
 		title: 'Priority Route Available',
 		body: 'An urgent route is available with a bonus. First to accept gets it.'
+	},
+	streak_advanced: {
+		title: 'Streak Milestone',
+		body: 'Your weekly streak advanced! Keep up the great work.'
+	},
+	streak_reset: {
+		title: 'Streak Reset',
+		body: 'Your weekly streak has been reset due to a reliability event.'
+	},
+	bonus_eligible: {
+		title: 'Bonus Eligible',
+		body: 'Congratulations! You reached 4 stars and qualify for a +10% bonus preview.'
+	},
+	corrective_warning: {
+		title: 'Completion Rate Warning',
+		body: 'Your completion rate has dropped below 80%. Improve within 7 days to avoid further impact.'
 	}
 };
 
