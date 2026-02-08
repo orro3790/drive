@@ -840,11 +840,15 @@
 					{#if metricsExpanded}
 						<div id="metrics-content" class="metrics-grid">
 							<div class="metric-card">
-								<p class="metric-value">{formatPercentage(dashboardStore.metrics.attendanceRate)}</p>
+								<p class="metric-value">
+									{formatPercentage(dashboardStore.metrics.attendanceRate)}
+								</p>
 								<p class="metric-label">{m.dashboard_metrics_attendance()}</p>
 							</div>
 							<div class="metric-card">
-								<p class="metric-value">{formatPercentage(dashboardStore.metrics.completionRate)}</p>
+								<p class="metric-value">
+									{formatPercentage(dashboardStore.metrics.completionRate)}
+								</p>
 								<p class="metric-label">{m.dashboard_metrics_completion()}</p>
 							</div>
 							<div class="metric-card">

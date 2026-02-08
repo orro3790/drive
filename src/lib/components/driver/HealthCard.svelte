@@ -86,7 +86,14 @@
 					{health.score ?? '—'}
 				</span>
 			</div>
-			<div class="score-bar-track" role="progressbar" aria-valuenow={scorePercent} aria-valuemin={0} aria-valuemax={100} aria-label={m.dashboard_health_score_label()}>
+			<div
+				class="score-bar-track"
+				role="progressbar"
+				aria-valuenow={scorePercent}
+				aria-valuemin={0}
+				aria-valuemax={100}
+				aria-label={m.dashboard_health_score_label()}
+			>
 				<div
 					class="score-bar-fill"
 					style:width="{scorePercent}%"
@@ -107,7 +114,9 @@
 			<div class="stars-header">
 				<span class="stars-label">{m.dashboard_health_stars_label()}</span>
 				{#if health.streakWeeks > 0}
-					<span class="streak-badge">{m.dashboard_health_streak_label({ count: health.streakWeeks })}</span>
+					<span class="streak-badge"
+						>{m.dashboard_health_streak_label({ count: health.streakWeeks })}</span
+					>
 				{/if}
 			</div>
 			<div class="stars-row" aria-label="{health.stars} of {health.maxStars} stars">
@@ -120,7 +129,9 @@
 						height="24"
 						aria-hidden="true"
 					>
-						<path d="M10 1.5l2.47 5.01 5.53.8-4 3.9.94 5.49L10 14.27 5.06 16.7 6 11.21l-4-3.9 5.53-.8z" />
+						<path
+							d="M10 1.5l2.47 5.01 5.53.8-4 3.9.94 5.49L10 14.27 5.06 16.7 6 11.21l-4-3.9 5.53-.8z"
+						/>
 					</svg>
 				{/each}
 			</div>
@@ -144,7 +155,9 @@
 		<!-- Next milestone -->
 		<div class="milestone">
 			{#if health.stars < health.maxStars}
-				<p class="milestone-text">{m.dashboard_health_milestone_next({ target: String(health.nextMilestone.targetStars) })}</p>
+				<p class="milestone-text">
+					{m.dashboard_health_milestone_next({ target: String(health.nextMilestone.targetStars) })}
+				</p>
 			{:else}
 				<p class="milestone-text milestone-reached">{m.dashboard_health_milestone_reached()}</p>
 			{/if}
@@ -153,8 +166,15 @@
 		<!-- Simulation preview (4 stars) -->
 		{#if health.simulation.bonusEligible}
 			<div class="simulation">
-				<Chip variant="status" status="success" size="xs" label={m.dashboard_health_simulation_label()} />
-				<p class="simulation-text">{m.dashboard_health_simulation_bonus({ percent: String(health.simulation.bonusPercent) })}</p>
+				<Chip
+					variant="status"
+					status="success"
+					size="xs"
+					label={m.dashboard_health_simulation_label()}
+				/>
+				<p class="simulation-text">
+					{m.dashboard_health_simulation_bonus({ percent: String(health.simulation.bonusPercent) })}
+				</p>
 			</div>
 		{/if}
 	{/if}
