@@ -167,20 +167,22 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 
 	.notification-badge {
 		position: absolute;
-		top: -4px;
+		top: -2px;
 		right: -4px;
-		min-width: 16px;
-		height: 16px;
+		min-width: 18px;
+		height: 18px;
 		padding: 0 4px;
 		background: var(--interactive-accent);
 		color: var(--text-on-accent);
 		font-size: 10px;
 		font-weight: var(--font-weight-bold);
+		line-height: 1;
 		border-radius: var(--radius-full);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		pointer-events: none;
+		box-sizing: border-box;
 	}
 
 	#page-title {

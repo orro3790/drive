@@ -1,14 +1,12 @@
 /**
  * Metrics Generator
  *
- * Creates driver metrics with realistic performance distributions.
- * - 70% high performers (85-100% rates)
- * - 20% medium (70-85%)
- * - 10% low (<70%)
+ * Derives all driverMetrics columns from actual assignment and shift data.
+ * No random generation — everything is computed from real seed records.
  */
 
 import type { GeneratedUser } from './users';
-import { random, randomInt } from '../utils/runtime';
+import type { GeneratedAssignment, GeneratedShift } from './assignments';
 
 export interface GeneratedMetric {
 	userId: string;
@@ -16,73 +14,144 @@ export interface GeneratedMetric {
 	completedShifts: number;
 	attendanceRate: number;
 	completionRate: number;
+	avgParcelsDelivered: number;
+	totalAssigned: number;
+	confirmedShifts: number;
+	autoDroppedShifts: number;
+	lateCancellations: number;
+	noShows: number;
+	bidPickups: number;
+	arrivedOnTimeCount: number;
+	highDeliveryCount: number;
+	urgentPickups: number;
 }
 
 /**
- * Generate metrics for drivers with realistic distribution.
+ * Compute metrics for each driver from their actual assignments and shifts.
  */
-export function generateMetrics(drivers: GeneratedUser[]): GeneratedMetric[] {
+export function generateMetrics(
+	drivers: GeneratedUser[],
+	assignments: GeneratedAssignment[],
+	shifts: GeneratedShift[]
+): GeneratedMetric[] {
+	// Build shift lookup by assignment index (index into assignments array)
+	const shiftByAssignmentIndex = new Map<number, GeneratedShift>();
+	for (const shift of shifts) {
+		shiftByAssignmentIndex.set(shift.assignmentIndex, shift);
+	}
+
+	// Group assignment indices by userId
+	const assignmentIndicesByUser = new Map<string, number[]>();
+	for (let i = 0; i < assignments.length; i++) {
+		const a = assignments[i];
+		if (!a.userId) continue;
+		if (!assignmentIndicesByUser.has(a.userId)) {
+			assignmentIndicesByUser.set(a.userId, []);
+		}
+		assignmentIndicesByUser.get(a.userId)!.push(i);
+	}
+
 	const metrics: GeneratedMetric[] = [];
 
 	for (const driver of drivers) {
 		if (driver.role !== 'driver') continue;
 
-		// Determine performance tier
-		const tier = selectPerformanceTier();
+		const indices = assignmentIndicesByUser.get(driver.id) ?? [];
+		const driverAssignments = indices.map((i) => ({ assignment: assignments[i], index: i }));
 
-		// Generate total shifts (10-100 depending on how long they've been around)
-		const totalShifts = 10 + randomInt(0, 90);
+		// totalAssigned: all assignments where driver was assigned (not unfilled)
+		const totalAssigned = driverAssignments.filter((d) => d.assignment.status !== 'unfilled').length;
 
-		// Generate rates based on tier
-		const { attendanceRate, completionRate } = generateRatesForTier(tier);
+		// completedShifts: assignments with status === 'completed'
+		const completedShifts = driverAssignments.filter((d) => d.assignment.status === 'completed').length;
 
-		// Calculate completed shifts from attendance rate
-		const completedShifts = Math.round(totalShifts * attendanceRate);
+		// totalShifts: same as completedShifts
+		const totalShifts = completedShifts;
+
+		// attendanceRate: completedShifts / totalAssigned
+		const attendanceRate = totalAssigned > 0
+			? Math.round((completedShifts / totalAssigned) * 100) / 100
+			: 0;
+
+		// completionRate: parcelsDelivered / parcelsStart for completed shifts
+		let totalParcelsStart = 0;
+		let totalParcelsDelivered = 0;
+		for (const { assignment, index } of driverAssignments) {
+			if (assignment.status !== 'completed') continue;
+			const shift = shiftByAssignmentIndex.get(index);
+			if (shift?.parcelsStart && shift?.parcelsDelivered) {
+				totalParcelsStart += shift.parcelsStart;
+				totalParcelsDelivered += shift.parcelsDelivered;
+			}
+		}
+		const completionRate = totalParcelsStart > 0
+			? Math.round((totalParcelsDelivered / totalParcelsStart) * 100) / 100
+			: 0;
+
+		// avgParcelsDelivered
+		const avgParcelsDelivered = completedShifts > 0
+			? Math.round((totalParcelsDelivered / completedShifts) * 100) / 100
+			: 0;
+
+		// confirmedShifts: assignments where confirmedAt is set
+		const confirmedShifts = driverAssignments.filter((d) => d.assignment.confirmedAt !== null).length;
+
+		// lateCancellations: cancelled + confirmedAt (confirmed then cancelled)
+		const lateCancellations = driverAssignments.filter(
+			(d) => d.assignment.status === 'cancelled' && d.assignment.confirmedAt !== null
+		).length;
+
+		// autoDroppedShifts: assignments with cancelType = 'auto_drop'
+		const autoDroppedShifts = driverAssignments.filter(
+			(d) => d.assignment.cancelType === 'auto_drop'
+		).length;
+
+		// bidPickups: assigned via bid
+		const bidPickups = driverAssignments.filter((d) => d.assignment.assignedBy === 'bid').length;
+
+		// arrivedOnTimeCount: completed/active shifts with arrivedAt before 9 AM
+		let arrivedOnTimeCount = 0;
+		for (const { assignment, index } of driverAssignments) {
+			if (assignment.status !== 'completed' && assignment.status !== 'active') continue;
+			const shift = shiftByAssignmentIndex.get(index);
+			if (shift?.arrivedAt) {
+				const hours = shift.arrivedAt.getHours();
+				if (hours < 9) {
+					arrivedOnTimeCount++;
+				}
+			}
+		}
+
+		// highDeliveryCount: completed shifts where delivery rate >= 95%
+		let highDeliveryCount = 0;
+		for (const { assignment, index } of driverAssignments) {
+			if (assignment.status !== 'completed') continue;
+			const shift = shiftByAssignmentIndex.get(index);
+			if (shift?.parcelsStart && shift.parcelsStart > 0 && shift.parcelsDelivered) {
+				if (shift.parcelsDelivered / shift.parcelsStart >= 0.95) {
+					highDeliveryCount++;
+				}
+			}
+		}
 
 		metrics.push({
 			userId: driver.id,
 			totalShifts,
 			completedShifts,
 			attendanceRate,
-			completionRate
+			completionRate,
+			avgParcelsDelivered,
+			totalAssigned,
+			confirmedShifts,
+			autoDroppedShifts,
+			lateCancellations,
+			noShows: 0,
+			bidPickups,
+			arrivedOnTimeCount,
+			highDeliveryCount,
+			urgentPickups: 0
 		});
 	}
 
 	return metrics;
-}
-
-type PerformanceTier = 'high' | 'medium' | 'low';
-
-function selectPerformanceTier(): PerformanceTier {
-	const roll = random();
-	if (roll < 0.7) return 'high';
-	if (roll < 0.9) return 'medium';
-	return 'low';
-}
-
-function generateRatesForTier(tier: PerformanceTier): {
-	attendanceRate: number;
-	completionRate: number;
-} {
-	switch (tier) {
-		case 'high':
-			return {
-				attendanceRate: randomInRange(0.85, 1.0),
-				completionRate: randomInRange(0.9, 1.0)
-			};
-		case 'medium':
-			return {
-				attendanceRate: randomInRange(0.7, 0.85),
-				completionRate: randomInRange(0.75, 0.9)
-			};
-		case 'low':
-			return {
-				attendanceRate: randomInRange(0.5, 0.7),
-				completionRate: randomInRange(0.6, 0.75)
-			};
-	}
-}
-
-function randomInRange(min: number, max: number): number {
-	return Math.round((min + random() * (max - min)) * 100) / 100;
 }

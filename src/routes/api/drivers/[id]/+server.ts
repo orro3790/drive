@@ -13,7 +13,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { driverMetrics, user } from '$lib/server/db/schema';
+import { driverHealthState, driverMetrics, user } from '$lib/server/db/schema';
 import { driverUpdateSchema } from '$lib/schemas/driver';
 import { eq } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
@@ -77,9 +77,52 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		dbUpdates.flagWarningDate = null;
 	}
 
+	// Handle reinstate action (restore assignment pool eligibility)
+	if (updates.reinstate === true) {
+		const [healthState] = await db
+			.select({
+				assignmentPoolEligible: driverHealthState.assignmentPoolEligible,
+				requiresManagerIntervention: driverHealthState.requiresManagerIntervention
+			})
+			.from(driverHealthState)
+			.where(eq(driverHealthState.userId, id));
+
+		if (healthState && !healthState.assignmentPoolEligible) {
+			const now = new Date();
+			await db
+				.update(driverHealthState)
+				.set({
+					assignmentPoolEligible: true,
+					requiresManagerIntervention: false,
+					reinstatedAt: now,
+					updatedAt: now
+				})
+				.where(eq(driverHealthState.userId, id));
+
+			changes.assignmentPoolEligible = { from: false, to: true };
+			changes.requiresManagerIntervention = { from: true, to: false };
+
+			await createAuditLog({
+				entityType: 'driver_health',
+				entityId: id,
+				action: 'reinstate',
+				actorType: 'user',
+				actorId: locals.user.id,
+				changes: {
+					assignmentPoolEligible: { from: false, to: true },
+					requiresManagerIntervention: { from: true, to: false }
+				}
+			});
+		}
+	}
+
 	// If no actual changes, return current state
-	if (Object.keys(dbUpdates).length === 0) {
+	if (Object.keys(dbUpdates).length === 0 && Object.keys(changes).length === 0) {
 		const [metrics] = await db.select().from(driverMetrics).where(eq(driverMetrics.userId, id));
+		const [hs] = await db
+			.select({ assignmentPoolEligible: driverHealthState.assignmentPoolEligible })
+			.from(driverHealthState)
+			.where(eq(driverHealthState.userId, id));
 
 		return json({
 			driver: {
@@ -88,53 +131,63 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 				completedShifts: metrics?.completedShifts ?? 0,
 				attendanceRate: metrics?.attendanceRate ?? 0,
 				completionRate: metrics?.completionRate ?? 0,
-				avgParcelsDelivered: metrics?.avgParcelsDelivered ?? 0
+				avgParcelsDelivered: metrics?.avgParcelsDelivered ?? 0,
+				assignmentPoolEligible: hs?.assignmentPoolEligible ?? true
 			}
 		});
 	}
 
-	// Apply updates
-	const [updated] = await db
-		.update(user)
-		.set({
-			...dbUpdates,
-			updatedAt: new Date()
-		})
-		.where(eq(user.id, id))
-		.returning({
-			id: user.id,
-			name: user.name,
-			email: user.email,
-			phone: user.phone,
-			weeklyCap: user.weeklyCap,
-			isFlagged: user.isFlagged,
-			flagWarningDate: user.flagWarningDate,
-			createdAt: user.createdAt
+	// Apply user table updates if any
+	let updated = existing;
+	if (Object.keys(dbUpdates).length > 0) {
+		const [result] = await db
+			.update(user)
+			.set({
+				...dbUpdates,
+				updatedAt: new Date()
+			})
+			.where(eq(user.id, id))
+			.returning({
+				id: user.id,
+				name: user.name,
+				email: user.email,
+				phone: user.phone,
+				role: user.role,
+				weeklyCap: user.weeklyCap,
+				isFlagged: user.isFlagged,
+				flagWarningDate: user.flagWarningDate,
+				createdAt: user.createdAt
+			});
+		updated = result;
+
+		await createAuditLog({
+			entityType: 'user',
+			entityId: id,
+			action: updates.unflag ? 'unflag' : 'update',
+			actorType: 'user',
+			actorId: locals.user.id,
+			changes: {
+				before: {
+					weeklyCap: existing.weeklyCap,
+					isFlagged: existing.isFlagged,
+					flagWarningDate: existing.flagWarningDate
+				},
+				after: {
+					weeklyCap: updated.weeklyCap,
+					isFlagged: updated.isFlagged,
+					flagWarningDate: updated.flagWarningDate
+				},
+				fields: changes
+			}
 		});
+	}
 
-	await createAuditLog({
-		entityType: 'user',
-		entityId: id,
-		action: updates.unflag ? 'unflag' : 'update',
-		actorType: 'user',
-		actorId: locals.user.id,
-		changes: {
-			before: {
-				weeklyCap: existing.weeklyCap,
-				isFlagged: existing.isFlagged,
-				flagWarningDate: existing.flagWarningDate
-			},
-			after: {
-				weeklyCap: updated.weeklyCap,
-				isFlagged: updated.isFlagged,
-				flagWarningDate: updated.flagWarningDate
-			},
-			fields: changes
-		}
-	});
-
-	// Get metrics for response
+	// Get metrics and health state for response
 	const [metrics] = await db.select().from(driverMetrics).where(eq(driverMetrics.userId, id));
+	const [hs] = await db
+		.select({ assignmentPoolEligible: driverHealthState.assignmentPoolEligible })
+		.from(driverHealthState)
+		.where(eq(driverHealthState.userId, id));
 
 	return json({
 		driver: {
@@ -143,7 +196,8 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 			completedShifts: metrics?.completedShifts ?? 0,
 			attendanceRate: metrics?.attendanceRate ?? 0,
 			completionRate: metrics?.completionRate ?? 0,
-			avgParcelsDelivered: metrics?.avgParcelsDelivered ?? 0
+			avgParcelsDelivered: metrics?.avgParcelsDelivered ?? 0,
+			assignmentPoolEligible: hs?.assignmentPoolEligible ?? true
 		}
 	});
 };

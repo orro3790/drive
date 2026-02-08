@@ -92,6 +92,13 @@ Push notification service using Firebase Cloud Messaging (FCM) for sending time-
 - `manual` - Manager message
 - `schedule_locked` - Preferences locked
 - `assignment_confirmed` - New shift assigned
+- `confirmation_reminder` - 72h before shift confirmation deadline
+- `shift_auto_dropped` - Unconfirmed shift auto-dropped at 48h
+- `emergency_route_available` - Emergency bid window opened
+- `streak_advanced` - Weekly streak increased (health system)
+- `streak_reset` - Weekly streak reset to 0 (health system)
+- `bonus_eligible` - Milestone reward reached (health system)
+- `corrective_warning` - Completion rate below 80% (health system)
 
 **Usage:**
 
@@ -299,6 +306,53 @@ const routes = await db.select().from(routes).where(inArray(routes.warehouseId, 
 - Managers ↔ Warehouses: many-to-many via `warehouseManagers` junction table
 - Routes → Manager: optional one-to-many via `routes.managerId` (primary manager for a route)
 
+#### `health.ts`
+
+Driver health scoring (daily 0-100 score) and star progression (weekly 0-4 stars) with hard-stop resets. See `docs/plans/driver-health-gamification.md` for full specification.
+
+**Key Functions:**
+
+- `computeDailyScore(userId)` - Compute daily health score for a driver (attendance 50%, completion 30%, reliability 20%). Returns `DailyScoreResult` or null for new drivers.
+- `evaluateWeek(userId, weekStart)` - Evaluate weekly star progression based on qualifying week criteria (100% attendance, 95%+ completion, 0 no-shows, 0 late cancellations). Returns `WeeklyEvalResult`.
+- `runDailyHealthEvaluation()` - Batch runner for daily score computation across all drivers (cron job). Sends corrective warnings if needed.
+- `runWeeklyHealthEvaluation()` - Batch runner for weekly star evaluation across all drivers (cron job). Sends streak notifications.
+
+**Hard-Stop Rules:**
+
+- Any no-show OR 2+ late cancellations in rolling 30 days caps score at 49 and resets stars to 0
+- Hard-stop events set `assignmentPoolEligible = false` (requires manager intervention)
+
+**Usage:**
+
+```typescript
+import { computeDailyScore, evaluateWeek } from '$lib/server/services/health';
+
+// Compute daily score for a driver
+const result = await computeDailyScore(driverId);
+if (result) {
+	console.log(`Score: ${result.score}, Hard-stop: ${result.hardStopTriggered}`);
+}
+
+// Evaluate weekly progression (call after week closes)
+const weekResult = await evaluateWeek(driverId, lastMonday);
+if (weekResult.qualified) {
+	console.log(`Star progression: ${weekResult.previousStars} → ${weekResult.newStars}`);
+}
+
+// Cron job usage
+const dailyResult = await runDailyHealthEvaluation();
+console.log(
+	`Scored ${dailyResult.scored} drivers, ${dailyResult.correctiveWarnings} warnings sent`
+);
+```
+
+**Notifications Sent:**
+
+- `corrective_warning` - Completion rate below 80% (daily, max 1 per recovery window)
+- `streak_advanced` - Weekly streak increased (weekly, on qualifying week)
+- `streak_reset` - Weekly streak reset to 0 (weekly, on hard-stop)
+- `bonus_eligible` - Reached 4 stars (weekly, milestone)
+
 ---
 
 ## Component Patterns
@@ -409,7 +463,7 @@ Get driver dashboard overview data including unconfirmed shifts and shift workfl
 	todayShift: DashboardAssignment | null; // Includes isArrivable, shift.arrivedAt, shift.editableUntil
 	thisWeek: { weekStart: string; assignedDays: number; assignments: DashboardAssignment[] };
 	nextWeek: { weekStart: string; assignedDays: number; assignments: DashboardAssignment[] };
-	metrics: { totalShifts: number; completedShifts: number; attendanceRate: number; completionRate: number };
+	metrics: { totalShifts: number; completedShifts: number; attendanceRate: number; completionRate: number }; // UI: shown in collapsible section below health card
 	pendingBids: PendingBid[];
 	needsConfirmation: UnconfirmedAssignment[]; // Shifts requiring confirmation
 	isNewDriver: boolean;
@@ -422,6 +476,8 @@ Get driver dashboard overview data including unconfirmed shifts and shift workfl
 // - shift.arrivedAt: ISO timestamp when driver arrived on-site
 // - shift.editableUntil: ISO timestamp of 1-hour edit window expiration
 ```
+
+**UI Note:** Dashboard features HealthCard (score/stars/streak) as the primary metric display. Raw metrics (attendance/completion rates) are available in a collapsible section for details.
 
 **Auth:** Required (driver role only)
 
@@ -443,6 +499,47 @@ Get driver performance metrics (cached separately for offline use).
 ```
 
 **Auth:** Required (driver role only)
+
+#### `GET /api/driver-health`
+
+Read-only driver health state: score, stars, streak, hard-stop flags, next milestone, simulation rewards, and recent score history.
+
+**Response:**
+
+```typescript
+{
+	score: number | null; // null for onboarding drivers
+	stars: number; // 0-4
+	streakWeeks: number;
+	eliteThreshold: number; // from dispatchPolicy
+	maxStars: number;
+	hardStop: {
+		triggered: boolean; // derived from state table (canonical)
+		assignmentPoolEligible: boolean;
+		requiresManagerIntervention: boolean;
+		reasons: string[];
+	};
+	nextMilestone: {
+		targetStars: number;
+		currentStars: number;
+	};
+	simulation: {
+		bonusEligible: boolean;
+		bonusPercent: number;
+		label: 'simulation';
+	};
+	recentScores: Array<{
+		date: string;
+		score: number;
+		attendanceRate: number;
+		completionRate: number;
+		hardStopTriggered: boolean;
+	}>;
+	isOnboarding: boolean;
+}
+```
+
+**Auth:** Required (driver role only). Returns neutral onboarding state for new drivers with no health data.
 
 #### `POST /api/users/fcm-token`
 
@@ -702,6 +799,31 @@ Resolves or transitions expired bid windows based on mode.
    - **Instant/emergency without bids**: Close window, alert manager
 
 **Returns:** `{ success, processed, resolved, transitioned, closed, errors }`
+
+#### `GET /api/cron/health-daily`
+
+**Schedule:** Daily at 2:00 AM Toronto time (7:00 AM UTC), after performance-check.
+
+**Process:**
+
+1. Compute daily health score for all active drivers
+2. Persist snapshot and update current state
+3. Send corrective warnings for completion < 80% (deduplicated per recovery window)
+
+**Returns:** `{ success, summary: { evaluated, scored, skippedNewDrivers, correctiveWarnings, errors, elapsedMs } }`
+
+#### `GET /api/cron/health-weekly`
+
+**Schedule:** Monday at 3:00 AM Toronto time (8:00 AM UTC).
+
+**Process:**
+
+1. Evaluate the just-completed week (previous Monday–Sunday) for all active drivers
+2. Check qualifying-week criteria (100% attendance, ≥95% completion, 0 no-shows, 0 late cancellations)
+3. Increment/reset stars and streak based on qualification or hard-stop events
+4. Send streak_advanced, streak_reset, or bonus_eligible notifications
+
+**Returns:** `{ success, summary: { evaluated, qualified, hardStopResets, neutral, errors, elapsedMs } }`
 
 ---
 

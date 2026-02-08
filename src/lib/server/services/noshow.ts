@@ -9,6 +9,7 @@ import { db } from '$lib/server/db';
 import {
 	assignments,
 	bidWindows,
+	driverHealthState,
 	driverMetrics,
 	routes,
 	shifts,
@@ -153,7 +154,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 			if (result.success) {
 				bidWindowsCreated++;
 
-				// 2. Increment driver noShows metric
+				// 2. Increment driver noShows metric and reset health score
 				if (candidate.driverId) {
 					try {
 						await db
@@ -163,8 +164,22 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 								updatedAt: new Date()
 							})
 							.where(eq(driverMetrics.userId, candidate.driverId));
+
+						// No-show = full score reset
+						await db
+							.update(driverHealthState)
+							.set({
+								currentScore: 0,
+								lastScoreResetAt: new Date(),
+								stars: 0,
+								streakWeeks: 0,
+								assignmentPoolEligible: false,
+								requiresManagerIntervention: true,
+								updatedAt: new Date()
+							})
+							.where(eq(driverHealthState.userId, candidate.driverId));
 					} catch (error) {
-						log.warn({ driverId: candidate.driverId, error }, 'Failed to increment noShows metric');
+						log.warn({ driverId: candidate.driverId, error }, 'Failed to update noShow metrics/health');
 					}
 				}
 

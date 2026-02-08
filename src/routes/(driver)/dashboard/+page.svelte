@@ -7,30 +7,48 @@
 	- Personal metrics (attendance, completion rates)
 	- Pending bids with countdown timers
 	- New driver welcome banner
+
+	Design follows schedule/notification-item patterns: flat rows, single accent per status,
+	icon anchors, tag chips for metadata.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { format, parseISO, formatDistanceToNow, differenceInMinutes } from 'date-fns';
+	import type { Component } from 'svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
-	import Modal from '$lib/components/primitives/Modal.svelte';
-	import Select from '$lib/components/Select.svelte';
+	import IconBase from '$lib/components/primitives/Icon.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
+	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
-	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
-	import { dashboardStore, type DashboardAssignment } from '$lib/stores/dashboardStore.svelte';
+	import CancelShiftModal from '$lib/components/driver/CancelShiftModal.svelte';
+	import HealthCard from '$lib/components/driver/HealthCard.svelte';
+	import Announcement from '$lib/components/icons/Announcement.svelte';
+	import CalendarX from '$lib/components/icons/CalendarX.svelte';
+	import CheckCircleIcon from '$lib/components/icons/CheckCircleIcon.svelte';
+	import Clock from '$lib/components/icons/Clock.svelte';
+	import Gavel from '$lib/components/icons/Gavel.svelte';
+	import Lock from '$lib/components/icons/Lock.svelte';
+	import MapPin from '$lib/components/icons/MapPin.svelte';
+	import Pencil from '$lib/components/icons/Pencil.svelte';
+	import QuestionMark from '$lib/components/icons/QuestionMark.svelte';
+	import RouteIcon from '$lib/components/icons/Route.svelte';
+	import WarehouseIcon from '$lib/components/icons/Warehouse.svelte';
+	import XIcon from '$lib/components/icons/XIcon.svelte';
 	import {
-		cancelReasonValues,
-		type AssignmentStatus,
-		type CancelReason
-	} from '$lib/schemas/assignment';
-	import type { SelectOption } from '$lib/schemas/ui/select';
+		deriveAssignmentLifecycleState,
+		getAssignmentActions,
+		type AssignmentLifecycleActionId
+	} from '$lib/config/driverLifecycleIa';
+	import { statusLabels } from '$lib/config/lifecycleLabels';
+	import { formatAssignmentDate } from '$lib/utils/date/formatting';
+	import { dashboardStore, type DashboardAssignment } from '$lib/stores/dashboardStore.svelte';
+	import type { CancelReason } from '$lib/schemas/assignment';
 
 	// Cancel modal state
 	let cancelTarget = $state<DashboardAssignment | null>(null);
-	let cancelReason = $state<CancelReason | ''>('');
-	let cancelError = $state<string | null>(null);
 
 	// Shift start (inventory) state
 	let parcelsStart = $state<number | ''>('');
@@ -48,6 +66,10 @@
 
 	// Edit countdown timer
 	let editMinutesRemaining = $state(0);
+	let dismissedNewDriverBanner = $state(false);
+
+
+	const NEW_DRIVER_BANNER_DISMISS_KEY = 'drive.dashboard.new-driver-banner.dismissed';
 
 	type ShiftStep =
 		| 'arrive'
@@ -58,29 +80,175 @@
 		| 'completed-locked'
 		| null;
 
+	type DashboardActionId = Extract<
+		AssignmentLifecycleActionId,
+		| 'confirm_shift'
+		| 'arrive_on_site'
+		| 'record_inventory'
+		| 'complete_shift'
+		| 'edit_completion'
+		| 'cancel_shift'
+	>;
+
 	let completingStep = $state(false);
 
-	const shiftStep: ShiftStep = $derived.by(() => {
+	const todayLifecycleState = $derived.by(() => {
 		const shift = dashboardStore.todayShift;
 		if (!shift) return null;
 
-		// No shift record yet or not arrived
-		if (!shift.shift?.arrivedAt) return 'arrive';
+		return deriveAssignmentLifecycleState(shift);
+	});
 
-		// Arrived but no inventory yet
-		if (shift.shift.parcelsStart === null) return 'inventory';
-
-		// Inventory done but not completed
-		if (!shift.shift.completedAt) {
-			return completingStep ? 'completing' : 'delivering';
+	const todayActions = $derived.by(() => {
+		const shift = dashboardStore.todayShift;
+		if (!shift) {
+			return [] as DashboardActionId[];
 		}
 
-		// Completed — check edit window
-		if (shift.shift.editableUntil && new Date() < new Date(shift.shift.editableUntil)) {
-			return 'completed-editable';
+		return getAssignmentActions(shift, 'dashboard').filter(
+			(actionId): actionId is DashboardActionId =>
+				actionId === 'confirm_shift' ||
+				actionId === 'arrive_on_site' ||
+				actionId === 'record_inventory' ||
+				actionId === 'complete_shift' ||
+				actionId === 'edit_completion' ||
+				actionId === 'cancel_shift'
+		);
+	});
+
+	function hasTodayAction(actionId: DashboardActionId) {
+		return todayActions.includes(actionId);
+	}
+
+	const showNewDriverBanner = $derived(dashboardStore.isNewDriver && !dismissedNewDriverBanner);
+
+	const todayPrimaryAction = $derived.by(() => {
+		const firstNonCancel = todayActions.find((actionId) => actionId !== 'cancel_shift');
+		if (firstNonCancel) {
+			return firstNonCancel;
 		}
 
-		return 'completed-locked';
+		return todayActions.includes('cancel_shift') ? 'cancel_shift' : null;
+	});
+
+	function getTodayActionLabel(actionId: DashboardActionId) {
+		switch (actionId) {
+			case 'confirm_shift':
+				return m.dashboard_confirm_button();
+			case 'arrive_on_site':
+				return m.shift_arrive_button();
+			case 'record_inventory':
+				return m.shift_start_button();
+			case 'complete_shift':
+				return m.shift_complete_button();
+			case 'edit_completion':
+				return m.shift_edit_button();
+			case 'cancel_shift':
+				return m.schedule_cancel_button();
+		}
+	}
+
+	function getTodayActionVariant(actionId: DashboardActionId): 'primary' | 'secondary' | 'danger' {
+		return actionId === 'cancel_shift' ? 'danger' : 'primary';
+	}
+
+	function isTodayActionLoading(actionId: DashboardActionId): boolean {
+		switch (actionId) {
+			case 'confirm_shift':
+				return dashboardStore.isConfirming;
+			case 'arrive_on_site':
+				return dashboardStore.isArriving;
+			case 'record_inventory':
+				return dashboardStore.isStartingShift;
+			case 'complete_shift':
+				return dashboardStore.isCompletingShift;
+			case 'edit_completion':
+				return dashboardStore.isEditingShift;
+			case 'cancel_shift':
+				return dashboardStore.isCancelling;
+		}
+	}
+
+	function handleTodayAction(actionId: DashboardActionId) {
+		const shift = dashboardStore.todayShift;
+		if (!shift) {
+			return;
+		}
+
+		switch (actionId) {
+			case 'confirm_shift':
+				dashboardStore.confirmShift(shift.id);
+				return;
+			case 'arrive_on_site':
+				handleArrive();
+				return;
+			case 'record_inventory':
+				return;
+			case 'complete_shift':
+				openCompleteStep();
+				return;
+			case 'edit_completion':
+				openEditMode();
+				return;
+			case 'cancel_shift':
+				openCancelModal(shift);
+				return;
+		}
+	}
+
+	const shiftStep: ShiftStep = $derived.by(() => {
+		switch (todayLifecycleState) {
+			case 'scheduled_today_arrive':
+				return 'arrive';
+			case 'active_inventory':
+				return 'inventory';
+			case 'active_delivering':
+				return completingStep ? 'completing' : 'delivering';
+			case 'completed_editable':
+				return 'completed-editable';
+			case 'completed_locked':
+				return 'completed-locked';
+			default:
+				return null;
+		}
+	});
+
+	// Derived: accent CSS variable for today's shift icon circle
+	const todayShiftAccent = $derived.by((): string => {
+		switch (shiftStep) {
+			case 'arrive':
+				return '--interactive-accent';
+			case 'inventory':
+				return '--status-info';
+			case 'delivering':
+			case 'completing':
+				return '--status-info';
+			case 'completed-editable':
+				return '--status-warning';
+			case 'completed-locked':
+				return '--text-muted';
+			default:
+				return '--interactive-accent';
+		}
+	});
+
+	// Derived: icon component for today's shift icon circle
+	const todayShiftIcon = $derived.by((): Component => {
+		switch (shiftStep) {
+			case 'arrive':
+				return Clock;
+			case 'inventory':
+				return MapPin;
+			case 'delivering':
+			case 'completing':
+				return Clock;
+			case 'completed-editable':
+				return Pencil;
+			case 'completed-locked':
+				return Lock;
+			default:
+				return Clock;
+		}
 	});
 
 	function updateEditCountdown() {
@@ -99,42 +267,18 @@
 		}
 	});
 
-	const statusLabels: Record<AssignmentStatus, string> = {
-		scheduled: m.schedule_status_scheduled(),
-		active: m.schedule_status_active(),
-		completed: m.schedule_status_completed(),
-		cancelled: m.schedule_status_cancelled(),
-		unfilled: m.schedule_status_unfilled()
-	};
-
-	const statusChips: Record<
-		AssignmentStatus,
-		'info' | 'success' | 'warning' | 'error' | 'neutral'
-	> = {
-		scheduled: 'info',
-		active: 'warning',
-		completed: 'success',
-		cancelled: 'neutral',
-		unfilled: 'warning'
-	};
-
-	const cancelReasonLabels: Record<CancelReason, string> = {
-		vehicle_breakdown: m.schedule_cancel_reason_vehicle_breakdown(),
-		medical_emergency: m.schedule_cancel_reason_medical_emergency(),
-		family_emergency: m.schedule_cancel_reason_family_emergency(),
-		traffic_accident: m.schedule_cancel_reason_traffic_accident(),
-		weather_conditions: m.schedule_cancel_reason_weather_conditions(),
-		personal_emergency: m.schedule_cancel_reason_personal_emergency(),
-		other: m.schedule_cancel_reason_other()
-	};
-
-	const cancelReasonOptions: SelectOption[] = cancelReasonValues.map((reason) => ({
-		value: reason,
-		label: cancelReasonLabels[reason]
-	}));
-
-	function formatAssignmentDate(dateString: string) {
-		return format(parseISO(dateString), 'EEE, MMM d');
+	function formatConfirmDeadline(isoString: string): { overdue: boolean; text: string } {
+		const deadline = parseISO(isoString);
+		if (deadline < new Date()) {
+			return {
+				overdue: true,
+				text: m.dashboard_confirm_overdue({ deadline: format(deadline, 'MMM d, h:mm a') })
+			};
+		}
+		return {
+			overdue: false,
+			text: m.dashboard_confirm_deadline({ deadline: formatDistanceToNow(deadline) })
+		};
 	}
 
 	function formatClosesAt(isoString: string) {
@@ -144,35 +288,21 @@
 		});
 	}
 
-	function formatPercentage(rate: number) {
-		return `${Math.round(rate * 100)}%`;
-	}
-
 	function formatTime(isoString: string) {
 		return format(parseISO(isoString), 'h:mm a');
 	}
 
-	// Cancel modal functions
 	function openCancelModal(assignment: DashboardAssignment) {
 		cancelTarget = assignment;
-		cancelReason = '';
-		cancelError = null;
 	}
 
 	function closeCancelModal() {
 		cancelTarget = null;
-		cancelReason = '';
-		cancelError = null;
 	}
 
-	async function submitCancellation() {
+	async function handleCancel(reason: CancelReason) {
 		if (!cancelTarget) return;
-		if (!cancelReason) {
-			cancelError = m.schedule_cancel_reason_required();
-			return;
-		}
-
-		const success = await dashboardStore.cancel(cancelTarget.id, cancelReason);
+		const success = await dashboardStore.cancel(cancelTarget.id, reason);
 		if (success) {
 			closeCancelModal();
 		}
@@ -265,10 +395,37 @@
 		}
 	}
 
+	function loadDismissedBannerPreference() {
+		const storedPreference = window.localStorage.getItem(NEW_DRIVER_BANNER_DISMISS_KEY);
+		dismissedNewDriverBanner = storedPreference === '1';
+	}
+
+	function dismissNewDriverBanner() {
+		dismissedNewDriverBanner = true;
+		window.localStorage.setItem(NEW_DRIVER_BANNER_DISMISS_KEY, '1');
+	}
+
+	const sortedUnconfirmedShifts = $derived(
+		[...dashboardStore.unconfirmedShifts].sort((a, b) => a.date.localeCompare(b.date))
+	);
+
 	onMount(() => {
+		loadDismissedBannerPreference();
 		dashboardStore.load();
 	});
 </script>
+
+{#snippet routeChipIcon()}
+	<IconBase size="small">
+		<RouteIcon />
+	</IconBase>
+{/snippet}
+
+{#snippet warehouseChipIcon()}
+	<IconBase size="small">
+		<WarehouseIcon />
+	</IconBase>
+{/snippet}
 
 <svelte:head>
 	<title>{m.dashboard_page_title()} | Drive</title>
@@ -290,14 +447,29 @@
 		{:else}
 			<div class="dashboard-sections">
 				<!-- New Driver Banner -->
-				{#if dashboardStore.isNewDriver}
-					<NoticeBanner variant="info" align="start">
-						<div class="banner-content">
-							<h3>{m.dashboard_new_driver_title()}</h3>
-							<p>{m.dashboard_new_driver_message()}</p>
+				{#if showNewDriverBanner}
+					<div class="banner-item" role="note" aria-label={m.dashboard_new_driver_title()}>
+						<div
+							class="icon-circle"
+							style="--icon-accent: var(--interactive-accent);"
+							aria-hidden="true"
+						>
+							<Announcement />
 						</div>
-					</NoticeBanner>
+						<div class="banner-content">
+							<div class="banner-header">
+								<h3>{m.dashboard_new_driver_title()}</h3>
+								<IconButton tooltip={m.common_close()} onclick={dismissNewDriverBanner}>
+									<IconBase><XIcon /></IconBase>
+								</IconButton>
+							</div>
+							<p class="banner-message">{m.dashboard_new_driver_message()}</p>
+						</div>
+					</div>
 				{/if}
+
+				<!-- Health Card -->
+				<HealthCard />
 
 				<!-- Today's Shift -->
 				<section class="dashboard-section">
@@ -307,212 +479,302 @@
 
 					{#if dashboardStore.todayShift}
 						{@const todayShift = dashboardStore.todayShift}
-						<div class="today-card">
-							<div class="card-header">
-								<div class="card-summary">
-									<p class="today-date">{formatAssignmentDate(todayShift.date)}</p>
-									<p class="today-route">{todayShift.routeName}</p>
-									<p class="today-warehouse">{todayShift.warehouseName}</p>
-								</div>
-								<Chip
-									variant="status"
-									status={statusChips[todayShift.status]}
-									label={statusLabels[todayShift.status]}
-									size="xs"
-								/>
+						{@const TodayIcon = todayShiftIcon}
+						<div
+							class="today-item"
+							style="--icon-accent: var({todayShiftAccent});"
+						>
+							<div class="icon-circle" aria-hidden="true">
+								<TodayIcon />
 							</div>
-
-							<!-- Step 1: Arrive -->
-							{#if shiftStep === 'arrive'}
-								<div class="step-content">
-									<Button
-										variant="primary"
-										fill
-										isLoading={dashboardStore.isArriving}
-										onclick={handleArrive}
-									>
-										{m.shift_arrive_button()}
-									</Button>
+							<div class="today-content">
+								<div class="assignment-header">
+									<div class="header-left">
+										<span class="assignment-date">{formatAssignmentDate(todayShift.date)}</span>
+										<span class="assignment-status">{statusLabels[todayShift.status]}</span>
+									</div>
+									<div class="header-right">
+										{#if hasTodayAction('cancel_shift')}
+											<Button
+												variant="ghost"
+												size="xs"
+												isLoading={isTodayActionLoading('cancel_shift')}
+												onclick={() => handleTodayAction('cancel_shift')}
+											>
+												<IconBase size="small"><CalendarX /></IconBase>
+												{m.common_cancel()}
+											</Button>
+										{/if}
+									</div>
 								</div>
-							{/if}
-
-							<!-- Step 2: Inventory -->
-							{#if shiftStep === 'inventory'}
-								<div class="step-content">
-									{#if todayShift.shift?.arrivedAt}
-										<p class="step-info">
-											{m.shift_arrive_arrived_at({ time: formatTime(todayShift.shift.arrivedAt) })}
-										</p>
-									{/if}
-									<form
-										class="inline-form"
-										onsubmit={(e) => {
-											e.preventDefault();
-											submitInventory();
-										}}
-									>
-										<div class="form-field">
-											<label for="parcels-start">{m.shift_start_parcels_label()}</label>
-											<input
-												id="parcels-start"
-												type="number"
-												class="number-input"
-												class:has-error={startError}
-												min="1"
-												max="999"
-												placeholder={m.shift_start_parcels_placeholder()}
-												bind:value={parcelsStart}
-												oninput={() => (startError = null)}
-											/>
-											{#if startError}
-												<p class="field-error">{startError}</p>
-											{/if}
-										</div>
-										<Button
-											variant="primary"
-											type="submit"
-											fill
-											isLoading={dashboardStore.isStartingShift}
-										>
-											{m.shift_start_button()}
-										</Button>
-									</form>
+								<div class="assignment-meta">
+									<Chip
+										variant="tag"
+										size="xs"
+										color="var(--text-muted)"
+										label={todayShift.routeName}
+										icon={routeChipIcon}
+									/>
+									<Chip
+										variant="tag"
+										size="xs"
+										color="var(--text-muted)"
+										label={todayShift.warehouseName}
+										icon={warehouseChipIcon}
+									/>
 								</div>
-							{/if}
 
-							<!-- Step 3: Delivering -->
-							{#if shiftStep === 'delivering'}
-								<div class="step-content">
-									<p class="step-status">{m.shift_delivering_status()}</p>
-									<p class="step-info">
-										{m.shift_delivering_parcels({
-											count: String(todayShift.shift?.parcelsStart ?? 0)
-										})}
-									</p>
-									<Button variant="primary" fill onclick={openCompleteStep}>
-										{m.shift_complete_button()}
-									</Button>
-								</div>
-							{/if}
+								<!-- Step 1: Arrive -->
+								{#if shiftStep === 'arrive'}
+									<div class="step-content">
+										{#if hasTodayAction('arrive_on_site')}
+											<Button
+												variant={getTodayActionVariant('arrive_on_site')}
+												fill
+												isLoading={isTodayActionLoading('arrive_on_site')}
+												onclick={() => handleTodayAction('arrive_on_site')}
+											>
+												{getTodayActionLabel('arrive_on_site')}
+											</Button>
+										{/if}
+									</div>
+								{/if}
 
-							<!-- Step 4: Completing (returns entry) -->
-							{#if shiftStep === 'completing'}
-								<div class="step-content">
-									<form
-										class="inline-form"
-										onsubmit={(e) => {
-											e.preventDefault();
-											submitComplete();
-										}}
-									>
-										<div class="form-field">
-											<label for="parcels-returned">{m.shift_complete_returned_label()}</label>
-											<input
-												id="parcels-returned"
-												type="number"
-												class="number-input"
-												class:has-error={completeError}
-												min="0"
-												max={todayShift.shift?.parcelsStart ?? 999}
-												placeholder={m.shift_complete_returned_placeholder()}
-												bind:value={parcelsReturned}
-												oninput={() => (completeError = null)}
-											/>
-											{#if completeError}
-												<p class="field-error">{completeError}</p>
-											{/if}
-										</div>
-
-										<div class="delivery-summary">
-											<p>
-												{m.shift_complete_summary_started({
-													count: String(todayShift.shift?.parcelsStart ?? 0)
-												})}
+								<!-- Step 2: Inventory -->
+								{#if shiftStep === 'inventory'}
+									<div class="step-content">
+										{#if todayShift.shift?.arrivedAt}
+											<p class="step-info">
+												{m.shift_arrive_arrived_at({ time: formatTime(todayShift.shift.arrivedAt) })}
 											</p>
-											<p>
-												{m.shift_complete_summary_returning({
-													count: String(typeof parcelsReturned === 'number' ? parcelsReturned : 0)
-												})}
-											</p>
-											<p class="summary-delivered">
-												{m.shift_complete_summary_delivered({
-													count: String(
-														(todayShift.shift?.parcelsStart ?? 0) -
-															(typeof parcelsReturned === 'number' ? parcelsReturned : 0)
-													)
-												})}
-											</p>
-										</div>
-
-										<Button
-											variant="primary"
-											type="submit"
-											fill
-											isLoading={dashboardStore.isCompletingShift}
-										>
-											{m.shift_complete_confirm_button()}
-										</Button>
-									</form>
-								</div>
-							{/if}
-
-							<!-- Step 5: Completed (editable) -->
-							{#if shiftStep === 'completed-editable'}
-								<div class="step-content">
-									{#if isEditing}
+										{/if}
 										<form
 											class="inline-form"
 											onsubmit={(e) => {
 												e.preventDefault();
-												submitEdit();
+												submitInventory();
 											}}
 										>
 											<div class="form-field">
-												<label for="edit-parcels-start">{m.shift_start_parcels_label()}</label>
-												<input
-													id="edit-parcels-start"
-													type="number"
-													class="number-input"
-													class:has-error={editError}
+												<label for="parcels-start">{m.shift_start_parcels_label()}</label>
+												<InlineEditor
+													id="parcels-start"
+													inputType="number"
+													inputmode="numeric"
+													mode="form"
+													hasError={!!startError}
 													min="1"
 													max="999"
-													bind:value={editParcelsStart}
-													oninput={() => (editError = null)}
+													placeholder={m.shift_start_parcels_placeholder()}
+													value={parcelsStart === '' ? '' : String(parcelsStart)}
+													onInput={(v) => {
+														parcelsStart = v === '' ? '' : Number(v);
+														startError = null;
+													}}
 												/>
+												{#if startError}
+													<p class="field-error">{startError}</p>
+												{/if}
 											</div>
-											<div class="form-field">
-												<label for="edit-parcels-returned"
-													>{m.shift_complete_returned_label()}</label
-												>
-												<input
-													id="edit-parcels-returned"
-													type="number"
-													class="number-input"
-													class:has-error={editError}
-													min="0"
-													max={typeof editParcelsStart === 'number' ? editParcelsStart : 999}
-													bind:value={editParcelsReturned}
-													oninput={() => (editError = null)}
-												/>
-											</div>
-											{#if editError}
-												<p class="field-error">{editError}</p>
-											{/if}
-											<div class="edit-actions">
-												<Button variant="secondary" fill onclick={closeEditMode}>
-													{m.common_cancel()}
-												</Button>
-												<Button
-													variant="primary"
-													type="submit"
-													fill
-													isLoading={dashboardStore.isEditingShift}
-												>
-													{m.common_save()}
-												</Button>
-											</div>
+											<Button
+												variant="primary"
+												type="submit"
+												fill
+												isLoading={dashboardStore.isStartingShift}
+											>
+												{m.shift_start_button()}
+											</Button>
 										</form>
-									{:else}
+									</div>
+								{/if}
+
+								<!-- Step 3: Delivering -->
+								{#if shiftStep === 'delivering'}
+									<div class="step-content">
+										<p class="step-status">{m.shift_delivering_status()}</p>
+										<p class="step-info">
+											{m.shift_delivering_parcels({
+												count: String(todayShift.shift?.parcelsStart ?? 0)
+											})}
+										</p>
+										{#if hasTodayAction('complete_shift')}
+											<Button
+												variant={getTodayActionVariant('complete_shift')}
+												fill
+												onclick={() => handleTodayAction('complete_shift')}
+											>
+												{getTodayActionLabel('complete_shift')}
+											</Button>
+										{/if}
+									</div>
+								{/if}
+
+								<!-- Step 4: Completing (returns entry) -->
+								{#if shiftStep === 'completing'}
+									<div class="step-content">
+										<form
+											class="inline-form"
+											onsubmit={(e) => {
+												e.preventDefault();
+												submitComplete();
+											}}
+										>
+											<div class="form-field">
+												<label for="parcels-returned">{m.shift_complete_returned_label()}</label>
+												<InlineEditor
+													id="parcels-returned"
+													inputType="number"
+													inputmode="numeric"
+													mode="form"
+													hasError={!!completeError}
+													min="0"
+													max={todayShift.shift?.parcelsStart ?? 999}
+													placeholder={m.shift_complete_returned_placeholder()}
+													value={parcelsReturned === '' ? '' : String(parcelsReturned)}
+													onInput={(v) => {
+														parcelsReturned = v === '' ? '' : Number(v);
+														completeError = null;
+													}}
+												/>
+												{#if completeError}
+													<p class="field-error">{completeError}</p>
+												{/if}
+											</div>
+
+											<div class="delivery-summary">
+												<p>
+													{m.shift_complete_summary_started({
+														count: String(todayShift.shift?.parcelsStart ?? 0)
+													})}
+												</p>
+												<p>
+													{m.shift_complete_summary_returning({
+														count: String(typeof parcelsReturned === 'number' ? parcelsReturned : 0)
+													})}
+												</p>
+												<p class="summary-delivered">
+													{m.shift_complete_summary_delivered({
+														count: String(
+															(todayShift.shift?.parcelsStart ?? 0) -
+																(typeof parcelsReturned === 'number' ? parcelsReturned : 0)
+														)
+													})}
+												</p>
+											</div>
+
+											<Button
+												variant="primary"
+												type="submit"
+												fill
+												isLoading={dashboardStore.isCompletingShift}
+											>
+												{m.shift_complete_confirm_button()}
+											</Button>
+										</form>
+									</div>
+								{/if}
+
+								<!-- Step 5: Completed (editable) -->
+								{#if shiftStep === 'completed-editable'}
+									<div class="step-content">
+										{#if isEditing}
+											<form
+												class="inline-form"
+												onsubmit={(e) => {
+													e.preventDefault();
+													submitEdit();
+												}}
+											>
+												<div class="form-field">
+													<label for="edit-parcels-start">{m.shift_start_parcels_label()}</label>
+													<InlineEditor
+														id="edit-parcels-start"
+														inputType="number"
+														inputmode="numeric"
+														mode="form"
+														hasError={!!editError}
+														min="1"
+														max="999"
+														value={editParcelsStart === '' ? '' : String(editParcelsStart)}
+														onInput={(v) => {
+															editParcelsStart = v === '' ? '' : Number(v);
+															editError = null;
+														}}
+													/>
+												</div>
+												<div class="form-field">
+													<label for="edit-parcels-returned"
+														>{m.shift_complete_returned_label()}</label
+													>
+													<InlineEditor
+														id="edit-parcels-returned"
+														inputType="number"
+														inputmode="numeric"
+														mode="form"
+														hasError={!!editError}
+														min="0"
+														max={typeof editParcelsStart === 'number' ? editParcelsStart : 999}
+														value={editParcelsReturned === '' ? '' : String(editParcelsReturned)}
+														onInput={(v) => {
+															editParcelsReturned = v === '' ? '' : Number(v);
+															editError = null;
+														}}
+													/>
+												</div>
+												{#if editError}
+													<p class="field-error">{editError}</p>
+												{/if}
+												<div class="edit-actions">
+													<Button variant="secondary" fill onclick={closeEditMode}>
+														{m.common_cancel()}
+													</Button>
+													<Button
+														variant="primary"
+														type="submit"
+														fill
+														isLoading={dashboardStore.isEditingShift}
+													>
+														{m.common_save()}
+													</Button>
+												</div>
+											</form>
+										{:else}
+											<div class="delivery-summary">
+												<p>
+													{m.shift_complete_summary_started({
+														count: String(todayShift.shift?.parcelsStart ?? 0)
+													})}
+												</p>
+												<p>
+													{m.shift_complete_summary_returning({
+														count: String(todayShift.shift?.parcelsReturned ?? 0)
+													})}
+												</p>
+												<p class="summary-delivered">
+													{m.shift_complete_summary_delivered({
+														count: String(todayShift.shift?.parcelsDelivered ?? 0)
+													})}
+												</p>
+											</div>
+											<p class="edit-countdown">
+												{m.shift_edit_window_remaining({ minutes: String(editMinutesRemaining) })}
+											</p>
+											{#if hasTodayAction('edit_completion')}
+												<Button
+													variant="secondary"
+													fill
+													onclick={() => handleTodayAction('edit_completion')}
+												>
+													{getTodayActionLabel('edit_completion')}
+												</Button>
+											{/if}
+										{/if}
+									</div>
+								{/if}
+
+								<!-- Step 6: Completed (locked) -->
+								{#if shiftStep === 'completed-locked'}
+									<div class="step-content">
 										<div class="delivery-summary">
 											<p>
 												{m.shift_complete_summary_started({
@@ -530,48 +792,23 @@
 												})}
 											</p>
 										</div>
-										<p class="edit-countdown">
-											{m.shift_edit_window_remaining({ minutes: String(editMinutesRemaining) })}
-										</p>
-										<Button variant="secondary" fill onclick={openEditMode}>
-											{m.shift_edit_button()}
-										</Button>
-									{/if}
-								</div>
-							{/if}
-
-							<!-- Step 6: Completed (locked) -->
-							{#if shiftStep === 'completed-locked'}
-								<div class="step-content">
-									<div class="delivery-summary">
-										<p>
-											{m.shift_complete_summary_started({
-												count: String(todayShift.shift?.parcelsStart ?? 0)
-											})}
-										</p>
-										<p>
-											{m.shift_complete_summary_returning({
-												count: String(todayShift.shift?.parcelsReturned ?? 0)
-											})}
-										</p>
-										<p class="summary-delivered">
-											{m.shift_complete_summary_delivered({
-												count: String(todayShift.shift?.parcelsDelivered ?? 0)
-											})}
-										</p>
+										<p class="edit-locked">{m.shift_edit_contact_manager()}</p>
 									</div>
-									<p class="edit-locked">{m.shift_edit_contact_manager()}</p>
-								</div>
-							{/if}
+								{/if}
 
-							<!-- Cancel button (available in early steps) -->
-							{#if todayShift.isCancelable && (shiftStep === 'arrive' || shiftStep === 'inventory')}
-								<div class="card-actions">
-									<Button variant="danger" size="small" onclick={() => openCancelModal(todayShift)}>
-										{m.schedule_cancel_button()}
-									</Button>
-								</div>
-							{/if}
+								{#if shiftStep === null && todayPrimaryAction && todayPrimaryAction !== 'cancel_shift'}
+									<div class="step-content">
+										<Button
+											variant={getTodayActionVariant(todayPrimaryAction)}
+											fill
+											isLoading={isTodayActionLoading(todayPrimaryAction)}
+											onclick={() => handleTodayAction(todayPrimaryAction)}
+										>
+											{getTodayActionLabel(todayPrimaryAction)}
+										</Button>
+									</div>
+								{/if}
+							</div>
 						</div>
 					{:else}
 						<div class="empty-state">
@@ -580,49 +817,6 @@
 						</div>
 					{/if}
 				</section>
-
-				<!-- Needs Confirmation -->
-				{#if dashboardStore.unconfirmedShifts.length > 0}
-					<section class="dashboard-section">
-						<div class="section-header">
-							<h2 class="warning-heading">{m.dashboard_confirm_section()}</h2>
-							<Chip
-								variant="status"
-								status="warning"
-								size="sm"
-								label={String(dashboardStore.unconfirmedShifts.length)}
-							/>
-						</div>
-
-						<div class="confirm-list">
-							{#each dashboardStore.unconfirmedShifts as shift (shift.id)}
-								<div class="confirm-card">
-									<div class="card-summary">
-										<p class="confirm-date">{formatAssignmentDate(shift.date)}</p>
-										<p class="confirm-route">{shift.routeName}</p>
-										<p class="confirm-deadline">
-											{m.dashboard_confirm_deadline({
-												deadline: formatDistanceToNow(parseISO(shift.confirmationDeadline), {
-													addSuffix: true
-												})
-											})}
-										</p>
-									</div>
-									{#if shift.isConfirmable}
-										<Button
-											variant="primary"
-											size="small"
-											isLoading={dashboardStore.isConfirming}
-											onclick={() => dashboardStore.confirmShift(shift.id)}
-										>
-											{m.dashboard_confirm_button()}
-										</Button>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					</section>
-				{/if}
 
 				<!-- Week Summaries Row -->
 				<div class="week-row">
@@ -679,38 +873,68 @@
 					</section>
 				</div>
 
-				<!-- Metrics -->
-				<section class="dashboard-section">
-					<div class="section-header">
-						<h2>{m.dashboard_metrics_section()}</h2>
-					</div>
+				<!-- Needs Confirmation -->
+				{#if dashboardStore.unconfirmedShifts.length > 0}
+					<section class="dashboard-section">
+						<div class="section-header">
+							<h2>{m.dashboard_confirm_section()}</h2>
+							<span class="section-count">{dashboardStore.unconfirmedShifts.length}</span>
+						</div>
 
-					<div class="metrics-grid">
-						<div class="metric-card">
-							<p class="metric-value">{formatPercentage(dashboardStore.metrics.attendanceRate)}</p>
-							<p class="metric-label">{m.dashboard_metrics_attendance()}</p>
+						<div class="assignment-list">
+							{#each sortedUnconfirmedShifts as shift (shift.id)}
+								{@const confirmInfo = formatConfirmDeadline(shift.confirmationDeadline)}
+								<div
+									class="assignment-item"
+									style="--icon-accent: var(--status-warning);"
+								>
+									<div class="icon-circle" aria-hidden="true">
+										<QuestionMark />
+									</div>
+									<div class="assignment-content">
+										<div class="assignment-header">
+											<div class="header-left">
+												<span class="assignment-date">{formatAssignmentDate(shift.date)}</span>
+												<span class={confirmInfo.overdue ? 'header-overdue' : 'header-confirm-by'}>
+													{confirmInfo.text}
+												</span>
+											</div>
+											<div class="header-right">
+												{#if shift.isConfirmable}
+													<Button
+														variant="ghost"
+														size="xs"
+														isLoading={dashboardStore.isConfirming}
+														onclick={() => dashboardStore.confirmShift(shift.id)}
+													>
+														<IconBase size="small"><CheckCircleIcon /></IconBase>
+														{m.dashboard_confirm_button()}
+													</Button>
+												{/if}
+											</div>
+										</div>
+										<div class="assignment-meta">
+											<Chip
+												variant="tag"
+												size="xs"
+												color="var(--text-muted)"
+												label={shift.routeName}
+												icon={routeChipIcon}
+											/>
+										</div>
+									</div>
+								</div>
+							{/each}
 						</div>
-						<div class="metric-card">
-							<p class="metric-value">{formatPercentage(dashboardStore.metrics.completionRate)}</p>
-							<p class="metric-label">{m.dashboard_metrics_completion()}</p>
-						</div>
-						<div class="metric-card">
-							<p class="metric-value">{dashboardStore.metrics.totalShifts}</p>
-							<p class="metric-label">{m.dashboard_metrics_total_shifts()}</p>
-						</div>
-						<div class="metric-card">
-							<p class="metric-value">{dashboardStore.metrics.completedShifts}</p>
-							<p class="metric-label">{m.dashboard_metrics_completed_shifts()}</p>
-						</div>
-					</div>
-				</section>
+					</section>
+				{/if}
 
 				<!-- Pending Bids -->
 				<section class="dashboard-section">
 					<div class="section-header">
 						<h2>{m.dashboard_bids_section()}</h2>
 						{#if dashboardStore.pendingBids.length > 0}
-							<Button variant="ghost" size="small" onclick={() => goto('/bids')}>
+							<Button variant="ghost" size="xs" onclick={() => goto('/bids')}>
 								{m.dashboard_bids_view_all()}
 							</Button>
 						{/if}
@@ -722,14 +946,39 @@
 							<p class="empty-message">{m.dashboard_bids_empty_message()}</p>
 						</div>
 					{:else}
-						<div class="bid-list">
+						<div class="assignment-list">
 							{#each dashboardStore.pendingBids.slice(0, 3) as bid (bid.id)}
-								<div class="bid-card">
-									<div class="card-summary">
-										<p class="bid-date">{formatAssignmentDate(bid.assignmentDate)}</p>
-										<p class="bid-route">{bid.routeName}</p>
+								<div
+									class="assignment-item"
+									style="--icon-accent: var(--status-info);"
+								>
+									<div class="icon-circle" aria-hidden="true">
+										<Gavel />
 									</div>
-									<p class="bid-closes">{formatClosesAt(bid.windowClosesAt)}</p>
+									<div class="assignment-content">
+										<div class="assignment-header">
+											<div class="header-left">
+												<span class="assignment-date">{formatAssignmentDate(bid.assignmentDate)}</span>
+												<span class="header-muted">{formatClosesAt(bid.windowClosesAt)}</span>
+											</div>
+										</div>
+										<div class="assignment-meta">
+											<Chip
+												variant="tag"
+												size="xs"
+												color="var(--text-muted)"
+												label={bid.routeName}
+												icon={routeChipIcon}
+											/>
+											<Chip
+												variant="tag"
+												size="xs"
+												color="var(--text-muted)"
+												label={bid.warehouseName}
+												icon={warehouseChipIcon}
+											/>
+										</div>
+									</div>
 								</div>
 							{/each}
 						</div>
@@ -740,47 +989,18 @@
 	</div>
 </div>
 
-<!-- Cancel Modal -->
 {#if cancelTarget}
-	<Modal title={m.schedule_cancel_modal_title()} onClose={closeCancelModal}>
-		<form
-			class="modal-form"
-			onsubmit={(event) => {
-				event.preventDefault();
-				submitCancellation();
-			}}
-		>
-			<div class="form-field">
-				<label for="cancel-reason">{m.schedule_cancel_reason_label()}</label>
-				<Select
-					id="cancel-reason"
-					options={cancelReasonOptions}
-					bind:value={cancelReason}
-					placeholder={m.schedule_cancel_reason_placeholder()}
-					errors={cancelError ? [cancelError] : []}
-					onChange={() => (cancelError = null)}
-				/>
-			</div>
-
-			{#if cancelTarget.isLateCancel}
-				<div class="late-warning">{m.schedule_cancel_warning_late()}</div>
-			{/if}
-
-			<div class="modal-actions">
-				<Button variant="secondary" onclick={closeCancelModal} fill>
-					{m.common_cancel()}
-				</Button>
-				<Button variant="danger" type="submit" fill isLoading={dashboardStore.isCancelling}>
-					{m.schedule_cancel_confirm_button()}
-				</Button>
-			</div>
-		</form>
-	</Modal>
+	<CancelShiftModal
+		isLateCancel={cancelTarget.isLateCancel}
+		isLoading={dashboardStore.isCancelling}
+		onCancel={handleCancel}
+		onClose={closeCancelModal}
+	/>
 {/if}
 
 <style>
 	.page-surface {
-		min-height: 100%;
+		flex: 1;
 		background: var(--surface-inset);
 	}
 
@@ -788,24 +1008,33 @@
 		max-width: 720px;
 		margin: 0 auto;
 		padding: var(--spacing-4);
+		width: 100%;
 	}
 
 	.page-header {
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
 		gap: var(--spacing-3);
 		margin-bottom: var(--spacing-5);
+	}
+
+	.header-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-1);
+		padding-left: var(--spacing-2);
 	}
 
 	.header-text h1 {
 		margin: 0;
 		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
 	.header-text p {
-		margin: var(--spacing-1) 0 0;
+		margin: 0;
 		font-size: var(--font-size-sm);
 		color: var(--text-muted);
 	}
@@ -819,91 +1048,189 @@
 	.dashboard-sections {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-4);
+		gap: var(--spacing-5);
 	}
 
 	.dashboard-section {
-		background: var(--surface-primary);
-		border-radius: var(--radius-lg);
-		padding: var(--spacing-4);
-		box-shadow: var(--shadow-sm);
+		display: flex;
+		flex-direction: column;
 	}
 
 	.section-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: var(--spacing-3);
+		padding: 0 var(--spacing-3);
+		margin-bottom: var(--spacing-2);
 	}
 
 	.section-header h2 {
 		margin: 0;
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
-		color: var(--text-normal);
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-faint);
+		text-transform: uppercase;
+		letter-spacing: var(--letter-spacing-sm);
 	}
 
-	/* New Driver Banner */
-	.banner-content h3 {
-		margin: 0 0 var(--spacing-1);
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
-	}
-
-	.banner-content p {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-normal);
-		color: var(--text-normal);
-	}
-
-	/* Today's Shift Card */
-	.today-card {
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-base);
-		padding: var(--spacing-3);
-		background: var(--surface-secondary);
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-3);
-	}
-
-	.card-header {
-		display: flex;
-		justify-content: space-between;
-		gap: var(--spacing-2);
-		align-items: flex-start;
-	}
-
-	.card-summary {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-1);
-	}
-
-	.today-date {
-		margin: 0;
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		color: var(--text-normal);
-	}
-
-	.today-route {
-		margin: 0;
-		font-size: var(--font-size-base);
-		color: var(--text-normal);
-	}
-
-	.today-warehouse {
-		margin: 0;
-		font-size: var(--font-size-sm);
+	.section-count {
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-muted);
 	}
 
-	.card-actions {
+	/* Icon circle — tinted with accent color */
+	.icon-circle {
+		width: 32px;
+		height: 32px;
+		border-radius: var(--radius-full);
+		display: grid;
+		place-items: center;
+		background: color-mix(in srgb, var(--icon-accent) 12%, transparent);
+		color: var(--icon-accent);
+		flex-shrink: 0;
+	}
+
+	.icon-circle :global(svg) {
+		width: 20px;
+		height: 20px;
+	}
+
+	/* New Driver Banner — flat row with icon circle */
+	.banner-item {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: var(--spacing-3);
+		padding: var(--spacing-3);
+		border-radius: var(--radius-lg);
+	}
+
+	.banner-content {
 		display: flex;
-		justify-content: flex-end;
+		flex-direction: column;
+		gap: var(--spacing-1);
+		min-width: 0;
+	}
+
+	.banner-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
 		gap: var(--spacing-2);
+	}
+
+	.banner-header h3 {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-normal);
+	}
+
+	.banner-message {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		line-height: 1.5;
+		color: var(--text-muted);
+	}
+
+	/* Today's Shift — icon-circle grid layout */
+	.today-item {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: var(--spacing-3);
+		padding: var(--spacing-3);
+		border-radius: var(--radius-lg);
+		transition: background 150ms ease;
+	}
+
+	.today-content {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+		min-width: 0;
+	}
+
+	/* Shared assignment layout (confirmations, bids) */
+	.assignment-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+	}
+
+	.assignment-item {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: var(--spacing-3);
+		padding: var(--spacing-3);
+		border-radius: var(--radius-lg);
+		transition: background 150ms ease;
+	}
+
+	.assignment-item:hover {
+		background: color-mix(in srgb, var(--text-normal) 4%, transparent);
+	}
+
+	.assignment-content {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+		min-width: 0;
+	}
+
+	.assignment-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: var(--spacing-2);
+	}
+
+	.header-left {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.header-right {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		flex-shrink: 0;
+	}
+
+	.assignment-date {
+		font-size: var(--font-size-base);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-normal);
+		line-height: 1.3;
+	}
+
+	.assignment-status {
+		font-size: var(--font-size-xs);
+		color: var(--text-faint);
+		font-weight: var(--font-weight-medium);
+	}
+
+	.header-confirm-by {
+		font-size: var(--font-size-xs);
+		color: var(--status-warning);
+	}
+
+	.header-overdue {
+		font-size: var(--font-size-xs);
+		color: var(--status-error);
+	}
+
+	.header-muted {
+		font-size: var(--font-size-xs);
+		color: var(--text-muted);
+	}
+
+	.assignment-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-1);
+		align-items: center;
 	}
 
 	/* Step Content */
@@ -916,8 +1243,8 @@
 	.step-status {
 		margin: 0;
 		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
-		color: var(--accent-primary);
+		font-weight: var(--font-weight-medium);
+		color: var(--interactive-accent);
 	}
 
 	.step-info {
@@ -949,7 +1276,7 @@
 	}
 
 	.delivery-summary .summary-delivered {
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -975,14 +1302,11 @@
 
 	/* Empty States */
 	.empty-state {
-		padding: var(--spacing-4);
-		border-radius: var(--radius-base);
-		background: var(--surface-secondary);
-		border: 1px dashed var(--border-primary);
+		padding: var(--spacing-1) var(--spacing-3);
 	}
 
 	.empty-state.compact {
-		padding: var(--spacing-3);
+		padding: var(--spacing-1) var(--spacing-3);
 	}
 
 	.empty-title {
@@ -1013,6 +1337,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-2);
+		padding: 0 var(--spacing-3);
 	}
 
 	.week-count {
@@ -1030,114 +1355,10 @@
 	.day-chip {
 		padding: var(--spacing-1) var(--spacing-2);
 		border-radius: var(--radius-sm);
-		background: var(--surface-secondary);
-		border: 1px solid var(--border-primary);
+		background: var(--interactive-normal);
 		font-size: var(--font-size-xs);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
-	}
-
-	/* Metrics Grid */
-	.metrics-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-3);
-	}
-
-	.metric-card {
-		padding: var(--spacing-3);
-		border-radius: var(--radius-base);
-		background: var(--surface-secondary);
-		text-align: center;
-	}
-
-	.metric-value {
-		margin: 0;
-		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
-		color: var(--text-normal);
-	}
-
-	.metric-label {
-		margin: var(--spacing-1) 0 0;
-		font-size: var(--font-size-xs);
-		color: var(--text-muted);
-	}
-
-	/* Pending Bids */
-	.bid-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-2);
-	}
-
-	.bid-card {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: var(--spacing-3);
-		border-radius: var(--radius-base);
-		background: var(--surface-secondary);
-		border: 1px solid var(--border-primary);
-	}
-
-	.bid-date {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-		color: var(--text-normal);
-	}
-
-	.bid-route {
-		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--text-muted);
-	}
-
-	.bid-closes {
-		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--text-muted);
-	}
-
-	/* Needs Confirmation */
-	.warning-heading {
-		color: var(--status-warning);
-	}
-
-	.confirm-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-2);
-	}
-
-	.confirm-card {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: var(--spacing-3);
-		border-radius: var(--radius-base);
-		background: var(--surface-secondary);
-		border: 1px solid var(--status-warning);
-	}
-
-	.confirm-date {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-		color: var(--text-normal);
-	}
-
-	.confirm-route {
-		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--text-muted);
-	}
-
-	.confirm-deadline {
-		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--status-warning);
 	}
 
 	/* Form Styles */
@@ -1153,69 +1374,52 @@
 		color: var(--text-normal);
 	}
 
-	.number-input {
-		width: 100%;
-		padding: var(--spacing-2) var(--spacing-3);
-		font-size: var(--font-size-base);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-base);
-		background: var(--surface-primary);
-		color: var(--text-normal);
-		transition: border-color 0.15s ease;
-	}
-
-	.number-input:focus {
-		outline: none;
-		border-color: var(--accent-primary);
-	}
-
-	.number-input.has-error {
-		border-color: var(--status-error);
-	}
-
-	.number-input::placeholder {
-		color: var(--text-muted);
-	}
-
 	.field-error {
 		margin: 0;
 		font-size: var(--font-size-sm);
 		color: var(--status-error);
 	}
 
-	.late-warning {
-		padding: var(--spacing-2);
-		border-radius: var(--radius-base);
-		background: color-mix(in srgb, var(--status-warning) 15%, transparent);
-		color: var(--status-warning);
-		font-size: var(--font-size-sm);
-	}
-
-	/* Modal Styles */
-	.modal-form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-3);
-	}
-
-	.modal-actions {
-		display: flex;
-		gap: var(--spacing-2);
-		margin-top: var(--spacing-2);
-	}
-
 	/* Responsive */
-	@media (max-width: 600px) {
+	@media (max-width: 767px) {
+		.page-stage {
+			padding: var(--spacing-2);
+		}
+
+		.page-header {
+			gap: var(--spacing-2);
+			margin-bottom: var(--spacing-3);
+		}
+
+		.header-text h1 {
+			font-size: var(--font-size-lg);
+		}
+
+		.today-item,
+		.assignment-item {
+			gap: var(--spacing-2);
+			padding: var(--spacing-2);
+		}
+
+		.icon-circle {
+			width: 28px;
+			height: 28px;
+		}
+
+		.icon-circle :global(svg) {
+			width: 14px;
+			height: 14px;
+		}
+
 		.week-row {
 			grid-template-columns: 1fr;
 		}
+	}
 
-		.metrics-grid {
-			grid-template-columns: repeat(2, 1fr);
-		}
-
-		.modal-actions {
-			flex-direction: column;
+	@media (pointer: coarse) {
+		.today-item,
+		.assignment-item {
+			min-height: 44px;
 		}
 	}
 </style>

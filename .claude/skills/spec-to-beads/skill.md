@@ -31,19 +31,38 @@ Accepts:
 - Note dependencies between units
 - Capture the source file path for traceability
 
-### 2. Create Beads
+### 2. Create Epic Parent
 
-For each unit of work, create a bead with:
+Every spec/plan produces multiple related beads. **Always create an epic first** so agents know the beads form one cohesive feature:
 
 ```bash
-# Create a bead (task by default). Use stdin for a multi-line body.
-bd.exe create --type task --priority 2 --title "<clear title>" --body-file - <<'EOF'
+bd.exe create "Feature Name" -d "<summary of the whole feature>" --type epic --priority P2 --labels "relevant,labels"
+```
+
+This returns an epic ID (e.g., `sg-5xfk`). All child beads will be parented under it.
+
+### 3. Create Child Beads
+
+For each unit of work, create a bead **with `--parent`** pointing to the epic:
+
+```bash
+bd.exe create "<clear title>" -d "<detailed body>" --parent <epic-id>
+```
+
+For multi-line bodies, use `--body-file -` with stdin:
+
+```bash
+bd.exe create --type task --parent <epic-id> --title "<clear title>" --body-file - <<'EOF'
 Source: <path-to-spec-or-plan-file> (<section if applicable>)
 
 <rest of bead body>
 EOF
+```
 
-# Tip: add --silent to output only the issue ID (useful for scripting)
+Alternatively, create beads first and reparent after:
+
+```bash
+bd.exe update <bead-id> --parent <epic-id>
 ```
 
 ### Source Traceability (REQUIRED)
@@ -92,29 +111,26 @@ Each bead MUST include:
    - Compatibility requirements
    - Security considerations
 
-### 3. Set Up Structure & Dependencies
+### 4. Set Up Dependencies
 
-Parent/child hierarchy (epic -> tasks):
-
-```bash
-# Create a child under an epic
-bd.exe create --type task --parent <epic-id> --title "<title>" --body-file -
-
-# Or re-parent later
-bd.exe update <child-id> --parent <parent-id>
-```
-
-Dependencies (blocked depends on blocker):
+Link execution-order dependencies between sibling beads (NOT parent-child — that's handled by `--parent`):
 
 ```bash
-# blocked depends on blocker
-bd.exe dep add <blocked-id> <blocker-id>
-
-# Shorthand: blocker --blocks blocked
-bd.exe dep <blocker-id> --blocks <blocked-id>
+bd.exe dep add <blocked-bead> <blocking-bead>
 ```
 
-### 4. Validate Completeness
+**Do NOT use `dep add` for epic-child relationships.** Use `--parent` for that. `dep add` is for execution ordering between siblings.
+
+### 5. Verify Epic Structure
+
+After creating all beads, verify the epic structure:
+
+```bash
+bd.exe children <epic-id>    # Lists all children
+bd.exe epic status <epic-id> # Shows completion progress
+```
+
+### 6. Validate Completeness
 
 For each bead, verify:
 
@@ -138,15 +154,17 @@ If a bead lacks sufficient detail:
 
 ## Anti-Patterns (DO NOT)
 
-- ❌ "Implement the authentication system" (too vague)
-- ❌ "Add error handling" (which errors? how?)
-- ❌ "Make it faster" (what metric? what target?)
-- ❌ "Follow best practices" (which ones specifically?)
-- ❌ Creating beads without source references
+- Creating beads without source references
+- Creating beads without an epic parent (agents won't know they belong together)
+- Using `dep add` for epic-child relationships (use `--parent` instead)
+- "Implement the authentication system" (too vague)
+- "Add error handling" (which errors? how?)
+- "Make it faster" (what metric? what target?)
+- "Follow best practices" (which ones specifically?)
 
 ## Good Examples
 
-✅ Bead with source traceability:
+Bead with source traceability:
 
 ```
 Source: C:\Users\matto\.claude\plans\auth-plan.md (Task 2)
@@ -161,7 +179,7 @@ Dependencies: None
 Acceptance: Unit tests pass, manual test with curl succeeds
 ```
 
-✅ Another example:
+Another example:
 
 ```
 Source: docs/specs/retry-logic.md

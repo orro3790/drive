@@ -6,6 +6,7 @@
 	- View driver metrics (attendance, completion rates)
 	- Adjust weekly cap (1-6)
 	- Unflag drivers and monitor health state
+	- Reinstate drivers to assignment pool after hard-stop events
 
 	Uses DataTable with Drive tabs/toolbar pattern.
 -->
@@ -37,6 +38,7 @@
 	let selectedDriverId = $state<string | null>(null);
 	let isEditing = $state(false);
 	let unflagConfirm = $state<{ driver: Driver; x: number; y: number } | null>(null);
+	let reinstateConfirm = $state<{ driver: Driver; x: number; y: number } | null>(null);
 
 	// Form state
 	let formWeeklyCap = $state(4);
@@ -316,6 +318,20 @@
 		unflagConfirm = null;
 	}
 
+	function openReinstateConfirm(driver: Driver, event: MouseEvent) {
+		reinstateConfirm = {
+			driver,
+			x: event.clientX,
+			y: event.clientY
+		};
+	}
+
+	function handleReinstate() {
+		if (!reinstateConfirm) return;
+		driverStore.reinstate(reinstateConfirm.driver.id);
+		reinstateConfirm = null;
+	}
+
 	// Load data on mount
 	onMount(() => {
 		driverStore.load();
@@ -535,6 +551,11 @@
 {/snippet}
 
 {#snippet driverDetailActions(driver: Driver)}
+	{#if !driver.assignmentPoolEligible}
+		<Button variant="secondary" size="small" fill onclick={(e) => openReinstateConfirm(driver, e)}>
+			{m.drivers_reinstate_button()}
+		</Button>
+	{/if}
 	{#if driver.isFlagged}
 		<Button variant="secondary" size="small" fill onclick={(e) => openUnflagConfirm(driver, e)}>
 			{m.drivers_unflag_button()}
@@ -562,6 +583,11 @@
 				<Button fill onclick={() => startEditing(driver)}>
 					{m.common_edit()}
 				</Button>
+				{#if !driver.assignmentPoolEligible}
+					<Button variant="secondary" fill onclick={(e) => openReinstateConfirm(driver, e)}>
+						{m.drivers_reinstate_button()}
+					</Button>
+				{/if}
 				{#if driver.isFlagged}
 					<Button variant="secondary" fill onclick={(e) => openUnflagConfirm(driver, e)}>
 						{m.drivers_unflag_button()}
@@ -630,7 +656,7 @@
 		onSave={handleSave}
 		viewContent={driverDetailView}
 		editContent={driverDetailEdit}
-		viewActions={selectedDriver?.isFlagged ? driverDetailActions : undefined}
+		viewActions={selectedDriver && (selectedDriver.isFlagged || !selectedDriver.assignmentPoolEligible) ? driverDetailActions : undefined}
 		{tableContent}
 		storageKey="drivers"
 	/>
@@ -646,6 +672,19 @@
 		confirmLabel={m.drivers_unflag_button()}
 		onConfirm={handleUnflag}
 		onCancel={() => (unflagConfirm = null)}
+	/>
+{/if}
+
+<!-- Reinstate Confirmation -->
+{#if reinstateConfirm}
+	<ConfirmationDialog
+		x={reinstateConfirm.x}
+		y={reinstateConfirm.y}
+		title={m.drivers_reinstate_confirm_title()}
+		description={m.drivers_reinstate_confirm_message()}
+		confirmLabel={m.drivers_reinstate_button()}
+		onConfirm={handleReinstate}
+		onCancel={() => (reinstateConfirm = null)}
 	/>
 {/if}
 

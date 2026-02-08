@@ -48,6 +48,40 @@ export const dispatchPolicy = {
 			watchBandAboveThreshold: 0.05
 		}
 	},
+	health: {
+		points: {
+			confirmedOnTime: 1,
+			arrivedOnTime: 2,
+			completedShift: 2,
+			highDelivery: 1,
+			bidPickup: 2,
+			urgentPickup: 4,
+			autoDrop: -12,
+			lateCancel: -48
+		},
+		tierThreshold: 96,
+		lateCancelRollingDays: 30,
+		lateCancelThreshold: 2,
+		correctiveCompletionThreshold: 0.8,
+		correctiveRecoveryDays: 7,
+		qualifyingWeek: {
+			minAttendanceRate: 1.0,
+			minCompletionRate: 0.95,
+			maxNoShows: 0,
+			maxLateCancellations: 0
+		},
+		maxStars: 4,
+		simulationBonus: {
+			fourStarBonusPercent: 10
+		},
+		/** Display-only indicative deltas shown in schedule UI.
+		 *  Values match actual point costs from health.points. */
+		displayDeltas: {
+			confirmedOnTime: 1,
+			unconfirmed: -12,
+			lateCancel: -48
+		}
+	},
 	jobs: {
 		notificationBatchSize: 10,
 		performanceCheckBatchSize: 50

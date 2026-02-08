@@ -16,6 +16,7 @@ import {
 	getWeekRange,
 	getWeekDates,
 	isPastDate,
+	isFutureDate,
 	isToday,
 	randomTimeOnDate,
 	toTorontoDateString,
@@ -31,10 +32,13 @@ export interface GeneratedAssignment {
 	status: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled';
 	assignedBy: 'algorithm' | 'manager' | 'bid' | null;
 	assignedAt: Date | null;
+	confirmedAt: Date | null;
+	cancelType: 'driver' | 'late' | 'auto_drop' | null;
 }
 
 export interface GeneratedShift {
 	assignmentIndex: number; // Index into assignments array for linking
+	arrivedAt: Date | null;
 	parcelsStart: number | null;
 	parcelsDelivered: number | null;
 	parcelsReturned: number | null;
@@ -80,6 +84,8 @@ export function generateAssignments(
 
 	// Track weekly assignment count per driver
 	const weeklyCount = new Map<string, Map<string, number>>(); // weekKey -> userId -> count
+	// Track daily assignments to enforce 1 route per driver per day
+	const dailyAssigned = new Map<string, Set<string>>(); // dateString -> Set<userId>
 
 	for (const weekStart of weeks) {
 		const weekKey = toTorontoDateString(weekStart);
@@ -88,6 +94,10 @@ export function generateAssignments(
 		const dates = getWeekDates(weekStart);
 
 		for (const { dateString, dayOfWeek } of dates) {
+			if (!dailyAssigned.has(dateString)) {
+				dailyAssigned.set(dateString, new Set());
+			}
+
 			// For each route, create an assignment
 			for (const routeId of routeIds) {
 				const warehouseId = warehouseIdByRoute.get(routeId)!;
@@ -99,12 +109,16 @@ export function generateAssignments(
 					routeId,
 					dayOfWeek,
 					weekKey,
-					weeklyCount
+					weeklyCount,
+					dailyAssigned.get(dateString)!
 				);
 
 				// Determine status based on date
 				const status = determineStatus(dateString, eligibleDriverId);
 				const assignedBy = eligibleDriverId ? 'algorithm' : null;
+				const confirmedAt = generateConfirmedAt(dateString, status);
+
+				const cancelType = determineCancelType(status, confirmedAt);
 
 				const assignment: GeneratedAssignment = {
 					routeId,
@@ -113,16 +127,19 @@ export function generateAssignments(
 					date: dateString,
 					status,
 					assignedBy,
-					assignedAt: eligibleDriverId ? getSeedNow() : null
+					assignedAt: eligibleDriverId ? getSeedNow() : null,
+					confirmedAt,
+					cancelType
 				};
 
 				const assignmentIndex = assignments.length;
 				assignments.push(assignment);
 
-				// Update weekly count if driver assigned
+				// Update weekly count and daily set if driver assigned
 				if (eligibleDriverId) {
 					const weekCounts = weeklyCount.get(weekKey)!;
 					weekCounts.set(eligibleDriverId, (weekCounts.get(eligibleDriverId) || 0) + 1);
+					dailyAssigned.get(dateString)!.add(eligibleDriverId);
 				}
 
 				// Create shift record for completed/cancelled/active assignments
@@ -143,7 +160,8 @@ function findEligibleDriver(
 	routeId: string,
 	dayOfWeek: number,
 	weekKey: string,
-	weeklyCount: Map<string, Map<string, number>>
+	weeklyCount: Map<string, Map<string, number>>,
+	dailyAssignedForDate: Set<string>
 ): string | null {
 	const eligibleDrivers = drivers.filter((d) => {
 		if (d.role !== 'driver') return false;
@@ -157,6 +175,9 @@ function findEligibleDriver(
 
 		// Check route preference
 		if (!pref.preferredRoutes.includes(routeId)) return false;
+
+		// Enforce 1 route per driver per day
+		if (dailyAssignedForDate.has(d.id)) return false;
 
 		// Check weekly cap
 		const weekCounts = weeklyCount.get(weekKey)!;
@@ -212,6 +233,7 @@ function createShiftForStatus(
 
 		return {
 			assignmentIndex,
+			arrivedAt: randomTimeOnDate(dateString, 6, 8),
 			parcelsStart,
 			parcelsDelivered,
 			parcelsReturned,
@@ -228,6 +250,7 @@ function createShiftForStatus(
 
 		return {
 			assignmentIndex,
+			arrivedAt: null,
 			parcelsStart: null,
 			parcelsDelivered: null,
 			parcelsReturned: null,
@@ -242,6 +265,7 @@ function createShiftForStatus(
 	// Active - shift started but not completed
 	return {
 		assignmentIndex,
+		arrivedAt: randomTimeOnDate(toTorontoDateString(getTorontoToday()), 6, 8),
 		parcelsStart,
 		parcelsDelivered: null,
 		parcelsReturned: null,
@@ -251,4 +275,74 @@ function createShiftForStatus(
 		cancelReason: null,
 		cancelNotes: null
 	};
+}
+
+/**
+ * Determine cancelType for cancelled assignments.
+ * - late: confirmed then cancelled (late cancellation)
+ * - auto_drop: ~20% of unconfirmed cancellations
+ * - driver: regular driver-initiated cancellation
+ */
+function determineCancelType(
+	status: string,
+	confirmedAt: Date | null
+): 'driver' | 'late' | 'auto_drop' | null {
+	if (status !== 'cancelled') return null;
+
+	if (confirmedAt !== null) {
+		return 'late';
+	}
+
+	// 20% of unconfirmed cancellations are auto-drops
+	if (random() < 0.2) {
+		return 'auto_drop';
+	}
+
+	return 'driver';
+}
+
+/**
+ * Generate confirmedAt timestamp based on assignment status.
+ * - completed/active: always confirmed (3-5 days before assignment date)
+ * - cancelled: 30% confirmed (late cancellations), 70% null (pre-confirmation drops)
+ * - scheduled (future): 60% confirmed, 40% null (haven't confirmed yet)
+ * - unfilled: null
+ */
+function generateConfirmedAt(
+	dateString: string,
+	status: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled'
+): Date | null {
+	if (status === 'unfilled') return null;
+
+	if (status === 'completed' || status === 'active') {
+		// Always confirmed — 3-5 days before assignment date
+		const daysBeforeShift = 3 + randomInt(0, 3); // 3, 4, or 5
+		const assignmentDate = new Date(`${dateString}T12:00:00`);
+		assignmentDate.setDate(assignmentDate.getDate() - daysBeforeShift);
+		return randomTimeOnDate(toTorontoDateString(assignmentDate), 8, 22);
+	}
+
+	if (status === 'cancelled') {
+		// 30% are late cancellations (confirmed then cancelled)
+		if (random() < 0.3) {
+			const daysBeforeShift = 3 + randomInt(0, 3);
+			const assignmentDate = new Date(`${dateString}T12:00:00`);
+			assignmentDate.setDate(assignmentDate.getDate() - daysBeforeShift);
+			return randomTimeOnDate(toTorontoDateString(assignmentDate), 8, 22);
+		}
+		return null;
+	}
+
+	// Future scheduled: 60% confirmed, 40% not yet
+	if (isFutureDate(dateString)) {
+		if (random() < 0.6) {
+			const daysBeforeShift = 3 + randomInt(0, 3);
+			const assignmentDate = new Date(`${dateString}T12:00:00`);
+			assignmentDate.setDate(assignmentDate.getDate() - daysBeforeShift);
+			return randomTimeOnDate(toTorontoDateString(assignmentDate), 8, 22);
+		}
+		return null;
+	}
+
+	return null;
 }

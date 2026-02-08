@@ -48,6 +48,7 @@ export const cancelReasonEnum = pgEnum('cancel_reason', [
 	'personal_emergency',
 	'other'
 ]);
+export const cancelTypeEnum = pgEnum('cancel_type', ['driver', 'late', 'auto_drop']);
 export const bidWindowModeEnum = pgEnum('bid_window_mode', ['competitive', 'instant', 'emergency']);
 export const notificationTypeEnum = pgEnum('notification_type', [
 	'shift_reminder',
@@ -64,7 +65,11 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 	'driver_no_show',
 	'confirmation_reminder',
 	'shift_auto_dropped',
-	'emergency_route_available'
+	'emergency_route_available',
+	'streak_advanced',
+	'streak_reset',
+	'bonus_eligible',
+	'corrective_warning'
 ]);
 export const actorTypeEnum = pgEnum('actor_type', ['user', 'system']);
 
@@ -146,6 +151,7 @@ export const assignments = pgTable(
 		assignedBy: assignedByEnum('assigned_by'),
 		assignedAt: timestamp('assigned_at', { withTimezone: true }),
 		confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+		cancelType: cancelTypeEnum('cancel_type'),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 	},
@@ -239,6 +245,9 @@ export const driverMetrics = pgTable('driver_metrics', {
 	lateCancellations: integer('late_cancellations').notNull().default(0),
 	noShows: integer('no_shows').notNull().default(0),
 	bidPickups: integer('bid_pickups').notNull().default(0),
+	arrivedOnTimeCount: integer('arrived_on_time_count').notNull().default(0),
+	highDeliveryCount: integer('high_delivery_count').notNull().default(0),
+	urgentPickups: integer('urgent_pickups').notNull().default(0),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
 
@@ -307,6 +316,47 @@ export const auditLogs = pgTable(
 	})
 );
 
+// Driver Health Snapshots (daily score records)
+export const driverHealthSnapshots = pgTable(
+	'driver_health_snapshots',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		evaluatedAt: date('evaluated_at').notNull(),
+		score: integer('score').notNull(),
+		attendanceRate: real('attendance_rate').notNull(),
+		completionRate: real('completion_rate').notNull(),
+		lateCancellationCount30d: integer('late_cancellation_count_30d').notNull().default(0),
+		noShowCount30d: integer('no_show_count_30d').notNull().default(0),
+		hardStopTriggered: boolean('hard_stop_triggered').notNull().default(false),
+		reasons: jsonb('reasons').$type<string[]>().notNull().default([]),
+		contributions: jsonb('contributions'),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => ({
+		uniqueUserDate: unique().on(table.userId, table.evaluatedAt)
+	})
+);
+
+// Driver Health State (current state per driver)
+export const driverHealthState = pgTable('driver_health_state', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	currentScore: integer('current_score').notNull().default(0),
+	streakWeeks: integer('streak_weeks').notNull().default(0),
+	stars: integer('stars').notNull().default(0),
+	lastQualifiedWeekStart: date('last_qualified_week_start'),
+	assignmentPoolEligible: boolean('assignment_pool_eligible').notNull().default(true),
+	requiresManagerIntervention: boolean('requires_manager_intervention').notNull().default(false),
+	reinstatedAt: timestamp('reinstated_at', { withTimezone: true }),
+	lastScoreResetAt: timestamp('last_score_reset_at', { withTimezone: true }),
+	nextMilestoneStars: integer('next_milestone_stars').notNull().default(1),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});
+
 // Relations
 export const userRelations = relations(user, ({ one, many }) => ({
 	preferences: one(driverPreferences, {
@@ -317,10 +367,15 @@ export const userRelations = relations(user, ({ one, many }) => ({
 		fields: [user.id],
 		references: [driverMetrics.userId]
 	}),
+	healthState: one(driverHealthState, {
+		fields: [user.id],
+		references: [driverHealthState.userId]
+	}),
 	assignments: many(assignments),
 	bids: many(bids),
 	notifications: many(notifications),
-	routeCompletions: many(routeCompletions)
+	routeCompletions: many(routeCompletions),
+	healthSnapshots: many(driverHealthSnapshots)
 }));
 
 export const routesRelations = relations(routes, ({ one, many }) => ({
@@ -425,5 +480,19 @@ export const routeCompletionsRelations = relations(routeCompletions, ({ one }) =
 	route: one(routes, {
 		fields: [routeCompletions.routeId],
 		references: [routes.id]
+	})
+}));
+
+export const driverHealthSnapshotsRelations = relations(driverHealthSnapshots, ({ one }) => ({
+	user: one(user, {
+		fields: [driverHealthSnapshots.userId],
+		references: [user.id]
+	})
+}));
+
+export const driverHealthStateRelations = relations(driverHealthState, ({ one }) => ({
+	user: one(user, {
+		fields: [driverHealthState.userId],
+		references: [user.id]
 	})
 }));

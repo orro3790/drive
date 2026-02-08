@@ -13,7 +13,7 @@ Uses notificationsStore for data loading and optimistic read updates.
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
 	import NotificationItem from '$lib/components/notifications/NotificationItem.svelte';
-	import CheckCircleIcon from '$lib/components/icons/CheckCircleIcon.svelte';
+	import ClearAll from '$lib/components/icons/ClearAll.svelte';
 	import { notificationsStore } from '$lib/stores/notificationsStore.svelte';
 	import { getTimeGroup } from '$lib/utils/date/formatting';
 
@@ -87,101 +87,96 @@ Uses notificationsStore for data loading and optimistic read updates.
 	<title>{m.notifications_page_title()} | Drive</title>
 </svelte:head>
 
-<div class="page-surface notifications-surface">
-	<div class="page-stage notifications-stage">
-		<div class="page-card notifications-card">
-			<div class="card-header">
-				<div class="header-text">
-					<h1>{m.notifications_page_title()}</h1>
-					<p>{m.notifications_page_description()}</p>
-				</div>
-				<div class="header-actions">
-					<IconButton
-						tooltip={m.notifications_mark_all()}
-						onclick={handleMarkAllRead}
-						disabled={!hasUnread || notificationsStore.isMarkingAll}
-					>
-						<Icon size="medium">
-							<CheckCircleIcon />
-						</Icon>
-					</IconButton>
-				</div>
+<div class="page-surface">
+	<div class="page-stage">
+		<div class="page-header">
+			<div class="header-text">
+				<h1>{m.notifications_page_title()}</h1>
+				<p>{m.notifications_page_description()}</p>
 			</div>
-
-			<div class="card-body">
-				{#if notificationsStore.isLoading}
-					<div class="notifications-loading">
-						<Spinner size={24} label={m.common_loading()} />
-					</div>
-				{:else if notificationsStore.error}
-					<NoticeBanner variant="warning">
-						<p>{m.notifications_load_error()}</p>
-					</NoticeBanner>
-				{:else if notificationsStore.notifications.length === 0}
-					<div class="notifications-empty">
-						<h3>{m.notifications_empty_title()}</h3>
-						<p>{m.notifications_empty_message()}</p>
-					</div>
-				{:else}
-					<div class="notifications-groups">
-						{#each groupedNotifications as group (group.key)}
-							<div class="notification-group">
-								<h3 class="group-header">{group.label}</h3>
-								<div class="group-items">
-									{#each group.items as notification (notification.id)}
-										<NotificationItem {notification} onMarkRead={handleMarkRead} />
-									{/each}
-								</div>
-							</div>
-						{/each}
-					</div>
-
-					{#if notificationsStore.hasMore}
-						<div class="scroll-sentinel" bind:this={sentinelEl}>
-							{#if notificationsStore.isLoadingMore}
-								<Spinner size={20} label={m.common_loading()} />
-							{/if}
-						</div>
-					{/if}
-				{/if}
+			<div class="header-actions">
+				<IconButton
+					tooltip={m.notifications_mark_all()}
+					onclick={handleMarkAllRead}
+					disabled={!hasUnread || notificationsStore.isMarkingAll}
+				>
+					<Icon size="medium">
+						<ClearAll />
+					</Icon>
+				</IconButton>
 			</div>
 		</div>
+
+		{#if notificationsStore.isLoading}
+			<div class="notifications-loading">
+				<Spinner size={24} label={m.common_loading()} />
+			</div>
+		{:else if notificationsStore.error}
+			<NoticeBanner variant="warning">
+				<p>{m.notifications_load_error()}</p>
+			</NoticeBanner>
+		{:else if notificationsStore.notifications.length === 0}
+			<div class="notifications-empty">
+				<h3>{m.notifications_empty_title()}</h3>
+				<p>{m.notifications_empty_message()}</p>
+			</div>
+		{:else}
+			<div class="notifications-groups">
+				{#each groupedNotifications as group (group.key)}
+					<div class="notification-group">
+						<h3 class="group-label">{group.label}</h3>
+						<div class="group-items">
+							{#each group.items as notification (notification.id)}
+								<NotificationItem {notification} onMarkRead={handleMarkRead} />
+							{/each}
+						</div>
+					</div>
+				{/each}
+			</div>
+
+			{#if notificationsStore.hasMore}
+				<div class="scroll-sentinel" bind:this={sentinelEl}>
+					{#if notificationsStore.isLoadingMore}
+						<Spinner size={20} label={m.common_loading()} />
+					{/if}
+				</div>
+			{/if}
+		{/if}
 	</div>
 </div>
 
 <style>
-	.notifications-surface {
-		min-height: 100%;
+	.page-surface {
+		flex: 1;
 		background: var(--surface-inset);
 	}
 
-	.notifications-stage {
+	.page-stage {
 		max-width: 720px;
 		margin: 0 auto;
 		padding: var(--spacing-4);
 		width: 100%;
-		background: transparent;
-		overflow: visible;
 	}
 
-	.card-header {
+	.page-header {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
 		gap: var(--spacing-3);
-		padding: var(--spacing-4) var(--spacing-4) var(--spacing-3);
+		margin-bottom: var(--spacing-5);
 	}
 
 	.header-text {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-1);
+		padding-left: var(--spacing-2);
 	}
 
 	.header-text h1 {
 		margin: 0;
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
+		font-size: var(--font-size-xl);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -189,31 +184,12 @@ Uses notificationsStore for data loading and optimistic read updates.
 		margin: 0;
 		color: var(--text-muted);
 		font-size: var(--font-size-sm);
-		max-width: 52ch;
 	}
 
 	.header-actions {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-2);
-	}
-
-	.notifications-card {
-		gap: var(--spacing-3);
-		padding: 0;
-		margin: 0;
-		max-width: 720px;
-		width: 100%;
-		align-self: center;
-		box-shadow: var(--shadow-sm);
-		overflow: hidden;
-	}
-
-	.card-body {
-		padding: var(--spacing-3) var(--spacing-4) var(--spacing-4);
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-3);
 	}
 
 	.notifications-loading {
@@ -243,27 +219,27 @@ Uses notificationsStore for data loading and optimistic read updates.
 	.notifications-groups {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-4);
+		gap: var(--spacing-5);
 	}
 
 	.notification-group {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-2);
 	}
 
-	.group-header {
-		margin: 0;
+	.group-label {
+		margin: 0 0 var(--spacing-2);
+		padding: 0 var(--spacing-3);
 		font-size: var(--font-size-xs);
 		color: var(--text-faint);
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: var(--letter-spacing-sm);
 	}
 
 	.group-items {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-2);
+		gap: var(--spacing-4);
 	}
 
 	.scroll-sentinel {
@@ -273,33 +249,18 @@ Uses notificationsStore for data loading and optimistic read updates.
 		min-height: 1px;
 	}
 
-	@media (max-width: 768px) {
-		.notifications-stage {
-			padding: var(--spacing-3);
-		}
-
-		.card-header {
-			padding: var(--spacing-3);
-			gap: var(--spacing-2);
-		}
-
-		.card-body {
-			padding: var(--spacing-2) var(--spacing-3) var(--spacing-3);
-		}
-	}
-
-	@media (max-width: 480px) {
-		.notifications-stage {
+	@media (max-width: 767px) {
+		.page-stage {
 			padding: var(--spacing-2);
+		}
+
+		.page-header {
+			gap: var(--spacing-2);
+			margin-bottom: var(--spacing-3);
 		}
 
 		.header-text h1 {
-			font-size: var(--font-size-base);
-		}
-
-		.card-body {
-			padding: var(--spacing-2);
-			gap: var(--spacing-2);
+			font-size: var(--font-size-lg);
 		}
 	}
 </style>

@@ -7,28 +7,15 @@
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
-	import { format, parseISO, formatDistanceToNow } from 'date-fns';
+	import { parseISO, formatDistanceToNow } from 'date-fns';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import Lightning from '$lib/components/icons/Lightning.svelte';
-	import { bidsStore, type BidStatus } from '$lib/stores/bidsStore.svelte';
-
-	const statusLabels: Record<BidStatus, string> = {
-		pending: m.bids_status_pending(),
-		won: m.bids_status_won(),
-		lost: m.bids_status_lost()
-	};
-
-	const statusChips: Record<BidStatus, 'info' | 'success' | 'warning' | 'error' | 'neutral'> = {
-		pending: 'info',
-		won: 'success',
-		lost: 'neutral'
-	};
-
-	function formatAssignmentDate(dateString: string) {
-		return format(parseISO(dateString), 'EEE, MMM d');
-	}
+	import { getBidWindowPrimaryAction } from '$lib/config/driverLifecycleIa';
+	import { bidStatusLabels, bidStatusChipVariants } from '$lib/config/lifecycleLabels';
+	import { formatAssignmentDate } from '$lib/utils/date/formatting';
+	import { bidsStore } from '$lib/stores/bidsStore.svelte';
 
 	function formatClosesAt(isoString: string) {
 		const date = parseISO(isoString);
@@ -46,6 +33,11 @@
 
 	async function handleSubmitBid(assignmentId: string) {
 		await bidsStore.submitBid(assignmentId);
+	}
+
+	function getBidActionLabel(mode: 'competitive' | 'instant' | 'emergency') {
+		const actionId = getBidWindowPrimaryAction({ mode });
+		return actionId === 'submit_bid' ? m.bids_submit_button() : m.bids_accept_button();
 	}
 
 	onMount(() => {
@@ -128,7 +120,7 @@
 											isLoading={bidsStore.isSubmitting(window.assignmentId)}
 											disabled={bidsStore.submittingAssignmentId !== null}
 										>
-											{isEmergency ? m.bids_accept_button() : m.bids_submit_button()}
+											{getBidActionLabel(window.mode)}
 										</Button>
 									</div>
 								</div>
@@ -164,8 +156,8 @@
 										</div>
 										<Chip
 											variant="status"
-											status={statusChips[bid.status]}
-											label={statusLabels[bid.status]}
+											status={bidStatusChipVariants[bid.status]}
+											label={bidStatusLabels[bid.status]}
 											size="xs"
 										/>
 									</div>
@@ -207,7 +199,7 @@
 	.header-text h1 {
 		margin: 0;
 		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -233,7 +225,13 @@
 		background: var(--surface-primary);
 		border-radius: var(--radius-lg);
 		padding: var(--spacing-4);
-		box-shadow: var(--shadow-sm);
+		box-shadow: var(--shadow-base);
+	}
+
+	@media (max-width: 767px) {
+		.bids-section {
+			padding: 0;
+		}
 	}
 
 	.section-header {
@@ -243,7 +241,7 @@
 	.section-header h2 {
 		margin: 0;
 		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 
@@ -251,7 +249,7 @@
 		padding: var(--spacing-4);
 		border-radius: var(--radius-base);
 		background: var(--surface-secondary);
-		border: 1px dashed var(--border-primary);
+		border: none;
 	}
 
 	.empty-title {
@@ -297,7 +295,7 @@
 		align-items: center;
 		gap: var(--spacing-1);
 		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--status-success);
 		margin-bottom: var(--spacing-1);
 	}
@@ -323,7 +321,7 @@
 	.bid-date {
 		margin: 0;
 		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
 

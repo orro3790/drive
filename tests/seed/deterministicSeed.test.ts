@@ -52,7 +52,6 @@ async function buildSeedSnapshot(seed: number) {
 	);
 
 	const preferences = generatePreferences(drivers, routeIds);
-	const metrics = generateMetrics(drivers);
 	const assignments = generateAssignments(
 		config,
 		drivers,
@@ -60,6 +59,7 @@ async function buildSeedSnapshot(seed: number) {
 		routeIds,
 		warehouseIdByRoute
 	);
+	const metrics = generateMetrics(drivers, assignments.assignments, assignments.shifts);
 	const bidding = generateBidding(assignments.assignments, drivers);
 	const notifications = generateNotifications(
 		assignments.assignments,

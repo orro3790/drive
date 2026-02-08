@@ -662,7 +662,7 @@ export async function instantAssign(
 		return await db.transaction(async (tx) => {
 			// Lock the bid window row with FOR UPDATE to serialize concurrent requests
 			const lockResult = await tx.execute(
-				sql`SELECT id, status, pay_bonus_percent FROM bid_windows WHERE id = ${bidWindowId} FOR UPDATE`
+				sql`SELECT id, status, mode, pay_bonus_percent FROM bid_windows WHERE id = ${bidWindowId} FOR UPDATE`
 			);
 			const windowRow = (lockResult as { rows?: Array<Record<string, unknown>> }).rows?.[0];
 
@@ -730,6 +730,18 @@ export async function instantAssign(
 					updatedAt: resolvedAt
 				})
 				.where(eq(driverMetrics.userId, userId));
+
+			// Increment urgentPickups for instant/emergency mode bid windows
+			const windowMode = windowRow.mode as string;
+			if (windowMode === 'instant' || windowMode === 'emergency') {
+				await tx
+					.update(driverMetrics)
+					.set({
+						urgentPickups: sql`${driverMetrics.urgentPickups} + 1`,
+						updatedAt: resolvedAt
+					})
+					.where(eq(driverMetrics.userId, userId));
+			}
 
 			await createAuditLog(
 				{
