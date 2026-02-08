@@ -829,6 +829,7 @@
 						class="metrics-toggle"
 						onclick={() => (metricsExpanded = !metricsExpanded)}
 						aria-expanded={metricsExpanded}
+						aria-controls="metrics-content"
 					>
 						<h2>{m.dashboard_metrics_section()}</h2>
 						<span class="toggle-label">
@@ -837,7 +838,7 @@
 					</button>
 
 					{#if metricsExpanded}
-						<div class="metrics-grid">
+						<div id="metrics-content" class="metrics-grid">
 							<div class="metric-card">
 								<p class="metric-value">{formatPercentage(dashboardStore.metrics.attendanceRate)}</p>
 								<p class="metric-label">{m.dashboard_metrics_attendance()}</p>

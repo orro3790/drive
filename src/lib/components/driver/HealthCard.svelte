@@ -12,39 +12,9 @@
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
+	import type { HealthResponse } from '$lib/schemas/health';
 
-	type HealthData = {
-		score: number | null;
-		stars: number;
-		streakWeeks: number;
-		eliteThreshold: number;
-		maxStars: number;
-		hardStop: {
-			triggered: boolean;
-			assignmentPoolEligible: boolean;
-			requiresManagerIntervention: boolean;
-			reasons: string[];
-		};
-		nextMilestone: {
-			targetStars: number;
-			currentStars: number;
-		};
-		simulation: {
-			bonusEligible: boolean;
-			bonusPercent: number;
-			label: string;
-		};
-		recentScores: {
-			date: string;
-			score: number;
-			attendanceRate: number;
-			completionRate: number;
-			hardStopTriggered: boolean;
-		}[];
-		isOnboarding: boolean;
-	};
-
-	let health = $state<HealthData | null>(null);
+	let health = $state<HealthResponse | null>(null);
 	let isLoading = $state(true);
 	let hasError = $state(false);
 
@@ -57,7 +27,7 @@
 	});
 
 	const scorePercent = $derived(
-		health?.score !== null && health?.score !== undefined ? health.score : 0
+		health?.score !== null && health?.score !== undefined ? Math.min(health.score, 100) : 0
 	);
 
 	const elitePercent = $derived(health?.eliteThreshold ?? 80);
@@ -90,7 +60,7 @@
 
 	{#if isLoading}
 		<div class="health-loading">
-			<Spinner size={20} label="Loading health data" />
+			<Spinner size={20} label={m.dashboard_health_loading()} />
 		</div>
 	{:else if hasError || !health}
 		<p class="health-error">{m.dashboard_health_load_error()}</p>
@@ -116,7 +86,7 @@
 					{health.score ?? '—'}
 				</span>
 			</div>
-			<div class="score-bar-track" role="progressbar" aria-valuenow={scorePercent} aria-valuemin={0} aria-valuemax={100}>
+			<div class="score-bar-track" role="progressbar" aria-valuenow={scorePercent} aria-valuemin={0} aria-valuemax={100} aria-label={m.dashboard_health_score_label()}>
 				<div
 					class="score-bar-fill"
 					style:width="{scorePercent}%"
@@ -307,7 +277,7 @@
 	}
 
 	.elite-label {
-		font-size: 10px;
+		font-size: var(--font-size-xs);
 		color: var(--text-muted);
 		white-space: nowrap;
 		margin-top: 2px;
@@ -414,7 +384,7 @@
 	/* Responsive */
 	@media (max-width: 767px) {
 		.health-card {
-			padding: 0;
+			padding: var(--spacing-3);
 		}
 	}
 </style>

@@ -19,6 +19,7 @@ import { db } from '$lib/server/db';
 import { driverHealthState, driverHealthSnapshots } from '$lib/server/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import type { HealthResponse } from '$lib/schemas/health';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user) {
@@ -76,7 +77,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			},
 			recentScores: [],
 			isOnboarding: true
-		});
+		} satisfies HealthResponse);
 	}
 
 	// Hard-stop: derive from state table (canonical source of truth).
@@ -116,5 +117,5 @@ export const GET: RequestHandler = async ({ locals }) => {
 			hardStopTriggered: s.hardStopTriggered
 		})),
 		isOnboarding: false
-	});
+	} satisfies HealthResponse);
 };
