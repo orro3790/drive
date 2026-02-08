@@ -315,84 +315,80 @@
 		</div>
 		<div class="assignment-content">
 			<div class="assignment-header">
-				<div class="header-left">
-					<span class="assignment-date">{formatAssignmentDate(assignment.date)}</span>
-					{#if assignment.status === 'scheduled'}
-						{#if confirmState === 'confirmed'}
-							<span class="header-confirmed">
-								{m.schedule_confirmed_chip()}
-								<span class="health-delta positive">
-									<IconBase size="small"><HealthLine /></IconBase>
-									+{deltas.confirmedOnTime}
-								</span>
-							</span>
-						{:else if confirmState === 'confirmable' || confirmState === 'not_open'}
-							<span class="header-confirm-by">
-								{m.schedule_confirm_by_chip({
-									date: format(parseISO(assignment.confirmationDeadline), 'MMM d')
-								})}
-							</span>
-						{:else if confirmState === 'overdue'}
-							<span class="header-overdue">
-								{m.schedule_unconfirmed_chip()}
-								<span class="health-delta negative">
-									<IconBase size="small"><HealthLine /></IconBase>
-									{deltas.unconfirmed}
-								</span>
-							</span>
-						{/if}
+				<span class="assignment-date">{formatAssignmentDate(assignment.date)}</span>
+				{#if assignment.status === 'scheduled'}
+					{#if confirmAction}
+						<Button
+							variant="ghost"
+							size="compact"
+							isLoading={isScheduleActionLoading('confirm_shift')}
+							onclick={() => handleScheduleAction('confirm_shift', assignment)}
+						>
+							<IconBase size="small"><CheckCircleIcon /></IconBase>
+							{getScheduleActionLabel('confirm_shift')}
+						</Button>
 					{/if}
-				</div>
-				<div class="header-right">
-					{#if assignment.status === 'scheduled'}
-						{#if confirmAction}
-							<Button
-								variant="ghost"
-								size="xs"
-								isLoading={isScheduleActionLoading('confirm_shift')}
-								onclick={() => handleScheduleAction('confirm_shift', assignment)}
-							>
-								<IconBase size="small"><CheckCircleIcon /></IconBase>
-								{getScheduleActionLabel('confirm_shift')}
-							</Button>
-						{/if}
-						{#if cancelAction}
-							<Button
-								variant="ghost"
-								size="xs"
-								isLoading={isScheduleActionLoading('cancel_shift')}
-								onclick={() => handleScheduleAction('cancel_shift', assignment)}
-							>
-								<IconBase size="small"><CalendarX /></IconBase>
-								{m.common_cancel()}
-							</Button>
-						{/if}
-					{:else}
-						<span class="assignment-status">{statusLabels[assignment.status]}</span>
-						{#each otherActions as actionId (actionId)}
-							<Button
-								variant="ghost"
-								size="xs"
-								isLoading={isScheduleActionLoading(actionId)}
-								onclick={() => handleScheduleAction(actionId, assignment)}
-							>
-								{getScheduleActionLabel(actionId)}
-							</Button>
-						{/each}
+					{#if cancelAction}
+						<Button
+							variant="ghost"
+							size="compact"
+							isLoading={isScheduleActionLoading('cancel_shift')}
+							onclick={() => handleScheduleAction('cancel_shift', assignment)}
+						>
+							<IconBase size="small"><CalendarX /></IconBase>
+							{m.common_cancel()}
+						</Button>
 					{/if}
-				</div>
+				{:else if assignment.status !== 'active'}
+					<span class="assignment-status">{statusLabels[assignment.status]}</span>
+				{/if}
+				{#each otherActions as actionId (actionId)}
+					<Button
+						variant="ghost"
+						size="compact"
+						isLoading={isScheduleActionLoading(actionId)}
+						onclick={() => handleScheduleAction(actionId, assignment)}
+					>
+						{getScheduleActionLabel(actionId)}
+					</Button>
+				{/each}
 			</div>
+			{#if assignment.status === 'scheduled'}
+				{#if confirmState === 'confirmed'}
+					<span class="header-confirmed">
+						{m.schedule_confirmed_chip()}
+						<span class="health-delta positive">
+							<IconBase size="small"><HealthLine /></IconBase>
+							+{deltas.confirmedOnTime}
+						</span>
+					</span>
+				{:else if confirmState === 'confirmable' || confirmState === 'not_open'}
+					<span class="header-confirm-by">
+						{m.schedule_confirm_by_chip({
+							date: format(parseISO(assignment.confirmationDeadline), 'MMM d')
+						})}
+					</span>
+				{:else if confirmState === 'overdue'}
+					<span class="header-overdue">
+						{m.schedule_unconfirmed_chip()}
+						<span class="health-delta negative">
+							<IconBase size="small"><HealthLine /></IconBase>
+							{deltas.unconfirmed}
+						</span>
+					</span>
+				{/if}
+			{/if}
 			<div class="assignment-meta">
 				<Chip
 					variant="tag"
-					size="xs"
+					size="compact"
 					color="var(--text-muted)"
 					label={assignment.routeName}
 					icon={routeChipIcon}
 				/>
 				<Chip
 					variant="tag"
-					size="xs"
+					size="compact"
 					color="var(--text-muted)"
 					label={assignment.warehouseName}
 					icon={warehouseChipIcon}
@@ -724,23 +720,12 @@
 
 	.assignment-header {
 		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
+		align-items: center;
 		gap: var(--spacing-2);
 	}
 
-	.header-left {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-
-	.header-right {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-1);
-		flex-shrink: 0;
+	.assignment-header .assignment-date {
+		margin-right: auto;
 	}
 
 	.assignment-date {

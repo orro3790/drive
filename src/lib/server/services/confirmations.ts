@@ -7,7 +7,7 @@
  */
 
 import { db } from '$lib/server/db';
-import { assignments, driverMetrics, routes } from '$lib/server/db/schema';
+import { assignments, driverMetrics, routes, warehouses } from '$lib/server/db/schema';
 import { createAuditLog } from '$lib/server/services/audit';
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import { toZonedTime, format } from 'date-fns-tz';
@@ -146,6 +146,7 @@ export interface UnconfirmedAssignment {
 	id: string;
 	date: string;
 	routeName: string;
+	warehouseName: string;
 	confirmationOpensAt: string;
 	confirmationDeadline: string;
 	isConfirmable: boolean;
@@ -164,10 +165,12 @@ export async function getUnconfirmedAssignments(userId: string): Promise<Unconfi
 			id: assignments.id,
 			date: assignments.date,
 			routeName: routes.name,
+			warehouseName: warehouses.name,
 			confirmedAt: assignments.confirmedAt
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
+		.innerJoin(warehouses, eq(routes.warehouseId, warehouses.id))
 		.where(
 			and(
 				eq(assignments.userId, userId),
@@ -189,6 +192,7 @@ export async function getUnconfirmedAssignments(userId: string): Promise<Unconfi
 				id: row.id,
 				date: row.date,
 				routeName: row.routeName,
+				warehouseName: row.warehouseName,
 				confirmationOpensAt: opensAt.toISOString(),
 				confirmationDeadline: deadline.toISOString(),
 				isConfirmable

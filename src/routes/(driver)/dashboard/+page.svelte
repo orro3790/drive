@@ -491,35 +491,31 @@
 							</div>
 							<div class="today-content">
 								<div class="assignment-header">
-									<div class="header-left">
-										<span class="assignment-date">{formatAssignmentDate(todayShift.date)}</span>
-										<span class="assignment-status">{statusLabels[todayShift.status]}</span>
-									</div>
-									<div class="header-right">
-										{#if hasTodayAction('cancel_shift')}
-											<Button
-												variant="ghost"
-												size="xs"
-												isLoading={isTodayActionLoading('cancel_shift')}
-												onclick={() => handleTodayAction('cancel_shift')}
-											>
-												<IconBase size="small"><CalendarX /></IconBase>
-												{m.common_cancel()}
-											</Button>
-										{/if}
-									</div>
+									<span class="assignment-date">{formatAssignmentDate(todayShift.date)}</span>
+									<span class="assignment-status">{statusLabels[todayShift.status]}</span>
+									{#if hasTodayAction('cancel_shift')}
+										<Button
+											variant="ghost"
+											size="compact"
+											isLoading={isTodayActionLoading('cancel_shift')}
+											onclick={() => handleTodayAction('cancel_shift')}
+										>
+											<IconBase size="small"><CalendarX /></IconBase>
+											{m.common_cancel()}
+										</Button>
+									{/if}
 								</div>
 								<div class="assignment-meta">
 									<Chip
 										variant="tag"
-										size="xs"
+										size="compact"
 										color="var(--text-muted)"
 										label={todayShift.routeName}
 										icon={routeChipIcon}
 									/>
 									<Chip
 										variant="tag"
-										size="xs"
+										size="compact"
 										color="var(--text-muted)"
 										label={todayShift.warehouseName}
 										icon={warehouseChipIcon}
@@ -602,7 +598,7 @@
 										{#if hasTodayAction('complete_shift')}
 											<Button
 												variant="ghost"
-												size="xs"
+												size="compact"
 												onclick={() => handleTodayAction('complete_shift')}
 											>
 												<IconBase size="small"><CheckCircleIcon /></IconBase>
@@ -895,40 +891,43 @@
 									</div>
 									<div class="assignment-content">
 										<div class="assignment-header">
-											<div class="header-left">
-												<span class="assignment-date">{formatAssignmentDate(shift.date)}</span>
-												<span class={confirmInfo.overdue ? 'header-overdue' : 'header-confirm-by'}>
-													{confirmInfo.text}
-												</span>
-											</div>
-											<div class="header-right">
-												<Button
-													variant="ghost"
-													size="xs"
-													isLoading={dashboardStore.isConfirming}
-													onclick={() => dashboardStore.confirmShift(shift.id)}
-												>
-													<IconBase size="small"><CheckCircleIcon /></IconBase>
-													{m.dashboard_confirm_button()}
-												</Button>
-												<Button
-													variant="ghost"
-													size="xs"
-													isLoading={dashboardStore.isCancelling}
-													onclick={() => openCancelModal({ id: shift.id, isLateCancel: false })}
-												>
-													<IconBase size="small"><CalendarX /></IconBase>
-													{m.common_cancel()}
-												</Button>
-											</div>
+											<span class="assignment-date">{formatAssignmentDate(shift.date)}</span>
+											<Button
+												variant="ghost"
+												size="compact"
+												isLoading={dashboardStore.isConfirming}
+												onclick={() => dashboardStore.confirmShift(shift.id)}
+											>
+												<IconBase size="small"><CheckCircleIcon /></IconBase>
+												{m.dashboard_confirm_button()}
+											</Button>
+											<Button
+												variant="ghost"
+												size="compact"
+												isLoading={dashboardStore.isCancelling}
+												onclick={() => openCancelModal({ id: shift.id, isLateCancel: false })}
+											>
+												<IconBase size="small"><CalendarX /></IconBase>
+												{m.common_cancel()}
+											</Button>
 										</div>
+										<span class={confirmInfo.overdue ? 'header-overdue' : 'header-confirm-by'}>
+											{confirmInfo.text}
+										</span>
 										<div class="assignment-meta">
 											<Chip
 												variant="tag"
-												size="xs"
+												size="compact"
 												color="var(--text-muted)"
 												label={shift.routeName}
 												icon={routeChipIcon}
+											/>
+											<Chip
+												variant="tag"
+												size="compact"
+												color="var(--text-muted)"
+												label={shift.warehouseName}
+												icon={warehouseChipIcon}
 											/>
 										</div>
 									</div>
@@ -943,7 +942,7 @@
 					<div class="section-header">
 						<h2>{m.dashboard_bids_section()}</h2>
 						{#if dashboardStore.pendingBids.length > 0}
-							<Button variant="ghost" size="xs" onclick={() => goto('/bids')}>
+							<Button variant="ghost" size="compact" onclick={() => goto('/bids')}>
 								{m.dashboard_bids_view_all()}
 							</Button>
 						{/if}
@@ -974,14 +973,14 @@
 										<div class="assignment-meta">
 											<Chip
 												variant="tag"
-												size="xs"
+												size="compact"
 												color="var(--text-muted)"
 												label={bid.routeName}
 												icon={routeChipIcon}
 											/>
 											<Chip
 												variant="tag"
-												size="xs"
+												size="compact"
 												color="var(--text-muted)"
 												label={bid.warehouseName}
 												icon={warehouseChipIcon}
@@ -1182,23 +1181,12 @@
 
 	.assignment-header {
 		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
+		align-items: center;
 		gap: var(--spacing-2);
 	}
 
-	.header-left {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-
-	.header-right {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-1);
-		flex-shrink: 0;
+	.assignment-header .assignment-date {
+		margin-right: auto;
 	}
 
 	.assignment-date {
