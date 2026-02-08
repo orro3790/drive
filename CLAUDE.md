@@ -32,6 +32,7 @@ Tech stack interview **completed**. Specifications documented in `docs/specs/`. 
 - Automatic driver-to-route scheduling (2-week lookahead, Sunday lock)
 - Bidding-based replacement system (not FCFS)
 - Performance tracking with reliability-based flagging
+- Driver health gamification with score/star progression system
 - Mobile-first driver app + manager dashboard
 
 **What it is NOT**: A marketplace, HR system, routing/navigation engine, or payroll system.
@@ -60,6 +61,7 @@ Business logic in `src/lib/server/services/`:
 - `flagging.ts` - Driver performance flagging (`checkDriverForFlagging`)
 - `metrics.ts` - Driver metrics calculation (`recalculateDriverMetrics`)
 - `managers.ts` - Manager access control (`getManagerWarehouseIds`, `canManagerAccessWarehouse`, `getRouteManager`)
+- `health.ts` - Driver health scoring and star progression (planned for DRV-bjh implementation)
 
 See `docs/agent-guidelines.md` for detailed usage patterns.
 
@@ -174,6 +176,16 @@ Svelte 5 stores in `src/lib/stores/`:
 - 1 week grace period to improve
 - If still below: lose 1 day from cap
 
+### Driver Health System
+
+- **Score**: 0-100 daily health score (attendance 50%, completion 30%, reliability 20%)
+- **Hard Stop**: No-shows or 2+ late cancellations in 30 days cap score at 49 and reset stars to 0
+- **Stars**: 0-4 weekly streak progression based on qualifying weeks (100% attendance, 95%+ completion, 0 no-shows, 0 late cancellations)
+- **Pool Eligibility**: Hard-stop events remove driver from assignment pool (manager intervention required)
+- **V1 Scope**: UI + simulation only (no automatic pay/cap changes yet)
+- **Simulation**: 4 stars shows +10% bonus preview and higher shift access tier
+- See `docs/plans/driver-health-gamification.md` for full specification
+
 ### Bidding Modes
 
 **Competitive** (> 24h before shift):
@@ -203,6 +215,21 @@ score = (completion_rate * 0.4) +
         (attendance_rate * 0.2) +
         (preference_bonus * 0.1)
 ```
+
+### Dispatch Policy Configuration
+
+All business rule constants centralized in `src/lib/config/dispatchPolicy.ts`:
+
+- `timezone` - Toronto/Eastern time settings
+- `shifts` - Shift timing (7 AM start, 9 AM arrival deadline, 1-hour edit window)
+- `scheduling` - Schedule generation parameters
+- `confirmation` - Confirmation windows and deadlines
+- `bidding` - Bid scoring weights and mode cutoffs
+- `flagging` - Attendance thresholds, grace periods, weekly cap rules
+- `health` - Health score weights, hard-stop caps, qualifying week criteria, star progression
+- `jobs` - Batch sizes for cron jobs
+
+See `dispatchPolicy.health` for driver health gamification parameters (score weights, elite threshold, qualifying week criteria, etc.).
 
 ## Development Notes
 
