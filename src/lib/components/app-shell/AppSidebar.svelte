@@ -233,7 +233,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 		position: fixed;
 		top: 0;
 		left: 0;
-		height: 100vh;
+		height: 100dvh;
 		background: var(--surface-primary);
 		display: flex;
 		width: fit-content;

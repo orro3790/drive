@@ -33,6 +33,7 @@
 	import { driverStore } from '$lib/stores/driverStore.svelte';
 	import type { Driver } from '$lib/schemas/driver';
 	import type { SelectOption } from '$lib/schemas/ui/select';
+	import HealthCard from '$lib/components/driver/HealthCard.svelte';
 
 	// State
 	let selectedDriverId = $state<string | null>(null);
@@ -46,14 +47,6 @@
 	// Table state
 	let sorting = $state<SortingState>([]);
 	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
-
-	const healthSortOrder: Record<Driver['healthState'], number> = {
-		flagged: 0,
-		at_risk: 1,
-		watch: 2,
-		healthy: 3,
-		high_performer: 4
-	};
 
 	const globalAttendanceAverage = $derived.by(() => {
 		if (driverStore.drivers.length === 0) return 0;
@@ -100,12 +93,12 @@
 			sizing: 'fixed',
 			width: 170
 		}),
-		helper.accessor('healthRank', (row) => healthSortOrder[row.healthState], {
+		helper.accessor('healthRank', (row) => row.healthScore ?? -1, {
 			header: m.drivers_header_health(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 170,
-			minWidth: 150
+			width: 120,
+			minWidth: 100
 		}),
 		helper.accessor('attendancePercent', (row) => row.attendanceRate, {
 			header: m.drivers_header_attendance(),
@@ -353,7 +346,17 @@
 {/snippet}
 
 {#snippet healthCell(ctx: CellRendererContext<Driver>)}
-	{@render healthIndicator(ctx.row.healthState)}
+	{@render healthScoreCell(ctx.row.healthScore)}
+{/snippet}
+
+{#snippet healthScoreCell(score: number | null)}
+	{#if score === null}
+		<span class="health-score-null">&mdash;</span>
+	{:else}
+		<span class="health-score" style:color={score >= 96 ? 'var(--status-success)' : score >= 48 ? 'var(--status-warning)' : 'var(--status-error)'}>
+			{Math.round(score)}
+		</span>
+	{/if}
 {/snippet}
 
 {#snippet healthIndicator(healthState: Driver['healthState'])}
@@ -421,35 +424,63 @@
 			<dd>{driver.phone || m.drivers_detail_no_phone()}</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_total_shifts()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_total_shifts()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_total_shifts()}</span>
+				</Tooltip>
+			</dt>
 			<dd>{driver.totalShifts}</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_completed_shifts()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_completed_shifts()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_completed_shifts()}</span>
+				</Tooltip>
+			</dt>
 			<dd>{driver.completedShifts}</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_attendance()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_attendance()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_attendance()}</span>
+				</Tooltip>
+			</dt>
 			<dd class:low={driver.attendanceRate < driver.attendanceThreshold}>
 				{formatPercent(driver.attendanceRate)}
 			</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_completion()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_completion()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_completion()}</span>
+				</Tooltip>
+			</dt>
 			<dd>
 				{formatPercent(driver.completionRate)}
 			</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_avg_parcels()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_avg_parcels()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_avg_parcels()}</span>
+				</Tooltip>
+			</dt>
 			<dd>{formatAverageParcels(driver.avgParcelsDelivered)}</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_weekly_cap()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_weekly_cap()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_weekly_cap()}</span>
+				</Tooltip>
+			</dt>
 			<dd>{driver.weeklyCap} days</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_health()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_health()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_health()}</span>
+				</Tooltip>
+			</dt>
 			<dd>
 				{@render healthIndicator(driver.healthState)}
 			</dd>
@@ -463,10 +494,16 @@
 			</div>
 		{/if}
 		<div class="detail-row">
-			<dt>{m.drivers_detail_member_since()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_member_since()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_member_since()}</span>
+				</Tooltip>
+			</dt>
 			<dd>{formatDate(driver.createdAt)}</dd>
 		</div>
 	</dl>
+
+	<HealthCard healthUrl={`/api/drivers/${driver.id}/health`} />
 {/snippet}
 
 {#snippet driverDetailEditList(driver: Driver)}
@@ -484,31 +521,55 @@
 			<dd>{driver.phone || m.drivers_detail_no_phone()}</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_total_shifts()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_total_shifts()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_total_shifts()}</span>
+				</Tooltip>
+			</dt>
 			<dd>{driver.totalShifts}</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_completed_shifts()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_completed_shifts()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_completed_shifts()}</span>
+				</Tooltip>
+			</dt>
 			<dd>{driver.completedShifts}</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_attendance()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_attendance()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_attendance()}</span>
+				</Tooltip>
+			</dt>
 			<dd class:low={driver.attendanceRate < driver.attendanceThreshold}>
 				{formatPercent(driver.attendanceRate)}
 			</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_completion()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_completion()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_completion()}</span>
+				</Tooltip>
+			</dt>
 			<dd>
 				{formatPercent(driver.completionRate)}
 			</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_avg_parcels()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_avg_parcels()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_avg_parcels()}</span>
+				</Tooltip>
+			</dt>
 			<dd>{formatAverageParcels(driver.avgParcelsDelivered)}</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_weekly_cap()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_weekly_cap()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_weekly_cap()}</span>
+				</Tooltip>
+			</dt>
 			<dd class="detail-field">
 				<Select
 					options={weeklyCapOptions}
@@ -518,7 +579,11 @@
 			</dd>
 		</div>
 		<div class="detail-row">
-			<dt>{m.drivers_detail_health()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_health()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_health()}</span>
+				</Tooltip>
+			</dt>
 			<dd>
 				{@render healthIndicator(driver.healthState)}
 			</dd>
@@ -532,10 +597,16 @@
 			</div>
 		{/if}
 		<div class="detail-row">
-			<dt>{m.drivers_detail_member_since()}</dt>
+			<dt>
+				<Tooltip tooltip={m.drivers_detail_tooltip_member_since()} delay={250} focusable={false}>
+					<span class="dt-with-tooltip">{m.drivers_detail_member_since()}</span>
+				</Tooltip>
+			</dt>
 			<dd>{formatDate(driver.createdAt)}</dd>
 		</div>
 	</dl>
+
+	<HealthCard healthUrl={`/api/drivers/${driver.id}/health`} />
 {/snippet}
 
 {#snippet driverDetailView(driver: Driver)}
@@ -789,6 +860,21 @@
 		font-size: var(--font-size-sm);
 		font-variant-numeric: tabular-nums;
 		color: var(--text-muted);
+	}
+
+	.health-score {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.health-score-null {
+		color: var(--text-muted);
+	}
+
+	.dt-with-tooltip {
+		border-bottom: 1px dashed var(--border-primary);
+		cursor: help;
 	}
 
 	/* Detail panel */

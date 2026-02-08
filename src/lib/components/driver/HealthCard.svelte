@@ -21,6 +21,8 @@
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import type { HealthResponse } from '$lib/schemas/health';
 
+	let { healthUrl = '/api/driver-health' }: { healthUrl?: string } = $props();
+
 	let health = $state<HealthResponse | null>(null);
 	let isLoading = $state(true);
 	let hasError = $state(false);
@@ -99,7 +101,7 @@
 		hasError = false;
 
 		try {
-			const res = await fetch('/api/driver-health');
+			const res = await fetch(healthUrl);
 			if (!res.ok) throw new Error('Failed to load health data');
 			health = await res.json();
 		} catch {

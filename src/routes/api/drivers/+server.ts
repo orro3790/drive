@@ -88,6 +88,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			completionRate: driverMetrics.completionRate,
 			avgParcelsDelivered: driverMetrics.avgParcelsDelivered,
 			// Health state
+			healthScore: driverHealthState.currentScore,
 			assignmentPoolEligible: driverHealthState.assignmentPoolEligible
 		})
 		.from(user)
@@ -193,6 +194,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 				attendanceRate,
 				completionRate
 			}),
+			healthScore: driver.healthScore ?? null,
 			assignmentPoolEligible: driver.assignmentPoolEligible ?? true
 		};
 	});

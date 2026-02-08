@@ -62,19 +62,28 @@
 		scheduleStore.nextWeekStart ? parseISO(scheduleStore.nextWeekStart) : null
 	);
 
+	const activeAssignments = $derived(
+		sortedAssignments.filter((a) => a.status === 'active')
+	);
+
 	const thisWeekAssignments = $derived.by(() => {
 		const weekStart = scheduleStore.weekStart;
 		const nextWeekStart = scheduleStore.nextWeekStart;
 		if (!weekStart || !nextWeekStart) return [];
 		return sortedAssignments.filter(
-			(assignment) => assignment.date >= weekStart && assignment.date < nextWeekStart
+			(assignment) =>
+				assignment.status !== 'active' &&
+				assignment.date >= weekStart &&
+				assignment.date < nextWeekStart
 		);
 	});
 
 	const nextWeekAssignments = $derived.by(() => {
 		const nextWeekStart = scheduleStore.nextWeekStart;
 		if (!nextWeekStart) return [];
-		return sortedAssignments.filter((assignment) => assignment.date >= nextWeekStart);
+		return sortedAssignments.filter(
+			(assignment) => assignment.status !== 'active' && assignment.date >= nextWeekStart
+		);
 	});
 
 	// Status → accent color mapping (single color per status)
@@ -360,6 +369,16 @@
 						{/if}
 					{:else}
 						<span class="assignment-status">{statusLabels[assignment.status]}</span>
+						{#each otherActions as actionId (actionId)}
+							<Button
+								variant="ghost"
+								size="xs"
+								isLoading={isScheduleActionLoading(actionId)}
+								onclick={() => handleScheduleAction(actionId, assignment)}
+							>
+								{getScheduleActionLabel(actionId)}
+							</Button>
+						{/each}
 					{/if}
 				</div>
 			</div>
@@ -379,20 +398,6 @@
 					icon={warehouseChipIcon}
 				/>
 			</div>
-			{#if otherActions.length > 0}
-				<div class="assignment-actions">
-					{#each otherActions as actionId (actionId)}
-						<Button
-							variant={getScheduleActionVariant(actionId)}
-							size="small"
-							isLoading={isScheduleActionLoading(actionId)}
-							onclick={() => handleScheduleAction(actionId, assignment)}
-						>
-							{getScheduleActionLabel(actionId)}
-						</Button>
-					{/each}
-				</div>
-			{/if}
 		</div>
 	</div>
 {/snippet}
@@ -416,6 +421,19 @@
 			</div>
 		{:else}
 			<div class="schedule-sections">
+				{#if activeAssignments.length > 0}
+					<section class="schedule-section">
+						<div class="section-header">
+							<h3 class="section-label">{m.schedule_section_active()}</h3>
+						</div>
+						<div class="assignment-list">
+							{#each activeAssignments as assignment (assignment.id)}
+								{@render assignmentRow(assignment)}
+							{/each}
+						</div>
+					</section>
+				{/if}
+
 				<section class="schedule-section">
 					{#if weekStartDate}
 						<div class="section-header">
@@ -707,7 +725,7 @@
 	.assignment-header {
 		display: flex;
 		justify-content: space-between;
-		align-items: flex-start;
+		align-items: baseline;
 		gap: var(--spacing-2);
 	}
 
