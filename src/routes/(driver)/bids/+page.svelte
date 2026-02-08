@@ -7,29 +7,15 @@
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
-	import { format, parseISO, formatDistanceToNow } from 'date-fns';
+	import { parseISO, formatDistanceToNow } from 'date-fns';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import Lightning from '$lib/components/icons/Lightning.svelte';
 	import { getBidWindowPrimaryAction } from '$lib/config/driverLifecycleIa';
-	import { bidsStore, type BidStatus } from '$lib/stores/bidsStore.svelte';
-
-	const statusLabels: Record<BidStatus, string> = {
-		pending: m.bids_status_pending(),
-		won: m.bids_status_won(),
-		lost: m.bids_status_lost()
-	};
-
-	const statusChips: Record<BidStatus, 'info' | 'success' | 'warning' | 'error' | 'neutral'> = {
-		pending: 'info',
-		won: 'success',
-		lost: 'neutral'
-	};
-
-	function formatAssignmentDate(dateString: string) {
-		return format(parseISO(dateString), 'EEE, MMM d');
-	}
+	import { bidStatusLabels, bidStatusChipVariants } from '$lib/config/lifecycleLabels';
+	import { formatAssignmentDate } from '$lib/utils/date/formatting';
+	import { bidsStore } from '$lib/stores/bidsStore.svelte';
 
 	function formatClosesAt(isoString: string) {
 		const date = parseISO(isoString);
@@ -170,8 +156,8 @@
 										</div>
 										<Chip
 											variant="status"
-											status={statusChips[bid.status]}
-											label={statusLabels[bid.status]}
+											status={bidStatusChipVariants[bid.status]}
+											label={bidStatusLabels[bid.status]}
 											size="xs"
 										/>
 									</div>
@@ -242,6 +228,12 @@
 		box-shadow: var(--shadow-sm);
 	}
 
+	@media (max-width: 600px) {
+		.bids-section {
+			padding: 0;
+		}
+	}
+
 	.section-header {
 		margin-bottom: var(--spacing-3);
 	}
@@ -257,7 +249,7 @@
 		padding: var(--spacing-4);
 		border-radius: var(--radius-base);
 		background: var(--surface-secondary);
-		border: 1px dashed var(--border-primary);
+		border: none;
 	}
 
 	.empty-title {

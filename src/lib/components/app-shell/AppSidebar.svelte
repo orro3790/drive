@@ -16,7 +16,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import { authClient } from '$lib/auth-client';
 
 	// Import icons
-	import Award from '$lib/components/icons/Award.svelte';
+	import ClockDollar from '$lib/components/icons/ClockDollar.svelte';
 	import Calendar from '$lib/components/icons/Calendar.svelte';
 	import Home from '$lib/components/icons/Home.svelte';
 	import Building from '$lib/components/icons/Building.svelte';
@@ -61,7 +61,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 		{
 			id: 'bids',
 			label: () => m.nav_bids(),
-			Icon: Award,
+			Icon: ClockDollar,
 			path: '/bids'
 		}
 	];
