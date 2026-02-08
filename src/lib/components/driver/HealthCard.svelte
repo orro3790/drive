@@ -2,15 +2,20 @@
 	Driver Health Card
 
 	Displays driver health score (0-100), star progression (0-4),
-	factor breakdown, milestone guidance, simulation preview, and
-	hard-stop warnings. Fetches from /api/driver-health on mount.
+	factor breakdown, buff progress, and hard-stop warnings.
+	Fetches from /api/driver-health on mount.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
+	import Tooltip from '$lib/components/primitives/Tooltip.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
-	import Chip from '$lib/components/primitives/Chip.svelte';
+	import StarEmpty from '$lib/components/icons/StarEmpty.svelte';
+	import StarFilled from '$lib/components/icons/StarFilled.svelte';
+	import Dollar from '$lib/components/icons/Dollar.svelte';
+	import Lightning from '$lib/components/icons/Lightning.svelte';
+	import HealthLine from '$lib/components/icons/HealthLine.svelte';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import type { HealthResponse } from '$lib/schemas/health';
 
@@ -19,10 +24,11 @@
 	let hasError = $state(false);
 
 	const scoreColor = $derived.by(() => {
-		if (!health || health.score === null) return 'var(--text-muted)';
+		if (!health) return 'var(--text-muted)';
 		if (health.hardStop.triggered) return 'var(--status-error)';
-		if (health.score >= health.eliteThreshold) return 'var(--status-success)';
-		if (health.score >= 50) return 'var(--status-warning)';
+		const score = health.score ?? 0;
+		if (score >= health.eliteThreshold) return 'var(--status-success)';
+		if (score >= 50) return 'var(--status-warning)';
 		return 'var(--status-error)';
 	});
 
@@ -31,6 +37,26 @@
 	);
 
 	const elitePercent = $derived(health?.eliteThreshold ?? 80);
+	const isPastThreshold = $derived(scorePercent >= elitePercent);
+	const isBuffActive = $derived(isPastThreshold && !!health?.simulation.bonusEligible);
+	const isCharging = $derived(isPastThreshold && !isBuffActive);
+
+	const buffTooltipText = $derived(
+		health
+			? m.dashboard_health_buff_tooltip({
+					percent: String(health.simulation.bonusPercent),
+					threshold: String(health.eliteThreshold)
+				})
+			: ''
+	);
+	const chargingText = $derived(
+		health
+			? m.dashboard_health_buff_charging({
+					current: String(health.stars),
+					total: String(health.maxStars)
+				})
+			: ''
+	);
 
 	async function loadHealth() {
 		isLoading = true;
@@ -64,11 +90,6 @@
 		</div>
 	{:else if hasError || !health}
 		<p class="health-error">{m.dashboard_health_load_error()}</p>
-	{:else if health.isOnboarding}
-		<NoticeBanner variant="accent">
-			<p class="onboarding-title">{m.dashboard_health_onboarding_title()}</p>
-			<p class="onboarding-message">{m.dashboard_health_onboarding_message()}</p>
-		</NoticeBanner>
 	{:else}
 		<!-- Hard-stop warning -->
 		{#if health.hardStop.triggered}
@@ -81,9 +102,27 @@
 		<!-- Score bar -->
 		<div class="score-section">
 			<div class="score-header">
-				<span class="score-label">{m.dashboard_health_score_label()}</span>
+				<div class="score-stars">
+					<div class="stars-row" aria-label="{health.stars} of {health.maxStars} stars">
+						{#each Array(health.maxStars) as _, i (i)}
+							<span class="star" aria-hidden="true">
+								{#if i < health.stars}
+									<StarFilled fill="var(--status-warning)" />
+								{:else}
+									<StarEmpty stroke="var(--border-primary)" />
+								{/if}
+							</span>
+						{/each}
+					</div>
+					{#if health.streakWeeks > 0}
+						<span class="streak-badge"
+							>{m.dashboard_health_streak_label({ count: health.streakWeeks })}</span
+						>
+					{/if}
+				</div>
 				<span class="score-value" style:color={scoreColor}>
-					{health.score ?? '—'}
+					<HealthLine stroke={scoreColor} />
+					{health.score ?? 0}
 				</span>
 			</div>
 			<div
@@ -92,49 +131,51 @@
 				aria-valuenow={scorePercent}
 				aria-valuemin={0}
 				aria-valuemax={100}
-				aria-label={m.dashboard_health_score_label()}
+				aria-label={m.dashboard_health_section()}
 			>
 				<div
 					class="score-bar-fill"
+					class:charging={isCharging}
 					style:width="{scorePercent}%"
 					style:background={scoreColor}
-				></div>
-				<div
-					class="elite-marker"
-					style:left="{elitePercent}%"
-					title="{m.dashboard_health_elite_marker()} ({elitePercent})"
 				>
-					<span class="elite-label">{m.dashboard_health_elite_marker()}</span>
+					{#if isPastThreshold}
+						<span class="bar-tip-icon" class:tip-charging={isCharging}>
+							<Lightning stroke={isBuffActive ? 'var(--status-success)' : 'var(--text-muted)'} />
+						</span>
+					{/if}
 				</div>
+				<Tooltip tooltip={true} position="bottom" delay={300} focusable={false}>
+					{#snippet content()}
+						<div class="buff-tooltip">
+							<p>{buffTooltipText}</p>
+							{#if isBuffActive}
+								<p class="buff-tooltip-status buff-active">{m.dashboard_health_buff_active()}</p>
+							{:else}
+								<p class="buff-tooltip-status">{chargingText}</p>
+							{/if}
+						</div>
+					{/snippet}
+					<div class="elite-marker" style:left="{elitePercent}%">
+						<Dollar stroke="var(--text-muted)" />
+					</div>
+				</Tooltip>
 			</div>
-		</div>
 
-		<!-- Stars -->
-		<div class="stars-section">
-			<div class="stars-header">
-				<span class="stars-label">{m.dashboard_health_stars_label()}</span>
-				{#if health.streakWeeks > 0}
-					<span class="streak-badge"
-						>{m.dashboard_health_streak_label({ count: health.streakWeeks })}</span
-					>
-				{/if}
-			</div>
-			<div class="stars-row" aria-label="{health.stars} of {health.maxStars} stars">
-				{#each Array(health.maxStars) as _, i (i)}
-					<svg
-						class="star"
-						class:star-filled={i < health.stars}
-						viewBox="0 0 20 20"
-						width="24"
-						height="24"
-						aria-hidden="true"
-					>
-						<path
-							d="M10 1.5l2.47 5.01 5.53.8-4 3.9.94 5.49L10 14.27 5.06 16.7 6 11.21l-4-3.9 5.53-.8z"
-						/>
-					</svg>
-				{/each}
-			</div>
+			<!-- Charging progress below bar -->
+			{#if isCharging}
+				<div class="charging-progress">
+					<span class="charging-label">
+						{chargingText}
+					</span>
+				</div>
+			{:else if isBuffActive}
+				<div class="charging-progress">
+					<span class="charging-label buff-active-label">
+						{m.dashboard_health_buff_active()}
+					</span>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Factor breakdown -->
@@ -149,32 +190,6 @@
 					<span class="factor-label">{m.dashboard_health_factor_completion()}</span>
 					<span class="factor-value">{Math.round(latest.completionRate * 100)}%</span>
 				</div>
-			</div>
-		{/if}
-
-		<!-- Next milestone -->
-		<div class="milestone">
-			{#if health.stars < health.maxStars}
-				<p class="milestone-text">
-					{m.dashboard_health_milestone_next({ target: String(health.nextMilestone.targetStars) })}
-				</p>
-			{:else}
-				<p class="milestone-text milestone-reached">{m.dashboard_health_milestone_reached()}</p>
-			{/if}
-		</div>
-
-		<!-- Simulation preview (4 stars) -->
-		{#if health.simulation.bonusEligible}
-			<div class="simulation">
-				<Chip
-					variant="status"
-					status="success"
-					size="xs"
-					label={m.dashboard_health_simulation_label()}
-				/>
-				<p class="simulation-text">
-					{m.dashboard_health_simulation_bonus({ percent: String(health.simulation.bonusPercent) })}
-				</p>
 			</div>
 		{/if}
 	{/if}
@@ -215,19 +230,6 @@
 		padding: var(--spacing-3);
 	}
 
-	/* Onboarding */
-	.onboarding-title {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-	}
-
-	.onboarding-message {
-		margin: var(--spacing-1) 0 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-normal);
-	}
-
 	/* Hard-stop */
 	.hard-stop-title {
 		margin: 0;
@@ -252,17 +254,26 @@
 	.score-header {
 		display: flex;
 		justify-content: space-between;
-		align-items: baseline;
+		align-items: center;
 	}
 
-	.score-label {
-		font-size: var(--font-size-sm);
-		color: var(--text-muted);
+	.score-stars {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
 	}
 
 	.score-value {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
 		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-medium);
+	}
+
+	.score-value :global(svg) {
+		width: 20px;
+		height: 20px;
 	}
 
 	.score-bar-track {
@@ -274,52 +285,98 @@
 	}
 
 	.score-bar-fill {
+		position: relative;
 		height: 100%;
 		border-radius: var(--radius-full);
 		transition: width 0.4s var(--transition-ease);
 	}
 
+	/* Charging animation — gentle pulse on the bar fill */
+	.score-bar-fill.charging {
+		animation: chargePulse 2s ease-in-out infinite;
+	}
+
+	@keyframes chargePulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.6;
+		}
+	}
+
+	/* Lightning bolt at bar tip */
+	.bar-tip-icon {
+		position: absolute;
+		right: 0;
+		top: 50%;
+		transform: translate(50%, -50%);
+		display: flex;
+	}
+
+	.bar-tip-icon :global(svg) {
+		width: 20px;
+		height: 20px;
+	}
+
+	.bar-tip-icon.tip-charging {
+		animation: chargePulse 2s ease-in-out infinite;
+	}
+
+	/* Dollar marker */
 	.elite-marker {
 		position: absolute;
-		top: -2px;
-		transform: translateX(-50%);
+		top: 50%;
+		transform: translate(-50%, -50%);
+		display: flex;
+		align-items: center;
+		cursor: default;
+	}
+
+	.elite-marker :global(svg) {
+		width: 24px;
+		height: 24px;
+	}
+
+	/* Buff tooltip */
+	.buff-tooltip {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
+		gap: var(--spacing-1);
 	}
 
-	.elite-marker::before {
-		content: '';
-		width: 2px;
-		height: 12px;
-		background: var(--text-muted);
-		border-radius: var(--radius-full);
+	.buff-tooltip p {
+		margin: 0;
+		font-size: var(--font-size-sm);
 	}
 
-	.elite-label {
+	.buff-tooltip-status {
+		color: var(--text-muted);
+	}
+
+	.buff-tooltip-status.buff-active {
+		color: var(--status-success);
+		font-weight: var(--font-weight-medium);
+	}
+
+	/* Charging progress below bar */
+	.charging-progress {
+		display: flex;
+		justify-content: flex-end;
+	}
+
+	.charging-label {
 		font-size: var(--font-size-xs);
 		color: var(--text-muted);
-		white-space: nowrap;
-		margin-top: 2px;
+	}
+
+	.buff-active-label {
+		color: var(--status-success);
+		font-weight: var(--font-weight-medium);
 	}
 
 	/* Stars */
-	.stars-section {
-		margin-top: var(--spacing-4);
-	}
-
-	.stars-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: var(--spacing-2);
-	}
-
-	.stars-label {
-		font-size: var(--font-size-sm);
-		color: var(--text-muted);
-	}
-
 	.streak-badge {
 		font-size: var(--font-size-xs);
 		color: var(--text-muted);
@@ -331,15 +388,7 @@
 	}
 
 	.star {
-		fill: var(--interactive-normal);
-		stroke: var(--border-primary);
-		stroke-width: 1;
-		transition: fill 0.2s var(--transition-ease);
-	}
-
-	.star-filled {
-		fill: var(--status-warning);
-		stroke: var(--status-warning);
+		display: flex;
 	}
 
 	/* Factor breakdown */
@@ -367,37 +416,6 @@
 	.factor-value {
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
-		color: var(--text-normal);
-	}
-
-	/* Milestone */
-	.milestone {
-		margin-top: var(--spacing-3);
-	}
-
-	.milestone-text {
-		font-size: var(--font-size-sm);
-		color: var(--text-muted);
-		text-align: center;
-	}
-
-	.milestone-reached {
-		color: var(--status-success);
-	}
-
-	/* Simulation */
-	.simulation {
-		margin-top: var(--spacing-3);
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-2);
-		padding: var(--spacing-2) var(--spacing-3);
-		background: color-mix(in srgb, var(--status-success) 8%, transparent);
-		border-radius: var(--radius-base);
-	}
-
-	.simulation-text {
-		font-size: var(--font-size-sm);
 		color: var(--text-normal);
 	}
 

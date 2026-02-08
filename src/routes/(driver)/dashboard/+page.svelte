@@ -384,6 +384,9 @@
 					</div>
 				{/if}
 
+				<!-- Health Card -->
+				<HealthCard />
+
 				<!-- Today's Shift -->
 				<section class="dashboard-section">
 					<div class="section-header">
@@ -818,9 +821,6 @@
 						{/if}
 					</section>
 				</div>
-
-				<!-- Health Card -->
-				<HealthCard />
 
 				<!-- Raw Metrics (collapsible) -->
 				<section class="dashboard-section metrics-section">
