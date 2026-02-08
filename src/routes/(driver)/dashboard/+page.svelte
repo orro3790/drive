@@ -15,27 +15,24 @@
 	import { format, parseISO, formatDistanceToNow, differenceInMinutes } from 'date-fns';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
-	import Modal from '$lib/components/primitives/Modal.svelte';
-	import Select from '$lib/components/Select.svelte';
+	import Icon from '$lib/components/primitives/Icon.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
-	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
+	import CancelShiftModal from '$lib/components/driver/CancelShiftModal.svelte';
+	import Announcement from '$lib/components/icons/Announcement.svelte';
+	import XIcon from '$lib/components/icons/XIcon.svelte';
 	import {
 		deriveAssignmentLifecycleState,
 		getAssignmentActions,
 		type AssignmentLifecycleActionId
 	} from '$lib/config/driverLifecycleIa';
+	import { statusLabels, statusChipVariants } from '$lib/config/lifecycleLabels';
+	import { formatAssignmentDate } from '$lib/utils/date/formatting';
 	import { dashboardStore, type DashboardAssignment } from '$lib/stores/dashboardStore.svelte';
-	import {
-		cancelReasonValues,
-		type AssignmentStatus,
-		type CancelReason
-	} from '$lib/schemas/assignment';
-	import type { SelectOption } from '$lib/schemas/ui/select';
+	import type { CancelReason } from '$lib/schemas/assignment';
 
 	// Cancel modal state
 	let cancelTarget = $state<DashboardAssignment | null>(null);
-	let cancelReason = $state<CancelReason | ''>('');
-	let cancelError = $state<string | null>(null);
 
 	// Shift start (inventory) state
 	let parcelsStart = $state<number | ''>('');
@@ -53,6 +50,9 @@
 
 	// Edit countdown timer
 	let editMinutesRemaining = $state(0);
+	let dismissedNewDriverBanner = $state(false);
+
+	const NEW_DRIVER_BANNER_DISMISS_KEY = 'drive.dashboard.new-driver-banner.dismissed';
 
 	type ShiftStep =
 		| 'arrive'
@@ -103,6 +103,82 @@
 		return todayActions.includes(actionId);
 	}
 
+	const showNewDriverBanner = $derived(dashboardStore.isNewDriver && !dismissedNewDriverBanner);
+
+	const todayPrimaryAction = $derived.by(() => {
+		const firstNonCancel = todayActions.find((actionId) => actionId !== 'cancel_shift');
+		if (firstNonCancel) {
+			return firstNonCancel;
+		}
+
+		return todayActions.includes('cancel_shift') ? 'cancel_shift' : null;
+	});
+
+	function getTodayActionLabel(actionId: DashboardActionId) {
+		switch (actionId) {
+			case 'confirm_shift':
+				return m.dashboard_confirm_button();
+			case 'arrive_on_site':
+				return m.shift_arrive_button();
+			case 'record_inventory':
+				return m.shift_start_button();
+			case 'complete_shift':
+				return m.shift_complete_button();
+			case 'edit_completion':
+				return m.shift_edit_button();
+			case 'cancel_shift':
+				return m.schedule_cancel_button();
+		}
+	}
+
+	function getTodayActionVariant(actionId: DashboardActionId): 'primary' | 'secondary' | 'danger' {
+		return actionId === 'cancel_shift' ? 'danger' : 'primary';
+	}
+
+	function isTodayActionLoading(actionId: DashboardActionId): boolean {
+		switch (actionId) {
+			case 'confirm_shift':
+				return dashboardStore.isConfirming;
+			case 'arrive_on_site':
+				return dashboardStore.isArriving;
+			case 'record_inventory':
+				return dashboardStore.isStartingShift;
+			case 'complete_shift':
+				return dashboardStore.isCompletingShift;
+			case 'edit_completion':
+				return dashboardStore.isEditingShift;
+			case 'cancel_shift':
+				return dashboardStore.isCancelling;
+		}
+	}
+
+	function handleTodayAction(actionId: DashboardActionId) {
+		const shift = dashboardStore.todayShift;
+		if (!shift) {
+			return;
+		}
+
+		switch (actionId) {
+			case 'confirm_shift':
+				dashboardStore.confirmShift(shift.id);
+				return;
+			case 'arrive_on_site':
+				handleArrive();
+				return;
+			case 'record_inventory':
+				return;
+			case 'complete_shift':
+				openCompleteStep();
+				return;
+			case 'edit_completion':
+				openEditMode();
+				return;
+			case 'cancel_shift':
+				openCancelModal(shift);
+				return;
+		}
+	}
+
 	const shiftStep: ShiftStep = $derived.by(() => {
 		switch (todayLifecycleState) {
 			case 'scheduled_today_arrive':
@@ -136,44 +212,6 @@
 		}
 	});
 
-	const statusLabels: Record<AssignmentStatus, string> = {
-		scheduled: m.schedule_status_scheduled(),
-		active: m.schedule_status_active(),
-		completed: m.schedule_status_completed(),
-		cancelled: m.schedule_status_cancelled(),
-		unfilled: m.schedule_status_unfilled()
-	};
-
-	const statusChips: Record<
-		AssignmentStatus,
-		'info' | 'success' | 'warning' | 'error' | 'neutral'
-	> = {
-		scheduled: 'info',
-		active: 'warning',
-		completed: 'success',
-		cancelled: 'neutral',
-		unfilled: 'warning'
-	};
-
-	const cancelReasonLabels: Record<CancelReason, string> = {
-		vehicle_breakdown: m.schedule_cancel_reason_vehicle_breakdown(),
-		medical_emergency: m.schedule_cancel_reason_medical_emergency(),
-		family_emergency: m.schedule_cancel_reason_family_emergency(),
-		traffic_accident: m.schedule_cancel_reason_traffic_accident(),
-		weather_conditions: m.schedule_cancel_reason_weather_conditions(),
-		personal_emergency: m.schedule_cancel_reason_personal_emergency(),
-		other: m.schedule_cancel_reason_other()
-	};
-
-	const cancelReasonOptions: SelectOption[] = cancelReasonValues.map((reason) => ({
-		value: reason,
-		label: cancelReasonLabels[reason]
-	}));
-
-	function formatAssignmentDate(dateString: string) {
-		return format(parseISO(dateString), 'EEE, MMM d');
-	}
-
 	function formatClosesAt(isoString: string) {
 		const date = parseISO(isoString);
 		return m.bids_window_closes({
@@ -189,27 +227,17 @@
 		return format(parseISO(isoString), 'h:mm a');
 	}
 
-	// Cancel modal functions
 	function openCancelModal(assignment: DashboardAssignment) {
 		cancelTarget = assignment;
-		cancelReason = '';
-		cancelError = null;
 	}
 
 	function closeCancelModal() {
 		cancelTarget = null;
-		cancelReason = '';
-		cancelError = null;
 	}
 
-	async function submitCancellation() {
+	async function handleCancel(reason: CancelReason) {
 		if (!cancelTarget) return;
-		if (!cancelReason) {
-			cancelError = m.schedule_cancel_reason_required();
-			return;
-		}
-
-		const success = await dashboardStore.cancel(cancelTarget.id, cancelReason);
+		const success = await dashboardStore.cancel(cancelTarget.id, reason);
 		if (success) {
 			closeCancelModal();
 		}
@@ -302,7 +330,18 @@
 		}
 	}
 
+	function loadDismissedBannerPreference() {
+		const storedPreference = window.localStorage.getItem(NEW_DRIVER_BANNER_DISMISS_KEY);
+		dismissedNewDriverBanner = storedPreference === '1';
+	}
+
+	function dismissNewDriverBanner() {
+		dismissedNewDriverBanner = true;
+		window.localStorage.setItem(NEW_DRIVER_BANNER_DISMISS_KEY, '1');
+	}
+
 	onMount(() => {
+		loadDismissedBannerPreference();
 		dashboardStore.load();
 	});
 </script>
@@ -327,13 +366,19 @@
 		{:else}
 			<div class="dashboard-sections">
 				<!-- New Driver Banner -->
-				{#if dashboardStore.isNewDriver}
-					<NoticeBanner variant="info" align="start">
-						<div class="banner-content">
-							<h3>{m.dashboard_new_driver_title()}</h3>
-							<p>{m.dashboard_new_driver_message()}</p>
+				{#if showNewDriverBanner}
+					<div class="welcome-banner" role="note" aria-label={m.dashboard_new_driver_title()}>
+						<div class="welcome-banner-header">
+							<div class="welcome-banner-intro">
+								<Icon><Announcement /></Icon>
+								<h3>{m.dashboard_new_driver_title()}</h3>
+							</div>
+							<IconButton tooltip={m.common_close()} onclick={dismissNewDriverBanner}>
+								<Icon><XIcon /></Icon>
+							</IconButton>
 						</div>
-					</NoticeBanner>
+						<p class="welcome-banner-message">{m.dashboard_new_driver_message()}</p>
+					</div>
 				{/if}
 
 				<!-- Today's Shift -->
@@ -353,23 +398,32 @@
 								</div>
 								<Chip
 									variant="status"
-									status={statusChips[todayShift.status]}
+									status={statusChipVariants[todayShift.status]}
 									label={statusLabels[todayShift.status]}
 									size="xs"
 								/>
 							</div>
 
+							{#if todayPrimaryAction}
+								<div class="next-action-strip">
+									<p class="next-action-label">{m.common_actions()}</p>
+									<p class="next-action-value">{getTodayActionLabel(todayPrimaryAction)}</p>
+								</div>
+							{/if}
+
 							<!-- Step 1: Arrive -->
 							{#if shiftStep === 'arrive'}
 								<div class="step-content">
-									<Button
-										variant="primary"
-										fill
-										isLoading={dashboardStore.isArriving}
-										onclick={handleArrive}
-									>
-										{m.shift_arrive_button()}
-									</Button>
+									{#if hasTodayAction('arrive_on_site')}
+										<Button
+											variant={getTodayActionVariant('arrive_on_site')}
+											fill
+											isLoading={isTodayActionLoading('arrive_on_site')}
+											onclick={() => handleTodayAction('arrive_on_site')}
+										>
+											{getTodayActionLabel('arrive_on_site')}
+										</Button>
+									{/if}
 								</div>
 							{/if}
 
@@ -426,9 +480,15 @@
 											count: String(todayShift.shift?.parcelsStart ?? 0)
 										})}
 									</p>
-									<Button variant="primary" fill onclick={openCompleteStep}>
-										{m.shift_complete_button()}
-									</Button>
+									{#if hasTodayAction('complete_shift')}
+										<Button
+											variant={getTodayActionVariant('complete_shift')}
+											fill
+											onclick={() => handleTodayAction('complete_shift')}
+										>
+											{getTodayActionLabel('complete_shift')}
+										</Button>
+									{/if}
 								</div>
 							{/if}
 
@@ -570,9 +630,15 @@
 										<p class="edit-countdown">
 											{m.shift_edit_window_remaining({ minutes: String(editMinutesRemaining) })}
 										</p>
-										<Button variant="secondary" fill onclick={openEditMode}>
-											{m.shift_edit_button()}
-										</Button>
+										{#if hasTodayAction('edit_completion')}
+											<Button
+												variant="secondary"
+												fill
+												onclick={() => handleTodayAction('edit_completion')}
+											>
+												{getTodayActionLabel('edit_completion')}
+											</Button>
+										{/if}
 									{/if}
 								</div>
 							{/if}
@@ -601,11 +667,29 @@
 								</div>
 							{/if}
 
+							{#if shiftStep === null && todayPrimaryAction && todayPrimaryAction !== 'cancel_shift'}
+								<div class="step-content">
+									<Button
+										variant={getTodayActionVariant(todayPrimaryAction)}
+										fill
+										isLoading={isTodayActionLoading(todayPrimaryAction)}
+										onclick={() => handleTodayAction(todayPrimaryAction)}
+									>
+										{getTodayActionLabel(todayPrimaryAction)}
+									</Button>
+								</div>
+							{/if}
+
 							<!-- Cancel button (available in early steps) -->
 							{#if hasTodayAction('cancel_shift')}
 								<div class="card-actions">
-									<Button variant="danger" size="small" onclick={() => openCancelModal(todayShift)}>
-										{m.schedule_cancel_button()}
+									<Button
+										variant={getTodayActionVariant('cancel_shift')}
+										size="small"
+										isLoading={isTodayActionLoading('cancel_shift')}
+										onclick={() => handleTodayAction('cancel_shift')}
+									>
+										{getTodayActionLabel('cancel_shift')}
 									</Button>
 								</div>
 							{/if}
@@ -777,42 +861,13 @@
 	</div>
 </div>
 
-<!-- Cancel Modal -->
 {#if cancelTarget}
-	<Modal title={m.schedule_cancel_modal_title()} onClose={closeCancelModal}>
-		<form
-			class="modal-form"
-			onsubmit={(event) => {
-				event.preventDefault();
-				submitCancellation();
-			}}
-		>
-			<div class="form-field">
-				<label for="cancel-reason">{m.schedule_cancel_reason_label()}</label>
-				<Select
-					id="cancel-reason"
-					options={cancelReasonOptions}
-					bind:value={cancelReason}
-					placeholder={m.schedule_cancel_reason_placeholder()}
-					errors={cancelError ? [cancelError] : []}
-					onChange={() => (cancelError = null)}
-				/>
-			</div>
-
-			{#if cancelTarget.isLateCancel}
-				<div class="late-warning">{m.schedule_cancel_warning_late()}</div>
-			{/if}
-
-			<div class="modal-actions">
-				<Button variant="secondary" onclick={closeCancelModal} fill>
-					{m.common_cancel()}
-				</Button>
-				<Button variant="danger" type="submit" fill isLoading={dashboardStore.isCancelling}>
-					{m.schedule_cancel_confirm_button()}
-				</Button>
-			</div>
-		</form>
-	</Modal>
+	<CancelShiftModal
+		isLateCancel={cancelTarget.isLateCancel}
+		isLoading={dashboardStore.isCancelling}
+		onCancel={handleCancel}
+		onClose={closeCancelModal}
+	/>
 {/if}
 
 <style>
@@ -862,7 +917,7 @@
 	.dashboard-section {
 		background: var(--surface-primary);
 		border-radius: var(--radius-lg);
-		padding: 0;
+		padding: var(--spacing-4);
 		box-shadow: var(--shadow-sm);
 	}
 
@@ -881,16 +936,42 @@
 	}
 
 	/* New Driver Banner */
-	.banner-content h3 {
-		margin: 0 0 var(--spacing-1);
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
+	.welcome-banner {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+		padding: var(--spacing-3) var(--spacing-4);
+		background: var(--surface-primary);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow-sm);
 	}
 
-	.banner-content p {
+	.welcome-banner-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: var(--spacing-2);
+	}
+
+	.welcome-banner-intro {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		min-width: 0;
+		color: var(--text-normal);
+	}
+
+	.welcome-banner-intro h3 {
 		margin: 0;
 		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-normal);
+		font-weight: var(--font-weight-semibold);
+		color: var(--text-normal);
+	}
+
+	.welcome-banner-message {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		line-height: 1.5;
 		color: var(--text-normal);
 	}
 
@@ -903,6 +984,31 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-3);
+	}
+
+	.next-action-strip {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: var(--spacing-2);
+		padding: var(--spacing-2) var(--spacing-3);
+		border-radius: var(--radius-base);
+		background: color-mix(in srgb, var(--accent-primary) 10%, var(--surface-primary));
+		border: 1px solid color-mix(in srgb, var(--accent-primary) 30%, var(--border-primary));
+	}
+
+	.next-action-label {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-muted);
+	}
+
+	.next-action-value {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+		color: var(--text-normal);
 	}
 
 	.card-header {
@@ -1015,7 +1121,7 @@
 		padding: var(--spacing-4);
 		border-radius: var(--radius-base);
 		background: var(--surface-secondary);
-		border: 1px dashed var(--border-primary);
+		border: none;
 	}
 
 	.empty-state.compact {
@@ -1220,39 +1326,18 @@
 		color: var(--status-error);
 	}
 
-	.late-warning {
-		padding: var(--spacing-2);
-		border-radius: var(--radius-base);
-		background: color-mix(in srgb, var(--status-warning) 15%, transparent);
-		color: var(--status-warning);
-		font-size: var(--font-size-sm);
-	}
-
-	/* Modal Styles */
-	.modal-form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-3);
-	}
-
-	.modal-actions {
-		display: flex;
-		gap: var(--spacing-2);
-		margin-top: var(--spacing-2);
-	}
-
 	/* Responsive */
 	@media (max-width: 600px) {
+		.dashboard-section {
+			padding: 0;
+		}
+
 		.week-row {
 			grid-template-columns: 1fr;
 		}
 
 		.metrics-grid {
 			grid-template-columns: repeat(2, 1fr);
-		}
-
-		.modal-actions {
-			flex-direction: column;
 		}
 	}
 </style>

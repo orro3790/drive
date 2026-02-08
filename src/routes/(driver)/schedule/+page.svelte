@@ -10,24 +10,19 @@
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
-	import Select from '$lib/components/Select.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
+	import CancelShiftModal from '$lib/components/driver/CancelShiftModal.svelte';
 	import { scheduleStore, type ScheduleAssignment } from '$lib/stores/scheduleStore.svelte';
 	import {
 		getAssignmentActions,
 		type AssignmentLifecycleActionId
 	} from '$lib/config/driverLifecycleIa';
-	import {
-		cancelReasonValues,
-		type AssignmentStatus,
-		type CancelReason
-	} from '$lib/schemas/assignment';
-	import type { SelectOption } from '$lib/schemas/ui/select';
+	import { statusLabels, statusChipVariants } from '$lib/config/lifecycleLabels';
+	import { formatAssignmentDate } from '$lib/utils/date/formatting';
+	import type { CancelReason } from '$lib/schemas/assignment';
 
 	// Cancel modal state
 	let cancelTarget = $state<ScheduleAssignment | null>(null);
-	let cancelReason = $state<CancelReason | ''>('');
-	let cancelError = $state<string | null>(null);
 
 	// Shift start modal state
 	let startTarget = $state<ScheduleAssignment | null>(null);
@@ -38,40 +33,6 @@
 	let completeTarget = $state<ScheduleAssignment | null>(null);
 	let parcelsReturned = $state<number | ''>(0);
 	let completeError = $state<string | null>(null);
-
-	const statusLabels: Record<AssignmentStatus, string> = {
-		scheduled: m.schedule_status_scheduled(),
-		active: m.schedule_status_active(),
-		completed: m.schedule_status_completed(),
-		cancelled: m.schedule_status_cancelled(),
-		unfilled: m.schedule_status_unfilled()
-	};
-
-	const statusChips: Record<
-		AssignmentStatus,
-		'info' | 'success' | 'warning' | 'error' | 'neutral'
-	> = {
-		scheduled: 'info',
-		active: 'warning',
-		completed: 'success',
-		cancelled: 'neutral',
-		unfilled: 'warning'
-	};
-
-	const cancelReasonLabels: Record<CancelReason, string> = {
-		vehicle_breakdown: m.schedule_cancel_reason_vehicle_breakdown(),
-		medical_emergency: m.schedule_cancel_reason_medical_emergency(),
-		family_emergency: m.schedule_cancel_reason_family_emergency(),
-		traffic_accident: m.schedule_cancel_reason_traffic_accident(),
-		weather_conditions: m.schedule_cancel_reason_weather_conditions(),
-		personal_emergency: m.schedule_cancel_reason_personal_emergency(),
-		other: m.schedule_cancel_reason_other()
-	};
-
-	const cancelReasonOptions: SelectOption[] = cancelReasonValues.map((reason) => ({
-		value: reason,
-		label: cancelReasonLabels[reason]
-	}));
 
 	const sortedAssignments = $derived(
 		[...scheduleStore.assignments].sort((a, b) => a.date.localeCompare(b.date))
@@ -98,10 +59,6 @@
 		if (!nextWeekStart) return [];
 		return sortedAssignments.filter((assignment) => assignment.date >= nextWeekStart);
 	});
-
-	function formatAssignmentDate(dateString: string) {
-		return format(parseISO(dateString), 'EEE, MMM d');
-	}
 
 	function formatWeekRange(startDate: Date) {
 		const endDate = addDays(startDate, 6);
@@ -192,24 +149,15 @@
 
 	function openCancelModal(assignment: ScheduleAssignment) {
 		cancelTarget = assignment;
-		cancelReason = '';
-		cancelError = null;
 	}
 
 	function closeCancelModal() {
 		cancelTarget = null;
-		cancelReason = '';
-		cancelError = null;
 	}
 
-	async function submitCancellation() {
+	async function handleCancel(reason: CancelReason) {
 		if (!cancelTarget) return;
-		if (!cancelReason) {
-			cancelError = m.schedule_cancel_reason_required();
-			return;
-		}
-
-		const success = await scheduleStore.cancel(cancelTarget.id, cancelReason);
+		const success = await scheduleStore.cancel(cancelTarget.id, reason);
 		if (success) {
 			closeCancelModal();
 		}
@@ -320,7 +268,7 @@
 										<div class="card-chips">
 											<Chip
 												variant="status"
-												status={statusChips[assignment.status]}
+												status={statusChipVariants[assignment.status]}
 												label={statusLabels[assignment.status]}
 												size="xs"
 											/>
@@ -402,7 +350,7 @@
 										<div class="card-chips">
 											<Chip
 												variant="status"
-												status={statusChips[assignment.status]}
+												status={statusChipVariants[assignment.status]}
 												label={statusLabels[assignment.status]}
 												size="xs"
 											/>
@@ -461,40 +409,12 @@
 </div>
 
 {#if cancelTarget}
-	<Modal title={m.schedule_cancel_modal_title()} onClose={closeCancelModal}>
-		<form
-			class="modal-form"
-			onsubmit={(event) => {
-				event.preventDefault();
-				submitCancellation();
-			}}
-		>
-			<div class="form-field">
-				<label for="cancel-reason">{m.schedule_cancel_reason_label()}</label>
-				<Select
-					id="cancel-reason"
-					options={cancelReasonOptions}
-					bind:value={cancelReason}
-					placeholder={m.schedule_cancel_reason_placeholder()}
-					errors={cancelError ? [cancelError] : []}
-					onChange={() => (cancelError = null)}
-				/>
-			</div>
-
-			{#if cancelTarget.isLateCancel}
-				<div class="late-warning">{m.schedule_cancel_warning_late()}</div>
-			{/if}
-
-			<div class="modal-actions">
-				<Button variant="secondary" onclick={closeCancelModal} fill>
-					{m.common_cancel()}
-				</Button>
-				<Button variant="danger" type="submit" fill isLoading={scheduleStore.isCancelling}>
-					{m.schedule_cancel_confirm_button()}
-				</Button>
-			</div>
-		</form>
-	</Modal>
+	<CancelShiftModal
+		isLateCancel={cancelTarget.isLateCancel}
+		isLoading={scheduleStore.isCancelling}
+		onCancel={handleCancel}
+		onClose={closeCancelModal}
+	/>
 {/if}
 
 {#if startTarget}
@@ -650,7 +570,7 @@
 		padding: var(--spacing-4);
 		border-radius: var(--radius-base);
 		background: var(--surface-secondary);
-		border: 1px dashed var(--border-primary);
+		border: none;
 	}
 
 	.empty-title {
@@ -779,14 +699,6 @@
 		color: var(--status-error);
 	}
 
-	.late-warning {
-		padding: var(--spacing-2);
-		border-radius: var(--radius-base);
-		background: color-mix(in srgb, var(--status-warning) 15%, transparent);
-		color: var(--status-warning);
-		font-size: var(--font-size-sm);
-	}
-
 	.modal-actions {
 		display: flex;
 		gap: var(--spacing-2);
@@ -794,6 +706,10 @@
 	}
 
 	@media (max-width: 600px) {
+		.schedule-section {
+			padding: 0;
+		}
+
 		.modal-actions {
 			flex-direction: column;
 		}

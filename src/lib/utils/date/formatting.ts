@@ -9,6 +9,7 @@ import {
 	format,
 	isToday,
 	isYesterday,
+	parseISO,
 	startOfWeek
 } from 'date-fns';
 
@@ -98,4 +99,12 @@ export function getTimeGroup(
 	if (d >= startOfThisWeek) return 'this_week';
 
 	return 'earlier';
+}
+
+/**
+ * Format an ISO date string as a short assignment date (e.g., "Mon, Feb 10").
+ * Used across driver schedule, dashboard, and bids pages.
+ */
+export function formatAssignmentDate(dateString: string): string {
+	return format(parseISO(dateString), 'EEE, MMM d');
 }
