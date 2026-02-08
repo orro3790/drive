@@ -43,6 +43,7 @@ export type UnconfirmedShift = {
 	id: string;
 	date: string;
 	routeName: string;
+	warehouseName: string;
 	confirmationOpensAt: string;
 	confirmationDeadline: string;
 	isConfirmable: boolean;
