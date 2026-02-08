@@ -48,6 +48,29 @@ export const dispatchPolicy = {
 			watchBandAboveThreshold: 0.05
 		}
 	},
+	health: {
+		scoreWeights: {
+			attendance: 50,
+			completion: 30,
+			reliability: 20
+		},
+		hardStopScoreCap: 49,
+		lateCancelRollingDays: 30,
+		lateCancelThreshold: 2,
+		correctiveCompletionThreshold: 0.8,
+		correctiveRecoveryDays: 7,
+		qualifyingWeek: {
+			minAttendanceRate: 1.0,
+			minCompletionRate: 0.95,
+			maxNoShows: 0,
+			maxLateCancellations: 0
+		},
+		maxStars: 4,
+		eliteThreshold: 80,
+		simulationBonus: {
+			fourStarBonusPercent: 10
+		}
+	},
 	jobs: {
 		notificationBatchSize: 10,
 		performanceCheckBatchSize: 50
