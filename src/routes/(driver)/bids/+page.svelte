@@ -131,12 +131,13 @@
 													/>
 												{/if}
 												<Button
-													variant="primary"
-													size="small"
+													variant="ghost"
+													size="xs"
 													onclick={() => handleSubmitBid(window.assignmentId)}
 													isLoading={bidsStore.isSubmitting(window.assignmentId)}
 													disabled={bidsStore.submittingAssignmentId !== null}
 												>
+													<IconBase size="small"><Gavel /></IconBase>
 													{getBidActionLabel(window.mode)}
 												</Button>
 											</div>

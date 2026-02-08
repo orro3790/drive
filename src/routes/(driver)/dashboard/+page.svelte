@@ -44,11 +44,11 @@
 	} from '$lib/config/driverLifecycleIa';
 	import { statusLabels } from '$lib/config/lifecycleLabels';
 	import { formatAssignmentDate } from '$lib/utils/date/formatting';
-	import { dashboardStore, type DashboardAssignment } from '$lib/stores/dashboardStore.svelte';
+	import { dashboardStore } from '$lib/stores/dashboardStore.svelte';
 	import type { CancelReason } from '$lib/schemas/assignment';
 
 	// Cancel modal state
-	let cancelTarget = $state<DashboardAssignment | null>(null);
+	let cancelTarget = $state<{ id: string; isLateCancel: boolean } | null>(null);
 
 	// Shift start (inventory) state
 	let parcelsStart = $state<number | ''>('');
@@ -292,7 +292,7 @@
 		return format(parseISO(isoString), 'h:mm a');
 	}
 
-	function openCancelModal(assignment: DashboardAssignment) {
+	function openCancelModal(assignment: { id: string; isLateCancel: boolean }) {
 		cancelTarget = assignment;
 	}
 
@@ -406,7 +406,9 @@
 	}
 
 	const sortedUnconfirmedShifts = $derived(
-		[...dashboardStore.unconfirmedShifts].sort((a, b) => a.date.localeCompare(b.date))
+		[...dashboardStore.unconfirmedShifts]
+			.filter((s) => s.isConfirmable)
+			.sort((a, b) => a.date.localeCompare(b.date))
 	);
 
 	onMount(() => {
@@ -474,7 +476,7 @@
 				<!-- Today's Shift -->
 				<section class="dashboard-section">
 					<div class="section-header">
-						<h2>{m.dashboard_today_section()}</h2>
+						<h2>{m.dashboard_today_section()} ({format(new Date(), 'EEE, MMM d').toUpperCase()})</h2>
 					</div>
 
 					{#if dashboardStore.todayShift}
@@ -599,10 +601,11 @@
 										</p>
 										{#if hasTodayAction('complete_shift')}
 											<Button
-												variant={getTodayActionVariant('complete_shift')}
-												fill
+												variant="ghost"
+												size="xs"
 												onclick={() => handleTodayAction('complete_shift')}
 											>
+												<IconBase size="small"><CheckCircleIcon /></IconBase>
 												{getTodayActionLabel('complete_shift')}
 											</Button>
 										{/if}
@@ -833,8 +836,8 @@
 								</p>
 								<div class="week-days">
 									{#each dashboardStore.thisWeek.assignments as assignment (assignment.id)}
-										<div class="day-chip">
-											{format(parseISO(assignment.date), 'EEE')}
+										<div class="day-chip" class:completed={assignment.status === 'completed'}>
+											{format(parseISO(assignment.date), 'EEE d')}
 										</div>
 									{/each}
 								</div>
@@ -859,8 +862,8 @@
 								</p>
 								<div class="week-days">
 									{#each dashboardStore.nextWeek.assignments as assignment (assignment.id)}
-										<div class="day-chip">
-											{format(parseISO(assignment.date), 'EEE')}
+										<div class="day-chip" class:completed={assignment.status === 'completed'}>
+											{format(parseISO(assignment.date), 'EEE d')}
 										</div>
 									{/each}
 								</div>
@@ -874,10 +877,10 @@
 				</div>
 
 				<!-- Needs Confirmation -->
-				{#if dashboardStore.unconfirmedShifts.length > 0}
+				{#if sortedUnconfirmedShifts.length > 0}
 					<section class="dashboard-section">
 						<div class="section-header">
-							<h2>{m.dashboard_confirm_section()} ({dashboardStore.unconfirmedShifts.length})</h2>
+							<h2>{m.dashboard_confirm_section()} ({sortedUnconfirmedShifts.length})</h2>
 						</div>
 
 						<div class="assignment-list">
@@ -899,17 +902,24 @@
 												</span>
 											</div>
 											<div class="header-right">
-												{#if shift.isConfirmable}
-													<Button
-														variant="ghost"
-														size="xs"
-														isLoading={dashboardStore.isConfirming}
-														onclick={() => dashboardStore.confirmShift(shift.id)}
-													>
-														<IconBase size="small"><CheckCircleIcon /></IconBase>
-														{m.dashboard_confirm_button()}
-													</Button>
-												{/if}
+												<Button
+													variant="ghost"
+													size="xs"
+													isLoading={dashboardStore.isConfirming}
+													onclick={() => dashboardStore.confirmShift(shift.id)}
+												>
+													<IconBase size="small"><CheckCircleIcon /></IconBase>
+													{m.dashboard_confirm_button()}
+												</Button>
+												<Button
+													variant="ghost"
+													size="xs"
+													isLoading={dashboardStore.isCancelling}
+													onclick={() => openCancelModal({ id: shift.id, isLateCancel: false })}
+												>
+													<IconBase size="small"><CalendarX /></IconBase>
+													{m.common_cancel()}
+												</Button>
 											</div>
 										</div>
 										<div class="assignment-meta">
@@ -1352,6 +1362,11 @@
 		font-size: var(--font-size-xs);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
+	}
+
+	.day-chip.completed {
+		background: color-mix(in srgb, var(--status-success) 15%, transparent);
+		color: var(--status-success);
 	}
 
 	/* Form Styles */

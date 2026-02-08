@@ -39,7 +39,8 @@ export const driverSchema = z.object({
 	avgParcelsDeltaVsCohort: z.number().nullable(),
 	attendanceThreshold: z.number().min(0).max(1),
 	healthState: driverHealthStateSchema,
-	// Health pool eligibility (from driverHealthState table)
+	// Health state
+	healthScore: z.number().nullable().default(null),
 	assignmentPoolEligible: z.boolean().default(true)
 });
 

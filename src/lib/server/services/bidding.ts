@@ -449,7 +449,12 @@ export async function resolveBidWindow(
 			};
 		}
 
-		// For instant/emergency windows, alert manager
+		// For instant/emergency windows with no bids, close the window
+		await db
+			.update(bidWindows)
+			.set({ status: 'closed' })
+			.where(eq(bidWindows.id, bidWindowId));
+
 		try {
 			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
 				routeName: assignment.routeName,
@@ -506,6 +511,12 @@ export async function resolveBidWindow(
 				transitioned: true
 			};
 		}
+
+		// Close the window so it's not re-picked up
+		await db
+			.update(bidWindows)
+			.set({ status: 'closed' })
+			.where(eq(bidWindows.id, bidWindowId));
 
 		try {
 			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
@@ -669,6 +680,17 @@ export async function transitionToInstantMode(bidWindowId: string): Promise<void
 	}
 
 	const shiftStart = getShiftStartTime(assignment.date);
+
+	// If the shift has already started, close the window — transitioning would
+	// just create another immediately-expired window causing an infinite loop.
+	if (shiftStart <= new Date()) {
+		await db
+			.update(bidWindows)
+			.set({ status: 'closed' })
+			.where(eq(bidWindows.id, bidWindowId));
+		log.info({ assignmentId: window.assignmentId }, 'Shift already started, closed window');
+		return;
+	}
 
 	await db
 		.update(bidWindows)
