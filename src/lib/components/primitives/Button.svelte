@@ -251,6 +251,7 @@
 
 	.compact {
 		padding: var(--spacing-1) var(--spacing-2);
+		font-size: var(--font-size-sm);
 		min-height: 28px;
 	}
 
