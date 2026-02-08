@@ -79,9 +79,13 @@ export const GET: RequestHandler = async ({ locals }) => {
 		});
 	}
 
-	// Determine hard-stop reasons from most recent snapshot
+	// Hard-stop: derive from state table (canonical source of truth).
+	// Pool eligibility is a one-way latch in the health service — once tripped,
+	// only manager intervention can reinstate. Snapshot may lag behind state.
+	const hardStopActive = !state.assignmentPoolEligible || state.requiresManagerIntervention;
 	const latestSnapshot = recentSnapshots[0];
-	const hardStopReasons = latestSnapshot?.hardStopTriggered ? (latestSnapshot.reasons ?? []) : [];
+	const hardStopReasons =
+		hardStopActive && latestSnapshot?.hardStopTriggered ? (latestSnapshot.reasons ?? []) : [];
 
 	return json({
 		score: state.currentScore,
@@ -90,7 +94,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		eliteThreshold: health.eliteThreshold,
 		maxStars: health.maxStars,
 		hardStop: {
-			triggered: latestSnapshot?.hardStopTriggered ?? false,
+			triggered: hardStopActive,
 			assignmentPoolEligible: state.assignmentPoolEligible,
 			requiresManagerIntervention: state.requiresManagerIntervention,
 			reasons: hardStopReasons
