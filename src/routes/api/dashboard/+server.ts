@@ -170,9 +170,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 		};
 	});
 
-	// Find today's shift
+	// Find today's shift: either today's assignment or any currently active shift
 	const todayShift = processedAssignments.find(
-		(a) => a.date === torontoToday && a.status !== 'cancelled'
+		(a) => a.status === 'active' || (a.date === torontoToday && a.status !== 'cancelled')
 	);
 
 	// Calculate week summaries

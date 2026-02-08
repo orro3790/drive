@@ -417,8 +417,7 @@
 	"shift_start_success": "Inventory recorded.",
 	"shift_start_error": "Unable to record inventory.",
 
-	"shift_delivering_status": "Delivering...",
-	"shift_delivering_parcels": "Started with {count} parcels",
+	"shift_delivering_status": "Delivering {count} parcels",
 
 	"shift_complete_button": "Complete Shift",
 	"shift_complete_modal_title": "Complete Shift",

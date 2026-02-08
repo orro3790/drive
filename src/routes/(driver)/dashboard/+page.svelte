@@ -29,6 +29,7 @@
 	import CalendarX from '$lib/components/icons/CalendarX.svelte';
 	import CheckCircleIcon from '$lib/components/icons/CheckCircleIcon.svelte';
 	import Clock from '$lib/components/icons/Clock.svelte';
+	import ClockBolt from '$lib/components/icons/ClockBolt.svelte';
 	import Gavel from '$lib/components/icons/Gavel.svelte';
 	import Lock from '$lib/components/icons/Lock.svelte';
 	import MapPin from '$lib/components/icons/MapPin.svelte';
@@ -222,7 +223,7 @@
 				return '--status-info';
 			case 'delivering':
 			case 'completing':
-				return '--status-info';
+				return '--status-success';
 			case 'completed-editable':
 				return '--status-warning';
 			case 'completed-locked':
@@ -241,7 +242,7 @@
 				return MapPin;
 			case 'delivering':
 			case 'completing':
-				return Clock;
+				return ClockBolt;
 			case 'completed-editable':
 				return Pencil;
 			case 'completed-locked':
@@ -492,7 +493,18 @@
 							<div class="today-content">
 								<div class="assignment-header">
 									<span class="assignment-date">{formatAssignmentDate(todayShift.date)}</span>
-									<span class="assignment-status">{statusLabels[todayShift.status]}</span>
+									{#if todayPrimaryAction && todayPrimaryAction !== 'cancel_shift'}
+										<Button
+											variant="ghost"
+											size="compact"
+											isLoading={isTodayActionLoading(todayPrimaryAction)}
+											onclick={() => handleTodayAction(todayPrimaryAction)}
+										>
+											{getTodayActionLabel(todayPrimaryAction)}
+										</Button>
+									{:else}
+										<span class="assignment-status">{statusLabels[todayShift.status]}</span>
+									{/if}
 									{#if hasTodayAction('cancel_shift')}
 										<Button
 											variant="ghost"
@@ -505,6 +517,13 @@
 										</Button>
 									{/if}
 								</div>
+								{#if shiftStep === 'delivering' || shiftStep === 'completing'}
+									<span class="today-status">
+										{m.shift_delivering_status({ count: String(todayShift.shift?.parcelsStart ?? 0) })}
+									</span>
+								{:else}
+									<span class="today-status">Status: {statusLabels[todayShift.status]}</span>
+								{/if}
 								<div class="assignment-meta">
 									<Chip
 										variant="tag"
@@ -583,28 +602,6 @@
 												{m.shift_start_button()}
 											</Button>
 										</form>
-									</div>
-								{/if}
-
-								<!-- Step 3: Delivering -->
-								{#if shiftStep === 'delivering'}
-									<div class="step-content">
-										<p class="step-status">{m.shift_delivering_status()}</p>
-										<p class="step-info">
-											{m.shift_delivering_parcels({
-												count: String(todayShift.shift?.parcelsStart ?? 0)
-											})}
-										</p>
-										{#if hasTodayAction('complete_shift')}
-											<Button
-												variant="ghost"
-												size="compact"
-												onclick={() => handleTodayAction('complete_shift')}
-											>
-												<IconBase size="small"><CheckCircleIcon /></IconBase>
-												{getTodayActionLabel('complete_shift')}
-											</Button>
-										{/if}
 									</div>
 								{/if}
 
@@ -1200,6 +1197,11 @@
 		font-size: var(--font-size-xs);
 		color: var(--text-faint);
 		font-weight: var(--font-weight-medium);
+	}
+
+	.today-status {
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
 	}
 
 	.header-confirm-by {
