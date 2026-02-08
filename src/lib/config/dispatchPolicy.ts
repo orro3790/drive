@@ -49,12 +49,17 @@ export const dispatchPolicy = {
 		}
 	},
 	health: {
-		scoreWeights: {
-			attendance: 50,
-			completion: 30,
-			reliability: 20
+		points: {
+			confirmedOnTime: 1,
+			arrivedOnTime: 2,
+			completedShift: 2,
+			highDelivery: 1,
+			bidPickup: 2,
+			urgentPickup: 4,
+			autoDrop: -12,
+			lateCancel: -48
 		},
-		hardStopScoreCap: 49,
+		tierThreshold: 96,
 		lateCancelRollingDays: 30,
 		lateCancelThreshold: 2,
 		correctiveCompletionThreshold: 0.8,
@@ -66,9 +71,15 @@ export const dispatchPolicy = {
 			maxLateCancellations: 0
 		},
 		maxStars: 4,
-		eliteThreshold: 80,
 		simulationBonus: {
 			fourStarBonusPercent: 10
+		},
+		/** Display-only indicative deltas shown in schedule UI.
+		 *  Values match actual point costs from health.points. */
+		displayDeltas: {
+			confirmedOnTime: 1,
+			unconfirmed: -12,
+			lateCancel: -48
 		}
 	},
 	jobs: {

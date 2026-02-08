@@ -5,7 +5,7 @@
  * to showcase the inbox UI.
  */
 
-import { format, parseISO, subDays, subHours, subMinutes } from 'date-fns';
+import { addDays, format, parseISO, subDays, subHours, subMinutes } from 'date-fns';
 import type { NotificationType } from '../../../src/lib/schemas/api/notifications';
 import { notificationTypeValues } from '../../../src/lib/schemas/api/notifications';
 import type { GeneratedAssignment } from './assignments';
@@ -45,20 +45,20 @@ const TYPE_COPY: Record<
 		body: `Your shift for ${routeName} starts today.`
 	}),
 	bid_open: ({ routeName }) => ({
-		title: 'Bid Window Open',
-		body: `A new shift on ${routeName} is open for bidding.`
+		title: 'Shift Available',
+		body: `A shift on ${routeName} is open for bidding.`
 	}),
 	bid_won: ({ routeName, dateLabel }) => ({
 		title: 'Bid Won',
-		body: `You won ${routeName} for ${dateLabel}.`
+		body: `You've won the bid. You are now assigned ${routeName} on ${dateLabel}.`
 	}),
 	bid_lost: ({ routeName }) => ({
-		title: 'Bid Not Selected',
-		body: `${routeName} was assigned to another driver.`
+		title: 'Bid Not Won',
+		body: `${routeName} was assigned to another driver. No changes to your schedule.`
 	}),
 	shift_cancelled: ({ routeName, dateLabel }) => ({
 		title: 'Shift Cancelled',
-		body: `${routeName} on ${dateLabel} has been cancelled.`
+		body: `Your shift for ${routeName} on ${dateLabel} has been removed from your schedule.`
 	}),
 	warning: () => ({
 		title: 'Account Warning',
@@ -74,15 +74,15 @@ const TYPE_COPY: Record<
 	}),
 	assignment_confirmed: ({ routeName, dateLabel }) => ({
 		title: 'Shift Assigned',
-		body: `You have been assigned ${routeName} for ${dateLabel}.`
+		body: `You are now assigned ${routeName} on ${dateLabel}.`
 	}),
 	route_unfilled: ({ routeName, warehouseName }) => ({
 		title: 'Route Unfilled',
 		body: `${routeName} at ${warehouseName} has no driver assigned.`
 	}),
 	route_cancelled: ({ routeName, warehouseName }) => ({
-		title: 'Driver Cancelled',
-		body: `A driver cancelled ${routeName} at ${warehouseName}.`
+		title: 'Route Cancelled',
+		body: `${routeName} at ${warehouseName} has been cancelled. This shift has been removed from your schedule.`
 	}),
 	driver_no_show: ({ routeName, driverName }) => ({
 		title: 'Driver No-Show',
@@ -154,24 +154,65 @@ export function generateNotifications(
 		const copy = TYPE_COPY[type](context);
 		const read = index % 3 === 0;
 
+		// Some notification types don't need route/warehouse context
+		const noContextTypes: NotificationType[] = ['schedule_locked', 'warning', 'manual'];
+		const data = noContextTypes.includes(type)
+			? null
+			: {
+					routeName: route.name,
+					warehouseName: route.warehouseName,
+					date: dateLabel
+				};
+
 		return {
 			userId,
 			type,
 			title: copy.title,
 			body: copy.body,
-			data: {
-				routeName: route.name,
-				warehouseName: route.warehouseName,
-				date: dateLabel
-			},
+			data,
 			read,
 			createdAt
 		};
 	}
 
+	const todayLabel = format(now, 'EEE, MMM d');
+	const tomorrowLabel = format(addDays(now, 1), 'EEE, MMM d');
+
 	if (showcaseUser) {
 		allTypes.forEach((type, index) => {
 			notifications.push(buildNotification(showcaseUser.id, type, index));
+		});
+
+		// Premium shift notifications (urgent/emergency bid windows)
+		const premiumRoute1 = pickRoute(7);
+		const premiumRoute2 = pickRoute(8);
+		notifications.push({
+			userId: showcaseUser.id,
+			type: 'bid_open',
+			title: 'Shift Available',
+			body: `A driver is needed urgently to fill a shift on ${premiumRoute1.name} on ${todayLabel}. Receive +20% wage increase for this shift.`,
+			data: {
+				routeName: premiumRoute1.name,
+				warehouseName: premiumRoute1.warehouseName,
+				mode: 'emergency',
+				payBonusPercent: '20'
+			},
+			read: false,
+			createdAt: subMinutes(now, 8)
+		});
+		notifications.push({
+			userId: showcaseUser.id,
+			type: 'bid_open',
+			title: 'Shift Available',
+			body: `A driver is needed urgently to fill a shift on ${premiumRoute2.name} on ${tomorrowLabel}. Receive +20% wage increase for this shift.`,
+			data: {
+				routeName: premiumRoute2.name,
+				warehouseName: premiumRoute2.warehouseName,
+				mode: 'instant',
+				payBonusPercent: '20'
+			},
+			read: false,
+			createdAt: subMinutes(now, 25)
 		});
 	}
 
@@ -190,6 +231,23 @@ export function generateNotifications(
 	for (const driver of drivers.slice(1)) {
 		secondaryTypes.forEach((type, index) => {
 			notifications.push(buildNotification(driver.id, type, index + 2));
+		});
+
+		// Premium shift notification for each secondary driver
+		const premRoute = pickRoute(drivers.indexOf(driver));
+		notifications.push({
+			userId: driver.id,
+			type: 'bid_open',
+			title: 'Shift Available',
+			body: `A driver is needed urgently to fill a shift on ${premRoute.name} on ${todayLabel}. Receive +20% wage increase for this shift.`,
+			data: {
+				routeName: premRoute.name,
+				warehouseName: premRoute.warehouseName,
+				mode: 'emergency',
+				payBonusPercent: '20'
+			},
+			read: false,
+			createdAt: subMinutes(now, 12)
 		});
 	}
 

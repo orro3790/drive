@@ -7,15 +7,17 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, shifts } from '$lib/server/db/schema';
+import { assignments, driverMetrics, shifts } from '$lib/server/db/schema';
 import { shiftArriveSchema } from '$lib/schemas/shift';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
 import {
 	createAssignmentLifecycleContext,
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
+import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { toZonedTime } from 'date-fns-tz';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -101,6 +103,18 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			id: shifts.id,
 			arrivedAt: shifts.arrivedAt
 		});
+
+	// Check if arrived before 9 AM Toronto time → increment arrivedOnTimeCount
+	const arrivedToronto = toZonedTime(arrivedAt, dispatchPolicy.timezone.toronto);
+	if (arrivedToronto.getHours() < dispatchPolicy.shifts.arrivalDeadlineHourLocal) {
+		await db
+			.update(driverMetrics)
+			.set({
+				arrivedOnTimeCount: sql`${driverMetrics.arrivedOnTimeCount} + 1`,
+				updatedAt: new Date()
+			})
+			.where(eq(driverMetrics.userId, locals.user.id));
+	}
 
 	// Update assignment status to active
 	await db

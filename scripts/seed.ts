@@ -30,7 +30,9 @@ import {
 	bidWindows,
 	bids,
 	notifications,
-	auditLogs
+	auditLogs,
+	driverHealthSnapshots,
+	driverHealthState
 } from '../src/lib/server/db/schema';
 
 // Seed modules
@@ -44,6 +46,7 @@ import { generateAssignments } from './seed/generators/assignments';
 import { generateRouteCompletions } from './seed/generators/route-completions';
 import { generateBidding } from './seed/generators/bidding';
 import { generateNotifications } from './seed/generators/notifications';
+import { generateHealth } from './seed/generators/health';
 import { configureSeedRuntime, getSeedNow } from './seed/utils/runtime';
 
 config();
@@ -62,6 +65,8 @@ async function clearData() {
 
 	// Delete in reverse dependency order
 	await db.delete(auditLogs);
+	await db.delete(driverHealthSnapshots);
+	await db.delete(driverHealthState);
 	await db.delete(notifications);
 	await db.delete(bids);
 	await db.delete(bidWindows);
@@ -253,23 +258,8 @@ async function seed(seedConfig: SeedConfig) {
 	);
 	console.log(`   Created ${prefsData.length} preference records`);
 
-	// 5. Generate metrics
-	console.log('\n5. Creating metrics...');
-	const metricsData = generateMetrics(drivers);
-	await db.insert(driverMetrics).values(
-		metricsData.map((m) => ({
-			userId: m.userId,
-			totalShifts: m.totalShifts,
-			completedShifts: m.completedShifts,
-			attendanceRate: m.attendanceRate,
-			completionRate: m.completionRate,
-			updatedAt: getSeedNow()
-		}))
-	);
-	console.log(`   Created ${metricsData.length} metric records`);
-
-	// 6. Generate assignments and shifts
-	console.log('\n6. Creating assignments and shifts...');
+	// 5. Generate assignments and shifts
+	console.log('\n5. Creating assignments and shifts...');
 	const assignmentData = generateAssignments(
 		seedConfig,
 		drivers,
@@ -288,7 +278,9 @@ async function seed(seedConfig: SeedConfig) {
 				date: a.date,
 				status: a.status,
 				assignedBy: a.assignedBy,
-				assignedAt: a.assignedAt
+				assignedAt: a.assignedAt,
+				confirmedAt: a.confirmedAt,
+				cancelType: a.cancelType
 			}))
 		)
 		.returning({ id: assignments.id });
@@ -298,6 +290,7 @@ async function seed(seedConfig: SeedConfig) {
 		await db.insert(shifts).values(
 			assignmentData.shifts.map((s) => ({
 				assignmentId: insertedAssignments[s.assignmentIndex].id,
+				arrivedAt: s.arrivedAt,
 				parcelsStart: s.parcelsStart,
 				parcelsDelivered: s.parcelsDelivered,
 				parcelsReturned: s.parcelsReturned,
@@ -328,8 +321,8 @@ async function seed(seedConfig: SeedConfig) {
 	console.log(`   Created ${insertedAssignments.length} assignments:`, statusCounts);
 	console.log(`   Created ${assignmentData.shifts.length} shifts`);
 
-	// 7. Generate route completions
-	console.log('\n7. Creating route completions...');
+	// 6. Generate route completions
+	console.log('\n6. Creating route completions...');
 	const completionsData = generateRouteCompletions(assignmentData.assignments);
 	if (completionsData.length > 0) {
 		await db.insert(routeCompletions).values(
@@ -343,8 +336,79 @@ async function seed(seedConfig: SeedConfig) {
 	}
 	console.log(`   Created ${completionsData.length} route completion records`);
 
-	// 8. Generate bidding
-	console.log('\n8. Creating bid windows and bids...');
+	// 7. Generate metrics (derived from actual assignments/shifts)
+	console.log('\n7. Creating metrics...');
+	const metricsData = generateMetrics(drivers, assignmentData.assignments, assignmentData.shifts);
+	await db.insert(driverMetrics).values(
+		metricsData.map((m) => ({
+			userId: m.userId,
+			totalShifts: m.totalShifts,
+			completedShifts: m.completedShifts,
+			attendanceRate: m.attendanceRate,
+			completionRate: m.completionRate,
+			avgParcelsDelivered: m.avgParcelsDelivered,
+			totalAssigned: m.totalAssigned,
+			confirmedShifts: m.confirmedShifts,
+			autoDroppedShifts: m.autoDroppedShifts,
+			lateCancellations: m.lateCancellations,
+			noShows: m.noShows,
+			bidPickups: m.bidPickups,
+			arrivedOnTimeCount: m.arrivedOnTimeCount,
+			highDeliveryCount: m.highDeliveryCount,
+			urgentPickups: m.urgentPickups,
+			updatedAt: getSeedNow()
+		}))
+	);
+	console.log(`   Created ${metricsData.length} metric records`);
+
+	// 8. Generate health snapshots and state
+	console.log('\n8. Creating health snapshots and state...');
+	const healthData = generateHealth(
+		drivers,
+		assignmentData.assignments,
+		assignmentData.shifts,
+		metricsData
+	);
+
+	if (healthData.snapshots.length > 0) {
+		await db.insert(driverHealthSnapshots).values(
+			healthData.snapshots.map((s) => ({
+				userId: s.userId,
+				evaluatedAt: s.evaluatedAt,
+				score: s.score,
+				attendanceRate: s.attendanceRate,
+				completionRate: s.completionRate,
+				lateCancellationCount30d: s.lateCancellationCount30d,
+				noShowCount30d: s.noShowCount30d,
+				hardStopTriggered: s.hardStopTriggered,
+				reasons: s.reasons,
+				contributions: s.contributions
+			}))
+		);
+	}
+
+	if (healthData.states.length > 0) {
+		await db.insert(driverHealthState).values(
+			healthData.states.map((s) => ({
+				userId: s.userId,
+				currentScore: s.currentScore,
+				streakWeeks: s.streakWeeks,
+				stars: s.stars,
+				lastQualifiedWeekStart: s.lastQualifiedWeekStart,
+				assignmentPoolEligible: s.assignmentPoolEligible,
+				requiresManagerIntervention: s.requiresManagerIntervention,
+				nextMilestoneStars: s.nextMilestoneStars,
+				lastScoreResetAt: s.lastScoreResetAt,
+				updatedAt: getSeedNow()
+			}))
+		);
+	}
+
+	console.log(`   Created ${healthData.snapshots.length} health snapshots`);
+	console.log(`   Created ${healthData.states.length} health state records`);
+
+	// 9. Generate bidding
+	console.log('\n9. Creating bid windows and bids...');
 	const biddingData = generateBidding(assignmentData.assignments, drivers);
 
 	if (biddingData.bidWindows.length > 0) {
@@ -376,8 +440,8 @@ async function seed(seedConfig: SeedConfig) {
 	console.log(`   Created ${biddingData.bidWindows.length} bid windows`);
 	console.log(`   Created ${biddingData.bids.length} bids`);
 
-	// 9. Generate notifications
-	console.log('\n9. Creating notifications...');
+	// 10. Generate notifications
+	console.log('\n10. Creating notifications...');
 	const notificationUsers = testUserForNotifications
 		? userData.users.some((u) => u.id === testUserForNotifications?.id)
 			? userData.users

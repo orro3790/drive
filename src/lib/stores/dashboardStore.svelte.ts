@@ -59,6 +59,8 @@ export type DriverMetrics = {
 	completedShifts: number;
 	attendanceRate: number;
 	completionRate: number;
+	totalAssigned: number;
+	avgParcelsDelivered: number;
 };
 
 export type PendingBid = {
@@ -95,7 +97,9 @@ const state = $state<{
 		totalShifts: 0,
 		completedShifts: 0,
 		attendanceRate: 0,
-		completionRate: 0
+		completionRate: 0,
+		totalAssigned: 0,
+		avgParcelsDelivered: 0
 	},
 	pendingBids: [],
 	unconfirmedShifts: [],
@@ -182,7 +186,9 @@ export const dashboardStore = {
 					totalShifts: 0,
 					completedShifts: 0,
 					attendanceRate: 0,
-					completionRate: 0
+					completionRate: 0,
+					totalAssigned: 0,
+					avgParcelsDelivered: 0
 				};
 			state.pendingBids = dashboardData.pendingBids ?? [];
 			state.unconfirmedShifts = dashboardData.unconfirmedShifts ?? [];

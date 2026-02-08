@@ -3,11 +3,25 @@
  * Used by both the API response and the HealthCard component.
  */
 
+export type ContributionLine = { count: number; points: number };
+
+export type HealthContributions = {
+	confirmedOnTime: ContributionLine;
+	arrivedOnTime: ContributionLine;
+	completedShifts: ContributionLine;
+	highDelivery: ContributionLine;
+	bidPickups: ContributionLine;
+	urgentPickups: ContributionLine;
+	autoDrops: ContributionLine;
+	lateCancellations: ContributionLine;
+};
+
 export type HealthResponse = {
+	tier: 'I' | 'II';
 	score: number | null;
 	stars: number;
 	streakWeeks: number;
-	eliteThreshold: number;
+	tierThreshold: number;
 	maxStars: number;
 	hardStop: {
 		triggered: boolean;
@@ -24,6 +38,7 @@ export type HealthResponse = {
 		bonusPercent: number;
 		label: string;
 	};
+	contributions: HealthContributions | null;
 	recentScores: HealthSnapshot[];
 	isOnboarding: boolean;
 };
@@ -31,7 +46,5 @@ export type HealthResponse = {
 export type HealthSnapshot = {
 	date: string;
 	score: number;
-	attendanceRate: number;
-	completionRate: number;
 	hardStopTriggered: boolean;
 };

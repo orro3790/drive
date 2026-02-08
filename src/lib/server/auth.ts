@@ -18,20 +18,20 @@ import { ac, admin, manager } from './permissions';
 
 /**
  * Derive auth base URL:
- * 1. Use BETTER_AUTH_URL if explicitly set (local dev or custom domain)
+ * 1. Use BETTER_AUTH_URL if explicitly set (custom domain)
  * 2. Fall back to Vercel's auto-provided VERCEL_URL for deployments
+ * 3. In dev, omit entirely — Better Auth infers from the request,
+ *    so both localhost and LAN IPs work automatically.
  */
-function getAuthBaseUrl(): string {
+function getAuthBaseUrl(): string | undefined {
 	if (env.BETTER_AUTH_URL) {
 		return env.BETTER_AUTH_URL;
 	}
 	if (env.VERCEL_URL) {
 		return `https://${env.VERCEL_URL}`;
 	}
-	throw new Error('BETTER_AUTH_URL or VERCEL_URL must be set');
+	return undefined;
 }
-
-const authBaseUrl = getAuthBaseUrl();
 
 const inviteCodeGuard = createAuthMiddleware(async (ctx) => {
 	if (ctx.path !== '/sign-up/email') {
@@ -53,10 +53,14 @@ const inviteCodeGuard = createAuthMiddleware(async (ctx) => {
 
 export const auth = betterAuth({
 	appName: 'Drive',
-	baseURL: authBaseUrl,
+	baseURL: getAuthBaseUrl(),
 	secret: BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg', schema: authSchema }),
-	trustedOrigins: ['http://localhost:5173', 'https://*.vercel.app'],
+	trustedOrigins: [
+		'http://localhost:5173',
+		'http://192.168.*',
+		'https://*.vercel.app'
+	],
 	emailAndPassword: {
 		enabled: true
 		// NOTE: Email-based password reset is disabled until a domain is configured in Resend.

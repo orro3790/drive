@@ -189,13 +189,17 @@ export const GET: RequestHandler = async ({ locals }) => {
 				totalShifts: metricsRow[0].totalShifts,
 				completedShifts: metricsRow[0].completedShifts,
 				attendanceRate: metricsRow[0].attendanceRate,
-				completionRate: metricsRow[0].completionRate
+				completionRate: metricsRow[0].completionRate,
+				totalAssigned: metricsRow[0].totalAssigned,
+				avgParcelsDelivered: metricsRow[0].avgParcelsDelivered
 			}
 		: {
 				totalShifts: 0,
 				completedShifts: 0,
 				attendanceRate: 0,
-				completionRate: 0
+				completionRate: 0,
+				totalAssigned: 0,
+				avgParcelsDelivered: 0
 			};
 
 	// Process pending bids

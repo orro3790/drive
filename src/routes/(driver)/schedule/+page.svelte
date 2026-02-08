@@ -2,25 +2,41 @@
 	Driver Schedule Page
 
 	Displays current and next week assignments with shift start/complete flow.
+	Design follows notification-item patterns: flat rows, single accent per status,
+	icon anchors, tag chips for metadata.
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
 	import { addDays, format, getWeek, parseISO } from 'date-fns';
+	import type { Component } from 'svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
+	import IconBase from '$lib/components/primitives/Icon.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import CancelShiftModal from '$lib/components/driver/CancelShiftModal.svelte';
+	import AlertTriangleIcon from '$lib/components/icons/AlertTriangleIcon.svelte';
+	import CalendarCheck from '$lib/components/icons/CalendarCheck.svelte';
+	import CheckCircleIcon from '$lib/components/icons/CheckCircleIcon.svelte';
+	import CalendarExclamation from '$lib/components/icons/CalendarExclamation.svelte';
+	import CalendarX from '$lib/components/icons/CalendarX.svelte';
+	import Clock from '$lib/components/icons/Clock.svelte';
+	import HealthLine from '$lib/components/icons/HealthLine.svelte';
+	import QuestionMark from '$lib/components/icons/QuestionMark.svelte';
+	import RouteIcon from '$lib/components/icons/Route.svelte';
+	import WarehouseIcon from '$lib/components/icons/Warehouse.svelte';
+	import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 	import { scheduleStore, type ScheduleAssignment } from '$lib/stores/scheduleStore.svelte';
 	import {
 		getAssignmentActions,
 		type AssignmentLifecycleActionId
 	} from '$lib/config/driverLifecycleIa';
-	import { statusLabels, statusChipVariants } from '$lib/config/lifecycleLabels';
+	import { statusLabels } from '$lib/config/lifecycleLabels';
 	import { formatAssignmentDate } from '$lib/utils/date/formatting';
 	import type { CancelReason } from '$lib/schemas/assignment';
+	import type { AssignmentStatus } from '$lib/schemas/assignment';
 
 	// Cancel modal state
 	let cancelTarget = $state<ScheduleAssignment | null>(null);
@@ -61,6 +77,24 @@
 		return sortedAssignments.filter((assignment) => assignment.date >= nextWeekStart);
 	});
 
+	// Status → accent color mapping (single color per status)
+	const statusAccent: Record<AssignmentStatus, string> = {
+		completed: '--text-muted',
+		scheduled: '--interactive-accent',
+		active: '--status-info',
+		cancelled: '--status-error',
+		unfilled: '--status-warning'
+	};
+
+	// Status → icon mapping
+	const statusIcon: Record<AssignmentStatus, Component> = {
+		completed: CheckCircleIcon,
+		scheduled: Clock,
+		active: Clock,
+		cancelled: CalendarExclamation,
+		unfilled: CalendarExclamation
+	};
+
 	function formatWeekRange(startDate: Date) {
 		const endDate = addDays(startDate, 6);
 		return m.schedule_week_range({
@@ -78,9 +112,11 @@
 	function getConfirmationState(assignment: ScheduleAssignment) {
 		if (assignment.confirmedAt) return 'confirmed';
 		if (assignment.isConfirmable) return 'confirmable';
-		if (assignment.status === 'scheduled' && !assignment.confirmedAt) {
+		if (assignment.status === 'scheduled') {
 			const now = new Date();
+			const deadline = parseISO(assignment.confirmationDeadline);
 			const opensAt = parseISO(assignment.confirmationOpensAt);
+			if (now > deadline) return 'overdue';
 			if (now < opensAt) return 'not_open';
 		}
 		return 'none';
@@ -114,8 +150,12 @@
 		}
 	}
 
-	function getScheduleActionVariant(actionId: ScheduleActionId): 'primary' | 'danger' {
-		return actionId === 'cancel_shift' ? 'danger' : 'primary';
+	function getScheduleActionVariant(
+		actionId: ScheduleActionId
+	): 'primary' | 'secondary' | 'ghost' {
+		if (actionId === 'cancel_shift') return 'ghost';
+		if (actionId === 'confirm_shift') return 'primary';
+		return 'secondary';
 	}
 
 	function isScheduleActionLoading(actionId: ScheduleActionId): boolean {
@@ -164,7 +204,6 @@
 		}
 	}
 
-	// Shift start modal functions
 	function openStartModal(assignment: ScheduleAssignment) {
 		startTarget = assignment;
 		parcelsStart = '';
@@ -190,7 +229,6 @@
 		}
 	}
 
-	// Shift complete modal functions
 	function openCompleteModal(assignment: ScheduleAssignment) {
 		completeTarget = assignment;
 		parcelsReturned = 0;
@@ -222,6 +260,143 @@
 	});
 </script>
 
+{#snippet routeChipIcon()}
+	<IconBase size="small">
+		<RouteIcon />
+	</IconBase>
+{/snippet}
+
+{#snippet warehouseChipIcon()}
+	<IconBase size="small">
+		<WarehouseIcon />
+	</IconBase>
+{/snippet}
+
+{#snippet assignmentRow(assignment: ScheduleAssignment)}
+	{@const accent = statusAccent[assignment.status]}
+	{@const Icon = statusIcon[assignment.status]}
+	{@const confirmState = getConfirmationState(assignment)}
+	{@const actions = getScheduleActions(assignment)}
+	{@const isPast = assignment.status === 'completed' || assignment.status === 'cancelled'}
+	{@const isOverdue = confirmState === 'overdue'}
+	{@const cancelAction = !isOverdue && actions.includes('cancel_shift')}
+	{@const confirmAction = actions.includes('confirm_shift')}
+	{@const otherActions = actions.filter((a) => a !== 'confirm_shift' && a !== 'cancel_shift')}
+	{@const deltas = dispatchPolicy.health.displayDeltas}
+	<div
+		class="assignment-item"
+		class:past={isPast}
+		class:overdue={isOverdue}
+		style="--assignment-accent: var({accent});"
+	>
+		<div class="icon-circle" class:icon-confirmed={confirmState === 'confirmed'} class:icon-unconfirmed={confirmState === 'confirmable' || confirmState === 'not_open'} class:icon-overdue={isOverdue} aria-hidden="true">
+			{#if assignment.status === 'scheduled'}
+				{#if confirmState === 'confirmed'}
+					<CalendarCheck />
+				{:else if confirmState === 'overdue'}
+					<AlertTriangleIcon />
+				{:else if confirmState === 'confirmable' || confirmState === 'not_open'}
+					<QuestionMark />
+				{:else}
+					<Clock />
+				{/if}
+			{:else}
+				<Icon />
+			{/if}
+		</div>
+		<div class="assignment-content">
+			<div class="assignment-header">
+				<div class="header-left">
+					<span class="assignment-date">{formatAssignmentDate(assignment.date)}</span>
+					{#if assignment.status === 'scheduled'}
+						{#if confirmState === 'confirmed'}
+							<span class="header-confirmed">
+								{m.schedule_confirmed_chip()}
+								<span class="health-delta positive">
+									<IconBase size="small"><HealthLine /></IconBase>
+									+{deltas.confirmedOnTime}
+								</span>
+							</span>
+						{:else if confirmState === 'confirmable' || confirmState === 'not_open'}
+							<span class="header-confirm-by">
+								{m.schedule_confirm_by_chip({
+									date: format(parseISO(assignment.confirmationDeadline), 'MMM d')
+								})}
+							</span>
+						{:else if confirmState === 'overdue'}
+							<span class="header-overdue">
+								{m.schedule_unconfirmed_chip()}
+								<span class="health-delta negative">
+									<IconBase size="small"><HealthLine /></IconBase>
+									{deltas.unconfirmed}
+								</span>
+							</span>
+						{/if}
+					{/if}
+				</div>
+				<div class="header-right">
+					{#if assignment.status === 'scheduled'}
+						{#if confirmAction}
+							<Button
+								variant="ghost"
+								size="xs"
+								isLoading={isScheduleActionLoading('confirm_shift')}
+								onclick={() => handleScheduleAction('confirm_shift', assignment)}
+							>
+								<IconBase size="small"><CheckCircleIcon /></IconBase>
+								{getScheduleActionLabel('confirm_shift')}
+							</Button>
+						{/if}
+						{#if cancelAction}
+							<Button
+								variant="ghost"
+								size="xs"
+								isLoading={isScheduleActionLoading('cancel_shift')}
+								onclick={() => handleScheduleAction('cancel_shift', assignment)}
+							>
+								<IconBase size="small"><CalendarX /></IconBase>
+								{m.common_cancel()}
+							</Button>
+						{/if}
+					{:else}
+						<span class="assignment-status">{statusLabels[assignment.status]}</span>
+					{/if}
+				</div>
+			</div>
+			<div class="assignment-meta">
+				<Chip
+					variant="tag"
+					size="xs"
+					color="var(--text-muted)"
+					label={assignment.routeName}
+					icon={routeChipIcon}
+				/>
+				<Chip
+					variant="tag"
+					size="xs"
+					color="var(--text-muted)"
+					label={assignment.warehouseName}
+					icon={warehouseChipIcon}
+				/>
+			</div>
+			{#if otherActions.length > 0}
+				<div class="assignment-actions">
+					{#each otherActions as actionId (actionId)}
+						<Button
+							variant={getScheduleActionVariant(actionId)}
+							size="small"
+							isLoading={isScheduleActionLoading(actionId)}
+							onclick={() => handleScheduleAction(actionId, assignment)}
+						>
+							{getScheduleActionLabel(actionId)}
+						</Button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	</div>
+{/snippet}
+
 <svelte:head>
 	<title>{m.schedule_page_title()} | Drive</title>
 </svelte:head>
@@ -244,10 +419,8 @@
 				<section class="schedule-section">
 					{#if weekStartDate}
 						<div class="section-header">
-							<div>
-								<h2>{formatWeekLabel(weekStartDate, false)}</h2>
-								<p>{formatWeekRange(weekStartDate)}</p>
-							</div>
+							<h3 class="section-label">{formatWeekLabel(weekStartDate, false)}</h3>
+							<span class="section-range">{formatWeekRange(weekStartDate)}</span>
 						</div>
 					{/if}
 
@@ -259,65 +432,7 @@
 					{:else}
 						<div class="assignment-list">
 							{#each thisWeekAssignments as assignment (assignment.id)}
-								<div class="assignment-card" class:cancelled={assignment.status === 'cancelled'}>
-									<div class="card-header">
-										<div class="card-summary">
-											<p class="assignment-date">{formatAssignmentDate(assignment.date)}</p>
-											<p class="assignment-route">{assignment.routeName}</p>
-											<p class="assignment-warehouse">{assignment.warehouseName}</p>
-										</div>
-										<div class="card-chips">
-											<Chip
-												variant="status"
-												status={statusChipVariants[assignment.status]}
-												label={statusLabels[assignment.status]}
-												size="xs"
-											/>
-											{#if getConfirmationState(assignment) === 'confirmed'}
-												<Chip
-													variant="status"
-													status="success"
-													label={m.schedule_confirmed_chip()}
-													size="xs"
-												/>
-											{:else if getConfirmationState(assignment) === 'confirmable'}
-												<Chip
-													variant="status"
-													status="warning"
-													label={m.schedule_confirm_by_chip({
-														date: format(parseISO(assignment.confirmationDeadline), 'MMM d')
-													})}
-													size="xs"
-												/>
-											{:else if getConfirmationState(assignment) === 'not_open'}
-												<Chip
-													variant="status"
-													status="neutral"
-													label={m.schedule_confirm_opens_chip({
-														date: format(parseISO(assignment.confirmationOpensAt), 'MMM d')
-													})}
-													size="xs"
-												/>
-											{/if}
-										</div>
-									</div>
-
-									{#if getScheduleActions(assignment).length > 0}
-										<div class="card-actions">
-											{#each getScheduleActions(assignment) as actionId (actionId)}
-												<Button
-													variant={getScheduleActionVariant(actionId)}
-													size="small"
-													fill={actionId === 'confirm_shift'}
-													isLoading={isScheduleActionLoading(actionId)}
-													onclick={() => handleScheduleAction(actionId, assignment)}
-												>
-													{getScheduleActionLabel(actionId)}
-												</Button>
-											{/each}
-										</div>
-									{/if}
-								</div>
+								{@render assignmentRow(assignment)}
 							{/each}
 						</div>
 					{/if}
@@ -326,10 +441,8 @@
 				<section class="schedule-section">
 					{#if nextWeekStartDate}
 						<div class="section-header">
-							<div>
-								<h2>{formatWeekLabel(nextWeekStartDate, true)}</h2>
-								<p>{formatWeekRange(nextWeekStartDate)}</p>
-							</div>
+							<h3 class="section-label">{formatWeekLabel(nextWeekStartDate, true)}</h3>
+							<span class="section-range">{formatWeekRange(nextWeekStartDate)}</span>
 						</div>
 					{/if}
 
@@ -341,65 +454,7 @@
 					{:else}
 						<div class="assignment-list">
 							{#each nextWeekAssignments as assignment (assignment.id)}
-								<div class="assignment-card" class:cancelled={assignment.status === 'cancelled'}>
-									<div class="card-header">
-										<div class="card-summary">
-											<p class="assignment-date">{formatAssignmentDate(assignment.date)}</p>
-											<p class="assignment-route">{assignment.routeName}</p>
-											<p class="assignment-warehouse">{assignment.warehouseName}</p>
-										</div>
-										<div class="card-chips">
-											<Chip
-												variant="status"
-												status={statusChipVariants[assignment.status]}
-												label={statusLabels[assignment.status]}
-												size="xs"
-											/>
-											{#if getConfirmationState(assignment) === 'confirmed'}
-												<Chip
-													variant="status"
-													status="success"
-													label={m.schedule_confirmed_chip()}
-													size="xs"
-												/>
-											{:else if getConfirmationState(assignment) === 'confirmable'}
-												<Chip
-													variant="status"
-													status="warning"
-													label={m.schedule_confirm_by_chip({
-														date: format(parseISO(assignment.confirmationDeadline), 'MMM d')
-													})}
-													size="xs"
-												/>
-											{:else if getConfirmationState(assignment) === 'not_open'}
-												<Chip
-													variant="status"
-													status="neutral"
-													label={m.schedule_confirm_opens_chip({
-														date: format(parseISO(assignment.confirmationOpensAt), 'MMM d')
-													})}
-													size="xs"
-												/>
-											{/if}
-										</div>
-									</div>
-
-									{#if getScheduleActions(assignment).length > 0}
-										<div class="card-actions">
-											{#each getScheduleActions(assignment) as actionId (actionId)}
-												<Button
-													variant={getScheduleActionVariant(actionId)}
-													size="small"
-													fill={actionId === 'confirm_shift'}
-													isLoading={isScheduleActionLoading(actionId)}
-													onclick={() => handleScheduleAction(actionId, assignment)}
-												>
-													{getScheduleActionLabel(actionId)}
-												</Button>
-											{/each}
-										</div>
-									{/if}
-								</div>
+								{@render assignmentRow(assignment)}
 							{/each}
 						</div>
 					{/if}
@@ -506,7 +561,7 @@
 
 <style>
 	.page-surface {
-		min-height: 100%;
+		flex: 1;
 		background: var(--surface-inset);
 	}
 
@@ -514,13 +569,22 @@
 		max-width: 720px;
 		margin: 0 auto;
 		padding: var(--spacing-4);
+		width: 100%;
 	}
 
 	.page-header {
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
 		gap: var(--spacing-3);
 		margin-bottom: var(--spacing-5);
+	}
+
+	.header-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-1);
+		padding-left: var(--spacing-2);
 	}
 
 	.header-text h1 {
@@ -531,7 +595,7 @@
 	}
 
 	.header-text p {
-		margin: var(--spacing-1) 0 0;
+		margin: 0;
 		font-size: var(--font-size-sm);
 		color: var(--text-muted);
 	}
@@ -542,49 +606,210 @@
 		padding: var(--spacing-8);
 	}
 
+	/* Sections */
 	.schedule-sections {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-6);
+		gap: var(--spacing-5);
 	}
 
 	.schedule-section {
-		background: var(--surface-primary);
-		border-radius: var(--radius-lg);
-		padding: var(--spacing-4);
-		box-shadow: var(--shadow-base);
+		display: flex;
+		flex-direction: column;
 	}
 
 	.section-header {
 		display: flex;
+		align-items: baseline;
 		justify-content: space-between;
-		align-items: flex-start;
-		margin-bottom: var(--spacing-3);
+		margin: 0 0 var(--spacing-2);
+		padding: 0 var(--spacing-3);
 	}
 
-	.section-header h2 {
+	.section-label {
 		margin: 0;
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-faint);
+		text-transform: uppercase;
+		letter-spacing: var(--letter-spacing-sm);
+	}
+
+	.section-range {
+		font-size: var(--font-size-xs);
+		color: var(--text-faint);
+	}
+
+	/* Assignment items — notification-style layout */
+	.assignment-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+	}
+
+	.assignment-item {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: var(--spacing-3);
+		padding: var(--spacing-3);
+		border-radius: var(--radius-lg);
+		transition: background 150ms ease;
+	}
+
+	.assignment-item:hover {
+		background: color-mix(in srgb, var(--text-normal) 4%, transparent);
+	}
+
+	.assignment-item.past {
+		opacity: 0.55;
+	}
+
+	/* Icon circle — tinted with single accent color */
+	.icon-circle {
+		width: 32px;
+		height: 32px;
+		border-radius: var(--radius-full);
+		display: grid;
+		place-items: center;
+		background: color-mix(in srgb, var(--assignment-accent) 12%, transparent);
+		color: var(--assignment-accent);
+		flex-shrink: 0;
+	}
+
+	.icon-circle.icon-confirmed {
+		background: color-mix(in srgb, var(--status-success) 12%, transparent);
+		color: var(--status-success);
+	}
+
+	.icon-circle.icon-unconfirmed {
+		background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+		color: var(--status-warning);
+	}
+
+	.icon-circle.icon-overdue {
+		background: color-mix(in srgb, var(--status-error) 12%, transparent);
+		color: var(--status-error);
+	}
+
+	.icon-circle :global(svg) {
+		width: 20px;
+		height: 20px;
+	}
+
+	/* Content */
+	.assignment-content {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+		min-width: 0;
+	}
+
+	.assignment-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: var(--spacing-2);
+	}
+
+	.header-left {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.header-right {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		flex-shrink: 0;
+	}
+
+	.assignment-date {
 		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
+		line-height: 1.3;
 	}
 
-	.section-header p {
-		margin: var(--spacing-1) 0 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-muted);
+	.assignment-status {
+		font-size: var(--font-size-xs);
+		color: var(--text-faint);
+		flex-shrink: 0;
+		font-weight: var(--font-weight-medium);
 	}
 
+	.assignment-item.overdue {
+		opacity: 0.55;
+	}
+
+	.assignment-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-1);
+		align-items: center;
+	}
+
+	.header-confirmed {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		color: var(--status-success);
+		flex-shrink: 0;
+	}
+
+	.header-confirm-by {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		font-size: var(--font-size-xs);
+		color: var(--status-warning);
+	}
+
+	.header-overdue {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		font-size: var(--font-size-xs);
+		color: var(--status-error);
+	}
+
+	/* Health delta indicators */
+	.health-delta {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		margin-left: var(--spacing-1);
+	}
+
+	.health-delta.positive {
+		color: var(--status-success);
+	}
+
+	.health-delta.negative {
+		color: var(--status-error);
+	}
+
+	.assignment-actions {
+		display: flex;
+		gap: var(--spacing-2);
+		margin-top: var(--spacing-1);
+	}
+
+	/* Empty state */
 	.empty-state {
-		padding: var(--spacing-4);
-		border-radius: var(--radius-base);
-		background: var(--surface-secondary);
-		border: none;
+		text-align: center;
+		padding: var(--spacing-6) var(--spacing-4);
+		color: var(--text-muted);
 	}
 
 	.empty-title {
 		margin: 0 0 var(--spacing-1);
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 	}
@@ -592,74 +817,9 @@
 	.empty-message {
 		margin: 0;
 		font-size: var(--font-size-sm);
-		color: var(--text-muted);
 	}
 
-	.assignment-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-3);
-	}
-
-	.assignment-card {
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-base);
-		padding: var(--spacing-3);
-		background: var(--surface-secondary);
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-3);
-	}
-
-	.assignment-card.cancelled {
-		opacity: 0.7;
-	}
-
-	.card-header {
-		display: flex;
-		justify-content: space-between;
-		gap: var(--spacing-2);
-		align-items: flex-start;
-	}
-
-	.card-summary {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-1);
-	}
-
-	.assignment-date {
-		margin: 0;
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-medium);
-		color: var(--text-normal);
-	}
-
-	.assignment-route {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-normal);
-	}
-
-	.assignment-warehouse {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-muted);
-	}
-
-	.card-chips {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: var(--spacing-1);
-	}
-
-	.card-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: var(--spacing-2);
-	}
-
+	/* Modals */
 	.modal-form {
 		display: flex;
 		flex-direction: column;
@@ -690,13 +850,44 @@
 		margin-top: var(--spacing-2);
 	}
 
+	/* Mobile */
 	@media (max-width: 767px) {
-		.schedule-section {
-			padding: 0;
+		.page-stage {
+			padding: var(--spacing-2);
+		}
+
+		.page-header {
+			gap: var(--spacing-2);
+			margin-bottom: var(--spacing-3);
+		}
+
+		.header-text h1 {
+			font-size: var(--font-size-lg);
+		}
+
+		.assignment-item {
+			gap: var(--spacing-2);
+			padding: var(--spacing-2);
+		}
+
+		.icon-circle {
+			width: 28px;
+			height: 28px;
+		}
+
+		.icon-circle :global(svg) {
+			width: 14px;
+			height: 14px;
 		}
 
 		.modal-actions {
 			flex-direction: column;
+		}
+	}
+
+	@media (pointer: coarse) {
+		.assignment-item {
+			min-height: 44px;
 		}
 	}
 </style>
