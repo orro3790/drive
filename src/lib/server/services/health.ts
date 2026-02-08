@@ -358,7 +358,8 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 
 	// Attendance: all non-cancelled assignments must be completed
 	const nonCancelledCount = totalAssignments - cancelledAssignments.length;
-	const weekAttendance = nonCancelledCount > 0 ? completedAssignments.length / nonCancelledCount : 0;
+	const weekAttendance =
+		nonCancelledCount > 0 ? completedAssignments.length / nonCancelledCount : 0;
 
 	// Week-specific completion rate (not all-time from driverMetrics).
 	// The daily score uses all-time rates; weekly qualification uses this-week-only.
@@ -382,10 +383,8 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 
 	const weekCompletionRate =
 		weekShifts.length > 0
-			? weekShifts.reduce(
-					(sum, s) => sum + (s.parcelsDelivered ?? 0) / (s.parcelsStart ?? 1),
-					0
-				) / weekShifts.length
+			? weekShifts.reduce((sum, s) => sum + (s.parcelsDelivered ?? 0) / (s.parcelsStart ?? 1), 0) /
+				weekShifts.length
 			: 0;
 
 	// No-shows this week (subset of rolling — check assignments in this week specifically)
@@ -445,9 +444,7 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 	// Streak counts cumulative qualifying weeks (not consecutive).
 	// Non-qualifying weeks (without hard-stop) leave streak unchanged.
 	// Only hard-stop events reset streak to 0 (handled above).
-	const newStreak = qualified
-		? previousStreak + 1
-		: previousStreak;
+	const newStreak = qualified ? previousStreak + 1 : previousStreak;
 	const newStars = qualified
 		? Math.min(previousStars + 1, dispatchPolicy.health.maxStars)
 		: previousStars;
@@ -579,10 +576,7 @@ export async function runDailyHealthEvaluation(): Promise<DailyHealthRunResult> 
 	const today = torontoToday();
 
 	// Get all active drivers
-	const drivers = await db
-		.select({ id: user.id })
-		.from(user)
-		.where(eq(user.role, 'driver'));
+	const drivers = await db.select({ id: user.id }).from(user).where(eq(user.role, 'driver'));
 
 	let scored = 0;
 	let skippedNewDrivers = 0;
@@ -606,32 +600,29 @@ export async function runDailyHealthEvaluation(): Promise<DailyHealthRunResult> 
 					scored++;
 
 					// Send corrective warning if completion below threshold,
-				// but only if no corrective_warning was sent in the recovery window
-				if (
-					result.completionRate <
-					dispatchPolicy.health.correctiveCompletionThreshold
-				) {
-					const recoveryCutoff = subDays(
-						new Date(),
-						dispatchPolicy.health.correctiveRecoveryDays
-					);
-					const [recentWarning] = await db
-						.select({ id: notifications.id })
-						.from(notifications)
-						.where(
-							and(
-								eq(notifications.userId, driver.id),
-								eq(notifications.type, 'corrective_warning'),
-								gte(notifications.createdAt, recoveryCutoff)
+					// but only if no corrective_warning was sent in the recovery window
+					if (result.completionRate < dispatchPolicy.health.correctiveCompletionThreshold) {
+						const recoveryCutoff = subDays(
+							new Date(),
+							dispatchPolicy.health.correctiveRecoveryDays
+						);
+						const [recentWarning] = await db
+							.select({ id: notifications.id })
+							.from(notifications)
+							.where(
+								and(
+									eq(notifications.userId, driver.id),
+									eq(notifications.type, 'corrective_warning'),
+									gte(notifications.createdAt, recoveryCutoff)
+								)
 							)
-						)
-						.limit(1);
+							.limit(1);
 
-					if (!recentWarning) {
-						await sendNotification(driver.id, 'corrective_warning');
-						correctiveWarnings++;
+						if (!recentWarning) {
+							await sendNotification(driver.id, 'corrective_warning');
+							correctiveWarnings++;
+						}
 					}
-				}
 				} catch (error) {
 					errors++;
 					log.error({ userId: driver.id, error }, 'Failed to evaluate driver health');
@@ -681,14 +672,14 @@ export async function runWeeklyHealthEvaluation(): Promise<WeeklyHealthRunResult
 	const lastMonday = subDays(thisMonday, 7);
 
 	log.info(
-		{ weekStart: format(lastMonday, 'yyyy-MM-dd'), weekEnd: format(subDays(thisMonday, 1), 'yyyy-MM-dd') },
+		{
+			weekStart: format(lastMonday, 'yyyy-MM-dd'),
+			weekEnd: format(subDays(thisMonday, 1), 'yyyy-MM-dd')
+		},
 		'Evaluating week'
 	);
 
-	const drivers = await db
-		.select({ id: user.id })
-		.from(user)
-		.where(eq(user.role, 'driver'));
+	const drivers = await db.select({ id: user.id }).from(user).where(eq(user.role, 'driver'));
 
 	let qualified = 0;
 	let hardStopResets = 0;

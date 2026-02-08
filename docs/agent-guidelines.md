@@ -341,7 +341,9 @@ if (weekResult.qualified) {
 
 // Cron job usage
 const dailyResult = await runDailyHealthEvaluation();
-console.log(`Scored ${dailyResult.scored} drivers, ${dailyResult.correctiveWarnings} warnings sent`);
+console.log(
+	`Scored ${dailyResult.scored} drivers, ${dailyResult.correctiveWarnings} warnings sent`
+);
 ```
 
 **Notifications Sent:**
