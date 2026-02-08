@@ -12,10 +12,11 @@ import {
 	driverHealthSnapshots,
 	driverHealthState,
 	driverMetrics,
+	notifications,
 	shifts,
 	user
 } from '$lib/server/db/schema';
-import { and, eq, gte, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 import { format, toZonedTime } from 'date-fns-tz';
 import { subDays, startOfWeek, endOfWeek } from 'date-fns';
 import logger from '$lib/server/logger';
@@ -48,10 +49,9 @@ interface RollingCounts {
  *   before the shift, so the assignment date is a reliable proxy.
  */
 async function getRollingCounts(userId: string, windowDays: number): Promise<RollingCounts> {
-	const cutoffDate = format(
-		subDays(toZonedTime(new Date(), TORONTO_TZ), windowDays),
-		'yyyy-MM-dd'
-	);
+	const nowToronto = toZonedTime(new Date(), TORONTO_TZ);
+	const cutoffDate = format(subDays(nowToronto, windowDays), 'yyyy-MM-dd');
+	const todayStr = format(nowToronto, 'yyyy-MM-dd');
 
 	// No-shows: assignments for this driver that triggered no-show bid windows
 	const [noShowResult] = await db
@@ -61,7 +61,13 @@ async function getRollingCounts(userId: string, windowDays: number): Promise<Rol
 			bidWindows,
 			and(eq(bidWindows.assignmentId, assignments.id), eq(bidWindows.trigger, 'no_show'))
 		)
-		.where(and(eq(assignments.userId, userId), gte(assignments.date, cutoffDate)));
+		.where(
+			and(
+				eq(assignments.userId, userId),
+				gte(assignments.date, cutoffDate),
+				lte(assignments.date, todayStr)
+			)
+		);
 
 	// Late cancellations: confirmed assignments that were cancelled, date in window
 	const [lateCancelResult] = await db
@@ -72,7 +78,8 @@ async function getRollingCounts(userId: string, windowDays: number): Promise<Rol
 				eq(assignments.userId, userId),
 				eq(assignments.status, 'cancelled'),
 				isNotNull(assignments.confirmedAt),
-				gte(assignments.date, cutoffDate)
+				gte(assignments.date, cutoffDate),
+				lte(assignments.date, todayStr)
 			)
 		);
 
@@ -205,27 +212,33 @@ async function persistDailyScore(result: DailyScoreResult, evaluatedAt: string):
 			}
 		});
 
-	// Update current state (score + pool eligibility)
-	const poolEligible = !result.hardStopTriggered;
-	const requiresIntervention = result.hardStopTriggered;
+	// Update current state (score only).
+	// Pool eligibility is a one-way latch: hard-stop removes from pool, but only
+	// a manager action can reinstate. We never set assignmentPoolEligible=true here.
+	const upsertBase: Record<string, unknown> = {
+		currentScore: result.score,
+		updatedAt: new Date()
+	};
+
+	if (result.hardStopTriggered) {
+		Object.assign(upsertBase, {
+			assignmentPoolEligible: false,
+			requiresManagerIntervention: true
+		});
+	}
 
 	await db
 		.insert(driverHealthState)
 		.values({
 			userId: result.userId,
 			currentScore: result.score,
-			assignmentPoolEligible: poolEligible,
-			requiresManagerIntervention: requiresIntervention,
+			assignmentPoolEligible: !result.hardStopTriggered,
+			requiresManagerIntervention: result.hardStopTriggered,
 			updatedAt: new Date()
 		})
 		.onConflictDoUpdate({
 			target: driverHealthState.userId,
-			set: {
-				currentScore: result.score,
-				assignmentPoolEligible: poolEligible,
-				requiresManagerIntervention: requiresIntervention,
-				updatedAt: new Date()
-			}
+			set: upsertBase
 		});
 }
 
@@ -347,7 +360,8 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 	const nonCancelledCount = totalAssignments - cancelledAssignments.length;
 	const weekAttendance = nonCancelledCount > 0 ? completedAssignments.length / nonCancelledCount : 0;
 
-	// Get week's completion rate from completed shifts
+	// Week-specific completion rate (not all-time from driverMetrics).
+	// The daily score uses all-time rates; weekly qualification uses this-week-only.
 	const weekShifts = await db
 		.select({
 			parcelsStart: shifts.parcelsStart,
@@ -428,6 +442,9 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 		}
 	}
 
+	// Streak counts cumulative qualifying weeks (not consecutive).
+	// Non-qualifying weeks (without hard-stop) leave streak unchanged.
+	// Only hard-stop events reset streak to 0 (handled above).
 	const newStreak = qualified
 		? previousStreak + 1
 		: previousStreak;
@@ -465,6 +482,21 @@ async function persistWeeklyEval(result: WeeklyEvalResult): Promise<void> {
 
 	const now = new Date();
 
+	// Build upsert set — pool eligibility is a one-way latch (same as daily).
+	const weeklyUpsert: Record<string, unknown> = {
+		streakWeeks: result.newStreak,
+		stars: result.newStars,
+		nextMilestoneStars: Math.min(result.newStars + 1, dispatchPolicy.health.maxStars),
+		updatedAt: now
+	};
+	if (result.qualified) {
+		weeklyUpsert.lastQualifiedWeekStart = result.weekStart;
+	}
+	if (result.hardStopReset) {
+		weeklyUpsert.assignmentPoolEligible = false;
+		weeklyUpsert.requiresManagerIntervention = true;
+	}
+
 	await db
 		.insert(driverHealthState)
 		.values({
@@ -479,15 +511,7 @@ async function persistWeeklyEval(result: WeeklyEvalResult): Promise<void> {
 		})
 		.onConflictDoUpdate({
 			target: driverHealthState.userId,
-			set: {
-				streakWeeks: result.newStreak,
-				stars: result.newStars,
-				lastQualifiedWeekStart: result.qualified ? result.weekStart : undefined,
-				nextMilestoneStars: Math.min(result.newStars + 1, dispatchPolicy.health.maxStars),
-				assignmentPoolEligible: !result.hardStopReset,
-				requiresManagerIntervention: result.hardStopReset,
-				updatedAt: now
-			}
+			set: weeklyUpsert
 		});
 
 	// Send notifications
@@ -581,14 +605,33 @@ export async function runDailyHealthEvaluation(): Promise<DailyHealthRunResult> 
 					await persistDailyScore(result, today);
 					scored++;
 
-					// Send corrective warning if completion below threshold
-					if (
-						result.completionRate <
-						dispatchPolicy.health.correctiveCompletionThreshold
-					) {
+					// Send corrective warning if completion below threshold,
+				// but only if no corrective_warning was sent in the recovery window
+				if (
+					result.completionRate <
+					dispatchPolicy.health.correctiveCompletionThreshold
+				) {
+					const recoveryCutoff = subDays(
+						new Date(),
+						dispatchPolicy.health.correctiveRecoveryDays
+					);
+					const [recentWarning] = await db
+						.select({ id: notifications.id })
+						.from(notifications)
+						.where(
+							and(
+								eq(notifications.userId, driver.id),
+								eq(notifications.type, 'corrective_warning'),
+								gte(notifications.createdAt, recoveryCutoff)
+							)
+						)
+						.limit(1);
+
+					if (!recentWarning) {
 						await sendNotification(driver.id, 'corrective_warning');
 						correctiveWarnings++;
 					}
+				}
 				} catch (error) {
 					errors++;
 					log.error({ userId: driver.id, error }, 'Failed to evaluate driver health');
