@@ -50,6 +50,13 @@
       "when": 1770514481765,
       "tag": "0006_bizarre_spencer_smythe",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770514761935,
+      "tag": "0007_whole_scarecrow",
+      "breakpoints": true
     }
   ]
 }

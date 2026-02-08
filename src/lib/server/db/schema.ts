@@ -330,7 +330,6 @@ export const driverHealthSnapshots = pgTable(
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 	},
 	(table) => ({
-		userDateIdx: index('idx_health_snapshots_user_date').on(table.userId, table.evaluatedAt),
 		uniqueUserDate: unique().on(table.userId, table.evaluatedAt)
 	})
 );
