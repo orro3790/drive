@@ -198,9 +198,9 @@
 <style>
 	.health-card {
 		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
 		border-radius: var(--radius-lg);
 		padding: var(--spacing-4);
-		box-shadow: var(--shadow-base);
 	}
 
 	.section-header {

@@ -728,13 +728,8 @@
 				{#if dashboardStore.unconfirmedShifts.length > 0}
 					<section class="dashboard-section">
 						<div class="section-header">
-							<h2 class="warning-heading">{m.dashboard_confirm_section()}</h2>
-							<Chip
-								variant="status"
-								status="warning"
-								size="sm"
-								label={String(dashboardStore.unconfirmedShifts.length)}
-							/>
+							<h2>{m.dashboard_confirm_section()}</h2>
+							<span class="confirm-count">{dashboardStore.unconfirmedShifts.length}</span>
 						</div>
 
 						<div class="confirm-list">
@@ -1315,8 +1310,10 @@
 	}
 
 	/* Needs Confirmation */
-	.warning-heading {
-		color: var(--status-warning);
+	.confirm-count {
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-muted);
 	}
 
 	.confirm-list {
@@ -1332,7 +1329,6 @@
 		padding: var(--spacing-3);
 		border-radius: var(--radius-base);
 		background: var(--surface-secondary);
-		border: 1px solid var(--status-warning);
 	}
 
 	.confirm-date {
@@ -1351,7 +1347,7 @@
 	.confirm-deadline {
 		margin: 0;
 		font-size: var(--font-size-xs);
-		color: var(--status-warning);
+		color: var(--text-muted);
 	}
 
 	/* Form Styles */
