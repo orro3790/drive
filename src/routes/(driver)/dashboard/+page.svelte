@@ -69,7 +69,6 @@
 	let editMinutesRemaining = $state(0);
 	let dismissedNewDriverBanner = $state(false);
 
-
 	const NEW_DRIVER_BANNER_DISMISS_KEY = 'drive.dashboard.new-driver-banner.dismissed';
 
 	type ShiftStep =
@@ -477,16 +476,15 @@
 				<!-- Today's Shift -->
 				<section class="dashboard-section">
 					<div class="section-header">
-						<h2>{m.dashboard_today_section()} ({format(new Date(), 'EEE, MMM d').toUpperCase()})</h2>
+						<h2>
+							{m.dashboard_today_section()} ({format(new Date(), 'EEE, MMM d').toUpperCase()})
+						</h2>
 					</div>
 
 					{#if dashboardStore.todayShift}
 						{@const todayShift = dashboardStore.todayShift}
 						{@const TodayIcon = todayShiftIcon}
-						<div
-							class="today-item"
-							style="--icon-accent: var({todayShiftAccent});"
-						>
+						<div class="today-item" style="--icon-accent: var({todayShiftAccent});">
 							<div class="icon-circle" aria-hidden="true">
 								<TodayIcon />
 							</div>
@@ -519,7 +517,9 @@
 								</div>
 								{#if shiftStep === 'delivering' || shiftStep === 'completing'}
 									<span class="today-status">
-										{m.shift_delivering_status({ count: String(todayShift.shift?.parcelsStart ?? 0) })}
+										{m.shift_delivering_status({
+											count: String(todayShift.shift?.parcelsStart ?? 0)
+										})}
 									</span>
 								{:else}
 									<span class="today-status">Status: {statusLabels[todayShift.status]}</span>
@@ -527,14 +527,14 @@
 								<div class="assignment-meta">
 									<Chip
 										variant="tag"
-										size="compact"
+										size="xs"
 										color="var(--text-muted)"
 										label={todayShift.routeName}
 										icon={routeChipIcon}
 									/>
 									<Chip
 										variant="tag"
-										size="compact"
+										size="xs"
 										color="var(--text-muted)"
 										label={todayShift.warehouseName}
 										icon={warehouseChipIcon}
@@ -562,7 +562,9 @@
 									<div class="step-content">
 										{#if todayShift.shift?.arrivedAt}
 											<p class="step-info">
-												{m.shift_arrive_arrived_at({ time: formatTime(todayShift.shift.arrivedAt) })}
+												{m.shift_arrive_arrived_at({
+													time: formatTime(todayShift.shift.arrivedAt)
+												})}
 											</p>
 										{/if}
 										<form
@@ -879,10 +881,7 @@
 						<div class="assignment-list">
 							{#each sortedUnconfirmedShifts as shift (shift.id)}
 								{@const confirmInfo = formatConfirmDeadline(shift.confirmationDeadline)}
-								<div
-									class="assignment-item"
-									style="--icon-accent: var(--status-warning);"
-								>
+								<div class="assignment-item" style="--icon-accent: var(--status-warning);">
 									<div class="icon-circle" aria-hidden="true">
 										<QuestionMark />
 									</div>
@@ -914,14 +913,14 @@
 										<div class="assignment-meta">
 											<Chip
 												variant="tag"
-												size="compact"
+												size="xs"
 												color="var(--text-muted)"
 												label={shift.routeName}
 												icon={routeChipIcon}
 											/>
 											<Chip
 												variant="tag"
-												size="compact"
+												size="xs"
 												color="var(--text-muted)"
 												label={shift.warehouseName}
 												icon={warehouseChipIcon}
@@ -953,31 +952,30 @@
 					{:else}
 						<div class="assignment-list">
 							{#each dashboardStore.pendingBids.slice(0, 3) as bid (bid.id)}
-								<div
-									class="assignment-item"
-									style="--icon-accent: var(--status-info);"
-								>
+								<div class="assignment-item" style="--icon-accent: var(--status-info);">
 									<div class="icon-circle" aria-hidden="true">
 										<Gavel />
 									</div>
 									<div class="assignment-content">
 										<div class="assignment-header">
 											<div class="header-left">
-												<span class="assignment-date">{formatAssignmentDate(bid.assignmentDate)}</span>
+												<span class="assignment-date"
+													>{formatAssignmentDate(bid.assignmentDate)}</span
+												>
 												<span class="header-muted">{formatClosesAt(bid.windowClosesAt)}</span>
 											</div>
 										</div>
 										<div class="assignment-meta">
 											<Chip
 												variant="tag"
-												size="compact"
+												size="xs"
 												color="var(--text-muted)"
 												label={bid.routeName}
 												icon={routeChipIcon}
 											/>
 											<Chip
 												variant="tag"
-												size="compact"
+												size="xs"
 												color="var(--text-muted)"
 												label={bid.warehouseName}
 												icon={warehouseChipIcon}
@@ -1231,13 +1229,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-3);
-	}
-
-	.step-status {
-		margin: 0;
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-medium);
-		color: var(--interactive-accent);
 	}
 
 	.step-info {

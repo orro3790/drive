@@ -60,18 +60,21 @@ export function generateMetrics(
 		const driverAssignments = indices.map((i) => ({ assignment: assignments[i], index: i }));
 
 		// totalAssigned: all assignments where driver was assigned (not unfilled)
-		const totalAssigned = driverAssignments.filter((d) => d.assignment.status !== 'unfilled').length;
+		const totalAssigned = driverAssignments.filter(
+			(d) => d.assignment.status !== 'unfilled'
+		).length;
 
 		// completedShifts: assignments with status === 'completed'
-		const completedShifts = driverAssignments.filter((d) => d.assignment.status === 'completed').length;
+		const completedShifts = driverAssignments.filter(
+			(d) => d.assignment.status === 'completed'
+		).length;
 
 		// totalShifts: same as completedShifts
 		const totalShifts = completedShifts;
 
 		// attendanceRate: completedShifts / totalAssigned
-		const attendanceRate = totalAssigned > 0
-			? Math.round((completedShifts / totalAssigned) * 100) / 100
-			: 0;
+		const attendanceRate =
+			totalAssigned > 0 ? Math.round((completedShifts / totalAssigned) * 100) / 100 : 0;
 
 		// completionRate: parcelsDelivered / parcelsStart for completed shifts
 		let totalParcelsStart = 0;
@@ -84,17 +87,19 @@ export function generateMetrics(
 				totalParcelsDelivered += shift.parcelsDelivered;
 			}
 		}
-		const completionRate = totalParcelsStart > 0
-			? Math.round((totalParcelsDelivered / totalParcelsStart) * 100) / 100
-			: 0;
+		const completionRate =
+			totalParcelsStart > 0
+				? Math.round((totalParcelsDelivered / totalParcelsStart) * 100) / 100
+				: 0;
 
 		// avgParcelsDelivered
-		const avgParcelsDelivered = completedShifts > 0
-			? Math.round((totalParcelsDelivered / completedShifts) * 100) / 100
-			: 0;
+		const avgParcelsDelivered =
+			completedShifts > 0 ? Math.round((totalParcelsDelivered / completedShifts) * 100) / 100 : 0;
 
 		// confirmedShifts: assignments where confirmedAt is set
-		const confirmedShifts = driverAssignments.filter((d) => d.assignment.confirmedAt !== null).length;
+		const confirmedShifts = driverAssignments.filter(
+			(d) => d.assignment.confirmedAt !== null
+		).length;
 
 		// lateCancellations: cancelled + confirmedAt (confirmed then cancelled)
 		const lateCancellations = driverAssignments.filter(

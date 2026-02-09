@@ -179,7 +179,10 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 							})
 							.where(eq(driverHealthState.userId, candidate.driverId));
 					} catch (error) {
-						log.warn({ driverId: candidate.driverId, error }, 'Failed to update noShow metrics/health');
+						log.warn(
+							{ driverId: candidate.driverId, error },
+							'Failed to update noShow metrics/health'
+						);
 					}
 				}
 

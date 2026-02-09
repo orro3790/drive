@@ -262,8 +262,6 @@
 		flex-shrink: 0;
 	}
 
-
-
 	.notification-cta:hover :global(.chip) {
 		background: var(--interactive-hover);
 	}
@@ -374,6 +372,5 @@
 			width: 18px;
 			height: 18px;
 		}
-
 	}
 </style>

@@ -62,9 +62,7 @@
 		scheduleStore.nextWeekStart ? parseISO(scheduleStore.nextWeekStart) : null
 	);
 
-	const activeAssignments = $derived(
-		sortedAssignments.filter((a) => a.status === 'active')
-	);
+	const activeAssignments = $derived(sortedAssignments.filter((a) => a.status === 'active'));
 
 	const thisWeekAssignments = $derived.by(() => {
 		const weekStart = scheduleStore.weekStart;
@@ -159,9 +157,7 @@
 		}
 	}
 
-	function getScheduleActionVariant(
-		actionId: ScheduleActionId
-	): 'primary' | 'secondary' | 'ghost' {
+	function getScheduleActionVariant(actionId: ScheduleActionId): 'primary' | 'secondary' | 'ghost' {
 		if (actionId === 'cancel_shift') return 'ghost';
 		if (actionId === 'confirm_shift') return 'primary';
 		return 'secondary';
@@ -298,7 +294,13 @@
 		class:overdue={isOverdue}
 		style="--assignment-accent: var({accent});"
 	>
-		<div class="icon-circle" class:icon-confirmed={confirmState === 'confirmed'} class:icon-unconfirmed={confirmState === 'confirmable' || confirmState === 'not_open'} class:icon-overdue={isOverdue} aria-hidden="true">
+		<div
+			class="icon-circle"
+			class:icon-confirmed={confirmState === 'confirmed'}
+			class:icon-unconfirmed={confirmState === 'confirmable' || confirmState === 'not_open'}
+			class:icon-overdue={isOverdue}
+			aria-hidden="true"
+		>
 			{#if assignment.status === 'scheduled'}
 				{#if confirmState === 'confirmed'}
 					<CalendarCheck />
@@ -381,14 +383,14 @@
 			<div class="assignment-meta">
 				<Chip
 					variant="tag"
-					size="compact"
+					size="xs"
 					color="var(--text-muted)"
 					label={assignment.routeName}
 					icon={routeChipIcon}
 				/>
 				<Chip
 					variant="tag"
-					size="compact"
+					size="xs"
 					color="var(--text-muted)"
 					label={assignment.warehouseName}
 					icon={warehouseChipIcon}
@@ -795,12 +797,6 @@
 
 	.health-delta.negative {
 		color: var(--status-error);
-	}
-
-	.assignment-actions {
-		display: flex;
-		gap: var(--spacing-2);
-		margin-top: var(--spacing-1);
 	}
 
 	/* Empty state */

@@ -118,18 +118,12 @@ export function calculateBidScoreParts({
 	preferredRouteIds,
 	routeId
 }: BidScoreInputs) {
-	const healthNormalized = Math.min(
-		healthScore / dispatchPolicy.bidding.healthNormalizationCap,
-		1
-	);
+	const healthNormalized = Math.min(healthScore / dispatchPolicy.bidding.healthNormalizationCap, 1);
 	const familiarityNormalized = Math.min(
 		routeFamiliarityCount / dispatchPolicy.bidding.familiarityNormalizationCap,
 		1
 	);
-	const seniorityNormalized = Math.min(
-		tenureMonths / dispatchPolicy.bidding.seniorityCapMonths,
-		1
-	);
+	const seniorityNormalized = Math.min(tenureMonths / dispatchPolicy.bidding.seniorityCapMonths, 1);
 	const preferenceBonus = preferredRouteIds
 		.slice(0, dispatchPolicy.bidding.preferenceTopN)
 		.includes(routeId)

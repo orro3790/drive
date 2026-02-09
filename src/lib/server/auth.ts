@@ -56,11 +56,7 @@ export const auth = betterAuth({
 	baseURL: getAuthBaseUrl(),
 	secret: BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg', schema: authSchema }),
-	trustedOrigins: [
-		'http://localhost:5173',
-		'http://192.168.*',
-		'https://*.vercel.app'
-	],
+	trustedOrigins: ['http://localhost:5173', 'http://192.168.*', 'https://*.vercel.app'],
 	emailAndPassword: {
 		enabled: true
 		// NOTE: Email-based password reset is disabled until a domain is configured in Resend.

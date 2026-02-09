@@ -114,7 +114,9 @@
 									<div class="assignment-content">
 										<div class="assignment-header">
 											<div class="header-left">
-												<span class="assignment-date">{formatAssignmentDate(window.assignmentDate)}</span>
+												<span class="assignment-date"
+													>{formatAssignmentDate(window.assignmentDate)}</span
+												>
 												{#if isEmergency}
 													<span class="header-muted">{m.bids_emergency_first_come()}</span>
 												{:else}
@@ -184,7 +186,12 @@
 						<div class="assignment-list">
 							{#each bidsStore.myBids as bid (bid.id)}
 								{@const isResolved = bid.status !== 'pending'}
-								{@const iconAccent = bid.status === 'won' ? '--status-success' : bid.status === 'lost' ? '--text-muted' : '--status-info'}
+								{@const iconAccent =
+									bid.status === 'won'
+										? '--status-success'
+										: bid.status === 'lost'
+											? '--text-muted'
+											: '--status-info'}
 								<div
 									class="assignment-item"
 									class:resolved={isResolved}
@@ -196,7 +203,9 @@
 									<div class="assignment-content">
 										<div class="assignment-header">
 											<div class="header-left">
-												<span class="assignment-date">{formatAssignmentDate(bid.assignmentDate)}</span>
+												<span class="assignment-date"
+													>{formatAssignmentDate(bid.assignmentDate)}</span
+												>
 												<span class="header-muted">{formatSubmittedAt(bid.bidAt)}</span>
 											</div>
 											<div class="header-right">

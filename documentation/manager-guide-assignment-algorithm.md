@@ -26,6 +26,7 @@ For each route on each day, the system asks:
 4. **Are they in good standing?** (Not flagged for performance issues.)
 
 If multiple drivers qualify, the system picks the one with:
+
 - The most experience on that specific route (first priority)
 - The best delivery completion rate (second priority)
 - The best attendance rate (third priority)
@@ -34,11 +35,11 @@ If **no one** qualifies for a route on a given day, that slot is marked **unfill
 
 ### Weekly Limits
 
-| Driver Level | Max Days/Week |
-|---|---|
-| Standard | 4 |
-| High performer (20+ shifts, 95%+ attendance) | 6 |
-| Flagged (performance issue) | Reduced by 1 per infraction (minimum 1) |
+| Driver Level                                 | Max Days/Week                           |
+| -------------------------------------------- | --------------------------------------- |
+| Standard                                     | 4                                       |
+| High performer (20+ shifts, 95%+ attendance) | 6                                       |
+| Flagged (performance issue)                  | Reduced by 1 per infraction (minimum 1) |
 
 ### Preference Lock Timing
 
@@ -66,12 +67,12 @@ When there's time, the system runs a **scored competition**:
 
 **How Bids Are Scored:**
 
-| Factor | Weight | What It Measures |
-|---|---|---|
-| Health Score | 45% | Overall reliability — attendance, delivery completion, no late cancellations |
-| Route Familiarity | 25% | How many times the driver has completed this specific route (maxes out at 20 runs) |
-| Seniority | 15% | How long the driver has been with us (maxes out at 12 months) |
-| Route Preference | 15% | Whether this route is in the driver's top 3 preferred routes |
+| Factor            | Weight | What It Measures                                                                   |
+| ----------------- | ------ | ---------------------------------------------------------------------------------- |
+| Health Score      | 45%    | Overall reliability — attendance, delivery completion, no late cancellations       |
+| Route Familiarity | 25%    | How many times the driver has completed this specific route (maxes out at 20 runs) |
+| Seniority         | 15%    | How long the driver has been with us (maxes out at 12 months)                      |
+| Route Preference  | 15%    | Whether this route is in the driver's top 3 preferred routes                       |
 
 **If scores are tied**, the driver who bid first wins.
 
@@ -97,16 +98,19 @@ When there's less than a day until the shift, speed matters more than scoring:
 ### Emergency Mode (Urgent Situations)
 
 Triggered when:
+
 - A driver no-shows at 9:00 AM (detected automatically)
 - A manager manually opens an emergency window
 
 Emergency mode works like instant (first to accept wins), but:
+
 - Drivers see a **"Priority Route Available"** notification
 - An optional **pay bonus** can be attached (default +20%)
 
 > **Scenario: "9 AM No-Show"**
 >
 > It's 9:05 AM and Darius hasn't arrived for Route 3. The system automatically:
+>
 > 1. Marks Darius as a no-show
 > 2. Opens an **emergency bid window** for Route 3
 > 3. Sends "Priority Route Available" to all eligible drivers with +20% bonus
@@ -116,11 +120,11 @@ Emergency mode works like instant (first to accept wins), but:
 
 ### What Happens When Nobody Bids
 
-| Situation | System Response |
-|---|---|
-| Competitive window closes, zero bids | Automatically transitions to instant mode (first-come-first-served) |
-| Instant window closes, nobody accepted | Manager receives an alert for manual intervention |
-| Emergency window closes, nobody accepted | Manager receives an alert |
+| Situation                                | System Response                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------- |
+| Competitive window closes, zero bids     | Automatically transitions to instant mode (first-come-first-served) |
+| Instant window closes, nobody accepted   | Manager receives an alert for manual intervention                   |
+| Emergency window closes, nobody accepted | Manager receives an alert                                           |
 
 ### Same-Day Conflict Protection
 
@@ -141,12 +145,12 @@ Every scheduled shift must be **manually confirmed** by the driver. This is mand
 
 ### The Confirmation Window
 
-| Milestone | Timing |
-|---|---|
-| **Window opens** | 7 days before the shift |
-| **Reminder sent** | 3 days before the shift (72 hours) |
-| **Deadline** | 48 hours before the shift |
-| **Auto-drop** | If not confirmed by deadline, the shift is taken away |
+| Milestone         | Timing                                                |
+| ----------------- | ----------------------------------------------------- |
+| **Window opens**  | 7 days before the shift                               |
+| **Reminder sent** | 3 days before the shift (72 hours)                    |
+| **Deadline**      | 48 hours before the shift                             |
+| **Auto-drop**     | If not confirmed by deadline, the shift is taken away |
 
 ### What Auto-Drop Looks Like
 
@@ -173,15 +177,15 @@ Every driver has a **health score** (0-100) and a **star rating** (0-4). These a
 
 ### How Points Are Earned and Lost
 
-| Action | Points |
-|---|---|
-| Confirmed shift on time | +1 |
-| Arrived on time | +2 |
-| Completed the shift | +2 |
-| High delivery rate (95%+) | +1 |
-| Picked up a shift via competitive bid | +2 |
-| Picked up an urgent/emergency shift | +4 |
-| **Auto-drop (didn't confirm)** | **-12** |
+| Action                                           | Points  |
+| ------------------------------------------------ | ------- |
+| Confirmed shift on time                          | +1      |
+| Arrived on time                                  | +2      |
+| Completed the shift                              | +2      |
+| High delivery rate (95%+)                        | +1      |
+| Picked up a shift via competitive bid            | +2      |
+| Picked up an urgent/emergency shift              | +4      |
+| **Auto-drop (didn't confirm)**                   | **-12** |
 | **Late cancellation (confirmed then cancelled)** | **-48** |
 
 A perfect shift earns **+6 points** (confirm + arrive + complete + high delivery). Picking up extra shifts through bidding earns bonus points.
@@ -200,10 +204,12 @@ Each qualifying week adds 1 star (max 4). Non-qualifying weeks don't change the 
 ### Hard-Stop: The Serious Consequence
 
 A driver enters hard-stop when:
+
 - They no-show (don't arrive by 9:00 AM), **OR**
 - They accumulate 2+ late cancellations in any 30-day window
 
 Hard-stop means:
+
 - Health score capped at 49 (can't compete effectively in bidding)
 - Stars reset to 0
 - **Removed from the assignment pool** — they won't be scheduled
@@ -245,6 +251,7 @@ However, once a driver crosses the 96-point threshold, additional health points 
 ### "Route Specialist vs. All-Rounder"
 
 > **Situation**: Route 9 opens for bidding.
+>
 > - **Specialist (Noor)**: Health 50, 20 completions on Route 9, 6 months, Route 9 is her preference
 >   - Score: (50/96 × 0.45) + (20/20 × 0.25) + (6/12 × 0.15) + (1 × 0.15) = 0.23 + 0.25 + 0.075 + 0.15 = **0.71**
 > - **All-Rounder (Trevor)**: Health 96, 0 completions on Route 9, 12 months, Route 9 NOT preferred
@@ -263,6 +270,7 @@ However, once a driver crosses the 96-point threshold, additional health points 
 > **Situation**: It's 8:55 AM. Driver Chen was supposed to run Route 1 but hasn't arrived.
 >
 > At 9:00 AM, the no-show cron triggers:
+>
 > 1. Chen's assignment is flagged as a no-show (-48 health points for Chen if this leads to a hard-stop event)
 > 2. Emergency bid window opens with +20% bonus
 > 3. Every eligible driver gets "Priority Route Available" notification
@@ -289,23 +297,23 @@ However, once a driver crosses the 96-point threshold, additional health points 
 
 ## Quick Reference
 
-| Rule | Value |
-|---|---|
-| Shift start time | 7:00 AM Toronto |
-| Arrival deadline | 9:00 AM Toronto |
-| Preference lock | Sunday 11:59 PM Toronto |
-| Schedule lookahead | 2 weeks |
-| Confirmation window | 7 days to 48 hours before shift |
-| Confirmation reminder | 72 hours before shift |
-| Auto-drop penalty | -12 health points |
-| Late cancel penalty | -48 health points |
-| Hard-stop trigger | 1 no-show OR 2 late cancellations in 30 days |
-| Competitive bidding cutoff | 24 hours before shift |
-| Emergency bonus (default) | +20% pay |
-| Weekly cap (standard) | 4 days |
-| Weekly cap (high performer) | 6 days |
-| Edit window after shift | 1 hour to correct parcel counts |
+| Rule                        | Value                                        |
+| --------------------------- | -------------------------------------------- |
+| Shift start time            | 7:00 AM Toronto                              |
+| Arrival deadline            | 9:00 AM Toronto                              |
+| Preference lock             | Sunday 11:59 PM Toronto                      |
+| Schedule lookahead          | 2 weeks                                      |
+| Confirmation window         | 7 days to 48 hours before shift              |
+| Confirmation reminder       | 72 hours before shift                        |
+| Auto-drop penalty           | -12 health points                            |
+| Late cancel penalty         | -48 health points                            |
+| Hard-stop trigger           | 1 no-show OR 2 late cancellations in 30 days |
+| Competitive bidding cutoff  | 24 hours before shift                        |
+| Emergency bonus (default)   | +20% pay                                     |
+| Weekly cap (standard)       | 4 days                                       |
+| Weekly cap (high performer) | 6 days                                       |
+| Edit window after shift     | 1 hour to correct parcel counts              |
 
 ---
 
-*Document version: February 2026. Based on Drive v1 dispatch policy.*
+_Document version: February 2026. Based on Drive v1 dispatch policy._

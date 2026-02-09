@@ -80,21 +80,64 @@
 		if (!health?.contributions) return [];
 		const c = health.contributions;
 		const rows: ContributionRow[] = [
-			{ label: m.dashboard_health_contribution_confirmed(), count: c.confirmedOnTime.count, perPoint: c.confirmedOnTime.count > 0 ? c.confirmedOnTime.points / c.confirmedOnTime.count : 1, total: c.confirmedOnTime.points },
-			{ label: m.dashboard_health_contribution_arrived(), count: c.arrivedOnTime.count, perPoint: c.arrivedOnTime.count > 0 ? c.arrivedOnTime.points / c.arrivedOnTime.count : 2, total: c.arrivedOnTime.points },
-			{ label: m.dashboard_health_contribution_completed(), count: c.completedShifts.count, perPoint: c.completedShifts.count > 0 ? c.completedShifts.points / c.completedShifts.count : 2, total: c.completedShifts.points },
-			{ label: m.dashboard_health_contribution_high_delivery(), count: c.highDelivery.count, perPoint: c.highDelivery.count > 0 ? c.highDelivery.points / c.highDelivery.count : 1, total: c.highDelivery.points },
-			{ label: m.dashboard_health_contribution_bid_pickup(), count: c.bidPickups.count, perPoint: c.bidPickups.count > 0 ? c.bidPickups.points / c.bidPickups.count : 2, total: c.bidPickups.points },
-			{ label: m.dashboard_health_contribution_urgent_pickup(), count: c.urgentPickups.count, perPoint: c.urgentPickups.count > 0 ? c.urgentPickups.points / c.urgentPickups.count : 4, total: c.urgentPickups.points },
-			{ label: m.dashboard_health_contribution_auto_drop(), count: c.autoDrops.count, perPoint: c.autoDrops.count > 0 ? c.autoDrops.points / c.autoDrops.count : -12, total: c.autoDrops.points },
-			{ label: m.dashboard_health_contribution_late_cancel(), count: c.lateCancellations.count, perPoint: c.lateCancellations.count > 0 ? c.lateCancellations.points / c.lateCancellations.count : -48, total: c.lateCancellations.points }
+			{
+				label: m.dashboard_health_contribution_confirmed(),
+				count: c.confirmedOnTime.count,
+				perPoint:
+					c.confirmedOnTime.count > 0 ? c.confirmedOnTime.points / c.confirmedOnTime.count : 1,
+				total: c.confirmedOnTime.points
+			},
+			{
+				label: m.dashboard_health_contribution_arrived(),
+				count: c.arrivedOnTime.count,
+				perPoint: c.arrivedOnTime.count > 0 ? c.arrivedOnTime.points / c.arrivedOnTime.count : 2,
+				total: c.arrivedOnTime.points
+			},
+			{
+				label: m.dashboard_health_contribution_completed(),
+				count: c.completedShifts.count,
+				perPoint:
+					c.completedShifts.count > 0 ? c.completedShifts.points / c.completedShifts.count : 2,
+				total: c.completedShifts.points
+			},
+			{
+				label: m.dashboard_health_contribution_high_delivery(),
+				count: c.highDelivery.count,
+				perPoint: c.highDelivery.count > 0 ? c.highDelivery.points / c.highDelivery.count : 1,
+				total: c.highDelivery.points
+			},
+			{
+				label: m.dashboard_health_contribution_bid_pickup(),
+				count: c.bidPickups.count,
+				perPoint: c.bidPickups.count > 0 ? c.bidPickups.points / c.bidPickups.count : 2,
+				total: c.bidPickups.points
+			},
+			{
+				label: m.dashboard_health_contribution_urgent_pickup(),
+				count: c.urgentPickups.count,
+				perPoint: c.urgentPickups.count > 0 ? c.urgentPickups.points / c.urgentPickups.count : 4,
+				total: c.urgentPickups.points
+			},
+			{
+				label: m.dashboard_health_contribution_auto_drop(),
+				count: c.autoDrops.count,
+				perPoint: c.autoDrops.count > 0 ? c.autoDrops.points / c.autoDrops.count : -12,
+				total: c.autoDrops.points
+			},
+			{
+				label: m.dashboard_health_contribution_late_cancel(),
+				count: c.lateCancellations.count,
+				perPoint:
+					c.lateCancellations.count > 0
+						? c.lateCancellations.points / c.lateCancellations.count
+						: -48,
+				total: c.lateCancellations.points
+			}
 		];
 		return rows.filter((r) => r.count > 0);
 	});
 
-	const contributionsTotal = $derived(
-		contributionRows.reduce((sum, r) => sum + r.total, 0)
-	);
+	const contributionsTotal = $derived(contributionRows.reduce((sum, r) => sum + r.total, 0));
 
 	async function loadHealth() {
 		isLoading = true;
@@ -241,14 +284,22 @@
 								<span class="contribution-calc">
 									{row.count} × ({row.perPoint > 0 ? '+' : ''}{row.perPoint})
 								</span>
-								<span class="contribution-total" class:positive-text={row.total > 0} class:negative-text={row.total < 0}>
+								<span
+									class="contribution-total"
+									class:positive-text={row.total > 0}
+									class:negative-text={row.total < 0}
+								>
 									{row.total > 0 ? '+' : ''}{row.total}
 								</span>
 							</div>
 						{/each}
 						<div class="contribution-row contribution-net">
 							<span class="contribution-label">{m.dashboard_health_contributions_total()}</span>
-							<span class="contribution-total" class:positive-text={contributionsTotal > 0} class:negative-text={contributionsTotal < 0}>
+							<span
+								class="contribution-total"
+								class:positive-text={contributionsTotal > 0}
+								class:negative-text={contributionsTotal < 0}
+							>
 								{contributionsTotal > 0 ? '+' : ''}{contributionsTotal}
 							</span>
 						</div>
