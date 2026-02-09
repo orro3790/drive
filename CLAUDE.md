@@ -292,18 +292,20 @@ async function submitBid(assignmentId: string) {
 
 Reference: `.env.example` for full documentation.
 
-| Variable                  | Purpose                                             | Required  |
-| ------------------------- | --------------------------------------------------- | --------- |
-| `DATABASE_URL`            | Neon PostgreSQL connection (pooled)                 | Yes       |
-| `BETTER_AUTH_SECRET`      | Session signing key                                 | Yes       |
-| `BETTER_AUTH_URL`         | App base URL — local dev only, Vercel auto-provides | Dev only  |
-| `BETTER_AUTH_INVITE_CODE` | Optional signup gate for drivers                    | No        |
-| `FIREBASE_PROJECT_ID`     | FCM project identifier                              | Yes       |
-| `FIREBASE_CLIENT_EMAIL`   | FCM service account email                           | Yes       |
-| `FIREBASE_PRIVATE_KEY`    | FCM service account private key                     | Yes       |
-| `AXIOM_TOKEN`             | Axiom API token for log shipping                    | Prod only |
-| `TEST_USER_EMAIL`         | Dev/test user email                                 | Dev only  |
-| `TEST_USER_PASSWORD`      | Dev/test user password                              | Dev only  |
+| Variable                       | Purpose                                             | Required  |
+| ------------------------------ | --------------------------------------------------- | --------- |
+| `DATABASE_URL`                 | Neon PostgreSQL connection (pooled)                 | Yes       |
+| `BETTER_AUTH_SECRET`           | Session signing key                                 | Yes       |
+| `BETTER_AUTH_URL`              | App base URL — local dev only, Vercel auto-provides | Dev only  |
+| `BETTER_AUTH_SIGNUP_POLICY`    | Signup onboarding mode (`allowlist` or `open`)      | No        |
+| `BETTER_AUTH_SIGNUP_ALLOWLIST` | Approved signup emails (comma-separated)            | Prod only |
+| `BETTER_AUTH_INVITE_CODE`      | Optional dev-only invite code                       | Dev only  |
+| `FIREBASE_PROJECT_ID`          | FCM project identifier                              | Yes       |
+| `FIREBASE_CLIENT_EMAIL`        | FCM service account email                           | Yes       |
+| `FIREBASE_PRIVATE_KEY`         | FCM service account private key                     | Yes       |
+| `AXIOM_TOKEN`                  | Axiom API token for log shipping                    | Prod only |
+| `TEST_USER_EMAIL`              | Dev/test user email                                 | Dev only  |
+| `TEST_USER_PASSWORD`           | Dev/test user password                              | Dev only  |
 
 ### Usage in Code
 

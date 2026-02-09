@@ -3,7 +3,6 @@
  */
 
 import { betterAuth } from 'better-auth';
-import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { admin as adminPlugin } from 'better-auth/plugins';
@@ -15,6 +14,7 @@ import logger from './logger';
 import { BETTER_AUTH_SECRET } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 import { ac, admin, manager } from './permissions';
+import { buildAuthRateLimitConfig, createSignupAbuseGuard } from './auth-abuse-hardening';
 
 /**
  * Derive auth base URL:
@@ -33,23 +33,7 @@ function getAuthBaseUrl(): string | undefined {
 	return undefined;
 }
 
-const inviteCodeGuard = createAuthMiddleware(async (ctx) => {
-	if (ctx.path !== '/sign-up/email') {
-		return;
-	}
-
-	const requiredCode = env.BETTER_AUTH_INVITE_CODE?.trim();
-	if (!requiredCode) {
-		return;
-	}
-
-	// Check header only - the client sends invite code via x-invite-code header
-	const providedCode = ctx.headers?.get?.('x-invite-code')?.trim();
-
-	if (!providedCode || providedCode !== requiredCode) {
-		throw new APIError('BAD_REQUEST', { message: 'Invalid invite code' });
-	}
-});
+const signupAbuseGuard = createSignupAbuseGuard();
 
 export const auth = betterAuth({
 	appName: 'Drive',
@@ -57,6 +41,7 @@ export const auth = betterAuth({
 	secret: BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg', schema: authSchema }),
 	trustedOrigins: ['http://localhost:5173', 'http://192.168.*', 'https://*.vercel.app'],
+	rateLimit: buildAuthRateLimitConfig(),
 	emailAndPassword: {
 		enabled: true
 		// NOTE: Email-based password reset is disabled until a domain is configured in Resend.
@@ -107,7 +92,7 @@ export const auth = betterAuth({
 		}
 	},
 	hooks: {
-		before: inviteCodeGuard
+		before: signupAbuseGuard
 	},
 	plugins: [
 		sveltekitCookies(getRequestEvent),

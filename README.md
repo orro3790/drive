@@ -53,6 +53,8 @@ Edit `.env` with your credentials:
 - `DATABASE_URL` - Neon PostgreSQL connection string (pooled)
 - `BETTER_AUTH_SECRET` - Random secret for session signing (generate with `openssl rand -base64 32`)
 - `BETTER_AUTH_URL` - `http://localhost:5173` for local dev
+- `BETTER_AUTH_SIGNUP_POLICY` - Signup policy (`allowlist` in production, `open` for unrestricted signup)
+- `BETTER_AUTH_SIGNUP_ALLOWLIST` - Comma-separated approved signup emails when allowlist policy is enabled
 - Firebase Admin SDK credentials (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`)
 
 See `.env.example` for full documentation.
@@ -122,6 +124,7 @@ src/
 | Technical Spec         | `documentation/specs/SPEC.md`                          |
 | Data Model             | `documentation/specs/data-model.md`                    |
 | Android Distribution   | `documentation/mobile/android-private-distribution.md` |
+| Launch Confidence      | `documentation/launch/launch-capability-matrix.md`     |
 | Agent Guidelines       | `documentation/agent-guidelines.md`                    |
 | Project Instructions   | `CLAUDE.md`                                            |
 | Architecture Decisions | `documentation/adr/`                                   |
@@ -186,6 +189,8 @@ Deploy to Vercel:
 2. Add environment variables in Vercel Dashboard:
    - `DATABASE_URL`
    - `BETTER_AUTH_SECRET`
+   - `BETTER_AUTH_SIGNUP_POLICY=allowlist`
+   - `BETTER_AUTH_SIGNUP_ALLOWLIST` (approved onboarding emails)
    - Firebase credentials
    - `AXIOM_TOKEN` (for production logging)
 3. Deploy

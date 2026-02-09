@@ -7,15 +7,42 @@ import { json, redirect } from '@sveltejs/kit';
 import { building } from '$app/environment';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { auth } from '$lib/server/auth';
+import logger from '$lib/server/logger';
 
 const publicPaths = new Set(['/', '/sign-in', '/sign-up']);
 const publicPrefixes = ['/api/auth', '/api/cron', '/_app', '/static'];
+
+function extractClientIp(headers: Headers): string | null {
+	const forwardedFor = headers.get('x-forwarded-for');
+	if (forwardedFor) {
+		return forwardedFor.split(',')[0]?.trim() || null;
+	}
+
+	return headers.get('x-real-ip');
+}
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const { pathname } = event.url;
 
 	if (pathname.startsWith('/api/auth')) {
-		return svelteKitHandler({ event, resolve, auth, building });
+		const response = await svelteKitHandler({ event, resolve, auth, building });
+		if (
+			response.status === 429 &&
+			(pathname.startsWith('/api/auth/sign-up') ||
+				pathname.startsWith('/api/auth/sign-in') ||
+				pathname.startsWith('/api/auth/forget-password'))
+		) {
+			logger.warn(
+				{
+					path: pathname,
+					ip: extractClientIp(event.request.headers),
+					userAgent: event.request.headers.get('user-agent')
+				},
+				'auth_rate_limit_exceeded'
+			);
+		}
+
+		return response;
 	}
 
 	const session = await auth.api.getSession({ headers: event.request.headers });

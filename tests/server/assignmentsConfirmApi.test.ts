@@ -40,7 +40,7 @@ afterEach(() => {
 	vi.clearAllMocks();
 });
 
-describe('POST /api/assignments/[id]/confirm', () => {
+describe('LC-05 API boundary: POST /api/assignments/[id]/confirm', () => {
 	it('returns 401 when no user is present', async () => {
 		const event = createRequestEvent({
 			method: 'POST',
@@ -87,6 +87,7 @@ describe('POST /api/assignments/[id]/confirm', () => {
 	it.each([
 		['Forbidden', 403],
 		['Assignment not found', 404],
+		['Assignment already confirmed', 400],
 		['Confirmation deadline has passed', 400]
 	] as const)('maps service error "%s" to status %i', async (serviceError, status) => {
 		confirmShiftMock.mockResolvedValue({
