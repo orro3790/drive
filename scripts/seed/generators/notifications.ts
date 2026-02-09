@@ -76,6 +76,34 @@ const TYPE_COPY: Record<
 		title: 'Shift Assigned',
 		body: `You are now assigned ${routeName} on ${dateLabel}.`
 	}),
+	confirmation_reminder: ({ routeName, dateLabel }) => ({
+		title: 'Confirm Your Shift',
+		body: `Please confirm your upcoming shift for ${routeName} on ${dateLabel}.`
+	}),
+	shift_auto_dropped: ({ routeName, dateLabel }) => ({
+		title: 'Shift Dropped',
+		body: `${routeName} on ${dateLabel} was removed because it was not confirmed in time.`
+	}),
+	emergency_route_available: ({ routeName, warehouseName, dateLabel }) => ({
+		title: 'Shift Available',
+		body: `Urgent route ${routeName} at ${warehouseName} needs coverage on ${dateLabel}.`
+	}),
+	streak_advanced: () => ({
+		title: 'Streak Milestone',
+		body: 'Your weekly streak advanced. Keep up the great work.'
+	}),
+	streak_reset: () => ({
+		title: 'Streak Reset',
+		body: 'Your weekly streak has been reset after a reliability event.'
+	}),
+	bonus_eligible: () => ({
+		title: 'Bonus Eligible',
+		body: 'You reached 4 stars and now qualify for a bonus preview.'
+	}),
+	corrective_warning: () => ({
+		title: 'Completion Rate Warning',
+		body: 'Your completion rate dropped below 80%. Improve within 7 days to avoid further impact.'
+	}),
 	route_unfilled: ({ routeName, warehouseName }) => ({
 		title: 'Route Unfilled',
 		body: `${routeName} at ${warehouseName} has no driver assigned.`
@@ -155,7 +183,15 @@ export function generateNotifications(
 		const read = index % 3 === 0;
 
 		// Some notification types don't need route/warehouse context
-		const noContextTypes: NotificationType[] = ['schedule_locked', 'warning', 'manual'];
+		const noContextTypes: NotificationType[] = [
+			'schedule_locked',
+			'warning',
+			'manual',
+			'streak_advanced',
+			'streak_reset',
+			'bonus_eligible',
+			'corrective_warning'
+		];
 		const data = noContextTypes.includes(type)
 			? null
 			: {

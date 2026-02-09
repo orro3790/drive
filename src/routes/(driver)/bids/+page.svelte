@@ -122,9 +122,7 @@
 													>
 													{#if isBoosted}
 														<span class="premium-badge">
-															<span class="premium-badge-value"
-																>{window.payBonusPercent}%</span
-															>
+															<span class="premium-badge-value">{window.payBonusPercent}%</span>
 															<Increase fill="currentColor" />
 														</span>
 													{/if}
