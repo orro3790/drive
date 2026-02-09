@@ -475,12 +475,11 @@
 {#if cancelTarget}
 	<Modal title={m.schedule_cancel_modal_title()} onClose={closeCancelModal}>
 		<div class="confirm-modal-copy-stack">
-			<p class="confirm-modal-copy">
-				Cancel this shift? This action cannot be undone.
-			</p>
+			<p class="confirm-modal-copy">Cancel this shift? This action cannot be undone.</p>
 			{#if cancelTarget.isLateCancel}
 				<p class="confirm-modal-penalty">
-					Late cancellation: -{lateCancelPenaltyPoints} health points. Repeated penalties may reduce shift access and bonus eligibility.
+					Late cancellation: -{lateCancelPenaltyPoints} health points. Repeated penalties may reduce shift
+					access and bonus eligibility.
 				</p>
 			{/if}
 			<div class="confirm-modal-actions">
