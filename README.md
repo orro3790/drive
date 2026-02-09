@@ -22,7 +22,7 @@ Drive is an event-driven operations automation platform that manages driver sche
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 20+ (Node.js 22+ recommended for Capacitor Android packaging)
 - pnpm
 - PostgreSQL database (Neon account recommended)
 - Firebase project with FCM enabled
@@ -163,7 +163,10 @@ pnpm check        # Run type checking
 pnpm lint         # Run ESLint
 pnpm format       # Format with Prettier
 pnpm mobile:android:sync
+pnpm mobile:android:doctor
+pnpm mobile:android:open
 pnpm mobile:android:bundle:release
+pnpm mobile:android:apk:release
 ```
 
 ### Database Commands

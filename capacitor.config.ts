@@ -9,10 +9,12 @@ const config: CapacitorConfig = {
 	bundledWebRuntime: false
 };
 
-if (serverUrl) {
+if (serverUrl?.trim()) {
+	const normalizedServerUrl = serverUrl.trim();
+
 	config.server = {
-		url: serverUrl,
-		cleartext: serverUrl.startsWith('http://')
+		url: normalizedServerUrl,
+		cleartext: normalizedServerUrl.startsWith('http://')
 	};
 }
 
