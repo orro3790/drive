@@ -9,6 +9,13 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/test
+      BETTER_AUTH_SECRET: test-better-auth-secret
+      FIREBASE_PROJECT_ID: test-project
+      FIREBASE_CLIENT_EMAIL: test@example.com
+      FIREBASE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nTEST\\n-----END PRIVATE KEY-----\\n"
+      CRON_SECRET: test-cron-secret
 
     steps:
       - name: Checkout
@@ -27,6 +34,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Prepare i18n artifacts for typecheck
+        run: |
+          mkdir -p src/lib
+          rm -rf src/lib/paraglide
+          cp -R src/paraglide src/lib/paraglide
 
       - name: Validate
         run: pnpm validate
