@@ -15,7 +15,7 @@ const perDriver = await sql`
   GROUP BY u.email ORDER BY pending_count DESC
 `;
 console.log('\nPending bids per driver:');
-perDriver.forEach(r => console.log(' ', r.email, '-', r.pending_count));
+perDriver.forEach((r) => console.log(' ', r.email, '-', r.pending_count));
 
 const dupes = await sql`
   SELECT b.user_id, a.date, COUNT(*) as bid_count

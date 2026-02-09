@@ -222,8 +222,7 @@ function calculateBidScore(): number {
 	const seniority = random(); // 0-1.0 normalized
 	const preferenceBonus = random() < 0.3 ? 1 : 0; // ~30% chance of preference match
 
-	const score =
-		health * 0.45 + routeFamiliarity * 0.25 + seniority * 0.15 + preferenceBonus * 0.15;
+	const score = health * 0.45 + routeFamiliarity * 0.25 + seniority * 0.15 + preferenceBonus * 0.15;
 
 	return Math.round(score * 100) / 100;
 }

@@ -69,7 +69,8 @@
 	  ═══════════════════════════════════════════════════════════════════════════*/
 
 	--font-family-base: 'JetBrains Mono', system-ui, -apple-system, sans-serif;
-	--font-family-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	--font-family-mono:
+		'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
 	/* Font Weights */
 	--font-weight-medium: 500; /* section headers, modal headers, titles, notice banners */
