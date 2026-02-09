@@ -9,11 +9,12 @@
 	import * as m from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
 	import { parseISO, formatDistanceToNow } from 'date-fns';
-	import Button from '$lib/components/primitives/Button.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import IconBase from '$lib/components/primitives/Icon.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import Gavel from '$lib/components/icons/Gavel.svelte';
+	import Increase from '$lib/components/icons/Increase.svelte';
 	import Lightning from '$lib/components/icons/Lightning.svelte';
 	import RouteIcon from '$lib/components/icons/Route.svelte';
 	import WarehouseIcon from '$lib/components/icons/Warehouse.svelte';
@@ -100,6 +101,7 @@
 						<div class="assignment-list">
 							{#each bidsStore.availableWindows as window (window.id)}
 								{@const isEmergency = window.mode === 'emergency'}
+								{@const isBoosted = window.payBonusPercent > 0}
 								<div
 									class="assignment-item"
 									style="--icon-accent: var({isEmergency ? '--status-success' : '--status-info'});"
@@ -114,9 +116,19 @@
 									<div class="assignment-content">
 										<div class="assignment-header">
 											<div class="header-left">
-												<span class="assignment-date"
-													>{formatAssignmentDate(window.assignmentDate)}</span
-												>
+												<div class="date-row">
+													<span class="assignment-date"
+														>{formatAssignmentDate(window.assignmentDate)}</span
+													>
+													{#if isBoosted}
+														<span class="premium-badge">
+															<span class="premium-badge-value"
+																>{window.payBonusPercent}%</span
+															>
+															<Increase fill="currentColor" />
+														</span>
+													{/if}
+												</div>
 												{#if isEmergency}
 													<span class="header-muted">{m.bids_emergency_first_come()}</span>
 												{:else}
@@ -124,24 +136,19 @@
 												{/if}
 											</div>
 											<div class="header-right">
-												{#if isEmergency && window.payBonusPercent > 0}
-													<Chip
-														variant="status"
-														status="success"
-														label={m.bids_emergency_bonus({ bonus: window.payBonusPercent })}
-														size="xs"
-													/>
-												{/if}
-												<Button
-													variant="ghost"
-													size="xs"
+												<IconButton
+													tooltip={getBidActionLabel(window.mode)}
 													onclick={() => handleSubmitBid(window.assignmentId)}
-													isLoading={bidsStore.isSubmitting(window.assignmentId)}
 													disabled={bidsStore.submittingAssignmentId !== null}
 												>
-													<IconBase size="small"><Gavel /></IconBase>
-													{getBidActionLabel(window.mode)}
-												</Button>
+													<IconBase size="small">
+														{#if bidsStore.isSubmitting(window.assignmentId)}
+															<Spinner size={14} />
+														{:else}
+															<Gavel />
+														{/if}
+													</IconBase>
+												</IconButton>
 											</div>
 										</div>
 										<div class="assignment-meta">
@@ -380,6 +387,101 @@
 		flex-direction: column;
 		gap: 2px;
 		min-width: 0;
+	}
+
+	.date-row {
+		display: inline-flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: var(--spacing-1);
+	}
+
+	.premium-badge {
+		position: relative;
+		isolation: isolate;
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		padding: var(--spacing-1) var(--spacing-2);
+		border-radius: var(--radius-sm);
+		background: color-mix(in srgb, var(--status-success) 15%, transparent);
+		color: var(--status-success);
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-bold);
+		vertical-align: middle;
+		line-height: 1;
+	}
+
+	.premium-badge-value {
+		display: inline-flex;
+		align-items: center;
+		line-height: 1;
+		transform: translateY(0.5px);
+	}
+
+	.premium-badge :global(svg) {
+		width: 12px;
+		height: 12px;
+		display: block;
+		flex-shrink: 0;
+	}
+
+	.premium-badge::before,
+	.premium-badge::after {
+		--pulse-angle: 0deg;
+		content: '';
+		position: absolute;
+		inset: -1px;
+		border-radius: inherit;
+		box-sizing: border-box;
+		background-image: conic-gradient(
+			from var(--pulse-angle),
+			transparent 20%,
+			color-mix(in srgb, var(--status-success) 40%, transparent) 30%,
+			var(--status-success) 35%,
+			transparent 40%,
+			transparent 70%,
+			color-mix(in srgb, var(--status-success) 40%, transparent) 80%,
+			var(--status-success) 85%,
+			transparent 90%
+		);
+		animation: premium-attention-spin 6s linear infinite;
+		z-index: -1;
+		pointer-events: none;
+		padding: 1px;
+		mask:
+			linear-gradient(#fff 0 0) content-box,
+			linear-gradient(#fff 0 0);
+		-webkit-mask:
+			linear-gradient(#fff 0 0) content-box,
+			linear-gradient(#fff 0 0);
+		mask-composite: exclude;
+		-webkit-mask-composite: xor;
+	}
+
+	.premium-badge::before {
+		filter: blur(0.5rem);
+		opacity: 0.5;
+	}
+
+	.premium-badge::after {
+		opacity: 1;
+	}
+
+	@keyframes premium-attention-spin {
+		from {
+			--pulse-angle: 0deg;
+		}
+		to {
+			--pulse-angle: 360deg;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.premium-badge::before,
+		.premium-badge::after {
+			animation: none;
+		}
 	}
 
 	.header-right {

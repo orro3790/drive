@@ -14,6 +14,13 @@ export const notificationTypeValues = [
 	'manual',
 	'schedule_locked',
 	'assignment_confirmed',
+	'confirmation_reminder',
+	'shift_auto_dropped',
+	'emergency_route_available',
+	'streak_advanced',
+	'streak_reset',
+	'bonus_eligible',
+	'corrective_warning',
 	'route_unfilled',
 	'route_cancelled',
 	'driver_no_show'

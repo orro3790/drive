@@ -129,22 +129,52 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			throw error(400, result.error ?? 'Route already assigned');
 		}
 
-		broadcastBidWindowClosed({
-			assignmentId,
-			bidWindowId: window.id,
-			winnerId: locals.user.id
-		});
+		try {
+			broadcastBidWindowClosed({
+				assignmentId,
+				bidWindowId: window.id,
+				winnerId: locals.user.id
+			});
+		} catch (err) {
+			log.warn(
+				{
+					errorName: err instanceof Error ? err.name : 'UnknownError',
+					errorMessage: err instanceof Error ? err.message : 'UnknownError'
+				},
+				'Bid window close broadcast failed'
+			);
+		}
 
-		broadcastAssignmentUpdated({
-			assignmentId,
-			status: 'scheduled',
-			driverId: locals.user.id,
-			routeId: window.routeId
-		});
+		try {
+			broadcastAssignmentUpdated({
+				assignmentId,
+				status: 'scheduled',
+				driverId: locals.user.id,
+				routeId: window.routeId
+			});
+		} catch (err) {
+			log.warn(
+				{
+					errorName: err instanceof Error ? err.name : 'UnknownError',
+					errorMessage: err instanceof Error ? err.message : 'UnknownError'
+				},
+				'Assignment update broadcast failed'
+			);
+		}
 
-		await sendNotification(locals.user.id, 'bid_won', {
-			data: { assignmentId, bidWindowId: window.id }
-		});
+		try {
+			await sendNotification(locals.user.id, 'bid_won', {
+				data: { assignmentId, bidWindowId: window.id }
+			});
+		} catch (err) {
+			log.warn(
+				{
+					errorName: err instanceof Error ? err.name : 'UnknownError',
+					errorMessage: err instanceof Error ? err.message : 'UnknownError'
+				},
+				'Bid won notification failed'
+			);
+		}
 
 		log.info({ mode: effectiveMode }, 'Instant assignment');
 

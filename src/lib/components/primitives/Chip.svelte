@@ -23,7 +23,7 @@
 	 * Semantic status values for chip coloring.
 	 * - info/success/warning/error: Standard semantic statuses
 	 * - neutral: Grey/muted default state
-	 * - new/good/fair/poor: Material condition values (green → yellow → red gradient)
+	 * - new/good/fair/poor: Material condition values (green → orange → red gradient)
 	 */
 	export type ChipStatus =
 		| 'info'
@@ -203,7 +203,7 @@
 	}
 	:global([data-theme='dark']) .chip[data-status='warning'] {
 		background: color-mix(in srgb, var(--status-warning) 20%, transparent);
-		color: var(--status-warning-light, #fde047);
+		color: var(--status-warning-light, var(--status-warning));
 	}
 
 	.chip[data-status='error'] {
@@ -225,7 +225,7 @@
 		color: var(--text-muted);
 	}
 
-	/* Condition statuses: new → good → fair → poor (green → yellow → red gradient) */
+	/* Condition statuses: new → good → fair → poor (green → orange → red gradient) */
 	.chip[data-status='new'],
 	.chip[data-status='good'] {
 		background: color-mix(in srgb, var(--status-success) 12%, transparent);
@@ -243,7 +243,7 @@
 	}
 	:global([data-theme='dark']) .chip[data-status='fair'] {
 		background: color-mix(in srgb, var(--status-warning) 20%, transparent);
-		color: var(--status-warning-light, #fde047);
+		color: var(--status-warning-light, var(--status-warning));
 	}
 
 	.chip[data-status='poor'] {

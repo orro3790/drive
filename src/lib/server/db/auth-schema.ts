@@ -85,7 +85,8 @@ export const verification = pgTable('verification', {
  * Used when auth rate limits are persisted in PostgreSQL.
  */
 export const rateLimit = pgTable('rate_limit', {
-	key: text('key').primaryKey(),
+	id: text('id').primaryKey(),
+	key: text('key').notNull().unique(),
 	count: integer('count').notNull(),
 	lastRequest: bigint('last_request', { mode: 'number' }).notNull()
 });
