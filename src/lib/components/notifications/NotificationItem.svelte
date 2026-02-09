@@ -7,6 +7,7 @@
 	import IconBase from '$lib/components/primitives/Icon.svelte';
 	import Increase from '$lib/components/icons/Increase.svelte';
 	import Dollar from '$lib/components/icons/Dollar.svelte';
+	import Announcement from '$lib/components/icons/Announcement.svelte';
 	import RouteIcon from '$lib/components/icons/Route.svelte';
 	import WarehouseIcon from '$lib/components/icons/Warehouse.svelte';
 
@@ -19,10 +20,15 @@
 		notification.type === 'bid_open' &&
 			(notification.data?.mode === 'instant' || notification.data?.mode === 'emergency')
 	);
-	const config = $derived.by(() => notificationTypeConfig[notification.type as NotificationType]);
+	const config = $derived.by(
+		() =>
+			notificationTypeConfig[notification.type as NotificationType] ?? {
+				icon: Announcement,
+				color: '--text-muted'
+			}
+	);
 	const Icon = $derived.by(() => (isPremium ? Dollar : config.icon));
 	const effectiveColor = $derived(isPremium ? '--status-success' : config.color);
-	const accentColor = $derived.by(() => `var(${effectiveColor})`);
 	const isUnread = $derived(!notification.read);
 	const metadataChips = $derived.by(() => {
 		const chips: { label: string; type: 'route' | 'warehouse' }[] = [];
@@ -124,7 +130,7 @@
 					<Chip
 						variant="tag"
 						size="xs"
-						color={accentColor}
+						color="var(--text-muted)"
 						label={chip.label}
 						icon={chip.type === 'route'
 							? routeChipIcon
@@ -360,7 +366,7 @@
 	@media (max-width: 640px) {
 		.notification-item {
 			gap: var(--spacing-2);
-			padding: var(--spacing-2);
+			padding: var(--spacing-3);
 		}
 
 		.icon-circle {

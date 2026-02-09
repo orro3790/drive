@@ -801,7 +801,6 @@
 
 	.no-phone {
 		color: var(--text-muted);
-		font-style: italic;
 	}
 
 	.health-indicator {

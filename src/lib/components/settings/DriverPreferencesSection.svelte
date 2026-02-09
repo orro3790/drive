@@ -5,11 +5,10 @@ DriverPreferencesSection - Preference controls for driver settings.
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import * as m from '$lib/paraglide/messages.js';
-	import SettingsGroupTitle from './SettingsGroupTitle.svelte';
 	import SettingsGrid from './SettingsGrid.svelte';
 	import SettingsRow from './SettingsRow.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
-	import Checkbox from '$lib/components/primitives/Checkbox.svelte';
+	import Button from '$lib/components/primitives/Button.svelte';
 	import Combobox from '$lib/components/Combobox.svelte';
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
@@ -104,7 +103,14 @@ DriverPreferencesSection - Preference controls for driver settings.
 	});
 
 	function handleRouteSelect(option: SelectOption) {
-		if (isLocked || routeLimitReached) {
+		if (isLocked) {
+			return;
+		}
+
+		if (routeLimitReached) {
+			toastStore.error(m.preferences_routes_max());
+			routeSelection = undefined;
+			routeResetKey += 1;
 			return;
 		}
 
@@ -140,14 +146,8 @@ DriverPreferencesSection - Preference controls for driver settings.
 	}
 </script>
 
-<section aria-labelledby="preferences-section" class="preferences-stack">
+<section aria-label={m.preferences_page_title()} class="preferences-stack">
 	<div class="settings-card">
-		<SettingsGroupTitle
-			title={m.preferences_page_title()}
-			desc={m.preferences_page_description()}
-			id="preferences-section"
-		/>
-
 		{#if isLocked}
 			<NoticeBanner variant="warning">
 				<div class="lock-banner">
@@ -173,25 +173,24 @@ DriverPreferencesSection - Preference controls for driver settings.
 				<SettingsRow ariaDisabled={isLocked || isSaving}>
 					{#snippet label()}
 						<div class="title">{m.preferences_days_section()}</div>
-						<div class="desc">{m.preferences_days_description()}</div>
-					{/snippet}
-					{#snippet control()}
-						{#if lockStatus}
-							<span class="status-text">{lockStatus}</span>
-						{/if}
+						<div class="desc">{lockStatus || m.preferences_days_description()}</div>
 					{/snippet}
 					{#snippet children()}
 						<div class="days-grid">
 							{#each dayOptions as day (day.value)}
-								<Checkbox
-									id={`preferred-day-${day.value}`}
-									name={`preferred-day-${day.value}`}
-									label={day.short}
-									ariaLabel={day.full}
-									checked={preferredDays.includes(day.value)}
+								{@const isSelected = preferredDays.includes(day.value)}
+								<Button
+									type="button"
+									variant="ghost"
+									size="compact"
+									class={`day-toggle ${isSelected ? 'day-toggle-active' : 'day-toggle-inactive'}`}
+									aria-label={day.full}
+									aria-pressed={isSelected}
 									disabled={isLocked || isSaving}
 									onclick={() => preferencesStore.toggleDay(day.value)}
-								/>
+								>
+									{day.short}
+								</Button>
 							{/each}
 						</div>
 					{/snippet}
@@ -202,11 +201,6 @@ DriverPreferencesSection - Preference controls for driver settings.
 						<div class="title">{m.preferences_routes_section()}</div>
 						<div class="desc">{m.preferences_routes_description()}</div>
 					{/snippet}
-					{#snippet control()}
-						{#if routeLimitReached}
-							<span class="status-text">{m.preferences_routes_max()}</span>
-						{/if}
-					{/snippet}
 					{#snippet children()}
 						<div class="routes-stack">
 							{#key routeResetKey}
@@ -216,9 +210,9 @@ DriverPreferencesSection - Preference controls for driver settings.
 									placeholder={m.preferences_routes_placeholder()}
 									searchPlaceholder={m.preferences_routes_placeholder()}
 									aria-label={m.preferences_routes_aria_label()}
-									disabled={isLocked || isSaving || routeLimitReached}
+									disabled={isLocked || isSaving}
 									onSelect={handleRouteSelect}
-									size="xl"
+									size="sm"
 								/>
 							{/key}
 
@@ -275,16 +269,45 @@ DriverPreferencesSection - Preference controls for driver settings.
 		padding: var(--spacing-2) 0;
 	}
 
-	.status-text {
-		color: var(--text-muted);
-		font-size: var(--font-size-sm);
-		text-align: right;
+	.days-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-2);
 	}
 
-	.days-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-		gap: var(--spacing-2);
+	.days-grid :global(.day-toggle) {
+		width: auto;
+		flex: 0 0 auto;
+		justify-content: center;
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		letter-spacing: var(--letter-spacing-sm);
+		text-transform: uppercase;
+		border-radius: var(--radius-sm);
+		border: var(--border-width-thin) solid var(--border-primary);
+		min-height: 26px;
+		padding: 0 var(--spacing-2);
+	}
+
+	.days-grid :global(.day-toggle-inactive) {
+		background: var(--interactive-normal);
+		color: var(--text-muted);
+	}
+
+	.days-grid :global(.day-toggle-inactive:hover:not(:disabled)) {
+		background: var(--interactive-hover);
+		color: var(--text-normal);
+	}
+
+	.days-grid :global(.day-toggle-active) {
+		background: color-mix(in srgb, var(--status-success) 15%, transparent);
+		border-color: color-mix(in srgb, var(--status-success) 35%, transparent);
+		color: var(--status-success);
+	}
+
+	.days-grid :global(.day-toggle-active:hover:not(:disabled)) {
+		background: color-mix(in srgb, var(--status-success) 20%, transparent);
+		color: var(--status-success);
 	}
 
 	.routes-stack {
@@ -341,7 +364,7 @@ DriverPreferencesSection - Preference controls for driver settings.
 
 	@media (max-width: 767px) {
 		.days-grid {
-			grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+			gap: var(--spacing-1);
 		}
 	}
 </style>

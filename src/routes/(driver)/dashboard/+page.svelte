@@ -22,17 +22,15 @@
 	import IconBase from '$lib/components/primitives/Icon.svelte';
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
+	import Modal from '$lib/components/primitives/Modal.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
-	import CancelShiftModal from '$lib/components/driver/CancelShiftModal.svelte';
 	import HealthCard from '$lib/components/driver/HealthCard.svelte';
 	import Announcement from '$lib/components/icons/Announcement.svelte';
 	import CalendarX from '$lib/components/icons/CalendarX.svelte';
 	import CheckCircleIcon from '$lib/components/icons/CheckCircleIcon.svelte';
-	import Clock from '$lib/components/icons/Clock.svelte';
-	import ClockBolt from '$lib/components/icons/ClockBolt.svelte';
+	import CheckInProgress from '$lib/components/icons/CheckInProgress.svelte';
+	import CircleCheckFill from '$lib/components/icons/CircleCheckFill.svelte';
 	import Gavel from '$lib/components/icons/Gavel.svelte';
-	import Lock from '$lib/components/icons/Lock.svelte';
-	import MapPin from '$lib/components/icons/MapPin.svelte';
 	import Pencil from '$lib/components/icons/Pencil.svelte';
 	import QuestionMark from '$lib/components/icons/QuestionMark.svelte';
 	import RouteIcon from '$lib/components/icons/Route.svelte';
@@ -43,10 +41,10 @@
 		getAssignmentActions,
 		type AssignmentLifecycleActionId
 	} from '$lib/config/driverLifecycleIa';
+	import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 	import { statusLabels } from '$lib/config/lifecycleLabels';
 	import { formatAssignmentDate } from '$lib/utils/date/formatting';
 	import { dashboardStore } from '$lib/stores/dashboardStore.svelte';
-	import type { CancelReason } from '$lib/schemas/assignment';
 
 	// Cancel modal state
 	let cancelTarget = $state<{ id: string; isLateCancel: boolean } | null>(null);
@@ -56,8 +54,13 @@
 	let startError = $state<string | null>(null);
 
 	// Shift complete state
-	let parcelsReturned = $state<number | ''>(0);
+	let parcelsReturned = $state(0);
 	let completeError = $state<string | null>(null);
+	let completeConfirmTarget = $state<{
+		assignmentId: string;
+		parcelsReturned: number;
+		parcelsDelivered: number;
+	} | null>(null);
 
 	// Shift edit state
 	let isEditing = $state(false);
@@ -70,6 +73,7 @@
 	let dismissedNewDriverBanner = $state(false);
 
 	const NEW_DRIVER_BANNER_DISMISS_KEY = 'drive.dashboard.new-driver-banner.dismissed';
+	const lateCancelPenaltyPoints = Math.abs(dispatchPolicy.health.displayDeltas.lateCancel);
 
 	type ShiftStep =
 		| 'arrive'
@@ -213,42 +217,30 @@
 		}
 	});
 
+	const isTodayShiftCompleted = $derived(
+		shiftStep === 'completed-editable' || shiftStep === 'completed-locked'
+	);
+
+	const isTodayShiftInProgress = $derived(
+		shiftStep === 'inventory' || shiftStep === 'delivering' || shiftStep === 'completing'
+	);
+
 	// Derived: accent CSS variable for today's shift icon circle
 	const todayShiftAccent = $derived.by((): string => {
-		switch (shiftStep) {
-			case 'arrive':
-				return '--interactive-accent';
-			case 'inventory':
-				return '--status-info';
-			case 'delivering':
-			case 'completing':
-				return '--status-success';
-			case 'completed-editable':
-				return '--status-warning';
-			case 'completed-locked':
-				return '--text-muted';
-			default:
-				return '--interactive-accent';
+		if (isTodayShiftCompleted) {
+			return '--status-success';
 		}
+
+		if (isTodayShiftInProgress) {
+			return '--interactive-accent';
+		}
+
+		return '--status-warning';
 	});
 
 	// Derived: icon component for today's shift icon circle
 	const todayShiftIcon = $derived.by((): Component => {
-		switch (shiftStep) {
-			case 'arrive':
-				return Clock;
-			case 'inventory':
-				return MapPin;
-			case 'delivering':
-			case 'completing':
-				return ClockBolt;
-			case 'completed-editable':
-				return Pencil;
-			case 'completed-locked':
-				return Lock;
-			default:
-				return Clock;
-		}
+		return isTodayShiftCompleted ? CircleCheckFill : CheckInProgress;
 	});
 
 	function updateEditCountdown() {
@@ -262,8 +254,20 @@
 	$effect(() => {
 		if (shiftStep === 'completed-editable') {
 			updateEditCountdown();
-			const timer = setInterval(updateEditCountdown, 30_000);
-			return () => clearInterval(timer);
+
+			let intervalId: ReturnType<typeof setInterval> | null = null;
+			const msUntilNextMinute = 60_000 - (Date.now() % 60_000);
+			const timeoutId = setTimeout(() => {
+				updateEditCountdown();
+				intervalId = setInterval(updateEditCountdown, 60_000);
+			}, msUntilNextMinute);
+
+			return () => {
+				clearTimeout(timeoutId);
+				if (intervalId) {
+					clearInterval(intervalId);
+				}
+			};
 		}
 	});
 
@@ -300,11 +304,37 @@
 		cancelTarget = null;
 	}
 
-	async function handleCancel(reason: CancelReason) {
+	async function confirmCancel() {
 		if (!cancelTarget) return;
-		const success = await dashboardStore.cancel(cancelTarget.id, reason);
+		const success = await dashboardStore.cancel(cancelTarget.id, 'other');
 		if (success) {
 			closeCancelModal();
+		}
+	}
+
+	function closeCompleteConfirm() {
+		completeConfirmTarget = null;
+	}
+
+	function closeCompleteStep() {
+		completingStep = false;
+		parcelsReturned = 0;
+		completeError = null;
+	}
+
+	async function confirmComplete() {
+		if (!completeConfirmTarget) {
+			return;
+		}
+
+		const success = await dashboardStore.completeShift(
+			completeConfirmTarget.assignmentId,
+			completeConfirmTarget.parcelsReturned
+		);
+
+		if (success) {
+			closeCompleteStep();
+			closeCompleteConfirm();
 		}
 	}
 
@@ -341,24 +371,25 @@
 	async function submitComplete() {
 		const shift = dashboardStore.todayShift;
 		if (!shift) return;
-		if (parcelsReturned === '') {
+
+		if (!Number.isFinite(parcelsReturned) || parcelsReturned < 0) {
 			completeError = m.shift_complete_returned_required();
 			return;
 		}
 
-		const returnedValue = typeof parcelsReturned === 'number' ? parcelsReturned : 0;
+		const returnedValue = Math.max(0, Math.trunc(parcelsReturned));
 
 		if (shift.shift?.parcelsStart !== null && returnedValue > (shift.shift?.parcelsStart ?? 0)) {
 			completeError = m.shift_complete_returned_exceeds();
 			return;
 		}
 
-		const success = await dashboardStore.completeShift(shift.id, returnedValue);
-		if (success) {
-			completingStep = false;
-			parcelsReturned = 0;
-			completeError = null;
-		}
+		const parcelsStartValue = shift.shift?.parcelsStart ?? 0;
+		completeConfirmTarget = {
+			assignmentId: shift.id,
+			parcelsReturned: returnedValue,
+			parcelsDelivered: Math.max(0, parcelsStartValue - returnedValue)
+		};
 	}
 
 	// Edit
@@ -448,6 +479,9 @@
 			</div>
 		{:else}
 			<div class="dashboard-sections">
+				<!-- Health Card -->
+				<HealthCard />
+
 				<!-- New Driver Banner -->
 				{#if showNewDriverBanner}
 					<div class="banner-item" role="note" aria-label={m.dashboard_new_driver_title()}>
@@ -470,9 +504,6 @@
 					</div>
 				{/if}
 
-				<!-- Health Card -->
-				<HealthCard />
-
 				<!-- Today's Shift -->
 				<section class="dashboard-section">
 					<div class="section-header">
@@ -485,34 +516,60 @@
 						{@const todayShift = dashboardStore.todayShift}
 						{@const TodayIcon = todayShiftIcon}
 						<div class="today-item" style="--icon-accent: var({todayShiftAccent});">
-							<div class="icon-circle" aria-hidden="true">
+							<div
+								class="icon-circle"
+								class:icon-in-progress={!isTodayShiftCompleted}
+								class:icon-completed={isTodayShiftCompleted}
+								aria-hidden="true"
+							>
 								<TodayIcon />
 							</div>
 							<div class="today-content">
 								<div class="assignment-header">
-									<span class="assignment-date">{formatAssignmentDate(todayShift.date)}</span>
+									<div class="assignment-date-group">
+										<span class="assignment-date">{formatAssignmentDate(todayShift.date)}</span>
+										{#if isTodayShiftInProgress}
+											<Chip label="In Progress" variant="status" status="warning" size="xs" />
+										{/if}
+									</div>
 									{#if todayPrimaryAction && todayPrimaryAction !== 'cancel_shift'}
-										<Button
-											variant="ghost"
-											size="compact"
-											isLoading={isTodayActionLoading(todayPrimaryAction)}
-											onclick={() => handleTodayAction(todayPrimaryAction)}
-										>
-											{getTodayActionLabel(todayPrimaryAction)}
-										</Button>
+										{#if todayPrimaryAction === 'edit_completion'}
+											<IconButton
+												tooltip={getTodayActionLabel(todayPrimaryAction)}
+												disabled={dashboardStore.isEditingShift}
+												onclick={() => handleTodayAction(todayPrimaryAction)}
+											>
+												<IconBase size="small"><Pencil /></IconBase>
+											</IconButton>
+										{:else if todayPrimaryAction === 'complete_shift'}
+											<IconButton
+												tooltip={getTodayActionLabel(todayPrimaryAction)}
+												disabled={dashboardStore.isCompletingShift}
+												onclick={() => handleTodayAction(todayPrimaryAction)}
+											>
+												<IconBase size="small"><CheckCircleIcon /></IconBase>
+											</IconButton>
+										{:else}
+											<Button
+												variant="ghost"
+												size="compact"
+												isLoading={isTodayActionLoading(todayPrimaryAction)}
+												onclick={() => handleTodayAction(todayPrimaryAction)}
+											>
+												{getTodayActionLabel(todayPrimaryAction)}
+											</Button>
+										{/if}
 									{:else}
 										<span class="assignment-status">{statusLabels[todayShift.status]}</span>
 									{/if}
 									{#if hasTodayAction('cancel_shift')}
-										<Button
-											variant="ghost"
-											size="compact"
-											isLoading={isTodayActionLoading('cancel_shift')}
+										<IconButton
+											tooltip={m.common_cancel()}
+											disabled={dashboardStore.isCancelling}
 											onclick={() => handleTodayAction('cancel_shift')}
 										>
 											<IconBase size="small"><CalendarX /></IconBase>
-											{m.common_cancel()}
-										</Button>
+										</IconButton>
 									{/if}
 								</div>
 								{#if shiftStep === 'delivering' || shiftStep === 'completing'}
@@ -628,9 +685,9 @@
 													min="0"
 													max={todayShift.shift?.parcelsStart ?? 999}
 													placeholder={m.shift_complete_returned_placeholder()}
-													value={parcelsReturned === '' ? '' : String(parcelsReturned)}
+													value={String(parcelsReturned)}
 													onInput={(v) => {
-														parcelsReturned = v === '' ? '' : Number(v);
+														parcelsReturned = v === '' ? 0 : Number(v);
 														completeError = null;
 													}}
 												/>
@@ -647,27 +704,31 @@
 												</p>
 												<p>
 													{m.shift_complete_summary_returning({
-														count: String(typeof parcelsReturned === 'number' ? parcelsReturned : 0)
+														count: String(parcelsReturned)
 													})}
 												</p>
 												<p class="summary-delivered">
 													{m.shift_complete_summary_delivered({
 														count: String(
-															(todayShift.shift?.parcelsStart ?? 0) -
-																(typeof parcelsReturned === 'number' ? parcelsReturned : 0)
+															Math.max(0, (todayShift.shift?.parcelsStart ?? 0) - parcelsReturned)
 														)
 													})}
 												</p>
 											</div>
 
-											<Button
-												variant="primary"
-												type="submit"
-												fill
-												isLoading={dashboardStore.isCompletingShift}
-											>
-												{m.shift_complete_confirm_button()}
-											</Button>
+											<div class="complete-actions">
+												<Button variant="ghost" size="compact" onclick={closeCompleteStep}>
+													{m.common_cancel()}
+												</Button>
+												<Button
+													variant="primary"
+													size="compact"
+													type="submit"
+													isLoading={dashboardStore.isCompletingShift}
+												>
+													{m.shift_complete_confirm_button()}
+												</Button>
+											</div>
 										</form>
 									</div>
 								{/if}
@@ -723,13 +784,13 @@
 													<p class="field-error">{editError}</p>
 												{/if}
 												<div class="edit-actions">
-													<Button variant="secondary" fill onclick={closeEditMode}>
+													<Button variant="ghost" size="compact" onclick={closeEditMode}>
 														{m.common_cancel()}
 													</Button>
 													<Button
 														variant="primary"
+														size="compact"
 														type="submit"
-														fill
 														isLoading={dashboardStore.isEditingShift}
 													>
 														{m.common_save()}
@@ -757,15 +818,6 @@
 											<p class="edit-countdown">
 												{m.shift_edit_window_remaining({ minutes: String(editMinutesRemaining) })}
 											</p>
-											{#if hasTodayAction('edit_completion')}
-												<Button
-													variant="secondary"
-													fill
-													onclick={() => handleTodayAction('edit_completion')}
-												>
-													{getTodayActionLabel('edit_completion')}
-												</Button>
-											{/if}
 										{/if}
 									</div>
 								{/if}
@@ -815,6 +867,64 @@
 						</div>
 					{/if}
 				</section>
+
+				<!-- Needs Confirmation -->
+				{#if sortedUnconfirmedShifts.length > 0}
+					<section class="dashboard-section">
+						<div class="section-header">
+							<h2>{m.dashboard_confirm_section()} ({sortedUnconfirmedShifts.length})</h2>
+						</div>
+
+						<div class="assignment-list">
+							{#each sortedUnconfirmedShifts as shift (shift.id)}
+								{@const confirmInfo = formatConfirmDeadline(shift.confirmationDeadline)}
+								<div class="assignment-item" style="--icon-accent: var(--status-warning);">
+									<div class="icon-circle" aria-hidden="true">
+										<QuestionMark />
+									</div>
+									<div class="assignment-content">
+										<div class="assignment-header">
+											<span class="assignment-date">{formatAssignmentDate(shift.date)}</span>
+											<IconButton
+												tooltip={m.dashboard_confirm_button()}
+												disabled={dashboardStore.isConfirming || dashboardStore.isCancelling}
+												onclick={() => dashboardStore.confirmShift(shift.id)}
+											>
+												<IconBase size="small"><CheckCircleIcon /></IconBase>
+											</IconButton>
+											<IconButton
+												tooltip={m.common_cancel()}
+												disabled={dashboardStore.isConfirming || dashboardStore.isCancelling}
+												onclick={() => openCancelModal({ id: shift.id, isLateCancel: false })}
+											>
+												<IconBase size="small"><CalendarX /></IconBase>
+											</IconButton>
+										</div>
+										<span class={confirmInfo.overdue ? 'header-overdue' : 'header-confirm-by'}>
+											{confirmInfo.text}
+										</span>
+										<div class="assignment-meta">
+											<Chip
+												variant="tag"
+												size="xs"
+												color="var(--text-muted)"
+												label={shift.routeName}
+												icon={routeChipIcon}
+											/>
+											<Chip
+												variant="tag"
+												size="xs"
+												color="var(--text-muted)"
+												label={shift.warehouseName}
+												icon={warehouseChipIcon}
+											/>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</section>
+				{/if}
 
 				<!-- Week Summaries Row -->
 				<div class="week-row">
@@ -870,68 +980,6 @@
 						{/if}
 					</section>
 				</div>
-
-				<!-- Needs Confirmation -->
-				{#if sortedUnconfirmedShifts.length > 0}
-					<section class="dashboard-section">
-						<div class="section-header">
-							<h2>{m.dashboard_confirm_section()} ({sortedUnconfirmedShifts.length})</h2>
-						</div>
-
-						<div class="assignment-list">
-							{#each sortedUnconfirmedShifts as shift (shift.id)}
-								{@const confirmInfo = formatConfirmDeadline(shift.confirmationDeadline)}
-								<div class="assignment-item" style="--icon-accent: var(--status-warning);">
-									<div class="icon-circle" aria-hidden="true">
-										<QuestionMark />
-									</div>
-									<div class="assignment-content">
-										<div class="assignment-header">
-											<span class="assignment-date">{formatAssignmentDate(shift.date)}</span>
-											<Button
-												variant="ghost"
-												size="compact"
-												isLoading={dashboardStore.isConfirming}
-												onclick={() => dashboardStore.confirmShift(shift.id)}
-											>
-												<IconBase size="small"><CheckCircleIcon /></IconBase>
-												{m.dashboard_confirm_button()}
-											</Button>
-											<Button
-												variant="ghost"
-												size="compact"
-												isLoading={dashboardStore.isCancelling}
-												onclick={() => openCancelModal({ id: shift.id, isLateCancel: false })}
-											>
-												<IconBase size="small"><CalendarX /></IconBase>
-												{m.common_cancel()}
-											</Button>
-										</div>
-										<span class={confirmInfo.overdue ? 'header-overdue' : 'header-confirm-by'}>
-											{confirmInfo.text}
-										</span>
-										<div class="assignment-meta">
-											<Chip
-												variant="tag"
-												size="xs"
-												color="var(--text-muted)"
-												label={shift.routeName}
-												icon={routeChipIcon}
-											/>
-											<Chip
-												variant="tag"
-												size="xs"
-												color="var(--text-muted)"
-												label={shift.warehouseName}
-												icon={warehouseChipIcon}
-											/>
-										</div>
-									</div>
-								</div>
-							{/each}
-						</div>
-					</section>
-				{/if}
 
 				<!-- Pending Bids -->
 				<section class="dashboard-section">
@@ -993,12 +1041,54 @@
 </div>
 
 {#if cancelTarget}
-	<CancelShiftModal
-		isLateCancel={cancelTarget.isLateCancel}
-		isLoading={dashboardStore.isCancelling}
-		onCancel={handleCancel}
-		onClose={closeCancelModal}
-	/>
+	<Modal title={m.schedule_cancel_modal_title()} onClose={closeCancelModal}>
+		<div class="confirm-modal-copy-stack">
+			<p class="confirm-modal-copy">
+				Cancel this shift? This action cannot be undone.
+			</p>
+			{#if cancelTarget.isLateCancel}
+				<p class="confirm-modal-penalty">
+					Late cancellation: -{lateCancelPenaltyPoints} health points. Repeated penalties may reduce shift access and bonus eligibility.
+				</p>
+			{/if}
+			<div class="confirm-modal-actions">
+				<Button variant="ghost" size="compact" onclick={closeCancelModal}>
+					{m.common_cancel()}
+				</Button>
+				<Button
+					variant="danger"
+					size="compact"
+					isLoading={dashboardStore.isCancelling}
+					onclick={confirmCancel}
+				>
+					{m.schedule_cancel_confirm_button()}
+				</Button>
+			</div>
+		</div>
+	</Modal>
+{/if}
+
+{#if completeConfirmTarget}
+	<Modal title={m.shift_complete_modal_title()} onClose={closeCompleteConfirm}>
+		<div class="confirm-modal-copy-stack">
+			<p class="confirm-modal-copy">
+				Confirm shift completion with {completeConfirmTarget.parcelsReturned} returns and {completeConfirmTarget.parcelsDelivered} delivered parcels?
+			</p>
+			<div class="confirm-modal-actions">
+				<Button variant="ghost" size="compact" onclick={closeCompleteConfirm}>
+					{m.common_cancel()}
+				</Button>
+				<Button
+					variant="primary"
+					size="compact"
+					isLoading={dashboardStore.isCompletingShift}
+					onclick={confirmComplete}
+				>
+					{m.shift_complete_confirm_button()}
+				</Button>
+			</div>
+		</div>
+	</Modal>
 {/if}
 
 <style>
@@ -1078,6 +1168,7 @@
 
 	/* Icon circle — tinted with accent color */
 	.icon-circle {
+		position: relative;
 		width: 32px;
 		height: 32px;
 		border-radius: var(--radius-full);
@@ -1184,11 +1275,33 @@
 		margin-right: auto;
 	}
 
+	.assignment-date-group {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		margin-right: auto;
+		min-width: 0;
+	}
+
+	.assignment-date-group .assignment-date {
+		margin-right: 0;
+	}
+
 	.assignment-date {
 		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 		line-height: 1.3;
+	}
+
+	.assignment-date-group :global(.chip[data-status='warning']) {
+		background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+		color: var(--interactive-accent);
+	}
+
+	:global([data-theme='dark']) .assignment-date-group :global(.chip[data-status='warning']) {
+		background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+		color: var(--interactive-accent);
 	}
 
 	.assignment-status {
@@ -1224,11 +1337,15 @@
 		align-items: center;
 	}
 
+	.today-content > .assignment-meta {
+		margin-bottom: var(--spacing-1);
+	}
+
 	/* Step Content */
 	.step-content {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-3);
+		gap: var(--spacing-2);
 	}
 
 	.step-info {
@@ -1249,7 +1366,7 @@
 		padding: var(--spacing-3);
 		border-radius: var(--radius-base);
 		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
+		border: none;
 	}
 
 	.delivery-summary p {
@@ -1269,18 +1386,113 @@
 		margin: 0;
 		font-size: var(--font-size-xs);
 		color: var(--text-muted);
-		text-align: center;
+		text-align: left;
+	}
+
+	.icon-circle.icon-in-progress {
+		animation: none;
+	}
+
+	.icon-circle.icon-in-progress::before,
+	.icon-circle.icon-in-progress::after {
+		content: '';
+		position: absolute;
+		inset: -3px;
+		border-radius: inherit;
+		pointer-events: none;
+		background: radial-gradient(
+			circle at 42% 42%,
+			color-mix(in srgb, var(--icon-accent) 16%, transparent) 0%,
+			color-mix(in srgb, var(--icon-accent) 9%, transparent) 38%,
+			transparent 72%
+		);
+		filter: blur(3px);
+		opacity: 0;
+		transform: scale(0.92);
+	}
+
+	.icon-circle.icon-in-progress::before {
+		animation: today-progress-wave 2.8s ease-out infinite;
+	}
+
+	.icon-circle.icon-in-progress::after {
+		animation: today-progress-wave 2.8s ease-out infinite 1.4s;
+	}
+
+	.icon-circle.icon-completed {
+		animation: none;
+	}
+
+	.icon-circle.icon-completed::after {
+		content: none;
+	}
+
+	@keyframes today-progress-wave {
+		0% {
+			opacity: 0;
+			transform: scale(0.92);
+		}
+
+		25% {
+			opacity: 0.18;
+		}
+
+		100% {
+			opacity: 0;
+			transform: scale(1.14);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.icon-circle.icon-in-progress::before,
+		.icon-circle.icon-in-progress::after {
+			animation: none;
+			opacity: 0;
+		}
 	}
 
 	.edit-locked {
 		margin: 0;
 		font-size: var(--font-size-xs);
 		color: var(--text-muted);
-		text-align: center;
+		text-align: left;
 	}
 
 	.edit-actions {
 		display: flex;
+		gap: var(--spacing-2);
+		justify-content: flex-end;
+	}
+
+	.complete-actions {
+		display: flex;
+		gap: var(--spacing-2);
+		justify-content: flex-end;
+	}
+
+	.confirm-modal-copy-stack {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+	}
+
+	.confirm-modal-copy {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
+
+	.confirm-modal-penalty {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		line-height: 1.5;
+		color: var(--status-warning);
+	}
+
+	.confirm-modal-actions {
+		display: flex;
+		justify-content: flex-end;
 		gap: var(--spacing-2);
 	}
 
@@ -1337,8 +1549,10 @@
 	}
 
 	.day-chip {
-		padding: var(--spacing-1) var(--spacing-2);
-		border-radius: var(--radius-sm);
+		display: inline-flex;
+		align-items: center;
+		padding: 2px var(--spacing-2);
+		border-radius: var(--radius-full);
 		background: var(--interactive-normal);
 		font-size: var(--font-size-xs);
 		font-weight: var(--font-weight-medium);
@@ -1387,7 +1601,7 @@
 		.today-item,
 		.assignment-item {
 			gap: var(--spacing-2);
-			padding: var(--spacing-2);
+			padding: var(--spacing-3);
 		}
 
 		.icon-circle {

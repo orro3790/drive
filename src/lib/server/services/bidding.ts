@@ -93,6 +93,26 @@ function getShiftStartTime(dateString: string): Date {
 	});
 }
 
+function getErrorLogContext(error: unknown): {
+	errorName: string;
+	errorMessage: string;
+	errorCode?: string;
+} {
+	const errorName = error instanceof Error ? error.name || 'Error' : 'UnknownError';
+	const fallbackMessage = toSafeErrorMessage(error);
+	const errorMessage =
+		error instanceof Error && error.message.trim().length > 0 ? error.message : fallbackMessage;
+	const errorCode =
+		typeof error === 'object' &&
+		error !== null &&
+		'code' in error &&
+		typeof (error as { code?: unknown }).code === 'string'
+			? ((error as { code: string }).code ?? undefined)
+			: undefined;
+
+	return { errorName, errorMessage, errorCode };
+}
+
 /**
  * Determine the appropriate bid window mode based on time until shift.
  *
@@ -734,7 +754,7 @@ export async function instantAssign(
 	const log = logger.child({ operation: 'instantAssign' });
 
 	try {
-		return await db.transaction(async (tx) => {
+		const transactionResult = await db.transaction(async (tx) => {
 			// Lock the bid window row with FOR UPDATE to serialize concurrent requests
 			const lockResult = await tx.execute(
 				sql`SELECT id, status, mode, pay_bonus_percent FROM bid_windows WHERE id = ${bidWindowId} FOR UPDATE`
@@ -752,6 +772,10 @@ export async function instantAssign(
 				.select({ date: assignments.date })
 				.from(assignments)
 				.where(eq(assignments.id, assignmentId));
+
+			if (!assignment) {
+				return { instantlyAssigned: false, error: 'Route already assigned' };
+			}
 
 			// Same-day conflict guard
 			const [existingSameDay] = await tx
@@ -822,44 +846,74 @@ export async function instantAssign(
 				})
 				.where(eq(driverMetrics.userId, userId));
 
-			// Increment urgentPickups for instant/emergency mode bid windows
-			const windowMode = windowRow.mode as string;
-			if (windowMode === 'instant' || windowMode === 'emergency') {
-				await tx
-					.update(driverMetrics)
-					.set({
-						urgentPickups: sql`${driverMetrics.urgentPickups} + 1`,
-						updatedAt: resolvedAt
-					})
-					.where(eq(driverMetrics.userId, userId));
-			}
-
-			await createAuditLog(
-				{
-					entityType: 'assignment',
-					entityId: assignmentId,
-					action: 'instant_assign',
-					actorType: 'user',
-					actorId: userId,
-					changes: {
-						before: { status: 'unfilled' },
-						after: { status: 'scheduled', userId, assignedBy: 'bid' },
-						bidWindowId,
-						mode: 'instant'
-					}
-				},
-				tx
-			);
+			const windowMode = windowRow.mode as BidWindowMode;
 
 			return {
 				instantlyAssigned: true,
 				bidId: bid.id,
-				assignmentId
+				assignmentId,
+				windowMode,
+				resolvedAt
 			};
 		});
+
+		if (!transactionResult.instantlyAssigned) {
+			return transactionResult;
+		}
+
+		if (
+			transactionResult.windowMode === 'instant' ||
+			transactionResult.windowMode === 'emergency'
+		) {
+			try {
+				await db
+					.update(driverMetrics)
+					.set({
+						urgentPickups: sql`${driverMetrics.urgentPickups} + 1`,
+						updatedAt: transactionResult.resolvedAt
+					})
+					.where(eq(driverMetrics.userId, userId));
+			} catch (err) {
+				log.warn(getErrorLogContext(err), 'Urgent pickup metric update failed');
+			}
+		}
+
+		try {
+			await createAuditLog({
+				entityType: 'assignment',
+				entityId: assignmentId,
+				action: 'instant_assign',
+				actorType: 'user',
+				actorId: userId,
+				changes: {
+					before: { status: 'unfilled' },
+					after: { status: 'scheduled', userId, assignedBy: 'bid' },
+					bidWindowId,
+					mode: transactionResult.windowMode
+				}
+			});
+		} catch (err) {
+			log.warn(getErrorLogContext(err), 'Instant assignment audit log failed');
+		}
+
+		return {
+			instantlyAssigned: true,
+			bidId: transactionResult.bidId,
+			assignmentId: transactionResult.assignmentId
+		};
 	} catch (err) {
-		log.error({ errorMessage: toSafeErrorMessage(err) }, 'Instant assign failed');
-		return { instantlyAssigned: false, error: 'Route already assigned' };
+		const errorContext = getErrorLogContext(err);
+		const errorMessageLower = errorContext.errorMessage.toLowerCase();
+		const isLikelyRaceCondition =
+			errorContext.errorCode === '40001' ||
+			errorMessageLower.includes('serialization') ||
+			errorMessageLower.includes('deadlock');
+
+		log.error(errorContext, 'Instant assign failed');
+		return {
+			instantlyAssigned: false,
+			error: isLikelyRaceCondition ? 'Route already assigned' : 'Unable to accept shift right now'
+		};
 	}
 }
 

@@ -173,14 +173,6 @@
 	{:else if hasError || !health}
 		<p class="health-error">{m.dashboard_health_load_error()}</p>
 	{:else}
-		<!-- Hard-stop warning -->
-		{#if health.hardStop.triggered}
-			<NoticeBanner variant="warning" align="start">
-				<p class="hard-stop-title">{m.dashboard_health_hard_stop_title()}</p>
-				<p class="hard-stop-message">{m.dashboard_health_hard_stop_message()}</p>
-			</NoticeBanner>
-		{/if}
-
 		<!-- Score bar -->
 		<div class="score-section">
 			<div class="score-header">
@@ -308,6 +300,13 @@
 				{/if}
 			</div>
 		{/if}
+
+		{#if health.hardStop.triggered}
+			<NoticeBanner variant="warning" align="start">
+				<p class="hard-stop-title">{m.dashboard_health_hard_stop_title()}</p>
+				<p class="hard-stop-message">{m.dashboard_health_hard_stop_message()}</p>
+			</NoticeBanner>
+		{/if}
 	{/if}
 </section>
 
@@ -358,6 +357,10 @@
 		margin: var(--spacing-1) 0 0;
 		font-size: var(--font-size-sm);
 		color: var(--text-normal);
+	}
+
+	:global(.health-card .notice-banner) {
+		margin: var(--spacing-2) var(--spacing-3) 0;
 	}
 
 	/* Score section */

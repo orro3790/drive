@@ -13,10 +13,10 @@
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import IconBase from '$lib/components/primitives/Icon.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
-	import CancelShiftModal from '$lib/components/driver/CancelShiftModal.svelte';
 	import AlertTriangleIcon from '$lib/components/icons/AlertTriangleIcon.svelte';
 	import CalendarCheck from '$lib/components/icons/CalendarCheck.svelte';
 	import CheckCircleIcon from '$lib/components/icons/CheckCircleIcon.svelte';
@@ -35,7 +35,6 @@
 	} from '$lib/config/driverLifecycleIa';
 	import { statusLabels } from '$lib/config/lifecycleLabels';
 	import { formatAssignmentDate } from '$lib/utils/date/formatting';
-	import type { CancelReason } from '$lib/schemas/assignment';
 	import type { AssignmentStatus } from '$lib/schemas/assignment';
 
 	// Cancel modal state
@@ -50,6 +49,7 @@
 	let completeTarget = $state<ScheduleAssignment | null>(null);
 	let parcelsReturned = $state<number | ''>(0);
 	let completeError = $state<string | null>(null);
+	const lateCancelPenaltyPoints = Math.abs(dispatchPolicy.health.displayDeltas.lateCancel);
 
 	const sortedAssignments = $derived(
 		[...scheduleStore.assignments].sort((a, b) => a.date.localeCompare(b.date))
@@ -88,7 +88,7 @@
 	const statusAccent: Record<AssignmentStatus, string> = {
 		completed: '--text-muted',
 		scheduled: '--interactive-accent',
-		active: '--status-info',
+		active: '--interactive-accent',
 		cancelled: '--status-error',
 		unfilled: '--status-warning'
 	};
@@ -111,9 +111,11 @@
 
 	function formatWeekLabel(startDate: Date, isNext: boolean) {
 		const weekNumber = getWeek(startDate, { weekStartsOn: 1 });
-		return isNext
+		const rawLabel = isNext
 			? m.schedule_week_next({ week: weekNumber })
 			: m.schedule_week_current({ week: weekNumber });
+
+		return rawLabel.replace(/\s*[（(][^）)]*[）)]\s*$/, '');
 	}
 
 	function getConfirmationState(assignment: ScheduleAssignment) {
@@ -157,12 +159,6 @@
 		}
 	}
 
-	function getScheduleActionVariant(actionId: ScheduleActionId): 'primary' | 'secondary' | 'ghost' {
-		if (actionId === 'cancel_shift') return 'ghost';
-		if (actionId === 'confirm_shift') return 'primary';
-		return 'secondary';
-	}
-
 	function isScheduleActionLoading(actionId: ScheduleActionId): boolean {
 		switch (actionId) {
 			case 'confirm_shift':
@@ -201,9 +197,9 @@
 		cancelTarget = null;
 	}
 
-	async function handleCancel(reason: CancelReason) {
+	async function confirmCancel() {
 		if (!cancelTarget) return;
-		const success = await scheduleStore.cancel(cancelTarget.id, reason);
+		const success = await scheduleStore.cancel(cancelTarget.id, 'other');
 		if (success) {
 			closeCancelModal();
 		}
@@ -320,26 +316,22 @@
 				<span class="assignment-date">{formatAssignmentDate(assignment.date)}</span>
 				{#if assignment.status === 'scheduled'}
 					{#if confirmAction}
-						<Button
-							variant="ghost"
-							size="compact"
-							isLoading={isScheduleActionLoading('confirm_shift')}
+						<IconButton
+							tooltip={getScheduleActionLabel('confirm_shift')}
+							disabled={scheduleStore.isConfirming || scheduleStore.isCancelling}
 							onclick={() => handleScheduleAction('confirm_shift', assignment)}
 						>
 							<IconBase size="small"><CheckCircleIcon /></IconBase>
-							{getScheduleActionLabel('confirm_shift')}
-						</Button>
+						</IconButton>
 					{/if}
 					{#if cancelAction}
-						<Button
-							variant="ghost"
-							size="compact"
-							isLoading={isScheduleActionLoading('cancel_shift')}
+						<IconButton
+							tooltip={m.common_cancel()}
+							disabled={scheduleStore.isConfirming || scheduleStore.isCancelling}
 							onclick={() => handleScheduleAction('cancel_shift', assignment)}
 						>
 							<IconBase size="small"><CalendarX /></IconBase>
-							{m.common_cancel()}
-						</Button>
+						</IconButton>
 					{/if}
 				{:else if assignment.status !== 'active'}
 					<span class="assignment-status">{statusLabels[assignment.status]}</span>
@@ -481,12 +473,31 @@
 </div>
 
 {#if cancelTarget}
-	<CancelShiftModal
-		isLateCancel={cancelTarget.isLateCancel}
-		isLoading={scheduleStore.isCancelling}
-		onCancel={handleCancel}
-		onClose={closeCancelModal}
-	/>
+	<Modal title={m.schedule_cancel_modal_title()} onClose={closeCancelModal}>
+		<div class="confirm-modal-copy-stack">
+			<p class="confirm-modal-copy">
+				Cancel this shift? This action cannot be undone.
+			</p>
+			{#if cancelTarget.isLateCancel}
+				<p class="confirm-modal-penalty">
+					Late cancellation: -{lateCancelPenaltyPoints} health points. Repeated penalties may reduce shift access and bonus eligibility.
+				</p>
+			{/if}
+			<div class="confirm-modal-actions">
+				<Button variant="ghost" size="compact" onclick={closeCancelModal}>
+					{m.common_cancel()}
+				</Button>
+				<Button
+					variant="danger"
+					size="compact"
+					isLoading={scheduleStore.isCancelling}
+					onclick={confirmCancel}
+				>
+					{m.schedule_cancel_confirm_button()}
+				</Button>
+			</div>
+		</div>
+	</Modal>
 {/if}
 
 {#if startTarget}
@@ -849,6 +860,32 @@
 		margin-top: var(--spacing-2);
 	}
 
+	.confirm-modal-copy-stack {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+	}
+
+	.confirm-modal-copy {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
+
+	.confirm-modal-penalty {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		line-height: 1.5;
+		color: var(--status-warning);
+	}
+
+	.confirm-modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--spacing-2);
+	}
+
 	/* Mobile */
 	@media (max-width: 767px) {
 		.page-stage {
@@ -866,7 +903,7 @@
 
 		.assignment-item {
 			gap: var(--spacing-2);
-			padding: var(--spacing-2);
+			padding: var(--spacing-3);
 		}
 
 		.icon-circle {

@@ -5,7 +5,7 @@
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip, { type ChipStatus } from '$lib/components/primitives/Chip.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
-	import Select from '$lib/components/Select.svelte';
+	import Combobox from '$lib/components/Combobox.svelte';
 	import SettingsGroupTitle from './SettingsGroupTitle.svelte';
 	import SettingsGrid from './SettingsGrid.svelte';
 	import SettingsRow from './SettingsRow.svelte';
@@ -324,8 +324,8 @@
 							}}
 							variant="bordered"
 						/>
-						<Select
-							size="small"
+						<Combobox
+							size="sm"
 							options={inviteExpiryOptions}
 							value={inviteExpiresInHours}
 							onChange={(value) => {

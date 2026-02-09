@@ -41,7 +41,7 @@ const updateWhereMock = vi.fn(async (_condition: unknown) => undefined);
 const updateSetMock = vi.fn((_values: Record<string, unknown>) => ({ where: updateWhereMock }));
 const updateMock = vi.fn((_table: unknown) => ({ set: updateSetMock }));
 
-const transactionMock = vi.fn(async (_runner: unknown) => {
+const transactionMock = vi.fn(async (_runner: unknown): Promise<unknown> => {
 	throw new Error('transaction_failed');
 });
 
@@ -208,6 +208,66 @@ describe('bidding service boundaries', () => {
 		await expect(instantAssign('assignment-3', 'driver-3', 'window-3')).resolves.toEqual({
 			instantlyAssigned: false,
 			error: 'Route already assigned'
+		});
+	});
+
+	it('still assigns instantly when non-critical side effects fail', async () => {
+		const txSelectQueue: SelectResult[] = [[{ date: '2026-02-20' }], []];
+		const txSelectMock = vi.fn((_shape?: unknown) => {
+			const chain = {
+				from: vi.fn(() => chain),
+				where: vi.fn(async (_condition: unknown) => {
+					if (txSelectQueue.length === 0) {
+						throw new Error('No tx select result available');
+					}
+
+					return txSelectQueue.shift();
+				})
+			};
+
+			return chain;
+		});
+
+		const txInsertReturningMock = vi.fn(async () => [{ id: 'bid-3' }]);
+		const txInsertValuesMock = vi.fn((_values: Record<string, unknown>) => ({
+			returning: txInsertReturningMock
+		}));
+		const txInsertMock = vi.fn((_table: unknown) => ({ values: txInsertValuesMock }));
+
+		const txUpdateWhereMock = vi.fn(async (_condition: unknown) => undefined);
+		const txUpdateSetMock = vi.fn((_values: Record<string, unknown>) => ({
+			where: txUpdateWhereMock
+		}));
+		const txUpdateMock = vi.fn((_table: unknown) => ({ set: txUpdateSetMock }));
+
+		const txDeleteWhereMock = vi.fn(async (_condition: unknown) => undefined);
+		const txDeleteMock = vi.fn((_table: unknown) => ({ where: txDeleteWhereMock }));
+
+		const txExecuteMock = vi.fn(async () => ({
+			rows: [{ id: 'window-3', status: 'open', mode: 'emergency', pay_bonus_percent: 20 }]
+		}));
+
+		transactionMock.mockImplementationOnce(async (runner: unknown) => {
+			if (typeof runner !== 'function') {
+				throw new Error('runner_missing');
+			}
+
+			return runner({
+				execute: txExecuteMock,
+				select: txSelectMock,
+				insert: txInsertMock,
+				update: txUpdateMock,
+				delete: txDeleteMock
+			});
+		});
+
+		updateWhereMock.mockRejectedValueOnce(new Error('urgent_pickups_missing'));
+		createAuditLogMock.mockRejectedValueOnce(new Error('audit_insert_failed'));
+
+		await expect(instantAssign('assignment-3', 'driver-3', 'window-3')).resolves.toEqual({
+			instantlyAssigned: true,
+			bidId: 'bid-3',
+			assignmentId: 'assignment-3'
 		});
 	});
 });
