@@ -30,6 +30,7 @@ import { sendNotification } from '$lib/server/services/notifications';
 import type { HealthContributions } from '$lib/schemas/health';
 
 const TORONTO_TZ = dispatchPolicy.timezone.toronto;
+const HARD_STOP_SCORE_CAP = 49;
 
 function torontoToday(): string {
 	return format(toZonedTime(new Date(), TORONTO_TZ), 'yyyy-MM-dd');
@@ -325,7 +326,7 @@ export interface DailyScoreResult {
  *
  * Score is an additive sum of event points since last reset.
  * Hard-stop: any no-show OR >=2 late cancellations in rolling 30 days
- * triggers pool removal (but no longer caps score).
+ * triggers pool removal and caps score to 49.
  */
 export async function computeDailyScore(userId: string): Promise<DailyScoreResult | null> {
 	const [metrics] = await db
@@ -337,7 +338,7 @@ export async function computeDailyScore(userId: string): Promise<DailyScoreResul
 		return null;
 	}
 
-	const { contributions, score } = await computeContributions(userId);
+	const { contributions, score: rawScore } = await computeContributions(userId);
 	const rolling = await getRollingCounts(userId, dispatchPolicy.health.lateCancelRollingDays);
 	const reasons: string[] = [];
 
@@ -355,6 +356,8 @@ export async function computeDailyScore(userId: string): Promise<DailyScoreResul
 			);
 		}
 	}
+
+	const score = hardStopTriggered ? Math.min(rawScore, HARD_STOP_SCORE_CAP) : rawScore;
 
 	return {
 		userId,

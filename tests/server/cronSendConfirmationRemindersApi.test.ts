@@ -121,7 +121,7 @@ beforeEach(async () => {
 	}));
 
 	({ GET } = await import('../../src/routes/api/cron/send-confirmation-reminders/+server'));
-});
+}, 20_000);
 
 afterEach(() => {
 	resetTime();

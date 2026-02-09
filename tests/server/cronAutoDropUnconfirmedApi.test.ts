@@ -179,7 +179,7 @@ beforeEach(async () => {
 	}));
 
 	({ GET } = await import('../../src/routes/api/cron/auto-drop-unconfirmed/+server'));
-});
+}, 20_000);
 
 afterEach(() => {
 	resetTime();

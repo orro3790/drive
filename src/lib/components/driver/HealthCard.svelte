@@ -20,6 +20,11 @@
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import type { HealthResponse } from '$lib/schemas/health';
+	import {
+		deriveHealthCardState,
+		deriveHealthScoreColor,
+		deriveThresholdFlags
+	} from '$lib/components/driver/healthCardState';
 
 	let { healthUrl = '/api/driver-health' }: { healthUrl?: string } = $props();
 
@@ -28,14 +33,8 @@
 	let hasError = $state(false);
 	let showContributions = $state(false);
 
-	const scoreColor = $derived.by(() => {
-		if (!health) return 'var(--text-muted)';
-		if (health.hardStop.triggered) return 'var(--status-error)';
-		const score = health.score ?? 0;
-		if (score >= health.tierThreshold) return 'var(--status-success)';
-		if (score >= health.tierThreshold / 2) return 'var(--status-warning)';
-		return 'var(--status-error)';
-	});
+	const scoreColor = $derived.by(() => deriveHealthScoreColor(health));
+	const healthState = $derived.by(() => deriveHealthCardState(health));
 
 	// Bar scale: threshold sits at 80%, leaving 20% buffer zone beyond it
 	const thresholdPosition = 80;
@@ -46,11 +45,9 @@
 			: 0
 	);
 
-	const isPastThreshold = $derived(
-		health?.score !== null && health?.score !== undefined && health.score >= health.tierThreshold
-	);
-	const isBuffActive = $derived(isPastThreshold && !!health?.simulation.bonusEligible);
-	const isCharging = $derived(isPastThreshold && !isBuffActive);
+	const isPastThreshold = $derived.by(() => deriveThresholdFlags(health).isPastThreshold);
+	const isBuffActive = $derived.by(() => deriveThresholdFlags(health).isBuffActive);
+	const isCharging = $derived.by(() => deriveThresholdFlags(health).isCharging);
 
 	const buffTooltipText = $derived(
 		health
@@ -160,7 +157,11 @@
 	});
 </script>
 
-<section class="health-card" aria-label={m.dashboard_health_section()}>
+<section
+	class="health-card"
+	data-health-state={healthState}
+	aria-label={m.dashboard_health_section()}
+>
 	<div class="section-header">
 		<h2>{m.dashboard_health_section()}</h2>
 	</div>

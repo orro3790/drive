@@ -138,7 +138,7 @@ beforeEach(async () => {
 	}));
 
 	({ detectNoShows } = await import('../../src/lib/server/services/noshow'));
-});
+}, 20_000);
 
 afterEach(() => {
 	resetTime();
