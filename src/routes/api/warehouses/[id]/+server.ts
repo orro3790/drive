@@ -19,10 +19,13 @@ import {
 import { warehouseUpdateSchema } from '$lib/schemas/warehouse';
 import { and, count, eq, gte, lt, ne, sql } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
+import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { addDays } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
+import { z } from 'zod';
 
 const TORONTO_TZ = 'America/Toronto';
+const warehouseIdParamsSchema = z.object({ id: z.string().uuid() });
 
 function getTorontoDateRanges() {
 	const torontoNow = toZonedTime(new Date(), TORONTO_TZ);
@@ -98,7 +101,16 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	const { id } = params;
+	const paramsResult = warehouseIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid warehouse ID');
+	}
+
+	const { id } = paramsResult.data;
+	const canAccess = await canManagerAccessWarehouse(locals.user.id, id);
+	if (!canAccess) {
+		throw error(403, 'No access to this warehouse');
+	}
 
 	const [warehouse] = await db
 		.select({
@@ -133,8 +145,24 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	const { id } = params;
-	const body = await request.json();
+	const paramsResult = warehouseIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid warehouse ID');
+	}
+
+	const { id } = paramsResult.data;
+	const canAccess = await canManagerAccessWarehouse(locals.user.id, id);
+	if (!canAccess) {
+		throw error(403, 'No access to this warehouse');
+	}
+
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
 	const result = warehouseUpdateSchema.safeParse(body);
 
 	if (!result.success) {
@@ -191,7 +219,16 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	const { id } = params;
+	const paramsResult = warehouseIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid warehouse ID');
+	}
+
+	const { id } = paramsResult.data;
+	const canAccess = await canManagerAccessWarehouse(locals.user.id, id);
+	if (!canAccess) {
+		throw error(403, 'No access to this warehouse');
+	}
 
 	// Check warehouse exists
 	const [existing] = await db.select().from(warehouses).where(eq(warehouses.id, id));

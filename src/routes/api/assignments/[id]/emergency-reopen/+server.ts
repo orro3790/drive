@@ -17,20 +17,28 @@ import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { createBidWindow } from '$lib/server/services/bidding';
 import { notifyAvailableDriversForEmergency } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
-import logger from '$lib/server/logger';
+import logger, { toSafeErrorMessage } from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { z } from 'zod';
+
+const assignmentIdParamsSchema = z.object({ id: z.string().uuid() });
 
 export const POST: RequestHandler = async ({ locals, params }) => {
 	if (!locals.user) {
 		throw error(401, 'Unauthorized');
 	}
 
-	if (locals.user.role === 'driver') {
+	if (locals.user.role !== 'manager') {
 		throw error(403, 'Only managers can reopen routes');
 	}
 
-	const { id } = params;
-	const log = logger.child({ operation: 'emergencyReopen', assignmentId: id });
+	const paramsResult = assignmentIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid assignment ID');
+	}
+
+	const { id } = paramsResult.data;
+	const log = logger.child({ operation: 'emergencyReopen' });
 
 	// Get assignment with route + warehouse details
 	const [assignment] = await db
@@ -87,7 +95,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 				})
 				.where(eq(driverMetrics.userId, assignment.userId));
 		} catch (err) {
-			log.warn({ driverId: assignment.userId, error: err }, 'Failed to increment noShows');
+			log.warn({ errorMessage: toSafeErrorMessage(err) }, 'Failed to increment noShows');
 		}
 	}
 
@@ -110,7 +118,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 			payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent
 		});
 	} catch (err) {
-		log.warn({ error: err }, 'Emergency notification dispatch failed');
+		log.warn({ errorMessage: toSafeErrorMessage(err) }, 'Emergency notification dispatch failed');
 	}
 
 	// Create audit log
@@ -129,10 +137,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		}
 	});
 
-	log.info(
-		{ bidWindowId: result.bidWindowId, notifiedCount },
-		'Emergency route reopened by manager'
-	);
+	log.info({ notifiedCount }, 'Emergency route reopened by manager');
 
 	return json({
 		success: true,

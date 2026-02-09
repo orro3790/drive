@@ -13,6 +13,7 @@ import { and, eq } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
 import { getBidWindowDetail } from '$lib/server/services/bidding';
+import { bidWindowIdParamsSchema } from '$lib/schemas/api/bidding';
 import { createAuditLog } from '$lib/server/services/audit';
 import {
 	broadcastAssignmentUpdated,
@@ -21,7 +22,12 @@ import {
 
 const assignSchema = z
 	.object({
-		driverId: z.string().min(1)
+		driverId: z
+			.string()
+			.trim()
+			.min(1)
+			.max(128)
+			.regex(/^[A-Za-z0-9:_-]+$/)
 	})
 	.strict();
 
@@ -36,14 +42,25 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	const actorId = locals.user.id;
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
 	const result = assignSchema.safeParse(body);
 
 	if (!result.success) {
 		throw error(400, 'Validation failed');
 	}
 
-	const windowId = params.id;
+	const paramsResult = bidWindowIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid bid window ID');
+	}
+
+	const windowId = paramsResult.data.id;
 
 	const [window] = await db
 		.select({

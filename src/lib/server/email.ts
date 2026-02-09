@@ -1,5 +1,5 @@
 import { resetPasswordHtml } from './emails/resetPassword';
-import logger from './logger';
+import logger, { toSafeErrorMessage } from './logger';
 
 /**
  * Send password reset email via Resend API.
@@ -40,20 +40,16 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
 		});
 
 		if (!response.ok) {
-			const errorText = await response.text().catch(() => 'unknown error');
 			logger.error(
-				{ email: to, status: response.status, error: errorText },
+				{ status: response.status, errorCategory: 'provider_request_failed' },
 				'Password reset email failed'
 			);
 			return;
 		}
 
 		const result = (await response.json()) as { id?: string };
-		logger.info({ email: to, emailId: result.id }, 'Password reset email sent');
+		logger.info({ providerMessageId: result.id }, 'Password reset email sent');
 	} catch (err) {
-		logger.error(
-			{ email: to, error: err instanceof Error ? err.message : 'unknown' },
-			'Password reset email failed'
-		);
+		logger.error({ errorMessage: toSafeErrorMessage(err) }, 'Password reset email failed');
 	}
 }

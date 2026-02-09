@@ -19,6 +19,7 @@ import { bidWindows, assignments, routes, warehouses, bids, user } from '$lib/se
 import { and, eq, gte, inArray, sql, or } from 'drizzle-orm';
 import { getManagerWarehouseIds } from '$lib/server/services/managers';
 import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
+import { bidWindowListQuerySchema } from '$lib/schemas/api/bidding';
 import logger from '$lib/server/logger';
 
 export const GET: RequestHandler = async ({ locals, url }) => {
@@ -30,17 +31,24 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	const log = logger.child({ operation: 'listBidWindows', userId: locals.user.id });
+	const log = logger.child({ operation: 'listBidWindows' });
 
 	// Parse query params
-	const statusParam = url.searchParams.get('status') ?? 'all';
-	const sinceParam = url.searchParams.get('since');
-	const warehouseIdParam = url.searchParams.get('warehouseId');
+	const paramsResult = bidWindowListQuerySchema.safeParse({
+		status: url.searchParams.get('status') ?? undefined,
+		since: url.searchParams.get('since') ?? undefined,
+		warehouseId: url.searchParams.get('warehouseId') ?? undefined
+	});
 
-	// Validate status param
-	if (!['open', 'resolved', 'all'].includes(statusParam)) {
-		throw error(400, 'Invalid status parameter');
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid query parameters');
 	}
+
+	const {
+		status: statusParam,
+		since: sinceParam,
+		warehouseId: warehouseIdParam
+	} = paramsResult.data;
 
 	// Get manager's warehouse IDs for scoping
 	const managerWarehouseIds = await getManagerWarehouseIds(locals.user.id);
@@ -57,18 +65,15 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 	// Resolve any expired bid windows before returning (event-driven)
 	try {
-		const expiredWindows = await getExpiredBidWindows();
+		const expiredWindows = await getExpiredBidWindows(warehouseIds);
 		for (const window of expiredWindows) {
 			await resolveBidWindow(window.id);
 		}
 		if (expiredWindows.length > 0) {
 			log.info({ count: expiredWindows.length }, 'Resolved expired bid windows');
 		}
-	} catch (err) {
-		log.warn(
-			{ error: err instanceof Error ? err.message : 'Unknown' },
-			'Failed to resolve expired windows'
-		);
+	} catch {
+		log.warn('Failed to resolve expired windows');
 		// Continue with query - don't fail the request
 	}
 

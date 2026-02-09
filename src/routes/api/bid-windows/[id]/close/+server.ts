@@ -11,6 +11,7 @@ import { assignments, bidWindows, bids, routes, warehouses } from '$lib/server/d
 import { and, eq } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { getBidWindowDetail, resolveBidWindow } from '$lib/server/services/bidding';
+import { bidWindowIdParamsSchema } from '$lib/schemas/api/bidding';
 import { createAuditLog } from '$lib/server/services/audit';
 import {
 	broadcastAssignmentUpdated,
@@ -28,7 +29,12 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 
 	const actorId = locals.user.id;
 
-	const windowId = params.id;
+	const paramsResult = bidWindowIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid bid window ID');
+	}
+
+	const windowId = paramsResult.data.id;
 
 	const [window] = await db
 		.select({

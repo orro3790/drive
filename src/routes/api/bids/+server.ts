@@ -23,6 +23,7 @@ import {
 	broadcastBidWindowClosed
 } from '$lib/server/realtime/managerSse';
 import { sendNotification } from '$lib/server/services/notifications';
+import { bidSubmissionSchema } from '$lib/schemas/api/bidding';
 import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
@@ -37,7 +38,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(403, 'Only drivers can submit bids');
 	}
 
-	const log = logger.child({ operation: 'submitBid', userId: locals.user.id });
+	const log = logger.child({ operation: 'submitBid' });
 
 	let body: unknown;
 	try {
@@ -46,11 +47,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'Invalid JSON body');
 	}
 
-	const { assignmentId } = body as { assignmentId?: unknown };
-
-	if (!assignmentId || typeof assignmentId !== 'string') {
-		throw error(400, 'assignmentId is required');
+	const parsedBody = bidSubmissionSchema.safeParse(body);
+	if (!parsedBody.success) {
+		throw error(400, 'assignmentId must be a valid assignment ID');
 	}
+
+	const { assignmentId } = parsedBody.data;
 
 	// Check if driver is flagged
 	const [driverInfo] = await db
@@ -105,8 +107,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	// Belt-and-suspenders: if < 24h to shift, treat as instant regardless of stored mode
-	const parsed = parseISO(window.assignmentDate);
-	const toronto = toZonedTime(parsed, dispatchPolicy.timezone.toronto);
+	const parsedAssignmentDate = parseISO(window.assignmentDate);
+	const toronto = toZonedTime(parsedAssignmentDate, dispatchPolicy.timezone.toronto);
 	const shiftStart = set(startOfDay(toronto), {
 		hours: dispatchPolicy.shifts.startHourLocal,
 		minutes: 0,
@@ -144,7 +146,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			data: { assignmentId, bidWindowId: window.id }
 		});
 
-		log.info({ bidId: result.bidId, mode: effectiveMode }, 'Instant assignment');
+		log.info({ mode: effectiveMode }, 'Instant assignment');
 
 		return json({
 			success: true,
@@ -171,7 +173,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			windowClosesAt: bids.windowClosesAt
 		});
 
-	log.info({ bidId: newBid.id, assignmentId }, 'Bid submitted');
+	log.info('Bid submitted');
 
 	return json({
 		success: true,

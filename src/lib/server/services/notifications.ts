@@ -10,7 +10,7 @@ import { assignments, notifications, shifts, user } from '$lib/server/db/schema'
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { toZonedTime, format } from 'date-fns-tz';
 import { parseISO } from 'date-fns';
-import logger from '$lib/server/logger';
+import logger, { toSafeErrorMessage } from '$lib/server/logger';
 import { getRouteManager } from './managers';
 import { getWeekStart, canDriverTakeAssignment } from './scheduling';
 import {
@@ -168,7 +168,10 @@ async function getMessaging(): Promise<Messaging | null> {
 
 			logger.info('Firebase Admin SDK initialized');
 		} catch (error) {
-			logger.error({ error }, 'Failed to initialize Firebase Admin SDK');
+			logger.error(
+				{ errorMessage: toSafeErrorMessage(error) },
+				'Failed to initialize Firebase Admin SDK'
+			);
 			return null;
 		}
 	}
@@ -210,7 +213,7 @@ export async function sendNotification(
 	type: NotificationType,
 	options: SendNotificationOptions = {}
 ): Promise<SendNotificationResult> {
-	const log = logger.child({ operation: 'sendNotification', userId, type });
+	const log = logger.child({ operation: 'sendNotification', type });
 	const result: SendNotificationResult = {
 		inAppCreated: false,
 		pushSent: false
@@ -232,7 +235,7 @@ export async function sendNotification(
 		result.inAppCreated = true;
 		log.debug('In-app notification created');
 	} catch (error) {
-		log.error({ error }, 'Failed to create in-app notification');
+		log.error({ errorMessage: toSafeErrorMessage(error) }, 'Failed to create in-app notification');
 		// Continue to try push notification
 	}
 
@@ -285,9 +288,9 @@ export async function sendNotification(
 	} catch (error) {
 		// FCM errors are common (invalid token, user uninstalled app, etc.)
 		// Log but don't throw - the in-app notification is still created
-		const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-		result.pushError = errorMessage;
-		log.warn({ error: errorMessage }, 'Failed to send push notification');
+		const errorCategory = toSafeErrorMessage(error);
+		result.pushError = 'push_failed';
+		log.warn({ errorCategory }, 'Failed to send push notification');
 
 		// If token is invalid, we could clear it from the user record
 		// but that's better handled by the client re-registering on app open
@@ -349,7 +352,7 @@ export async function sendManagerAlert(
 	alertType: ManagerAlertType,
 	details: ManagerAlertDetails = {}
 ): Promise<boolean> {
-	const log = logger.child({ operation: 'sendManagerAlert', routeId, alertType });
+	const log = logger.child({ operation: 'sendManagerAlert', alertType });
 
 	const managerId = await getRouteManager(routeId);
 	if (!managerId) {
@@ -377,7 +380,7 @@ export async function sendManagerAlert(
 		data: { routeId, ...details }
 	});
 
-	log.info({ managerId }, 'Manager alert sent');
+	log.info('Manager alert sent');
 	return true;
 }
 
@@ -410,7 +413,7 @@ export async function notifyAvailableDriversForEmergency(
 	params: EmergencyNotifyParams
 ): Promise<number> {
 	const { assignmentId, routeName, warehouseName, date, payBonusPercent } = params;
-	const log = logger.child({ operation: 'notifyAvailableDriversForEmergency', assignmentId });
+	const log = logger.child({ operation: 'notifyAvailableDriversForEmergency' });
 
 	const today = format(toZonedTime(new Date(), TORONTO_TZ), 'yyyy-MM-dd');
 
@@ -518,7 +521,10 @@ export async function notifyAvailableDriversForEmergency(
 							}
 						});
 					} catch (error) {
-						log.warn({ driverId, error }, 'Failed to send emergency push notification');
+						log.warn(
+							{ errorMessage: toSafeErrorMessage(error) },
+							'Failed to send emergency push notification'
+						);
 					}
 				})
 			);

@@ -29,7 +29,7 @@ import { createAuditLog, type AuditActor } from '$lib/server/services/audit';
 import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
 import { toZonedTime } from 'date-fns-tz';
 import { addHours, differenceInMonths, parseISO, set, startOfDay } from 'date-fns';
-import logger from '$lib/server/logger';
+import logger, { toSafeErrorMessage } from '$lib/server/logger';
 import { getWeekStart, canDriverTakeAssignment } from './scheduling';
 import {
 	broadcastAssignmentUpdated,
@@ -145,7 +145,7 @@ export async function createBidWindow(
 	assignmentId: string,
 	options: CreateBidWindowOptions = {}
 ): Promise<CreateBidWindowResult> {
-	const log = logger.child({ operation: 'createBidWindow', assignmentId, ...options });
+	const log = logger.child({ operation: 'createBidWindow', ...options });
 
 	const [assignment] = await db
 		.select({
@@ -169,7 +169,7 @@ export async function createBidWindow(
 		.where(and(eq(bidWindows.assignmentId, assignmentId), eq(bidWindows.status, 'open')));
 
 	if (existingWindow) {
-		log.info({ existingWindowId: existingWindow.id }, 'Open bid window already exists');
+		log.info('Open bid window already exists');
 		return { success: false, reason: 'Open bid window already exists for this assignment' };
 	}
 
@@ -222,7 +222,7 @@ export async function createBidWindow(
 		})
 		.returning({ id: bidWindows.id });
 
-	log.info({ bidWindowId: bidWindow.id, mode, closesAt }, 'Bid window created');
+	log.info({ mode, closesAt }, 'Bid window created');
 
 	const notifiedCount = await notifyEligibleDrivers({
 		assignmentId,
@@ -276,7 +276,7 @@ interface NotifyEligibleDriversParams {
  */
 async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promise<number> {
 	const { assignmentId, assignmentDate, routeName, closesAt, mode, payBonusPercent } = params;
-	const log = logger.child({ operation: 'notifyEligibleDrivers', assignmentId, mode });
+	const log = logger.child({ operation: 'notifyEligibleDrivers', mode });
 
 	const drivers = await db
 		.select({ id: user.id })
@@ -384,7 +384,7 @@ export async function resolveBidWindow(
 	bidWindowId: string,
 	actor: AuditActor = { actorType: 'system', actorId: null }
 ): Promise<ResolveBidWindowResult> {
-	const log = logger.child({ operation: 'resolveBidWindow', bidWindowId });
+	const log = logger.child({ operation: 'resolveBidWindow' });
 
 	const [window] = await db
 		.select({
@@ -420,7 +420,7 @@ export async function resolveBidWindow(
 		.where(eq(assignments.id, window.assignmentId));
 
 	if (!assignment) {
-		log.warn({ assignmentId: window.assignmentId }, 'Assignment not found');
+		log.warn('Assignment not found');
 		return { resolved: false, bidCount: 0, reason: 'assignment_not_found' };
 	}
 
@@ -434,7 +434,7 @@ export async function resolveBidWindow(
 		.where(and(eq(bids.assignmentId, assignment.id), eq(bids.status, 'pending')));
 
 	if (pendingBids.length === 0) {
-		log.info({ assignmentId: assignment.id }, 'No bids to resolve');
+		log.info('No bids to resolve');
 
 		// For competitive windows with no bids, transition to instant mode
 		if (window.mode === 'competitive') {
@@ -455,7 +455,7 @@ export async function resolveBidWindow(
 				routeName: assignment.routeName,
 				date: assignment.date
 			});
-			log.info({ routeId: assignment.routeId }, 'Manager alerted about unfilled route');
+			log.info('Manager alerted about unfilled route');
 		} catch {
 			// Best-effort alert, don't fail resolution
 		}
@@ -495,7 +495,7 @@ export async function resolveBidWindow(
 	const winner = scoredBids.find((b) => !conflictSet.has(b.userId));
 
 	if (!winner) {
-		log.info({ assignmentId: assignment.id }, 'All bidders have same-day conflicts');
+		log.info('All bidders have same-day conflicts');
 
 		if (window.mode === 'competitive') {
 			await transitionToInstantMode(bidWindowId);
@@ -613,7 +613,7 @@ export async function resolveBidWindow(
 		routeId: assignment.routeId
 	});
 
-	log.info({ winnerId: winner.userId, bidCount: scoredBids.length }, 'Bid window resolved');
+	log.info({ bidCount: scoredBids.length }, 'Bid window resolved');
 
 	return { resolved: true, bidCount: scoredBids.length, winnerId: winner.userId };
 }
@@ -622,10 +622,28 @@ export async function resolveBidWindow(
  * Get all open bid windows that have passed their closesAt time.
  * Used by the cron job to resolve expired windows.
  */
-export async function getExpiredBidWindows(): Promise<
-	Array<{ id: string; assignmentId: string; mode: BidWindowMode }>
-> {
+export async function getExpiredBidWindows(
+	warehouseIds?: string[]
+): Promise<Array<{ id: string; assignmentId: string; mode: BidWindowMode }>> {
 	const now = new Date();
+
+	if (warehouseIds && warehouseIds.length > 0) {
+		return db
+			.select({
+				id: bidWindows.id,
+				assignmentId: bidWindows.assignmentId,
+				mode: bidWindows.mode
+			})
+			.from(bidWindows)
+			.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
+			.where(
+				and(
+					eq(bidWindows.status, 'open'),
+					lt(bidWindows.closesAt, now),
+					inArray(assignments.warehouseId, warehouseIds)
+				)
+			);
+	}
 
 	return db
 		.select({
@@ -642,7 +660,7 @@ export async function getExpiredBidWindows(): Promise<
  * Called when a competitive window expires with no bids.
  */
 export async function transitionToInstantMode(bidWindowId: string): Promise<void> {
-	const log = logger.child({ operation: 'transitionToInstantMode', bidWindowId });
+	const log = logger.child({ operation: 'transitionToInstantMode' });
 
 	const [window] = await db
 		.select({
@@ -677,7 +695,7 @@ export async function transitionToInstantMode(bidWindowId: string): Promise<void
 	// just create another immediately-expired window causing an infinite loop.
 	if (shiftStart <= new Date()) {
 		await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, bidWindowId));
-		log.info({ assignmentId: window.assignmentId }, 'Shift already started, closed window');
+		log.info('Shift already started, closed window');
 		return;
 	}
 
@@ -701,7 +719,7 @@ export async function transitionToInstantMode(bidWindowId: string): Promise<void
 		payBonusPercent: 0
 	});
 
-	log.info({ assignmentId: window.assignmentId }, 'Transitioned to instant mode');
+	log.info('Transitioned to instant mode');
 }
 
 /**
@@ -713,7 +731,7 @@ export async function instantAssign(
 	userId: string,
 	bidWindowId: string
 ): Promise<InstantAssignResult> {
-	const log = logger.child({ operation: 'instantAssign', assignmentId, userId, bidWindowId });
+	const log = logger.child({ operation: 'instantAssign' });
 
 	try {
 		return await db.transaction(async (tx) => {
@@ -840,7 +858,7 @@ export async function instantAssign(
 			};
 		});
 	} catch (err) {
-		log.error({ error: err }, 'Instant assign failed');
+		log.error({ errorMessage: toSafeErrorMessage(err) }, 'Instant assign failed');
 		return { instantlyAssigned: false, error: 'Route already assigned' };
 	}
 }
