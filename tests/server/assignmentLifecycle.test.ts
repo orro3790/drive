@@ -16,7 +16,7 @@ function createTorontoContext(nowToronto: Date) {
 	} as const;
 }
 
-describe('deriveAssignmentLifecycle', () => {
+describe('LC-05 lifecycle service: deriveAssignmentLifecycle', () => {
 	it('calculates confirmation window boundaries inclusively', () => {
 		const assignmentDate = '2026-02-20';
 		const { opensAt, deadline } = calculateConfirmationWindow(assignmentDate);
@@ -196,5 +196,41 @@ describe('deriveAssignmentLifecycle', () => {
 
 		expect(context.torontoToday).toBe('2026-02-10');
 		expect(output.isCancelable).toBe(true);
+	});
+
+	it('is idempotent for repeated evaluations with identical input', () => {
+		const context = createAssignmentLifecycleContext(new Date('2026-02-10T15:00:00.000Z'));
+		const input = {
+			assignmentDate: '2026-02-12',
+			assignmentStatus: 'scheduled' as const,
+			confirmedAt: null,
+			shiftArrivedAt: null,
+			parcelsStart: null,
+			shiftCompletedAt: null
+		};
+
+		const first = deriveAssignmentLifecycle(input, context);
+		const second = deriveAssignmentLifecycle(input, context);
+
+		expect(second).toEqual(first);
+	});
+
+	it('never marks cancelled assignments as cancelable or late-cancel', () => {
+		const context = createAssignmentLifecycleContext(new Date('2026-02-10T05:00:00.000Z'));
+
+		const cancelled = deriveAssignmentLifecycle(
+			{
+				assignmentDate: '2026-02-13',
+				assignmentStatus: 'cancelled',
+				confirmedAt: null,
+				shiftArrivedAt: null,
+				parcelsStart: null,
+				shiftCompletedAt: null
+			},
+			context
+		);
+
+		expect(cancelled.isCancelable).toBe(false);
+		expect(cancelled.isLateCancel).toBe(false);
 	});
 });
