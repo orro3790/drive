@@ -10,6 +10,8 @@
 4. **Driver Health & Reputation** — How driver quality is tracked and rewarded
 5. **Edge Cases & Scenarios** — Real situations and how the system handles them
 
+For manager onboarding approvals/invites, see `documentation/manager-guide-onboarding-controls.md`.
+
 ---
 
 ## 1. The Weekly Schedule

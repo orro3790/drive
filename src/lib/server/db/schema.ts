@@ -72,6 +72,12 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 	'corrective_warning'
 ]);
 export const actorTypeEnum = pgEnum('actor_type', ['user', 'system']);
+export const signupOnboardingKindEnum = pgEnum('signup_onboarding_kind', ['approval', 'invite']);
+export const signupOnboardingStatusEnum = pgEnum('signup_onboarding_status', [
+	'pending',
+	'consumed',
+	'revoked'
+]);
 
 // Warehouses
 export const warehouses = pgTable('warehouses', {
@@ -313,6 +319,36 @@ export const auditLogs = pgTable(
 			table.entityId,
 			desc(table.createdAt)
 		)
+	})
+);
+
+// Signup Onboarding (manager approvals + one-time invites)
+export const signupOnboarding = pgTable(
+	'signup_onboarding',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		email: text('email').notNull(),
+		kind: signupOnboardingKindEnum('kind').notNull().default('approval'),
+		tokenHash: text('token_hash'),
+		status: signupOnboardingStatusEnum('status').notNull().default('pending'),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		expiresAt: timestamp('expires_at', { withTimezone: true }),
+		consumedAt: timestamp('consumed_at', { withTimezone: true }),
+		consumedByUserId: text('consumed_by_user_id').references(() => user.id, {
+			onDelete: 'set null'
+		}),
+		revokedAt: timestamp('revoked_at', { withTimezone: true }),
+		revokedByUserId: text('revoked_by_user_id').references(() => user.id, {
+			onDelete: 'set null'
+		}),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => ({
+		emailStatusIdx: index('idx_signup_onboarding_email_status').on(table.email, table.status),
+		expiresAtIdx: index('idx_signup_onboarding_expires_at').on(table.expiresAt),
+		tokenHashIdx: index('idx_signup_onboarding_token_hash').on(table.tokenHash),
+		tokenHashUnique: unique('uq_signup_onboarding_token_hash').on(table.tokenHash)
 	})
 );
 

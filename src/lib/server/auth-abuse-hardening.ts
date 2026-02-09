@@ -1,6 +1,10 @@
 import { env } from '$env/dynamic/private';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import logger from './logger';
+import {
+	consumeProductionSignupAuthorization,
+	resolveProductionSignupAuthorization
+} from './services/onboarding';
 
 const SIGN_UP_PATH = '/sign-up/email';
 const ALLOWLIST_POLICY = 'allowlist';
@@ -19,6 +23,11 @@ export interface SignupAbusePolicyConfig {
 	signupPolicyMode: SignupPolicyMode;
 	allowlistedEmails: Set<string>;
 	localInviteCode: string | null;
+}
+
+export interface SignupAbuseGuardDependencies {
+	resolveProductionSignupAuthorization?: typeof resolveProductionSignupAuthorization;
+	consumeProductionSignupAuthorization?: typeof consumeProductionSignupAuthorization;
 }
 
 interface SignupAttempt {
@@ -115,6 +124,7 @@ export function evaluateSignupAttempt(
 
 	if (
 		config.signupPolicyMode === ALLOWLIST_POLICY &&
+		!config.isProduction &&
 		!config.allowlistedEmails.has(normalizedEmail)
 	) {
 		return {
@@ -164,7 +174,70 @@ function extractClientIp(headers: Headers | undefined): string | null {
 	return forwardedFor.split(',')[0]?.trim() || null;
 }
 
-export function createSignupAbuseGuard(config = resolveSignupAbusePolicyConfig()) {
+function isProductionAllowlistMode(config: SignupAbusePolicyConfig): boolean {
+	return config.isProduction && config.signupPolicyMode === ALLOWLIST_POLICY;
+}
+
+async function extractSuccessfulAuthPayload(
+	returned: unknown
+): Promise<Record<string, unknown> | null> {
+	if (!returned) {
+		return null;
+	}
+
+	if (returned instanceof Response) {
+		if (returned.status !== 200) {
+			return null;
+		}
+
+		const payload = await returned
+			.clone()
+			.json()
+			.catch(() => null);
+		if (!payload || typeof payload !== 'object') {
+			return null;
+		}
+
+		return payload as Record<string, unknown>;
+	}
+
+	if (returned instanceof APIError) {
+		return null;
+	}
+
+	if (typeof returned !== 'object') {
+		return null;
+	}
+
+	return returned as Record<string, unknown>;
+}
+
+function extractSignedUpUser(
+	payload: Record<string, unknown>
+): { id: string; email: string } | null {
+	const user = payload.user;
+	if (!user || typeof user !== 'object') {
+		return null;
+	}
+
+	const candidate = user as { id?: unknown; email?: unknown };
+	if (typeof candidate.id !== 'string' || typeof candidate.email !== 'string') {
+		return null;
+	}
+
+	return {
+		id: candidate.id,
+		email: candidate.email
+	};
+}
+
+export function createSignupAbuseGuard(
+	config = resolveSignupAbusePolicyConfig(),
+	dependencies: SignupAbuseGuardDependencies = {}
+) {
+	const resolveProductionAuthorization =
+		dependencies.resolveProductionSignupAuthorization ?? resolveProductionSignupAuthorization;
+
 	return createAuthMiddleware(async (ctx) => {
 		if (ctx.path !== SIGN_UP_PATH) {
 			return;
@@ -177,22 +250,101 @@ export function createSignupAbuseGuard(config = resolveSignupAbusePolicyConfig()
 		};
 
 		const decision = evaluateSignupAttempt(attempt, config);
-		if (decision.allowed) {
+		if (!decision.allowed) {
+			logger.warn(
+				{
+					reason: decision.reason,
+					emailDomain: emailDomain(attempt.email),
+					ip: extractClientIp(ctx.headers),
+					signupPolicyMode: config.signupPolicyMode,
+					isProduction: config.isProduction
+				},
+				'auth_signup_blocked'
+			);
+
+			throw new APIError('BAD_REQUEST', { message: decision.message });
+		}
+
+		if (isProductionAllowlistMode(config)) {
+			const authorization = await resolveProductionAuthorization({
+				email: attempt.email!,
+				inviteCodeHeader: attempt.inviteCodeHeader
+			});
+
+			if (authorization.allowed) {
+				return;
+			}
+
+			logger.warn(
+				{
+					reason: 'allowlist_denied',
+					emailDomain: emailDomain(attempt.email),
+					ip: extractClientIp(ctx.headers),
+					signupPolicyMode: config.signupPolicyMode,
+					isProduction: config.isProduction
+				},
+				'auth_signup_blocked'
+			);
+
+			throw new APIError('BAD_REQUEST', { message: SIGN_UP_BLOCKED_MESSAGE });
+		}
+
+		return;
+	});
+}
+
+export function createSignupOnboardingConsumer(
+	config = resolveSignupAbusePolicyConfig(),
+	dependencies: SignupAbuseGuardDependencies = {}
+) {
+	const consumeAuthorization =
+		dependencies.consumeProductionSignupAuthorization ?? consumeProductionSignupAuthorization;
+
+	return createAuthMiddleware(async (ctx) => {
+		if (ctx.path !== SIGN_UP_PATH) {
 			return;
 		}
 
-		logger.warn(
-			{
-				reason: decision.reason,
-				emailDomain: emailDomain(attempt.email),
-				ip: extractClientIp(ctx.headers),
-				signupPolicyMode: config.signupPolicyMode,
-				isProduction: config.isProduction
-			},
-			'auth_signup_blocked'
-		);
+		if (!isProductionAllowlistMode(config)) {
+			return;
+		}
 
-		throw new APIError('BAD_REQUEST', { message: decision.message });
+		const payload = await extractSuccessfulAuthPayload(ctx.context.returned);
+		if (!payload) {
+			return;
+		}
+
+		const signedUpUser = extractSignedUpUser(payload);
+		if (!signedUpUser) {
+			return;
+		}
+
+		try {
+			const consumed = await consumeAuthorization({
+				email: signedUpUser.email,
+				userId: signedUpUser.id,
+				inviteCodeHeader: ctx.headers?.get?.('x-invite-code') ?? null
+			});
+
+			if (!consumed) {
+				logger.warn(
+					{
+						emailDomain: emailDomain(signedUpUser.email),
+						userId: signedUpUser.id
+					},
+					'auth_signup_onboarding_not_consumed'
+				);
+			}
+		} catch (error) {
+			logger.error(
+				{
+					emailDomain: emailDomain(signedUpUser.email),
+					userId: signedUpUser.id,
+					error
+				},
+				'auth_signup_onboarding_consume_failed'
+			);
+		}
 	});
 }
 

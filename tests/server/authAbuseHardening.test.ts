@@ -13,7 +13,7 @@ function createPolicyConfig(
 	overrides: Partial<SignupAbusePolicyConfig> = {}
 ): SignupAbusePolicyConfig {
 	return {
-		isProduction: true,
+		isProduction: false,
 		signupPolicyMode: 'allowlist',
 		allowlistedEmails: new Set(['approved@driver.test']),
 		localInviteCode: null,
@@ -114,6 +114,23 @@ describe('auth abuse hardening decisions', () => {
 		expect(allowed).toEqual({ allowed: true });
 	});
 
+	it('does not use env allowlist checks in production mode', () => {
+		const decision = evaluateSignupAttempt(
+			{
+				path: '/sign-up/email',
+				email: 'new-driver@driver.test',
+				inviteCodeHeader: null
+			},
+			createPolicyConfig({
+				isProduction: true,
+				signupPolicyMode: 'allowlist',
+				allowlistedEmails: new Set()
+			})
+		);
+
+		expect(decision).toEqual({ allowed: true });
+	});
+
 	it('does not apply invite code checks in production', () => {
 		const decision = evaluateSignupAttempt(
 			{
@@ -122,6 +139,7 @@ describe('auth abuse hardening decisions', () => {
 				inviteCodeHeader: null
 			},
 			createPolicyConfig({
+				isProduction: true,
 				signupPolicyMode: 'open',
 				allowlistedEmails: new Set(),
 				localInviteCode: 'should-not-apply'
