@@ -35,11 +35,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Prepare i18n artifacts for typecheck
-        run: |
-          mkdir -p src/lib
-          rm -rf src/lib/paraglide
-          cp -R src/paraglide src/lib/paraglide
+      - name: Generate i18n artifacts for typecheck
+        run: pnpm exec paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --emit-ts-declarations
 
       - name: Validate
         run: pnpm validate
