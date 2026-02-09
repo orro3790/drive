@@ -14,7 +14,11 @@ import logger from './logger';
 import { BETTER_AUTH_SECRET } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 import { ac, admin, manager } from './permissions';
-import { buildAuthRateLimitConfig, createSignupAbuseGuard } from './auth-abuse-hardening';
+import {
+	buildAuthRateLimitConfig,
+	createSignupAbuseGuard,
+	createSignupOnboardingConsumer
+} from './auth-abuse-hardening';
 
 /**
  * Derive auth base URL:
@@ -34,6 +38,7 @@ function getAuthBaseUrl(): string | undefined {
 }
 
 const signupAbuseGuard = createSignupAbuseGuard();
+const signupOnboardingConsumer = createSignupOnboardingConsumer();
 
 export const auth = betterAuth({
 	appName: 'Drive',
@@ -92,7 +97,8 @@ export const auth = betterAuth({
 		}
 	},
 	hooks: {
-		before: signupAbuseGuard
+		before: signupAbuseGuard,
+		after: signupOnboardingConsumer
 	},
 	plugins: [
 		sveltekitCookies(getRequestEvent),

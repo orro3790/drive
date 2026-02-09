@@ -16,6 +16,7 @@
 		type NavGroup
 	} from '$lib/components/settings/SettingsNav.svelte';
 	import AccountSection from '$lib/components/settings/AccountSection.svelte';
+	import ManagerOnboardingSection from '$lib/components/settings/ManagerOnboardingSection.svelte';
 	import type { PageData } from './$types';
 	import type { Breadcrumb } from '$lib/schemas/ui/breadcrumb';
 	import { asUser } from '$lib/types/user';
@@ -26,26 +27,55 @@
 
 	let activeCategory = $state<Category | null>(null);
 
+	function canAccessCategory(category: Category): boolean {
+		if (category === 'onboarding') {
+			return user?.role === 'manager';
+		}
+
+		return true;
+	}
+
+	function categoryLabel(category: Category): string {
+		return category === 'onboarding'
+			? m.settings_onboarding_section()
+			: m.settings_account_section();
+	}
+
 	// Sync activeCategory from URL param
 	$effect(() => {
 		const param = $page.url.searchParams.get('category') as Category | null;
-		activeCategory = param ?? null;
+		activeCategory = param && canAccessCategory(param) ? param : null;
 	});
 
 	/** Mobile drill-down: true when viewing content, false when viewing nav */
 	const showContent = $derived(activeCategory !== null);
 
 	/** Effective category for rendering - defaults to 'account' on desktop when no category selected */
-	const effectiveCategory = $derived<Category>(activeCategory ?? 'account');
+	const effectiveCategory = $derived.by((): Category => {
+		if (activeCategory && canAccessCategory(activeCategory)) {
+			return activeCategory;
+		}
+
+		return 'account';
+	});
 
 	// Nav groups
 	const navGroups = $derived.by((): NavGroup[] => {
-		return [
+		const groups: NavGroup[] = [
 			{
 				label: m.settings_group_personal(),
 				items: ['account']
 			}
 		];
+
+		if (user?.role === 'manager') {
+			groups.push({
+				label: m.settings_group_admin(),
+				items: ['onboarding']
+			});
+		}
+
+		return groups;
 	});
 
 	function setActive(c: Category) {
@@ -104,8 +134,8 @@
 			}
 		];
 		// Only add category crumb when viewing content
-		if (activeCategory) {
-			crumbs.push({ label: m.settings_account_section() });
+		if (activeCategory && canAccessCategory(activeCategory)) {
+			crumbs.push({ label: categoryLabel(activeCategory) });
 		}
 		return crumbs;
 	});
@@ -154,6 +184,8 @@
 				>
 					{#if effectiveCategory === 'account'}
 						<AccountSection {user} />
+					{:else if effectiveCategory === 'onboarding' && user?.role === 'manager'}
+						<ManagerOnboardingSection />
 					{/if}
 				</section>
 			</div>

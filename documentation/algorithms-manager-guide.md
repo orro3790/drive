@@ -24,6 +24,8 @@ Drive has multiple algorithms working together:
 
 Managers still have final authority. Automation handles normal cases; managers handle exceptions.
 
+For manager-facing signup approvals and invite operations, see `documentation/manager-guide-onboarding-controls.md`.
+
 ---
 
 ## Algorithm catalog (manager view)
