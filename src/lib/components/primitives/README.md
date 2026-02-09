@@ -46,7 +46,7 @@ When adding non-trivial behavior to a primitive, prefer to include:
 - **Accessibility tests**: Keyboard navigation, focus management, ARIA roles/states.
 - **Visual regression**: Snapshot tests for variants/sizes (if applicable).
 
-See `docs/agent-guidelines.md` for current project conventions. `documentation/agent-guidelines/testing-standards.md` is legacy reference material.
+See `documentation/agent-guidelines.md` for current project conventions. `documentation/agent-guidelines/testing-standards.md` is legacy reference material.
 
 ## Examples
 
@@ -74,5 +74,5 @@ See `docs/agent-guidelines.md` for current project conventions. `documentation/a
 
 - [design-system.md](../../../../documentation/agent-guidelines/design-system.md) — Icons, forms, design tokens
 - [accessibility-patterns.md](../../../../documentation/agent-guidelines/accessibility-patterns.md) — Keyboard, ARIA, focus management
-- [agent-guidelines.md](../../../../docs/agent-guidelines.md) — Project organization and module structure
+- [agent-guidelines.md](../../../../documentation/agent-guidelines.md) — Project organization and module structure
 - [testing-standards.md](../../../../documentation/agent-guidelines/testing-standards.md) — Legacy test standards (not Drive-specific)

@@ -4,7 +4,7 @@ Task: DRV-zq5
 
 ## Steps
 
-1. Review specs in `docs/specs/data-model.md` and `docs/specs/SPEC.md`, confirm target DB/env (Neon) and whether the DB is empty or needs backfills/defaults.
+1. Review specs in `documentation/specs/data-model.md` and `documentation/specs/SPEC.md`, confirm target DB/env (Neon) and whether the DB is empty or needs backfills/defaults.
 2. Implement all required enums and tables in `src/lib/server/db/schema.ts` with correct types, constraints, defaults, and indexes per spec.
 3. Add relations for users, routes, warehouses, and assignments in `src/lib/server/db/schema.ts`.
 4. Run `drizzle-kit generate`, inspect the migration SQL for correctness and outline a rollback path if the push fails or data constraints need backfills.

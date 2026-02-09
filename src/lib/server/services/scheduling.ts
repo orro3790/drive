@@ -2,7 +2,7 @@
  * Schedule Generation Service
  *
  * Implements the automatic schedule generation algorithm that runs at preference lock time.
- * See docs/specs/SPEC.md § Scheduling System for full specification.
+ * See documentation/specs/SPEC.md § Scheduling System for full specification.
  */
 
 import { db } from '$lib/server/db';

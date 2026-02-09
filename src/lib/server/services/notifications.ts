@@ -2,7 +2,7 @@
  * Push Notification Service
  *
  * Firebase Cloud Messaging integration for sending push notifications.
- * See docs/specs/SPEC.md § Notifications for notification types.
+ * See documentation/specs/SPEC.md § Notifications for notification types.
  */
 
 import { db } from '$lib/server/db';
@@ -69,7 +69,7 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	},
 	bid_won: {
 		title: 'Bid Won',
-		body: 'You\'ve won the bid. You are now assigned this shift.'
+		body: "You've won the bid. You are now assigned this shift."
 	},
 	bid_lost: {
 		title: 'Bid Not Won',
@@ -113,7 +113,7 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	},
 	shift_auto_dropped: {
 		title: 'Shift Dropped',
-		body: "Your shift was not confirmed in time and has been removed from your schedule."
+		body: 'Your shift was not confirmed in time and has been removed from your schedule.'
 	},
 	emergency_route_available: {
 		title: 'Shift Available',

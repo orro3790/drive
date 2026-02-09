@@ -182,7 +182,7 @@ Acceptance: Unit tests pass, manual test with curl succeeds
 Another example:
 
 ```
-Source: docs/specs/retry-logic.md
+Source: documentation/specs/SPEC.md
 
 Add retry logic to fetchUserData(): max 3 attempts, exponential backoff
 starting at 100ms, abort on 4xx errors, retry on 5xx and network errors,

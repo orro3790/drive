@@ -5,7 +5,7 @@
  * Each shift event earns/costs discrete points. Score accumulates since last reset.
  * Tier II activates at 96 points (= 1 perfect month of 4 shifts/week × 4 weeks × 6 pts/shift).
  *
- * See docs/plans/driver-health-gamification.md for full specification.
+ * See documentation/plans/driver-health-gamification.md for full specification.
  */
 
 import { db } from '$lib/server/db';

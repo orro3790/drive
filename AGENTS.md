@@ -4,7 +4,7 @@ This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get sta
 
 Project conventions and coding-agent guidelines:
 
-- Start here: `docs/agent-guidelines.md`
+- Start here: `documentation/agent-guidelines.md`
 - Index (deep dives): `documentation/agent-guidelines/index.md`
 
 ## Quick Reference

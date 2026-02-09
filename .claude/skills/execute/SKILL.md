@@ -283,7 +283,7 @@ Use the Task tool with `subagent_type='documentation-auditor'`:
 
 ```
 Review changes in this branch and check if documentation needs updating.
-Focus on: README, CLAUDE.md, JSDoc, and any docs/ files.
+Focus on: README, CLAUDE.md, JSDoc, and any documentation/ files.
 ```
 
 ### 6.2 Apply Updates

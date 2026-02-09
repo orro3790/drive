@@ -39,5 +39,5 @@ Drive is an event-driven operations platform for delivery logistics: a mobile-fi
 
 ## 6. Related Documentation
 
-- Drive agent guide: `docs/agent-guidelines.md`
+- Drive agent guide: `documentation/agent-guidelines.md`
 - Deep-dive index: `documentation/agent-guidelines/index.md`

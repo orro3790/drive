@@ -117,13 +117,14 @@ src/
 
 ## Documentation
 
-| Document               | Location                   |
-| ---------------------- | -------------------------- |
-| Technical Spec         | `docs/specs/SPEC.md`       |
-| Data Model             | `docs/specs/data-model.md` |
-| Agent Guidelines       | `docs/agent-guidelines.md` |
-| Project Instructions   | `CLAUDE.md`                |
-| Architecture Decisions | `docs/adr/`                |
+| Document               | Location                                               |
+| ---------------------- | ------------------------------------------------------ |
+| Technical Spec         | `documentation/specs/SPEC.md`                          |
+| Data Model             | `documentation/specs/data-model.md`                    |
+| Android Distribution   | `documentation/mobile/android-private-distribution.md` |
+| Agent Guidelines       | `documentation/agent-guidelines.md`                    |
+| Project Instructions   | `CLAUDE.md`                                            |
+| Architecture Decisions | `documentation/adr/`                                   |
 
 ## Key Concepts
 
@@ -161,6 +162,8 @@ pnpm preview      # Preview production build
 pnpm check        # Run type checking
 pnpm lint         # Run ESLint
 pnpm format       # Format with Prettier
+pnpm mobile:android:sync
+pnpm mobile:android:bundle:release
 ```
 
 ### Database Commands

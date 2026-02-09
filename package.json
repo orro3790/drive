@@ -18,9 +18,16 @@
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio",
 		"seed": "tsx scripts/seed.ts",
-		"seed:staging": "tsx scripts/seed.ts --staging"
+		"seed:staging": "tsx scripts/seed.ts --staging",
+		"mobile:android:sync": "pnpm exec cap sync android",
+		"mobile:android:copy": "pnpm exec cap copy android",
+		"mobile:android:open": "pnpm exec cap open android",
+		"mobile:android:doctor": "pnpm exec cap doctor",
+		"mobile:android:bundle:release": "node scripts/mobile/android-gradle.mjs bundleRelease",
+		"mobile:android:apk:release": "node scripts/mobile/android-gradle.mjs assembleRelease"
 	},
 	"devDependencies": {
+		"@capacitor/cli": "^8.0.2",
 		"@faker-js/faker": "^10.2.0",
 		"@noble/hashes": "^2.0.1",
 		"@playwright/test": "^1.58.1",
@@ -43,6 +50,8 @@
 	},
 	"dependencies": {
 		"@axiomhq/pino": "^1.4.0",
+		"@capacitor/android": "^8.0.2",
+		"@capacitor/core": "^8.0.2",
 		"@inlang/paraglide-js": "^2.10.0",
 		"@neondatabase/serverless": "^1.0.2",
 		"@tanstack/svelte-table": "^8.21.3",

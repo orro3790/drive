@@ -1,7 +1,7 @@
 /**
  * Database Schema - Driver Operations Platform
  *
- * See docs/specs/data-model.md for full documentation.
+ * See documentation/specs/data-model.md for full documentation.
  *
  * Note: User data is managed by Better Auth in auth-schema.ts.
  * Domain tables reference the auth user table via text user_id columns.

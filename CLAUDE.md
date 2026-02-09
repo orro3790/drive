@@ -7,7 +7,7 @@ Driver Operations Platform for delivery logistics.
 
 ## Project Status: Ready for Implementation
 
-Tech stack interview **completed**. Specifications documented in `docs/specs/`. Ready to begin implementation.
+Tech stack interview **completed**. Specifications documented in `documentation/specs/`. Ready to begin implementation.
 
 ## Quick Reference
 
@@ -41,14 +41,14 @@ Tech stack interview **completed**. Specifications documented in `docs/specs/`. 
 
 | Document               | Location                                                 |
 | ---------------------- | -------------------------------------------------------- |
-| Technical Spec         | `docs/specs/tech-stack.md`                               |
-| Data Model             | `docs/specs/data-model.md`                               |
-| Agent Guidelines       | `docs/agent-guidelines.md`                               |
+| Technical Spec         | `documentation/specs/SPEC.md`                            |
+| Data Model             | `documentation/specs/data-model.md`                      |
+| Agent Guidelines       | `documentation/agent-guidelines.md`                      |
 | Agent Guidelines Index | `documentation/agent-guidelines/index.md`                |
 | Domain Context         | `non-technical-specs.md`, `project-summary-condensed.md` |
-| ADR: Tech Stack        | `docs/adr/001-tech-stack.md`                             |
-| ADR: Bidding System    | `docs/adr/002-replacement-bidding-system.md`             |
-| ADR: Scheduling        | `docs/adr/003-scheduling-model.md`                       |
+| ADR: Tech Stack        | `documentation/adr/001-tech-stack.md`                    |
+| ADR: Bidding System    | `documentation/adr/002-replacement-bidding-system.md`    |
+| ADR: Scheduling        | `documentation/adr/003-scheduling-model.md`              |
 
 ## Server Services
 
@@ -63,7 +63,7 @@ Business logic in `src/lib/server/services/`:
 - `managers.ts` - Manager access control (`getManagerWarehouseIds`, `canManagerAccessWarehouse`, `getRouteManager`)
 - `health.ts` - Driver health scoring and star progression (`computeDailyScore`, `evaluateWeek`, `runDailyHealthEvaluation`, `runWeeklyHealthEvaluation`)
 
-See `docs/agent-guidelines.md` for detailed usage patterns.
+See `documentation/agent-guidelines.md` for detailed usage patterns.
 
 For deeper conventions and patterns, start at `documentation/agent-guidelines/index.md`.
 
@@ -190,7 +190,7 @@ Svelte 5 stores in `src/lib/stores/`:
 - **Pool Eligibility**: Hard-stop events remove driver from assignment pool (manager intervention required)
 - **V1 Scope**: UI + simulation only (no automatic pay/cap changes yet)
 - **Simulation**: 4 stars shows +10% bonus preview and higher shift access tier
-- See `docs/plans/driver-health-gamification.md` for full specification
+- See `documentation/plans/driver-health-gamification.md` for full specification
 
 ### Bidding Modes
 

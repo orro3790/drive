@@ -2,7 +2,7 @@
  * Bidding Service
  *
  * Manages bid windows for unfilled assignments.
- * See docs/adr/002-replacement-bidding-system.md for rationale.
+ * See documentation/adr/002-replacement-bidding-system.md for rationale.
  */
 
 import { db } from '$lib/server/db';
@@ -365,9 +365,7 @@ async function calculateBidScore(userId: string, routeId: string): Promise<numbe
 		.where(eq(driverPreferences.userId, userId));
 
 	const healthScore = healthState?.currentScore ?? 0;
-	const tenureMonths = driver?.createdAt
-		? differenceInMonths(new Date(), driver.createdAt)
-		: 0;
+	const tenureMonths = driver?.createdAt ? differenceInMonths(new Date(), driver.createdAt) : 0;
 	const preferredRoutes = preferences?.preferredRoutes ?? [];
 
 	return calculateBidScoreParts({
@@ -450,10 +448,7 @@ export async function resolveBidWindow(
 		}
 
 		// For instant/emergency windows with no bids, close the window
-		await db
-			.update(bidWindows)
-			.set({ status: 'closed' })
-			.where(eq(bidWindows.id, bidWindowId));
+		await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, bidWindowId));
 
 		try {
 			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
@@ -513,10 +508,7 @@ export async function resolveBidWindow(
 		}
 
 		// Close the window so it's not re-picked up
-		await db
-			.update(bidWindows)
-			.set({ status: 'closed' })
-			.where(eq(bidWindows.id, bidWindowId));
+		await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, bidWindowId));
 
 		try {
 			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
@@ -684,10 +676,7 @@ export async function transitionToInstantMode(bidWindowId: string): Promise<void
 	// If the shift has already started, close the window — transitioning would
 	// just create another immediately-expired window causing an infinite loop.
 	if (shiftStart <= new Date()) {
-		await db
-			.update(bidWindows)
-			.set({ status: 'closed' })
-			.where(eq(bidWindows.id, bidWindowId));
+		await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, bidWindowId));
 		log.info({ assignmentId: window.assignmentId }, 'Shift already started, closed window');
 		return;
 	}
