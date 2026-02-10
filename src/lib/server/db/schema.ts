@@ -159,6 +159,7 @@ export const assignments = pgTable(
 		assignedAt: timestamp('assigned_at', { withTimezone: true }),
 		confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
 		cancelType: cancelTypeEnum('cancel_type'),
+		cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 	},

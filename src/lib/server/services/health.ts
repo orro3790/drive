@@ -32,6 +32,10 @@ import type { HealthContributions } from '$lib/schemas/health';
 const TORONTO_TZ = dispatchPolicy.timezone.toronto;
 const HARD_STOP_SCORE_CAP = 49;
 
+function sameTimestamp(a: Date | null | undefined, b: Date | null | undefined): boolean {
+	return (a?.getTime() ?? null) === (b?.getTime() ?? null);
+}
+
 function torontoToday(): string {
 	return format(toZonedTime(new Date(), TORONTO_TZ), 'yyyy-MM-dd');
 }
@@ -49,8 +53,10 @@ interface RollingCounts {
  * Count no-shows and late cancellations for a driver in the last N days.
  */
 async function getRollingCounts(userId: string, windowDays: number): Promise<RollingCounts> {
-	const nowToronto = toZonedTime(new Date(), TORONTO_TZ);
+	const now = new Date();
+	const nowToronto = toZonedTime(now, TORONTO_TZ);
 	const cutoffDate = format(subDays(nowToronto, windowDays), 'yyyy-MM-dd');
+	const cutoffInstant = subDays(now, windowDays);
 	const todayStr = format(nowToronto, 'yyyy-MM-dd');
 
 	const [noShowResult] = await db
@@ -75,9 +81,11 @@ async function getRollingCounts(userId: string, windowDays: number): Promise<Rol
 			and(
 				eq(assignments.userId, userId),
 				eq(assignments.status, 'cancelled'),
+				eq(assignments.cancelType, 'late'),
 				isNotNull(assignments.confirmedAt),
-				gte(assignments.date, cutoffDate),
-				lte(assignments.date, todayStr)
+				isNotNull(assignments.cancelledAt),
+				gte(assignments.cancelledAt, cutoffInstant),
+				lte(assignments.cancelledAt, now)
 			)
 		);
 
@@ -91,10 +99,6 @@ async function getRollingCounts(userId: string, windowDays: number): Promise<Rol
  * Check whether any hard-stop events occurred after a given date.
  */
 async function hasNewHardStopEvents(userId: string, afterDate: Date): Promise<boolean> {
-	const afterStr = format(afterDate, 'yyyy-MM-dd');
-	const nowToronto = toZonedTime(new Date(), TORONTO_TZ);
-	const todayStr = format(nowToronto, 'yyyy-MM-dd');
-
 	const [noShowResult] = await db
 		.select({ count: sql<number>`count(distinct ${assignments.id})::int` })
 		.from(assignments)
@@ -102,13 +106,7 @@ async function hasNewHardStopEvents(userId: string, afterDate: Date): Promise<bo
 			bidWindows,
 			and(eq(bidWindows.assignmentId, assignments.id), eq(bidWindows.trigger, 'no_show'))
 		)
-		.where(
-			and(
-				eq(assignments.userId, userId),
-				sql`${assignments.date} > ${afterStr}`,
-				lte(assignments.date, todayStr)
-			)
-		);
+		.where(and(eq(assignments.userId, userId), sql`${bidWindows.opensAt} > ${afterDate}`));
 
 	const [lateCancelResult] = await db
 		.select({ count: sql<number>`count(*)::int` })
@@ -117,9 +115,10 @@ async function hasNewHardStopEvents(userId: string, afterDate: Date): Promise<bo
 			and(
 				eq(assignments.userId, userId),
 				eq(assignments.status, 'cancelled'),
+				eq(assignments.cancelType, 'late'),
 				isNotNull(assignments.confirmedAt),
-				sql`${assignments.date} > ${afterStr}`,
-				lte(assignments.date, todayStr)
+				isNotNull(assignments.cancelledAt),
+				sql`${assignments.cancelledAt} > ${afterDate}`
 			)
 		);
 
@@ -140,6 +139,7 @@ async function hasNewHardStopEvents(userId: string, afterDate: Date): Promise<bo
 export async function computeContributions(userId: string): Promise<{
 	contributions: HealthContributions;
 	score: number;
+	lastScoreResetAt: Date | null;
 }> {
 	const pts = dispatchPolicy.health.points;
 
@@ -304,7 +304,11 @@ export async function computeContributions(userId: string): Promise<{
 	const rawTotal = Object.values(contributions).reduce((sum, line) => sum + line.points, 0);
 	const score = Math.max(0, rawTotal);
 
-	return { contributions, score };
+	return {
+		contributions,
+		score,
+		lastScoreResetAt: stateRow?.lastScoreResetAt ?? null
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +318,10 @@ export async function computeContributions(userId: string): Promise<{
 export interface DailyScoreResult {
 	userId: string;
 	score: number;
+	attendanceRate: number;
+	completionRate: number;
 	contributions: HealthContributions;
+	lastScoreResetAt: Date | null;
 	noShowCount30d: number;
 	lateCancellationCount30d: number;
 	hardStopTriggered: boolean;
@@ -330,7 +337,11 @@ export interface DailyScoreResult {
  */
 export async function computeDailyScore(userId: string): Promise<DailyScoreResult | null> {
 	const [metrics] = await db
-		.select({ totalShifts: driverMetrics.totalShifts })
+		.select({
+			totalShifts: driverMetrics.totalShifts,
+			attendanceRate: driverMetrics.attendanceRate,
+			completionRate: driverMetrics.completionRate
+		})
 		.from(driverMetrics)
 		.where(eq(driverMetrics.userId, userId));
 
@@ -338,7 +349,7 @@ export async function computeDailyScore(userId: string): Promise<DailyScoreResul
 		return null;
 	}
 
-	const { contributions, score: rawScore } = await computeContributions(userId);
+	const { contributions, score: rawScore, lastScoreResetAt } = await computeContributions(userId);
 	const rolling = await getRollingCounts(userId, dispatchPolicy.health.lateCancelRollingDays);
 	const reasons: string[] = [];
 
@@ -362,7 +373,10 @@ export async function computeDailyScore(userId: string): Promise<DailyScoreResul
 	return {
 		userId,
 		score,
+		attendanceRate: metrics.attendanceRate ?? 0,
+		completionRate: metrics.completionRate ?? 0,
 		contributions,
+		lastScoreResetAt,
 		noShowCount30d: rolling.noShowCount30d,
 		lateCancellationCount30d: rolling.lateCancellationCount30d,
 		hardStopTriggered,
@@ -375,79 +389,119 @@ export async function computeDailyScore(userId: string): Promise<DailyScoreResul
  * Idempotent: upserts on (userId, evaluatedAt).
  */
 async function persistDailyScore(result: DailyScoreResult, evaluatedAt: string): Promise<void> {
-	// Upsert snapshot
-	await db
-		.insert(driverHealthSnapshots)
-		.values({
-			userId: result.userId,
-			evaluatedAt,
-			score: result.score,
-			attendanceRate: 0,
-			completionRate: 0,
-			lateCancellationCount30d: result.lateCancellationCount30d,
-			noShowCount30d: result.noShowCount30d,
-			hardStopTriggered: result.hardStopTriggered,
-			reasons: result.reasons,
-			contributions: result.contributions
-		})
-		.onConflictDoUpdate({
-			target: [driverHealthSnapshots.userId, driverHealthSnapshots.evaluatedAt],
-			set: {
+	const now = new Date();
+
+	await db.transaction(async (tx) => {
+		await tx.execute(
+			sql`SELECT user_id FROM driver_health_state WHERE user_id = ${result.userId} FOR UPDATE`
+		);
+
+		const [stateBeforeWrite] = await tx
+			.select({
+				reinstatedAt: driverHealthState.reinstatedAt,
+				lastScoreResetAt: driverHealthState.lastScoreResetAt,
+				assignmentPoolEligible: driverHealthState.assignmentPoolEligible,
+				requiresManagerIntervention: driverHealthState.requiresManagerIntervention
+			})
+			.from(driverHealthState)
+			.where(eq(driverHealthState.userId, result.userId));
+
+		if (!sameTimestamp(stateBeforeWrite?.lastScoreResetAt, result.lastScoreResetAt)) {
+			logger.warn(
+				{
+					userId: result.userId,
+					observedLastScoreResetAt: result.lastScoreResetAt?.toISOString() ?? null,
+					currentLastScoreResetAt: stateBeforeWrite?.lastScoreResetAt?.toISOString() ?? null
+				},
+				'Skipping stale daily health write due to reset marker mismatch'
+			);
+			throw new Error('STALE_DAILY_HEALTH_WRITE');
+		}
+
+		await tx
+			.insert(driverHealthSnapshots)
+			.values({
+				userId: result.userId,
+				evaluatedAt,
 				score: result.score,
-				attendanceRate: 0,
-				completionRate: 0,
+				attendanceRate: result.attendanceRate,
+				completionRate: result.completionRate,
 				lateCancellationCount30d: result.lateCancellationCount30d,
 				noShowCount30d: result.noShowCount30d,
 				hardStopTriggered: result.hardStopTriggered,
 				reasons: result.reasons,
 				contributions: result.contributions
-			}
-		});
-
-	// Update current state
-	const upsertBase: Record<string, unknown> = {
-		currentScore: result.score,
-		updatedAt: new Date()
-	};
-
-	if (result.hardStopTriggered) {
-		const [currentState] = await db
-			.select({ reinstatedAt: driverHealthState.reinstatedAt })
-			.from(driverHealthState)
-			.where(eq(driverHealthState.userId, result.userId));
-
-		let shouldDisablePool = true;
-
-		if (currentState?.reinstatedAt) {
-			const newEvents = await hasNewHardStopEvents(result.userId, currentState.reinstatedAt);
-			if (!newEvents) {
-				shouldDisablePool = false;
-			} else {
-				upsertBase.reinstatedAt = null;
-			}
-		}
-
-		if (shouldDisablePool) {
-			Object.assign(upsertBase, {
-				assignmentPoolEligible: false,
-				requiresManagerIntervention: true
+			})
+			.onConflictDoUpdate({
+				target: [driverHealthSnapshots.userId, driverHealthSnapshots.evaluatedAt],
+				set: {
+					score: result.score,
+					attendanceRate: result.attendanceRate,
+					completionRate: result.completionRate,
+					lateCancellationCount30d: result.lateCancellationCount30d,
+					noShowCount30d: result.noShowCount30d,
+					hardStopTriggered: result.hardStopTriggered,
+					reasons: result.reasons,
+					contributions: result.contributions
+				}
 			});
-		}
-	}
 
-	await db
-		.insert(driverHealthState)
-		.values({
-			userId: result.userId,
+		const upsertBase: Record<string, unknown> = {
 			currentScore: result.score,
-			assignmentPoolEligible: !result.hardStopTriggered,
-			requiresManagerIntervention: result.hardStopTriggered,
-			updatedAt: new Date()
-		})
-		.onConflictDoUpdate({
-			target: driverHealthState.userId,
-			set: upsertBase
-		});
+			updatedAt: now
+		};
+
+		let shouldDisablePool = false;
+		let hardStopResetAt: Date | null = null;
+
+		if (result.hardStopTriggered) {
+			shouldDisablePool = true;
+
+			if (stateBeforeWrite?.reinstatedAt) {
+				const newEvents = await hasNewHardStopEvents(result.userId, stateBeforeWrite.reinstatedAt);
+				if (!newEvents) {
+					shouldDisablePool = false;
+				} else {
+					upsertBase.reinstatedAt = null;
+				}
+			}
+
+			if (shouldDisablePool) {
+				const enteringHardStop =
+					!stateBeforeWrite ||
+					stateBeforeWrite.assignmentPoolEligible ||
+					!stateBeforeWrite.requiresManagerIntervention;
+
+				if (enteringHardStop || !stateBeforeWrite?.lastScoreResetAt) {
+					hardStopResetAt = now;
+					upsertBase.lastScoreResetAt = now;
+				}
+
+				Object.assign(upsertBase, {
+					assignmentPoolEligible: false,
+					requiresManagerIntervention: true,
+					stars: 0,
+					streakWeeks: 0,
+					nextMilestoneStars: 1
+				});
+			}
+		}
+
+		await tx
+			.insert(driverHealthState)
+			.values({
+				userId: result.userId,
+				currentScore: result.score,
+				assignmentPoolEligible: !shouldDisablePool,
+				requiresManagerIntervention: shouldDisablePool,
+				updatedAt: now,
+				...(hardStopResetAt ? { lastScoreResetAt: hardStopResetAt } : {})
+			})
+			.onConflictDoUpdate({
+				target: driverHealthState.userId,
+				set: upsertBase
+			});
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -615,6 +669,7 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 			and(
 				eq(assignments.userId, userId),
 				eq(assignments.status, 'cancelled'),
+				eq(assignments.cancelType, 'late'),
 				isNotNull(assignments.confirmedAt),
 				gte(assignments.date, weekStartStr),
 				sql`${assignments.date} <= ${weekEndStr}`
@@ -803,23 +858,38 @@ export async function runDailyHealthEvaluation(): Promise<DailyHealthRunResult> 
 		await Promise.all(
 			batch.map(async (driver) => {
 				try {
-					const result = await computeDailyScore(driver.id);
+					let dailyResult = await computeDailyScore(driver.id);
 
-					if (!result) {
+					if (!dailyResult) {
 						skippedNewDrivers++;
 						return;
 					}
 
-					await persistDailyScore(result, today);
+					try {
+						await persistDailyScore(dailyResult, today);
+					} catch (error) {
+						if (!(error instanceof Error) || error.message !== 'STALE_DAILY_HEALTH_WRITE') {
+							throw error;
+						}
+
+						log.warn(
+							{ userId: driver.id },
+							'Retrying daily health evaluation after stale-write guard'
+						);
+
+						dailyResult = await computeDailyScore(driver.id);
+
+						if (!dailyResult) {
+							skippedNewDrivers++;
+							return;
+						}
+
+						await persistDailyScore(dailyResult, today);
+					}
+
 					scored++;
 
-					// Corrective warning check uses driverMetrics.completionRate
-					const [driverMetricsRow] = await db
-						.select({ completionRate: driverMetrics.completionRate })
-						.from(driverMetrics)
-						.where(eq(driverMetrics.userId, driver.id));
-
-					const completionRate = driverMetricsRow?.completionRate ?? 1;
+					const completionRate = dailyResult.completionRate;
 
 					if (completionRate < dispatchPolicy.health.correctiveCompletionThreshold) {
 						const recoveryCutoff = subDays(

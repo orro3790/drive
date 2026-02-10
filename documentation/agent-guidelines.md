@@ -308,18 +308,18 @@ const routes = await db.select().from(routes).where(inArray(routes.warehouseId, 
 
 #### `health.ts`
 
-Driver health scoring (daily 0-100 score) and star progression (weekly 0-4 stars) with hard-stop resets. See `documentation/plans/driver-health-gamification.md` for full specification.
+Driver health scoring (daily additive score) and star progression (weekly 0-4 stars) with hard-stop resets. See `documentation/plans/driver-health-gamification.md` for full specification.
 
 **Key Functions:**
 
-- `computeDailyScore(userId)` - Compute daily health score for a driver (attendance 50%, completion 30%, reliability 20%). Returns `DailyScoreResult` or null for new drivers.
+- `computeDailyScore(userId)` - Compute additive daily health score for a driver from event contributions since last reset (hard-stop cap still applies). Returns `DailyScoreResult` or null for new drivers.
 - `evaluateWeek(userId, weekStart)` - Evaluate weekly star progression based on qualifying week criteria (100% attendance, 95%+ completion, 0 no-shows, 0 late cancellations). Returns `WeeklyEvalResult`.
 - `runDailyHealthEvaluation()` - Batch runner for daily score computation across all drivers (cron job). Sends corrective warnings if needed.
 - `runWeeklyHealthEvaluation()` - Batch runner for weekly star evaluation across all drivers (cron job). Sends streak notifications.
 
 **Hard-Stop Rules:**
 
-- Any no-show OR 2+ late cancellations in rolling 30 days caps score at 49 and resets stars to 0
+- Any no-show OR 2+ late cancellations in rolling 30 days caps score at 49 and resets stars to 0 (unless driver was already manager-reinstated with no new post-reinstatement hard-stop events)
 - Hard-stop events set `assignmentPoolEligible = false` (requires manager intervention)
 
 **Usage:**
