@@ -14,6 +14,7 @@ interface NoShowCandidate {
 	driverId: string | null;
 	driverName: string | null;
 	routeName: string | null;
+	routeStartTime: string | null;
 	warehouseName: string | null;
 	existingWindowId: string | null;
 	arrivedAt: Date | null;
@@ -60,6 +61,7 @@ function createCandidate(overrides: Partial<NoShowCandidate> = {}): NoShowCandid
 		driverId: 'driver-1',
 		driverName: 'Driver One',
 		routeName: 'Downtown Route',
+		routeStartTime: '09:00',
 		warehouseName: 'Warehouse A',
 		existingWindowId: null,
 		arrivedAt: null,
@@ -151,48 +153,120 @@ afterEach(() => {
 });
 
 describe('LC-05 cron service: detectNoShows', () => {
-	it('skips processing before the Toronto 9 AM arrival deadline', async () => {
+	it('skips candidates whose per-route deadline has not yet passed', async () => {
+		// 09:00 Toronto EST = 14:00 UTC; freeze to 13:59:59 UTC (one second before)
 		freezeTime('2026-02-10T13:59:59.000Z');
+		candidates.push(createCandidate({ routeStartTime: '09:00' }));
 
 		const result = await detectNoShows();
 
-		expect(result).toEqual({
-			evaluated: 0,
+		expect(result).toMatchObject({
+			evaluated: 1,
 			noShows: 0,
 			bidWindowsCreated: 0,
 			managerAlertsSent: 0,
 			driversNotified: 0,
 			errors: 0,
-			skippedBeforeDeadline: true
+			skippedBeforeDeadline: false
 		});
-		expect(dbSelectMock).not.toHaveBeenCalled();
+		expect(dbSelectMock).toHaveBeenCalled();
+		expect(createBidWindowMock).not.toHaveBeenCalled();
 	});
 
-	it('honors the Toronto 9 AM cutoff on DST spring-forward day', async () => {
-		freezeTime('2026-03-08T12:59:59.000Z');
+	it('processes candidates whose per-route deadline has passed', async () => {
+		// 09:00 Toronto EST = 14:00 UTC; freeze at deadline
+		freezeTime('2026-02-10T14:00:00.000Z');
+		candidates.push(createCandidate({ routeStartTime: '09:00' }));
+		notifyAvailableDriversForEmergencyMock.mockResolvedValueOnce(3);
 
-		const beforeCutoff = await detectNoShows();
-		expect(beforeCutoff.skippedBeforeDeadline).toBe(true);
+		const result = await detectNoShows();
 
-		freezeTime('2026-03-08T13:00:00.000Z');
-		candidates.push(createCandidate({ assignmentDate: '2026-03-08' }));
-
-		const atCutoff = await detectNoShows();
-		expect(atCutoff.skippedBeforeDeadline).toBe(false);
+		expect(result).toMatchObject({
+			evaluated: 1,
+			noShows: 1,
+			bidWindowsCreated: 1,
+			skippedBeforeDeadline: false
+		});
 		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
 	});
 
-	it('honors the Toronto 9 AM cutoff on DST fall-back day', async () => {
-		freezeTime('2026-11-01T13:59:59.000Z');
+	it('handles mixed routes — only flags candidates past their individual deadlines', async () => {
+		// Freeze to 12:30 UTC = 07:30 Toronto EST
+		freezeTime('2026-02-10T12:30:00.000Z');
+
+		// 07:30 route: deadline passed (07:30 EST = 12:30 UTC, now >= deadline)
+		candidates.push(
+			createCandidate({
+				assignmentId: 'early-route',
+				routeStartTime: '07:30'
+			})
+		);
+		// 09:00 route: deadline NOT passed (09:00 EST = 14:00 UTC, now < deadline)
+		candidates.push(
+			createCandidate({
+				assignmentId: 'normal-route',
+				routeStartTime: '09:00'
+			})
+		);
+
+		const result = await detectNoShows();
+
+		expect(result).toMatchObject({
+			evaluated: 2,
+			noShows: 1,
+			bidWindowsCreated: 1
+		});
+		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
+		expect(createBidWindowMock).toHaveBeenCalledWith('early-route', expect.any(Object));
+	});
+
+	it('respects per-route deadline across DST spring-forward boundary', async () => {
+		// Spring forward: 09:00 EDT = 13:00 UTC on 2026-03-08
+		freezeTime('2026-03-08T12:59:59.000Z');
+		candidates.push(
+			createCandidate({ assignmentDate: '2026-03-08', routeStartTime: '09:00' })
+		);
 
 		const beforeCutoff = await detectNoShows();
-		expect(beforeCutoff.skippedBeforeDeadline).toBe(true);
+		expect(beforeCutoff).toMatchObject({
+			evaluated: 1,
+			noShows: 0,
+			skippedBeforeDeadline: false
+		});
+		expect(createBidWindowMock).not.toHaveBeenCalled();
+
+		freezeTime('2026-03-08T13:00:00.000Z');
+		const atCutoff = await detectNoShows();
+		expect(atCutoff).toMatchObject({
+			evaluated: 1,
+			noShows: 1,
+			skippedBeforeDeadline: false
+		});
+		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('respects per-route deadline across DST fall-back boundary', async () => {
+		// Fall back: 09:00 EST = 14:00 UTC on 2026-11-01
+		freezeTime('2026-11-01T13:59:59.000Z');
+		candidates.push(
+			createCandidate({ assignmentDate: '2026-11-01', routeStartTime: '09:00' })
+		);
+
+		const beforeCutoff = await detectNoShows();
+		expect(beforeCutoff).toMatchObject({
+			evaluated: 1,
+			noShows: 0,
+			skippedBeforeDeadline: false
+		});
+		expect(createBidWindowMock).not.toHaveBeenCalled();
 
 		freezeTime('2026-11-01T14:00:00.000Z');
-		candidates.push(createCandidate({ assignmentDate: '2026-11-01' }));
-
 		const atCutoff = await detectNoShows();
-		expect(atCutoff.skippedBeforeDeadline).toBe(false);
+		expect(atCutoff).toMatchObject({
+			evaluated: 1,
+			noShows: 1,
+			skippedBeforeDeadline: false
+		});
 		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
 	});
 
@@ -248,7 +322,11 @@ describe('LC-05 cron service: detectNoShows', () => {
 				entityType: 'assignment',
 				entityId: 'assignment-1',
 				action: 'no_show_detected',
-				actorType: 'system'
+				actorType: 'system',
+				changes: expect.objectContaining({
+					routeStartTime: '09:00',
+					reason: 'no_arrival_by_09:00'
+				})
 			})
 		);
 		expect(result).toMatchObject({
@@ -261,6 +339,22 @@ describe('LC-05 cron service: detectNoShows', () => {
 			skippedBeforeDeadline: false
 		});
 		expect(dbUpdateMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('includes routeStartTime in audit log for non-default start times', async () => {
+		freezeTime('2026-02-10T12:35:00.000Z'); // 07:35 Toronto
+		candidates.push(createCandidate({ routeStartTime: '07:30' }));
+
+		await detectNoShows();
+
+		expect(createAuditLogMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changes: expect.objectContaining({
+					routeStartTime: '07:30',
+					reason: 'no_arrival_by_07:30'
+				})
+			})
+		);
 	});
 
 	it('surfaces processing failures through the result error counter', async () => {

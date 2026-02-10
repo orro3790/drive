@@ -11,6 +11,8 @@ interface AssignmentRow {
 	date: string;
 	status: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled';
 	confirmedAt: Date | null;
+	routeName: string;
+	routeStartTime: string;
 }
 
 interface ShiftRow {
@@ -25,6 +27,8 @@ interface UpdatedShiftRow {
 	parcelsStart: number | null;
 	parcelsDelivered: number | null;
 	parcelsReturned: number | null;
+	exceptedReturns: number | null;
+	exceptionNotes: string | null;
 	startedAt: Date | null;
 	completedAt: Date | null;
 	editableUntil: Date | null;
@@ -51,6 +55,12 @@ const assignmentsTable = {
 	updatedAt: 'assignments.updatedAt'
 };
 
+const routesTable = {
+	id: 'routes.id',
+	name: 'routes.name',
+	startTime: 'routes.startTime'
+};
+
 const shiftsTable = {
 	id: 'shifts.id',
 	assignmentId: 'shifts.assignmentId',
@@ -58,6 +68,8 @@ const shiftsTable = {
 	parcelsStart: 'shifts.parcelsStart',
 	parcelsDelivered: 'shifts.parcelsDelivered',
 	parcelsReturned: 'shifts.parcelsReturned',
+	exceptedReturns: 'shifts.exceptedReturns',
+	exceptionNotes: 'shifts.exceptionNotes',
 	startedAt: 'shifts.startedAt',
 	completedAt: 'shifts.completedAt',
 	editableUntil: 'shifts.editableUntil'
@@ -72,17 +84,15 @@ const driverMetricsTable = {
 let POST: CompleteRouteModule['POST'];
 
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
-let selectFromMock: ReturnType<
-	typeof vi.fn<
-		(table: unknown) => {
-			where: typeof selectWhereMock;
-		}
-	>
->;
+let selectChainMock: {
+	from: ReturnType<typeof vi.fn>;
+	innerJoin: ReturnType<typeof vi.fn>;
+	where: typeof selectWhereMock;
+};
 let selectMock: ReturnType<
 	typeof vi.fn<
 		(shape: Record<string, unknown>) => {
-			from: typeof selectFromMock;
+			from: typeof selectChainMock.from;
 		}
 	>
 >;
@@ -140,6 +150,9 @@ let recordRouteCompletionMock: ReturnType<
 	typeof vi.fn<(payload: { userId: string; routeId: string; completedAt: Date }) => Promise<void>>
 >;
 let updateDriverMetricsServiceMock: ReturnType<typeof vi.fn<(userId: string) => Promise<void>>>;
+let sendManagerAlertMock: ReturnType<
+	typeof vi.fn<(routeId: string, type: string, data: Record<string, unknown>) => Promise<void>>
+>;
 
 function createLifecycleOutput(overrides: Partial<LifecycleOutput> = {}): LifecycleOutput {
 	return {
@@ -164,16 +177,44 @@ function createUser(role: 'driver' | 'manager', id: string): App.Locals['user'] 
 	} as App.Locals['user'];
 }
 
+function createAssignment(overrides: Partial<AssignmentRow> = {}): AssignmentRow {
+	return {
+		id: 'assignment-1',
+		userId: 'driver-1',
+		routeId: 'route-1',
+		date: '2026-02-09',
+		status: 'active',
+		confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+		routeName: 'Route Alpha',
+		routeStartTime: '09:00',
+		...overrides
+	};
+}
+
+function createShift(overrides: Partial<ShiftRow> = {}): ShiftRow {
+	return {
+		id: 'shift-1',
+		arrivedAt: new Date('2026-02-09T10:00:00.000Z'),
+		parcelsStart: 10,
+		completedAt: null,
+		...overrides
+	};
+}
+
 beforeEach(async () => {
 	vi.resetModules();
 
 	selectWhereMock = vi.fn<(whereClause: unknown) => Promise<unknown[]>>(async () => []);
-	selectFromMock = vi.fn<(table: unknown) => { where: typeof selectWhereMock }>(() => ({
+	selectChainMock = {
+		from: vi.fn(() => selectChainMock),
+		innerJoin: vi.fn((_table: unknown, _on: unknown) => selectChainMock),
 		where: selectWhereMock
-	}));
-	selectMock = vi.fn<(shape: Record<string, unknown>) => { from: typeof selectFromMock }>(() => ({
-		from: selectFromMock
-	}));
+	};
+	selectMock = vi.fn<
+		(shape: Record<string, unknown>) => {
+			from: typeof selectChainMock.from;
+		}
+	>(() => selectChainMock);
 
 	shiftUpdateReturningMock = vi.fn<(shape: Record<string, unknown>) => Promise<UpdatedShiftRow[]>>(
 		async () => []
@@ -204,6 +245,7 @@ beforeEach(async () => {
 	broadcastAssignmentUpdatedMock = vi.fn();
 	recordRouteCompletionMock = vi.fn(async () => undefined);
 	updateDriverMetricsServiceMock = vi.fn(async () => undefined);
+	sendManagerAlertMock = vi.fn(async () => undefined);
 
 	vi.doMock('$lib/server/db', () => ({
 		db: {
@@ -215,6 +257,7 @@ beforeEach(async () => {
 	vi.doMock('$lib/server/db/schema', () => ({
 		assignments: assignmentsTable,
 		driverMetrics: driverMetricsTable,
+		routes: routesTable,
 		shifts: shiftsTable
 	}));
 
@@ -244,6 +287,10 @@ beforeEach(async () => {
 		updateDriverMetrics: updateDriverMetricsServiceMock
 	}));
 
+	vi.doMock('$lib/server/services/notifications', () => ({
+		sendManagerAlert: sendManagerAlertMock
+	}));
+
 	({ POST } = await import('../../src/routes/api/shifts/complete/+server'));
 });
 
@@ -256,6 +303,7 @@ afterEach(() => {
 	vi.doUnmock('$lib/server/services/audit');
 	vi.doUnmock('$lib/server/realtime/managerSse');
 	vi.doUnmock('$lib/server/services/metrics');
+	vi.doUnmock('$lib/server/services/notifications');
 });
 
 describe('POST /api/shifts/complete contract', () => {
@@ -294,6 +342,37 @@ describe('POST /api/shifts/complete contract', () => {
 		expect(selectMock).not.toHaveBeenCalled();
 	});
 
+	it('returns 400 when exceptedReturns exceeds parcelsReturned', async () => {
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: {
+				assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb',
+				parcelsReturned: 3,
+				exceptedReturns: 4,
+				exceptionNotes: 'damaged parcels'
+			}
+		});
+
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
+		expect(selectMock).not.toHaveBeenCalled();
+	});
+
+	it('returns 400 when exceptedReturns > 0 but no exceptionNotes provided', async () => {
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: {
+				assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb',
+				parcelsReturned: 3,
+				exceptedReturns: 2
+			}
+		});
+
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
+		expect(selectMock).not.toHaveBeenCalled();
+	});
+
 	it('returns 404 when assignment is missing', async () => {
 		selectWhereMock.mockResolvedValueOnce([]);
 
@@ -307,15 +386,7 @@ describe('POST /api/shifts/complete contract', () => {
 	});
 
 	it('returns 409 when assignment has no assigned driver', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: null,
-			routeId: 'route-1',
-			date: '2026-02-09',
-			status: 'active',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]);
+		selectWhereMock.mockResolvedValueOnce([createAssignment({ userId: null })]);
 
 		const event = createRequestEvent({
 			method: 'POST',
@@ -327,15 +398,7 @@ describe('POST /api/shifts/complete contract', () => {
 	});
 
 	it('returns 403 when assignment ownership does not match', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-2',
-			routeId: 'route-1',
-			date: '2026-02-09',
-			status: 'active',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]);
+		selectWhereMock.mockResolvedValueOnce([createAssignment({ userId: 'driver-2' })]);
 
 		const event = createRequestEvent({
 			method: 'POST',
@@ -347,15 +410,7 @@ describe('POST /api/shifts/complete contract', () => {
 	});
 
 	it('returns 409 when assignment is not active', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1',
-			routeId: 'route-1',
-			date: '2026-02-09',
-			status: 'scheduled',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]);
+		selectWhereMock.mockResolvedValueOnce([createAssignment({ status: 'scheduled' })]);
 
 		const event = createRequestEvent({
 			method: 'POST',
@@ -367,15 +422,7 @@ describe('POST /api/shifts/complete contract', () => {
 	});
 
 	it('returns 404 when shift is missing', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1',
-			routeId: 'route-1',
-			date: '2026-02-09',
-			status: 'active',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
+		selectWhereMock.mockResolvedValueOnce([createAssignment()]).mockResolvedValueOnce([]);
 
 		const event = createRequestEvent({
 			method: 'POST',
@@ -387,21 +434,9 @@ describe('POST /api/shifts/complete contract', () => {
 	});
 
 	it('returns 409 when lifecycle reports not completable', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1',
-			routeId: 'route-1',
-			date: '2026-02-09',
-			status: 'active',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
-		};
-		const shift: ShiftRow = {
-			id: 'shift-1',
-			arrivedAt: new Date('2026-02-09T10:00:00.000Z'),
-			parcelsStart: 10,
-			completedAt: null
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift()]);
 		deriveAssignmentLifecycleMock.mockReturnValue(createLifecycleOutput({ isCompletable: false }));
 
 		const event = createRequestEvent({
@@ -414,21 +449,11 @@ describe('POST /api/shifts/complete contract', () => {
 	});
 
 	it('returns 409 when shift is already completed', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1',
-			routeId: 'route-1',
-			date: '2026-02-09',
-			status: 'active',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
-		};
-		const shift: ShiftRow = {
-			id: 'shift-1',
-			arrivedAt: new Date('2026-02-09T10:00:00.000Z'),
-			parcelsStart: 10,
-			completedAt: new Date('2026-02-09T14:00:00.000Z')
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([
+				createShift({ completedAt: new Date('2026-02-09T14:00:00.000Z') })
+			]);
 
 		const event = createRequestEvent({
 			method: 'POST',
@@ -440,21 +465,9 @@ describe('POST /api/shifts/complete contract', () => {
 	});
 
 	it('returns 409 when parcels were never recorded', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1',
-			routeId: 'route-1',
-			date: '2026-02-09',
-			status: 'active',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
-		};
-		const shift: ShiftRow = {
-			id: 'shift-1',
-			arrivedAt: new Date('2026-02-09T10:00:00.000Z'),
-			parcelsStart: null,
-			completedAt: null
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift({ parcelsStart: null })]);
 
 		const event = createRequestEvent({
 			method: 'POST',
@@ -466,21 +479,9 @@ describe('POST /api/shifts/complete contract', () => {
 	});
 
 	it('returns 400 when parcelsReturned exceeds parcelsStart', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1',
-			routeId: 'route-1',
-			date: '2026-02-09',
-			status: 'active',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
-		};
-		const shift: ShiftRow = {
-			id: 'shift-1',
-			arrivedAt: new Date('2026-02-09T10:00:00.000Z'),
-			parcelsStart: 10,
-			completedAt: null
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift()]);
 
 		const event = createRequestEvent({
 			method: 'POST',
@@ -492,31 +493,21 @@ describe('POST /api/shifts/complete contract', () => {
 	});
 
 	it('returns 200 with completed shift payload and assignmentStatus completed', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1',
-			routeId: 'route-1',
-			date: '2026-02-09',
-			status: 'active',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
-		};
-		const shift: ShiftRow = {
-			id: 'shift-1',
-			arrivedAt: new Date('2026-02-09T10:00:00.000Z'),
-			parcelsStart: 10,
-			completedAt: null
-		};
 		const updatedShift: UpdatedShiftRow = {
 			id: 'shift-1',
 			parcelsStart: 10,
 			parcelsDelivered: 8,
 			parcelsReturned: 2,
+			exceptedReturns: 0,
+			exceptionNotes: null,
 			startedAt: new Date('2026-02-09T10:15:00.000Z'),
 			completedAt: new Date('2026-02-09T17:00:00.000Z'),
 			editableUntil: new Date('2026-02-09T18:00:00.000Z')
 		};
 
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift()]);
 		shiftUpdateReturningMock.mockResolvedValueOnce([updatedShift]);
 
 		const event = createRequestEvent({
@@ -534,6 +525,8 @@ describe('POST /api/shifts/complete contract', () => {
 				parcelsStart: 10,
 				parcelsDelivered: 8,
 				parcelsReturned: 2,
+				exceptedReturns: 0,
+				exceptionNotes: null,
 				startedAt: '2026-02-09T10:15:00.000Z',
 				completedAt: '2026-02-09T17:00:00.000Z',
 				editableUntil: '2026-02-09T18:00:00.000Z'
@@ -557,6 +550,193 @@ describe('POST /api/shifts/complete contract', () => {
 				routeId: 'route-1'
 			})
 		);
+		expect(nonReturningUpdateWhereMock).toHaveBeenCalledTimes(1);
+		expect(sendManagerAlertMock).not.toHaveBeenCalled();
+	});
+
+	it('passes routeStartTime through to lifecycle derivation', async () => {
+		const updatedShift: UpdatedShiftRow = {
+			id: 'shift-1',
+			parcelsStart: 10,
+			parcelsDelivered: 10,
+			parcelsReturned: 0,
+			exceptedReturns: 0,
+			exceptionNotes: null,
+			startedAt: new Date('2026-02-09T10:15:00.000Z'),
+			completedAt: new Date('2026-02-09T17:00:00.000Z'),
+			editableUntil: new Date('2026-02-09T18:00:00.000Z')
+		};
+
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment({ routeStartTime: '07:30' })])
+			.mockResolvedValueOnce([createShift()]);
+		shiftUpdateReturningMock.mockResolvedValueOnce([updatedShift]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb', parcelsReturned: 0 }
+		});
+
+		await POST(event as Parameters<typeof POST>[0]);
+
+		expect(deriveAssignmentLifecycleMock).toHaveBeenCalledWith(
+			expect.objectContaining({ routeStartTime: '07:30' }),
+			expect.any(Object)
+		);
+	});
+
+	it('sends manager alert when exceptedReturns > 0', async () => {
+		const updatedShift: UpdatedShiftRow = {
+			id: 'shift-1',
+			parcelsStart: 100,
+			parcelsDelivered: 95,
+			parcelsReturned: 5,
+			exceptedReturns: 3,
+			exceptionNotes: 'Damaged parcels at depot',
+			startedAt: new Date('2026-02-09T10:15:00.000Z'),
+			completedAt: new Date('2026-02-09T17:00:00.000Z'),
+			editableUntil: new Date('2026-02-09T18:00:00.000Z')
+		};
+
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift({ parcelsStart: 100 })]);
+		shiftUpdateReturningMock.mockResolvedValueOnce([updatedShift]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: {
+				assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb',
+				parcelsReturned: 5,
+				exceptedReturns: 3,
+				exceptionNotes: 'Damaged parcels at depot'
+			}
+		});
+
+		const response = await POST(event as Parameters<typeof POST>[0]);
+
+		expect(response.status).toBe(200);
+		expect(sendManagerAlertMock).toHaveBeenCalledWith('route-1', 'return_exception', {
+			routeName: 'Route Alpha',
+			driverName: 'driver-driver-1',
+			date: '2026-02-09'
+		});
+	});
+
+	it('includes exception data in shift audit log', async () => {
+		const updatedShift: UpdatedShiftRow = {
+			id: 'shift-1',
+			parcelsStart: 50,
+			parcelsDelivered: 45,
+			parcelsReturned: 5,
+			exceptedReturns: 2,
+			exceptionNotes: 'Customer refused',
+			startedAt: new Date('2026-02-09T10:15:00.000Z'),
+			completedAt: new Date('2026-02-09T17:00:00.000Z'),
+			editableUntil: new Date('2026-02-09T18:00:00.000Z')
+		};
+
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift({ parcelsStart: 50 })]);
+		shiftUpdateReturningMock.mockResolvedValueOnce([updatedShift]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: {
+				assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb',
+				parcelsReturned: 5,
+				exceptedReturns: 2,
+				exceptionNotes: 'Customer refused'
+			}
+		});
+
+		await POST(event as Parameters<typeof POST>[0]);
+
+		// Second audit log call is for the shift
+		const shiftAuditCall = createAuditLogMock.mock.calls[1][0];
+		expect(shiftAuditCall).toEqual(
+			expect.objectContaining({
+				entityType: 'shift',
+				action: 'complete',
+				changes: expect.objectContaining({
+					exceptedReturns: 2,
+					exceptionNotes: 'Customer refused'
+				})
+			})
+		);
+	});
+
+	it('counts adjusted delivery rate for high delivery metric (excepted returns included)', async () => {
+		// 100 start, 5 returned, 3 excepted → adjusted = (95 + 3) / 100 = 0.98 ≥ 0.95 → high delivery
+		const updatedShift: UpdatedShiftRow = {
+			id: 'shift-1',
+			parcelsStart: 100,
+			parcelsDelivered: 95,
+			parcelsReturned: 5,
+			exceptedReturns: 3,
+			exceptionNotes: 'Damaged in transit',
+			startedAt: new Date('2026-02-09T10:15:00.000Z'),
+			completedAt: new Date('2026-02-09T17:00:00.000Z'),
+			editableUntil: new Date('2026-02-09T18:00:00.000Z')
+		};
+
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift({ parcelsStart: 100 })]);
+		shiftUpdateReturningMock.mockResolvedValueOnce([updatedShift]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: {
+				assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb',
+				parcelsReturned: 5,
+				exceptedReturns: 3,
+				exceptionNotes: 'Damaged in transit'
+			}
+		});
+
+		await POST(event as Parameters<typeof POST>[0]);
+
+		// Should trigger high delivery metric update (shifts + driverMetrics + assignments = 3 updates)
+		expect(updateMock).toHaveBeenCalledTimes(3);
+		// nonReturningUpdateWhereMock is called for both driverMetrics and assignments
+		expect(nonReturningUpdateWhereMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('does not bump high delivery metric when adjusted rate is below 95%', async () => {
+		// 10 start, 2 returned, 0 excepted → adjusted = (8 + 0) / 10 = 0.80 < 0.95 → no high delivery
+		const updatedShift: UpdatedShiftRow = {
+			id: 'shift-1',
+			parcelsStart: 10,
+			parcelsDelivered: 8,
+			parcelsReturned: 2,
+			exceptedReturns: 0,
+			exceptionNotes: null,
+			startedAt: new Date('2026-02-09T10:15:00.000Z'),
+			completedAt: new Date('2026-02-09T17:00:00.000Z'),
+			editableUntil: new Date('2026-02-09T18:00:00.000Z')
+		};
+
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift()]);
+		shiftUpdateReturningMock.mockResolvedValueOnce([updatedShift]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb', parcelsReturned: 2 }
+		});
+
+		await POST(event as Parameters<typeof POST>[0]);
+
+		// Only shifts + assignments = 2 updates (no driverMetrics)
+		expect(updateMock).toHaveBeenCalledTimes(2);
 		expect(nonReturningUpdateWhereMock).toHaveBeenCalledTimes(1);
 	});
 });

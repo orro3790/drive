@@ -35,6 +35,7 @@ type RouteStatus = 'assigned' | 'unfilled' | 'bidding';
 type RouteWithWarehouse = {
 	id: string;
 	name: string;
+	startTime: string;
 	warehouseId: string;
 	warehouseName: string;
 	createdBy: string | null;
@@ -78,6 +79,7 @@ function makeRoute(overrides: Partial<RouteWithWarehouse> = {}): RouteWithWareho
 	return {
 		id: 'route-1',
 		name: 'Downtown',
+		startTime: '09:00',
 		warehouseId: 'warehouse-1',
 		warehouseName: 'Main Warehouse',
 		createdBy: null,

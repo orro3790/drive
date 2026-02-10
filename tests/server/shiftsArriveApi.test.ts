@@ -11,6 +11,7 @@ interface AssignmentRow {
 	date: string;
 	status: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled';
 	confirmedAt: Date | null;
+	routeStartTime: string;
 }
 
 interface ShiftRow {
@@ -34,10 +35,17 @@ interface LifecycleOutput {
 const assignmentsTable = {
 	id: 'assignments.id',
 	userId: 'assignments.userId',
+	routeId: 'assignments.routeId',
 	date: 'assignments.date',
 	status: 'assignments.status',
 	confirmedAt: 'assignments.confirmedAt',
 	updatedAt: 'assignments.updatedAt'
+};
+
+const routesTable = {
+	id: 'routes.id',
+	name: 'routes.name',
+	startTime: 'routes.startTime'
 };
 
 const shiftsTable = {
@@ -57,17 +65,15 @@ const driverMetricsTable = {
 let POST: ArriveRouteModule['POST'];
 
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
-let selectFromMock: ReturnType<
-	typeof vi.fn<
-		(table: unknown) => {
-			where: typeof selectWhereMock;
-		}
-	>
->;
+let selectChainMock: {
+	from: ReturnType<typeof vi.fn>;
+	innerJoin: ReturnType<typeof vi.fn>;
+	where: typeof selectWhereMock;
+};
 let selectMock: ReturnType<
 	typeof vi.fn<
 		(shape: Record<string, unknown>) => {
-			from: typeof selectFromMock;
+			from: typeof selectChainMock.from;
 		}
 	>
 >;
@@ -110,6 +116,9 @@ let createAssignmentLifecycleContextMock: ReturnType<typeof vi.fn<() => Record<s
 let deriveAssignmentLifecycleMock: ReturnType<
 	typeof vi.fn<(input: unknown, context: unknown) => LifecycleOutput>
 >;
+let calculateArrivalDeadlineMock: ReturnType<
+	typeof vi.fn<(date: string, tz?: string, startTime?: string | null) => Date>
+>;
 let createAuditLogMock: ReturnType<typeof vi.fn<(entry: Record<string, unknown>) => Promise<void>>>;
 let broadcastAssignmentUpdatedMock: ReturnType<
 	typeof vi.fn<(payload: Record<string, unknown>) => void>
@@ -142,12 +151,16 @@ beforeEach(async () => {
 	vi.resetModules();
 
 	selectWhereMock = vi.fn<(whereClause: unknown) => Promise<unknown[]>>(async () => []);
-	selectFromMock = vi.fn<(table: unknown) => { where: typeof selectWhereMock }>(() => ({
+	selectChainMock = {
+		from: vi.fn(() => selectChainMock),
+		innerJoin: vi.fn((_table: unknown, _on: unknown) => selectChainMock),
 		where: selectWhereMock
-	}));
-	selectMock = vi.fn<(shape: Record<string, unknown>) => { from: typeof selectFromMock }>(() => ({
-		from: selectFromMock
-	}));
+	};
+	selectMock = vi.fn<
+		(shape: Record<string, unknown>) => {
+			from: typeof selectChainMock.from;
+		}
+	>(() => selectChainMock);
 
 	insertReturningMock = vi.fn<
 		(shape: Record<string, unknown>) => Promise<Array<{ id: string; arrivedAt: Date }>>
@@ -171,6 +184,15 @@ beforeEach(async () => {
 
 	createAssignmentLifecycleContextMock = vi.fn(() => ({ torontoToday: '2026-02-09' }));
 	deriveAssignmentLifecycleMock = vi.fn(() => createLifecycleOutput());
+	calculateArrivalDeadlineMock = vi.fn(
+		(date: string, _tz?: string, startTime?: string | null) => {
+			// Default 9 AM Toronto (UTC-5) = 14:00 UTC
+			const st = startTime ?? '09:00';
+			const [h, m] = st.split(':').map(Number);
+			// Approximate: Toronto is UTC-5 in winter
+			return new Date(`${date}T${String(h + 5).padStart(2, '0')}:${String(m).padStart(2, '0')}:00.000Z`);
+		}
+	);
 	createAuditLogMock = vi.fn(async () => undefined);
 	broadcastAssignmentUpdatedMock = vi.fn();
 	freezeTime('2026-02-09T13:00:00.000Z');
@@ -186,6 +208,7 @@ beforeEach(async () => {
 	vi.doMock('$lib/server/db/schema', () => ({
 		assignments: assignmentsTable,
 		driverMetrics: driverMetricsTable,
+		routes: routesTable,
 		shifts: shiftsTable
 	}));
 
@@ -199,7 +222,8 @@ beforeEach(async () => {
 
 	vi.doMock('$lib/server/services/assignmentLifecycle', () => ({
 		createAssignmentLifecycleContext: createAssignmentLifecycleContextMock,
-		deriveAssignmentLifecycle: deriveAssignmentLifecycleMock
+		deriveAssignmentLifecycle: deriveAssignmentLifecycleMock,
+		calculateArrivalDeadline: calculateArrivalDeadlineMock
 	}));
 
 	vi.doMock('$lib/server/services/audit', () => ({
@@ -275,7 +299,8 @@ describe('POST /api/shifts/arrive contract', () => {
 			userId: 'driver-2',
 			date: '2026-02-09',
 			status: 'scheduled',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+			routeStartTime: '09:00'
 		};
 		selectWhereMock.mockResolvedValueOnce([assignment]);
 
@@ -295,7 +320,8 @@ describe('POST /api/shifts/arrive contract', () => {
 			userId: 'driver-1',
 			date: '2026-02-10',
 			status: 'scheduled',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+			routeStartTime: '09:00'
 		};
 
 		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
@@ -315,7 +341,8 @@ describe('POST /api/shifts/arrive contract', () => {
 			userId: 'driver-1',
 			date: '2026-02-09',
 			status: 'scheduled',
-			confirmedAt: null
+			confirmedAt: null,
+			routeStartTime: '09:00'
 		};
 
 		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
@@ -329,15 +356,17 @@ describe('POST /api/shifts/arrive contract', () => {
 		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
 	});
 
-	it('returns 400 when current time is at/after 9 AM Toronto cutoff', async () => {
+	it('returns 400 when current time is at/after route start time cutoff', async () => {
 		freezeTime('2026-02-09T14:00:00.000Z');
+		calculateArrivalDeadlineMock.mockReturnValue(new Date('2026-02-09T14:00:00.000Z'));
 
 		const assignment: AssignmentRow = {
 			id: 'assignment-1',
 			userId: 'driver-1',
 			date: '2026-02-09',
 			status: 'scheduled',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+			routeStartTime: '09:00'
 		};
 
 		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
@@ -351,20 +380,87 @@ describe('POST /api/shifts/arrive contract', () => {
 		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
 	});
 
-	it('enforces the 9 AM Toronto cutoff across DST spring-forward boundaries', async () => {
+	it('enforces per-route start time cutoff (early 07:30 route)', async () => {
+		// 07:30 Toronto = 12:30 UTC
+		freezeTime('2026-02-09T12:30:00.000Z');
+		calculateArrivalDeadlineMock.mockReturnValue(new Date('2026-02-09T12:30:00.000Z'));
+
+		const assignment: AssignmentRow = {
+			id: 'assignment-early',
+			userId: 'driver-1',
+			date: '2026-02-09',
+			status: 'scheduled',
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+			routeStartTime: '07:30'
+		};
+
+		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb' }
+		});
+
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
+		expect(calculateArrivalDeadlineMock).toHaveBeenCalledWith(
+			'2026-02-09',
+			undefined,
+			'07:30'
+		);
+	});
+
+	it('allows arrival before per-route start time (late 11:00 route)', async () => {
+		// 10:59 Toronto = 15:59 UTC, route starts 11:00
+		freezeTime('2026-02-09T15:59:00.000Z');
+		calculateArrivalDeadlineMock.mockReturnValue(new Date('2026-02-09T16:00:00.000Z'));
+
+		createAssignmentLifecycleContextMock.mockReturnValue({ torontoToday: '2026-02-09' });
+
+		const assignment: AssignmentRow = {
+			id: 'assignment-late',
+			userId: 'driver-1',
+			date: '2026-02-09',
+			status: 'scheduled',
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+			routeStartTime: '11:00'
+		};
+
+		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
+		insertReturningMock.mockResolvedValueOnce([
+			{
+				id: 'shift-late',
+				arrivedAt: new Date('2026-02-09T15:59:00.000Z')
+			}
+		]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb' }
+		});
+
+		const response = await POST(event as Parameters<typeof POST>[0]);
+		expect(response.status).toBe(200);
+	});
+
+	it('enforces the route start time cutoff across DST spring-forward boundaries', async () => {
 		const assignment: AssignmentRow = {
 			id: 'assignment-dst',
 			userId: 'driver-1',
 			date: '2026-03-08',
 			status: 'scheduled',
-			confirmedAt: new Date('2026-03-07T12:00:00.000Z')
+			confirmedAt: new Date('2026-03-07T12:00:00.000Z'),
+			routeStartTime: '09:00'
 		};
 
 		createAssignmentLifecycleContextMock
 			.mockReturnValueOnce({ torontoToday: '2026-03-08' })
 			.mockReturnValueOnce({ torontoToday: '2026-03-08' });
 
+		// Before cutoff: 09:00 EDT = 13:00 UTC on spring-forward day
 		freezeTime('2026-03-08T12:59:59.000Z');
+		calculateArrivalDeadlineMock.mockReturnValue(new Date('2026-03-08T13:00:00.000Z'));
 		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
 		insertReturningMock.mockResolvedValueOnce([
 			{
@@ -382,7 +478,9 @@ describe('POST /api/shifts/arrive contract', () => {
 		const beforeCutoffResponse = await POST(beforeCutoffEvent as Parameters<typeof POST>[0]);
 		expect(beforeCutoffResponse.status).toBe(200);
 
+		// At cutoff
 		freezeTime('2026-03-08T13:00:00.000Z');
+		calculateArrivalDeadlineMock.mockReturnValue(new Date('2026-03-08T13:00:00.000Z'));
 		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
 
 		const atCutoffEvent = createRequestEvent({
@@ -396,20 +494,23 @@ describe('POST /api/shifts/arrive contract', () => {
 		});
 	});
 
-	it('enforces the 9 AM Toronto cutoff across DST fall-back boundaries', async () => {
+	it('enforces the route start time cutoff across DST fall-back boundaries', async () => {
 		const assignment: AssignmentRow = {
 			id: 'assignment-dst-fall',
 			userId: 'driver-1',
 			date: '2026-11-01',
 			status: 'scheduled',
-			confirmedAt: new Date('2026-10-31T12:00:00.000Z')
+			confirmedAt: new Date('2026-10-31T12:00:00.000Z'),
+			routeStartTime: '09:00'
 		};
 
 		createAssignmentLifecycleContextMock
 			.mockReturnValueOnce({ torontoToday: '2026-11-01' })
 			.mockReturnValueOnce({ torontoToday: '2026-11-01' });
 
+		// Before cutoff: 09:00 EST = 14:00 UTC on fall-back day
 		freezeTime('2026-11-01T13:59:59.000Z');
+		calculateArrivalDeadlineMock.mockReturnValue(new Date('2026-11-01T14:00:00.000Z'));
 		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
 		insertReturningMock.mockResolvedValueOnce([
 			{
@@ -428,6 +529,7 @@ describe('POST /api/shifts/arrive contract', () => {
 		expect(beforeCutoffResponse.status).toBe(200);
 
 		freezeTime('2026-11-01T14:00:00.000Z');
+		calculateArrivalDeadlineMock.mockReturnValue(new Date('2026-11-01T14:00:00.000Z'));
 		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
 
 		const atCutoffEvent = createRequestEvent({
@@ -447,7 +549,8 @@ describe('POST /api/shifts/arrive contract', () => {
 			userId: 'driver-1',
 			date: '2026-02-09',
 			status: 'scheduled',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+			routeStartTime: '09:00'
 		};
 		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
 		deriveAssignmentLifecycleMock.mockReturnValue(createLifecycleOutput({ isArrivable: false }));
@@ -467,7 +570,8 @@ describe('POST /api/shifts/arrive contract', () => {
 			userId: 'driver-1',
 			date: '2026-02-09',
 			status: 'scheduled',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+			routeStartTime: '09:00'
 		};
 		const existingShift: ShiftRow = {
 			id: 'shift-1',
@@ -496,7 +600,8 @@ describe('POST /api/shifts/arrive contract', () => {
 			userId: 'driver-1',
 			date: '2026-02-09',
 			status: 'scheduled',
-			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+			routeStartTime: '09:00'
 		};
 
 		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
@@ -530,5 +635,38 @@ describe('POST /api/shifts/arrive contract', () => {
 				driverId: 'driver-1'
 			})
 		);
+	});
+
+	it('passes routeStartTime through to lifecycle derivation', async () => {
+		// 07:30 Toronto = 12:30 UTC; freeze time before that deadline
+		freezeTime('2026-02-09T12:00:00.000Z');
+
+		const assignment: AssignmentRow = {
+			id: 'assignment-1',
+			userId: 'driver-1',
+			date: '2026-02-09',
+			status: 'scheduled',
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+			routeStartTime: '07:30'
+		};
+
+		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
+		insertReturningMock.mockResolvedValueOnce([
+			{ id: 'shift-1', arrivedAt: new Date('2026-02-09T12:00:00.000Z') }
+		]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb' }
+		});
+
+		await POST(event as Parameters<typeof POST>[0]);
+
+		expect(deriveAssignmentLifecycleMock).toHaveBeenCalledWith(
+			expect.objectContaining({ routeStartTime: '07:30' }),
+			expect.any(Object)
+		);
+		expect(calculateArrivalDeadlineMock).toHaveBeenCalledWith('2026-02-09', undefined, '07:30');
 	});
 });
