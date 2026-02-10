@@ -222,7 +222,7 @@
 						</span>
 					{/if}
 				</div>
-				<Tooltip tooltip={true} position="bottom" delay={300} focusable={false}>
+				<Tooltip tooltip={true} position="bottom" delay={300} focusable={false} touchable>
 					{#snippet content()}
 						<div class="buff-tooltip">
 							<p>{buffTooltipText}</p>
