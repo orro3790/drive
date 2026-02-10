@@ -143,12 +143,9 @@
 			{m.auth_sign_in_button()}
 		</Button>
 
-		<!-- NOTE: Email-based password reset disabled until Resend domain is configured.
-		     Managers can reset passwords at /app/admin/reset-password
 		<a href="/forgot-password" class="forgot-password">
 			{m.auth_forgot_password()}
 		</a>
-		-->
 	</form>
 
 	<div class="auth-footer">
@@ -196,7 +193,6 @@
 		gap: var(--spacing-3);
 	}
 
-	/* NOTE: .forgot-password styles kept for when email reset is enabled
 	.forgot-password {
 		display: inline-flex;
 		align-self: center;
@@ -216,7 +212,6 @@
 		color: var(--interactive-accent-hover);
 		text-decoration: underline;
 	}
-	*/
 
 	.auth-footer {
 		text-align: center;

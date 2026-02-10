@@ -49,7 +49,7 @@ type RateLimitRule = { window: number; max: number };
 export const AUTH_RATE_LIMIT_RULES: Record<string, RateLimitRule> = {
 	'/sign-up/*': { window: 15 * 60, max: 3 },
 	'/sign-in/*': { window: 5 * 60, max: 5 },
-	'/forget-password': { window: 10 * 60, max: 3 }
+	'/request-password-reset': { window: 10 * 60, max: 3 }
 };
 
 function normalizeEmail(email: string): string {

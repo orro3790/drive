@@ -14,6 +14,7 @@ import logger from './logger';
 import { BETTER_AUTH_SECRET } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 import { ac, admin, manager } from './permissions';
+import { resolveTrustedOrigins } from './auth-trusted-origins';
 import {
 	buildAuthRateLimitConfig,
 	createSignupAbuseGuard,
@@ -31,6 +32,9 @@ function getAuthBaseUrl(): string | undefined {
 	if (env.BETTER_AUTH_URL) {
 		return env.BETTER_AUTH_URL;
 	}
+	if (env.VERCEL_URL) {
+		return `https://${env.VERCEL_URL}`;
+	}
 	if (env.VERCEL_PROJECT_PRODUCTION_URL) {
 		return `https://${env.VERCEL_PROJECT_PRODUCTION_URL}`;
 	}
@@ -39,28 +43,46 @@ function getAuthBaseUrl(): string | undefined {
 
 const signupAbuseGuard = createSignupAbuseGuard();
 const signupOnboardingConsumer = createSignupOnboardingConsumer();
+const trustedOriginsResolution = resolveTrustedOrigins(env);
+
+if (trustedOriginsResolution.invalidEntries.length > 0) {
+	if (trustedOriginsResolution.deploymentEnvironment === 'production') {
+		throw new Error(
+			`Invalid Better Auth trusted origins: ${trustedOriginsResolution.invalidEntries.join(', ')}`
+		);
+	}
+
+	logger.warn(
+		{ invalidTrustedOrigins: trustedOriginsResolution.invalidEntries },
+		'Ignoring invalid Better Auth trusted origins in non-production environment'
+	);
+}
+
+if (
+	trustedOriginsResolution.deploymentEnvironment === 'production' &&
+	trustedOriginsResolution.origins.length === 0
+) {
+	throw new Error('No trusted origins configured for Better Auth in production');
+}
 
 export const auth = betterAuth({
 	appName: 'Drive',
 	baseURL: getAuthBaseUrl(),
 	secret: BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg', schema: authSchema }),
-	trustedOrigins: ['http://localhost:5173', 'http://192.168.*', 'https://*.vercel.app'],
+	trustedOrigins: trustedOriginsResolution.origins,
 	rateLimit: buildAuthRateLimitConfig(),
 	emailAndPassword: {
-		enabled: true
-		// NOTE: Email-based password reset is disabled until a domain is configured in Resend.
-		// When ready to enable:
-		// 1. Add verified domain in Resend dashboard
-		// 2. Set RESEND_API_KEY and EMAIL_FROM in Vercel env vars
-		// 3. Uncomment the sendResetPassword hook below
-		//
-		// sendResetPassword: async ({ user, url }) => {
-		// 	sendPasswordResetEmail(user.email, url).catch((err) => {
-		// 		logger.error({ email: user.email, error: err.message }, 'Password reset email failed');
-		// 	});
-		// },
-		// resetPasswordTokenExpiresIn: 60 * 60 // 1 hour in seconds
+		enabled: true,
+		sendResetPassword: async ({ user, url }) => {
+			sendPasswordResetEmail(user.email, url).catch((err) => {
+				logger.error(
+					{ email: user.email, error: err instanceof Error ? err.message : String(err) },
+					'Password reset email failed'
+				);
+			});
+		},
+		resetPasswordTokenExpiresIn: 60 * 60
 	},
 	user: {
 		additionalFields: {

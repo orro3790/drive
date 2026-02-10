@@ -7,10 +7,12 @@ import { json, redirect } from '@sveltejs/kit';
 import { building } from '$app/environment';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { auth } from '$lib/server/auth';
+import {
+	buildSignInRedirect,
+	isMonitoredAuthRateLimitPath,
+	isPublicRoute
+} from '$lib/server/auth-route-policy';
 import logger from '$lib/server/logger';
-
-const publicPaths = new Set(['/', '/sign-in', '/sign-up']);
-const publicPrefixes = ['/api/auth', '/api/cron', '/_app', '/static'];
 
 function extractClientIp(headers: Headers): string | null {
 	const forwardedFor = headers.get('x-forwarded-for');
@@ -26,12 +28,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	if (pathname.startsWith('/api/auth')) {
 		const response = await svelteKitHandler({ event, resolve, auth, building });
-		if (
-			response.status === 429 &&
-			(pathname.startsWith('/api/auth/sign-up') ||
-				pathname.startsWith('/api/auth/sign-in') ||
-				pathname.startsWith('/api/auth/forget-password'))
-		) {
+		if (response.status === 429 && isMonitoredAuthRateLimitPath(pathname)) {
 			logger.warn(
 				{
 					path: pathname,
@@ -53,14 +50,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.userId = session.user?.id;
 	}
 
-	const isPublic =
-		publicPaths.has(pathname) || publicPrefixes.some((prefix) => pathname.startsWith(prefix));
+	const isPublic = isPublicRoute(pathname);
 
 	if (!session && !isPublic) {
 		if (pathname.startsWith('/api')) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
-		throw redirect(302, `/sign-in?redirect=${encodeURIComponent(pathname)}`);
+		throw redirect(302, buildSignInRedirect(pathname, event.url.search));
 	}
 
 	return svelteKitHandler({ event, resolve, auth, building });
