@@ -249,7 +249,7 @@ DriverPreferencesSection - Preference controls for driver settings.
 						aria-label={m.preferences_routes_aria_label()}
 						disabled={isLocked || isSaving}
 						onSelect={handleRouteSelect}
-						size="sm"
+						size="base"
 					/>
 				{/key}
 

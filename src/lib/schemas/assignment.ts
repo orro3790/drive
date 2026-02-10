@@ -42,8 +42,34 @@ export const assignmentManualAssignSchema = z
 	})
 	.strict();
 
+export const assignmentOverrideActionSchema = z.enum([
+	'reassign',
+	'open_bidding',
+	'open_urgent_bidding'
+]);
+
+export const assignmentOverrideSchema = z.discriminatedUnion('action', [
+	z
+		.object({
+			action: z.literal('reassign'),
+			driverId: z.string().min(1)
+		})
+		.strict(),
+	z
+		.object({
+			action: z.literal('open_bidding')
+		})
+		.strict(),
+	z
+		.object({
+			action: z.literal('open_urgent_bidding')
+		})
+		.strict()
+]);
+
 export const assignmentIdParamsSchema = z.object({
 	id: z.string().uuid()
 });
 
 export type AssignmentManualAssignInput = z.infer<typeof assignmentManualAssignSchema>;
+export type AssignmentOverrideInput = z.infer<typeof assignmentOverrideSchema>;

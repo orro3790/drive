@@ -253,6 +253,14 @@ export const bidWindows = pgTable(
 	})
 );
 
+// Dispatch Settings (singleton row keyed by id='global')
+export const dispatchSettings = pgTable('dispatch_settings', {
+	id: text('id').primaryKey(),
+	emergencyBonusPercent: integer('emergency_bonus_percent').notNull().default(20),
+	updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});
+
 // Driver Metrics (denormalized for performance)
 export const driverMetrics = pgTable('driver_metrics', {
 	userId: text('user_id')

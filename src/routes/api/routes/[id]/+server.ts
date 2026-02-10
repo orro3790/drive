@@ -7,12 +7,14 @@
 
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { parseRouteStartTime } from '$lib/config/dispatchPolicy';
 import { db } from '$lib/server/db';
 import { assignments, bidWindows, routes, user, warehouses } from '$lib/server/db/schema';
 import { routeIdParamsSchema, routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, count, desc, eq, gt, ne } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { createAuditLog } from '$lib/server/services/audit';
+import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
 
 function toLocalYmd(date = new Date()): string {
 	const year = date.getFullYear();
@@ -27,11 +29,17 @@ function isValidDate(value: string) {
 
 type AssignmentDetails = {
 	assignmentId: string;
-	status: string;
+	status: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled';
 	driverName: string | null;
 	bidWindowStatus: 'open' | null;
 	bidWindowClosesAt: Date | null;
 };
+
+function isShiftStarted(date: string, startTime: string): boolean {
+	const { hours, minutes } = parseRouteStartTime(startTime);
+	const shiftStart = getTorontoDateTimeInstant(date, { hours, minutes });
+	return new Date() >= shiftStart;
+}
 
 function resolveStatus(assignment: AssignmentDetails | null): RouteStatus {
 	if (!assignment) return 'unfilled';
@@ -142,6 +150,8 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 			route: {
 				...existing,
 				status,
+				assignmentStatus: assignment?.status ?? null,
+				isShiftStarted: isShiftStarted(date, existing.startTime),
 				assignmentId: assignment?.assignmentId ?? null,
 				driverName: status === 'assigned' ? (assignment?.driverName ?? null) : null,
 				bidWindowClosesAt:
@@ -226,6 +236,8 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 			...updated,
 			warehouseName: nextWarehouseName,
 			status,
+			assignmentStatus: assignment?.status ?? null,
+			isShiftStarted: isShiftStarted(date, updated.startTime),
 			assignmentId: assignment?.assignmentId ?? null,
 			driverName: status === 'assigned' ? (assignment?.driverName ?? null) : null,
 			bidWindowClosesAt:

@@ -1,29 +1,15 @@
 /**
- * Emergency Reopen API
+ * Legacy emergency reopen compatibility endpoint.
  *
- * POST /api/assignments/[id]/emergency-reopen - Manager manually creates emergency bid window
- *
- * Creates an emergency bid window with 20% bonus for today's assignments.
- * Notifies all available drivers. Increments original driver's noShows metric.
+ * New manager flows should use POST /api/assignments/[id]/override
+ * with action=open_urgent_bidding.
  */
 
-import { json, error } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { db } from '$lib/server/db';
-import { assignments, driverMetrics, routes, warehouses } from '$lib/server/db/schema';
-import { eq, sql } from 'drizzle-orm';
-import { format, toZonedTime } from 'date-fns-tz';
-import { canManagerAccessWarehouse } from '$lib/server/services/managers';
-import { createBidWindow } from '$lib/server/services/bidding';
-import { notifyAvailableDriversForEmergency } from '$lib/server/services/notifications';
-import { createAuditLog } from '$lib/server/services/audit';
-import logger, { toSafeErrorMessage } from '$lib/server/logger';
-import { dispatchPolicy } from '$lib/config/dispatchPolicy';
-import { z } from 'zod';
+import { assignmentIdParamsSchema } from '$lib/schemas/assignment';
 
-const assignmentIdParamsSchema = z.object({ id: z.string().uuid() });
-
-export const POST: RequestHandler = async ({ locals, params }) => {
+export const POST: RequestHandler = async ({ locals, params, fetch }) => {
 	if (!locals.user) {
 		throw error(401, 'Unauthorized');
 	}
@@ -37,111 +23,30 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		throw error(400, 'Invalid assignment ID');
 	}
 
-	const { id } = paramsResult.data;
-	const log = logger.child({ operation: 'emergencyReopen' });
-
-	// Get assignment with route + warehouse details
-	const [assignment] = await db
-		.select({
-			id: assignments.id,
-			routeId: assignments.routeId,
-			warehouseId: assignments.warehouseId,
-			userId: assignments.userId,
-			date: assignments.date,
-			status: assignments.status,
-			routeName: routes.name,
-			warehouseName: warehouses.name
-		})
-		.from(assignments)
-		.innerJoin(routes, eq(assignments.routeId, routes.id))
-		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
-		.where(eq(assignments.id, id));
-
-	if (!assignment) {
-		throw error(404, 'Assignment not found');
-	}
-
-	// Verify manager has warehouse access
-	const hasAccess = await canManagerAccessWarehouse(locals.user.id, assignment.warehouseId);
-	if (!hasAccess) {
-		throw error(403, 'No access to this warehouse');
-	}
-
-	// Verify assignment is for today
-	const today = format(toZonedTime(new Date(), dispatchPolicy.timezone.toronto), 'yyyy-MM-dd');
-	if (assignment.date !== today) {
-		throw error(400, "Emergency reopen is only available for today's assignments");
-	}
-
-	// Create emergency bid window
-	const result = await createBidWindow(id, {
-		mode: 'emergency',
-		trigger: 'manager',
-		payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent
+	const response = await fetch(`/api/assignments/${paramsResult.data.id}/override`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ action: 'open_urgent_bidding' })
 	});
 
-	if (!result.success) {
-		throw error(409, result.reason ?? 'Failed to create emergency bid window');
+	const payload = await response.json().catch(() => ({}));
+
+	if (!response.ok) {
+		throw error(
+			response.status,
+			(payload as { message?: string }).message ?? 'Emergency reopen failed'
+		);
 	}
 
-	// Increment original driver's noShows metric (if there was an assigned driver)
-	if (assignment.userId) {
-		try {
-			await db
-				.update(driverMetrics)
-				.set({
-					noShows: sql`${driverMetrics.noShows} + 1`,
-					updatedAt: new Date()
-				})
-				.where(eq(driverMetrics.userId, assignment.userId));
-		} catch (err) {
-			log.warn({ errorMessage: toSafeErrorMessage(err) }, 'Failed to increment noShows');
-		}
-	}
-
-	// Mark assignment as unfilled if not already
-	if (assignment.status !== 'unfilled') {
-		await db
-			.update(assignments)
-			.set({ status: 'unfilled', userId: null, updatedAt: new Date() })
-			.where(eq(assignments.id, id));
-	}
-
-	// Notify available drivers
-	let notifiedCount = 0;
-	try {
-		notifiedCount = await notifyAvailableDriversForEmergency({
-			assignmentId: id,
-			routeName: assignment.routeName,
-			warehouseName: assignment.warehouseName,
-			date: assignment.date,
-			payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent
-		});
-	} catch (err) {
-		log.warn({ errorMessage: toSafeErrorMessage(err) }, 'Emergency notification dispatch failed');
-	}
-
-	// Create audit log
-	await createAuditLog({
-		entityType: 'assignment',
-		entityId: id,
-		action: 'emergency_reopen',
-		actorType: 'user',
-		actorId: locals.user.id,
-		changes: {
-			before: { status: assignment.status, userId: assignment.userId },
-			after: { status: 'unfilled', userId: null },
-			trigger: 'manager',
-			bidWindowId: result.bidWindowId,
-			notifiedCount
-		}
-	});
-
-	log.info({ notifiedCount }, 'Emergency route reopened by manager');
+	const bidWindow = (payload as { bidWindow?: { id?: string } | null }).bidWindow;
+	const notifiedCount =
+		typeof (payload as { notifiedCount?: unknown }).notifiedCount === 'number'
+			? ((payload as { notifiedCount: number }).notifiedCount ?? 0)
+			: 0;
 
 	return json({
 		success: true,
-		bidWindowId: result.bidWindowId,
+		bidWindowId: bidWindow?.id ?? null,
 		notifiedCount
 	});
 };

@@ -23,6 +23,7 @@ interface NoShowCandidate {
 interface CreateBidWindowResult {
 	success: boolean;
 	bidWindowId?: string;
+	notifiedCount?: number;
 	reason?: string;
 }
 
@@ -44,12 +45,10 @@ let sendManagerAlertMock: ReturnType<
 		Promise<void>
 	>
 >;
-let notifyAvailableDriversForEmergencyMock: ReturnType<
-	typeof createBoundaryMock<[payload: Record<string, unknown>], Promise<number>>
->;
 let createAuditLogMock: ReturnType<
 	typeof createBoundaryMock<[entry: Record<string, unknown>], Promise<void>>
 >;
+let getEmergencyBonusPercentMock: ReturnType<typeof createBoundaryMock<[], Promise<number>>>;
 
 function createCandidate(overrides: Partial<NoShowCandidate> = {}): NoShowCandidate {
 	return {
@@ -99,16 +98,17 @@ beforeEach(async () => {
 		[string, string, Record<string, unknown>],
 		Promise<void>
 	>();
-	notifyAvailableDriversForEmergencyMock = createBoundaryMock<
-		[Record<string, unknown>],
-		Promise<number>
-	>();
 	createAuditLogMock = createBoundaryMock<[Record<string, unknown>], Promise<void>>();
+	getEmergencyBonusPercentMock = createBoundaryMock<[], Promise<number>>();
 
-	createBidWindowMock.mockResolvedValue({ success: true, bidWindowId: 'bid-window-1' });
+	createBidWindowMock.mockResolvedValue({
+		success: true,
+		bidWindowId: 'bid-window-1',
+		notifiedCount: 2
+	});
 	sendManagerAlertMock.mockResolvedValue();
-	notifyAvailableDriversForEmergencyMock.mockResolvedValue(2);
 	createAuditLogMock.mockResolvedValue();
+	getEmergencyBonusPercentMock.mockResolvedValue(20);
 
 	const childLogger = {
 		info: vi.fn(),
@@ -127,11 +127,13 @@ beforeEach(async () => {
 		createBidWindow: createBidWindowMock
 	}));
 	vi.doMock('$lib/server/services/notifications', () => ({
-		sendManagerAlert: sendManagerAlertMock,
-		notifyAvailableDriversForEmergency: notifyAvailableDriversForEmergencyMock
+		sendManagerAlert: sendManagerAlertMock
 	}));
 	vi.doMock('$lib/server/services/audit', () => ({
 		createAuditLog: createAuditLogMock
+	}));
+	vi.doMock('$lib/server/services/dispatchSettings', () => ({
+		getEmergencyBonusPercent: getEmergencyBonusPercentMock
 	}));
 	vi.doMock('$lib/server/logger', () => ({
 		default: {
@@ -148,6 +150,7 @@ afterEach(() => {
 	vi.doUnmock('$lib/server/services/bidding');
 	vi.doUnmock('$lib/server/services/notifications');
 	vi.doUnmock('$lib/server/services/audit');
+	vi.doUnmock('$lib/server/services/dispatchSettings');
 	vi.doUnmock('$lib/server/logger');
 	vi.clearAllMocks();
 });
@@ -177,7 +180,6 @@ describe('LC-05 cron service: detectNoShows', () => {
 		// 09:00 Toronto EST = 14:00 UTC; freeze at deadline
 		freezeTime('2026-02-10T14:00:00.000Z');
 		candidates.push(createCandidate({ routeStartTime: '09:00' }));
-		notifyAvailableDriversForEmergencyMock.mockResolvedValueOnce(3);
 
 		const result = await detectNoShows();
 
@@ -284,14 +286,17 @@ describe('LC-05 cron service: detectNoShows', () => {
 		expect(createBidWindowMock).not.toHaveBeenCalled();
 		expect(dbUpdateMock).not.toHaveBeenCalled();
 		expect(sendManagerAlertMock).not.toHaveBeenCalled();
-		expect(notifyAvailableDriversForEmergencyMock).not.toHaveBeenCalled();
 		expect(createAuditLogMock).not.toHaveBeenCalled();
 	});
 
 	it('creates emergency windows and downstream alerts for a detected no-show', async () => {
 		freezeTime('2026-02-10T14:05:00.000Z');
 		candidates.push(createCandidate());
-		notifyAvailableDriversForEmergencyMock.mockResolvedValueOnce(4);
+		createBidWindowMock.mockResolvedValueOnce({
+			success: true,
+			bidWindowId: 'bid-window-1',
+			notifiedCount: 4
+		});
 
 		const result = await detectNoShows();
 
@@ -305,13 +310,6 @@ describe('LC-05 cron service: detectNoShows', () => {
 			routeName: 'Downtown Route',
 			driverName: 'Driver One',
 			date: '2026-02-10'
-		});
-		expect(notifyAvailableDriversForEmergencyMock).toHaveBeenCalledWith({
-			assignmentId: 'assignment-1',
-			routeName: 'Downtown Route',
-			warehouseName: 'Warehouse A',
-			date: '2026-02-10',
-			payBonusPercent: 20
 		});
 		expect(createAuditLogMock).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -335,6 +333,23 @@ describe('LC-05 cron service: detectNoShows', () => {
 			skippedBeforeDeadline: false
 		});
 		expect(dbUpdateMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('uses runtime emergency bonus from dispatch settings service', async () => {
+		freezeTime('2026-02-10T14:05:00.000Z');
+		candidates.push(createCandidate());
+		getEmergencyBonusPercentMock.mockResolvedValueOnce(37);
+
+		await detectNoShows();
+
+		expect(getEmergencyBonusPercentMock).toHaveBeenCalledTimes(1);
+		expect(createBidWindowMock).toHaveBeenCalledWith(
+			'assignment-1',
+			expect.objectContaining({
+				mode: 'emergency',
+				payBonusPercent: 37
+			})
+		);
 	});
 
 	it('includes routeStartTime in audit log for non-default start times', async () => {
@@ -370,7 +385,6 @@ describe('LC-05 cron service: detectNoShows', () => {
 			skippedBeforeDeadline: false
 		});
 		expect(sendManagerAlertMock).not.toHaveBeenCalled();
-		expect(notifyAvailableDriversForEmergencyMock).not.toHaveBeenCalled();
 		expect(createAuditLogMock).not.toHaveBeenCalled();
 	});
 });

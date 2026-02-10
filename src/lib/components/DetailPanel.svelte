@@ -31,6 +31,10 @@
 		editContent?: Snippet<[T]>;
 		/** Custom actions in view mode */
 		viewActions?: Snippet<[T]>;
+		/** Optional header actions rendered left of close */
+		headerActions?: Snippet<[T]>;
+		/** Whether to show built-in edit button in footer view mode */
+		showDefaultViewEditAction?: boolean;
 		/** Render style variant */
 		variant?: 'panel' | 'modal';
 	};
@@ -48,14 +52,17 @@
 		viewContent,
 		editContent,
 		viewActions,
+		headerActions,
+		showDefaultViewEditAction = true,
 		variant = 'panel'
 	}: Props<ItemType> = $props();
 
 	const canEdit = $derived(!!editContent && !!onEditToggle);
+	const showEditAction = $derived(canEdit && showDefaultViewEditAction);
 	const hasViewActions = $derived(!!viewActions);
 	const footerButtonSize = 'small';
-	const splitActions = $derived(!isEditing && canEdit && hasViewActions);
-	const showFooter = $derived(!!item && (isEditing || canEdit || hasViewActions));
+	const splitActions = $derived(!isEditing && showEditAction && hasViewActions);
+	const showFooter = $derived(!!item && (isEditing || showEditAction || hasViewActions));
 </script>
 
 <div
@@ -67,9 +74,14 @@
 	<div class="detail-card">
 		<header class="detail-header">
 			<h2 id="detail-panel-title">{title}</h2>
-			<IconButton onclick={onClose} tooltip={m.common_close()}>
-				<Icon><XIcon /></Icon>
-			</IconButton>
+			<div class="header-actions">
+				{#if headerActions && item && !isEditing}
+					{@render headerActions(item as ItemType)}
+				{/if}
+				<IconButton onclick={onClose} tooltip={m.common_close()}>
+					<Icon><XIcon /></Icon>
+				</IconButton>
+			</div>
 		</header>
 
 		<div class="detail-body">
@@ -97,7 +109,7 @@
 						{m.common_save()}
 					</Button>
 				{:else}
-					{#if canEdit}
+					{#if showEditAction}
 						<Button
 							size={footerButtonSize}
 							fill={!hasViewActions}
@@ -157,6 +169,12 @@
 		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
+	}
+
+	.header-actions {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-1);
 	}
 
 	.detail-body {

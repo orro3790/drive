@@ -27,6 +27,8 @@ export type RouteWithWarehouse = {
 	createdAt: Date;
 	updatedAt: Date;
 	status: RouteStatus;
+	assignmentStatus: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled' | null;
+	isShiftStarted: boolean;
 	assignmentId: string | null;
 	driverName: string | null;
 	bidWindowClosesAt: string | null;
@@ -44,14 +46,14 @@ const state = $state<{
 	error: string | null;
 	filters: RouteFilters;
 	assigningAssignmentId: string | null;
-	emergencyReopenAssignmentId: string | null;
+	overridingAssignmentId: string | null;
 }>({
 	routes: [],
 	isLoading: false,
 	error: null,
 	filters: {},
 	assigningAssignmentId: null,
-	emergencyReopenAssignmentId: null
+	overridingAssignmentId: null
 });
 
 function matchesFilters(route: RouteWithWarehouse, filters: RouteFilters) {
@@ -80,6 +82,10 @@ const routeWithWarehouseSchema = z.object({
 	createdAt: z.coerce.date(),
 	updatedAt: z.coerce.date(),
 	status: routeStatusSchema,
+	assignmentStatus: z
+		.enum(['scheduled', 'active', 'completed', 'cancelled', 'unfilled'])
+		.nullable(),
+	isShiftStarted: z.boolean(),
 	assignmentId: z.string().min(1).nullable(),
 	driverName: z.string().nullable(),
 	bidWindowClosesAt: z.string().min(1).nullable()
@@ -93,18 +99,49 @@ const routeMutationResponseSchema = z.object({
 	route: routeWithWarehouseSchema
 });
 
-const manualAssignResponseSchema = z.object({
+const assignmentStatusSchema = z.enum([
+	'scheduled',
+	'active',
+	'completed',
+	'cancelled',
+	'unfilled'
+]);
+
+const overrideActionSchema = z.enum(['reassign', 'open_bidding', 'open_urgent_bidding']);
+
+const assignmentOverrideResponseSchema = z.object({
+	action: overrideActionSchema,
 	assignment: z
 		.object({
 			id: z.string().min(1),
-			driverName: z.string().nullable().optional()
+			status: assignmentStatusSchema,
+			userId: z.string().nullable(),
+			driverName: z.string().nullable(),
+			routeId: z.string().min(1)
 		})
-		.optional()
+		.strict(),
+	bidWindow: z
+		.object({
+			id: z.string().min(1),
+			mode: z.enum(['competitive', 'instant', 'emergency']),
+			status: z.enum(['open', 'closed', 'resolved']),
+			closesAt: z.string().min(1),
+			payBonusPercent: z.number().int()
+		})
+		.nullable(),
+	notifiedCount: z.number().int().nullable()
 });
 
-const emergencyReopenResponseSchema = z.object({
-	notifiedCount: z.number().int().nonnegative().optional()
-});
+function resolveRouteStatusFromAssignment(params: {
+	assignmentStatus: z.infer<typeof assignmentStatusSchema>;
+	bidWindowStatus: 'open' | 'closed' | 'resolved' | null;
+}): RouteStatus {
+	if (params.assignmentStatus === 'unfilled') {
+		return params.bidWindowStatus === 'open' ? 'bidding' : 'unfilled';
+	}
+
+	return 'assigned';
+}
 
 const mutationVersions = new Map<string, number>();
 
@@ -138,11 +175,18 @@ export const routeStore = {
 	isAssigningAssignment(assignmentId: string) {
 		return state.assigningAssignmentId === assignmentId;
 	},
+	get overridingAssignmentId() {
+		return state.overridingAssignmentId;
+	},
+	isOverridingAssignment(assignmentId: string) {
+		return state.overridingAssignmentId === assignmentId;
+	},
+	// Backward-compatible accessors while views migrate to explicit override naming.
 	get emergencyReopenAssignmentId() {
-		return state.emergencyReopenAssignmentId;
+		return state.overridingAssignmentId;
 	},
 	isEmergencyReopening(assignmentId: string) {
-		return state.emergencyReopenAssignmentId === assignmentId;
+		return state.overridingAssignmentId === assignmentId;
 	},
 
 	/**
@@ -195,6 +239,8 @@ export const routeStore = {
 			createdAt: now,
 			updatedAt: now,
 			status: 'unfilled',
+			assignmentStatus: null,
+			isShiftStarted: false,
 			assignmentId: null,
 			driverName: null,
 			bidWindowClosesAt: null
@@ -430,6 +476,7 @@ export const routeStore = {
 
 		const originalRoute = this.applyAssignmentUpdate(assignmentId, {
 			status: 'assigned',
+			assignmentStatus: 'scheduled',
 			driverName: driver.name,
 			bidWindowClosesAt: null
 		});
@@ -453,10 +500,13 @@ export const routeStore = {
 	) {
 		state.assigningAssignmentId = assignmentId;
 		try {
-			const res = await fetch(`/api/assignments/${assignmentId}/assign`, {
+			const res = await fetch(`/api/assignments/${assignmentId}/override`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ userId: driver.id })
+				body: JSON.stringify({
+					action: 'reassign',
+					driverId: driver.id
+				})
 			});
 
 			if (!res.ok) {
@@ -474,16 +524,21 @@ export const routeStore = {
 				return { ok: false, message: message ?? undefined };
 			}
 
-			const parsed = manualAssignResponseSchema.safeParse(await res.json().catch(() => ({})));
-			if (
-				parsed.success &&
-				parsed.data.assignment?.id &&
-				isLatestMutationVersion(mutationKey, mutationVersion)
-			) {
+			const parsed = assignmentOverrideResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid assignment override response');
+			}
+
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
 				this.applyAssignmentUpdate(assignmentId, {
-					status: 'assigned',
+					status: resolveRouteStatusFromAssignment({
+						assignmentStatus: parsed.data.assignment.status,
+						bidWindowStatus: parsed.data.bidWindow?.status ?? null
+					}),
+					assignmentStatus: parsed.data.assignment.status,
 					driverName: parsed.data.assignment.driverName ?? driver.name,
-					bidWindowClosesAt: null
+					bidWindowClosesAt:
+						parsed.data.bidWindow?.status === 'open' ? parsed.data.bidWindow.closesAt : null
 				});
 			}
 
@@ -507,6 +562,139 @@ export const routeStore = {
 		}
 	},
 
+	openBidding(assignmentId: string): Promise<{ ok: boolean; notifiedCount?: number }> {
+		if (!ensureOnlineForWrite()) {
+			return Promise.resolve({ ok: false });
+		}
+
+		const originalRoute = this.applyAssignmentUpdate(assignmentId, {
+			status: 'bidding',
+			assignmentStatus: 'unfilled',
+			driverName: null
+		});
+
+		if (!originalRoute) {
+			return Promise.resolve({ ok: false });
+		}
+
+		const mutationKey = `openBidding:${assignmentId}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
+
+		return this._runOverrideActionInDb(
+			assignmentId,
+			'open_bidding',
+			originalRoute,
+			mutationKey,
+			mutationVersion,
+			() => m.manager_override_open_bidding_success(),
+			() => m.manager_override_open_bidding_error()
+		);
+	},
+
+	openUrgentBidding(assignmentId: string): Promise<{ ok: boolean; notifiedCount?: number }> {
+		if (!ensureOnlineForWrite()) {
+			return Promise.resolve({ ok: false });
+		}
+
+		const originalRoute = this.applyAssignmentUpdate(assignmentId, {
+			status: 'bidding',
+			assignmentStatus: 'unfilled',
+			driverName: null
+		});
+
+		if (!originalRoute) {
+			return Promise.resolve({ ok: false });
+		}
+
+		const mutationKey = `openUrgentBidding:${assignmentId}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
+
+		return this._runOverrideActionInDb(
+			assignmentId,
+			'open_urgent_bidding',
+			originalRoute,
+			mutationKey,
+			mutationVersion,
+			(result) =>
+				m.manager_override_open_urgent_bidding_success({ count: result.notifiedCount ?? 0 }),
+			() => m.manager_override_open_urgent_bidding_error()
+		);
+	},
+
+	async _runOverrideActionInDb(
+		assignmentId: string,
+		action: z.infer<typeof overrideActionSchema>,
+		originalRoute: RouteWithWarehouse,
+		mutationKey: string,
+		mutationVersion: number,
+		successMessage: (result: z.infer<typeof assignmentOverrideResponseSchema>) => string,
+		errorMessage: () => string
+	): Promise<{ ok: boolean; notifiedCount?: number }> {
+		state.overridingAssignmentId = assignmentId;
+
+		try {
+			const res = await fetch(`/api/assignments/${assignmentId}/override`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action })
+			});
+
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				const message = typeof payload?.message === 'string' ? payload.message : null;
+
+				if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+					this.rollbackAssignmentUpdate(originalRoute);
+					toastStore.error(message ?? errorMessage());
+				}
+
+				return { ok: false };
+			}
+
+			const parsed = assignmentOverrideResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid assignment override response');
+			}
+
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return {
+					ok: true,
+					notifiedCount: parsed.data.notifiedCount ?? undefined
+				};
+			}
+
+			this.applyAssignmentUpdate(assignmentId, {
+				status: resolveRouteStatusFromAssignment({
+					assignmentStatus: parsed.data.assignment.status,
+					bidWindowStatus: parsed.data.bidWindow?.status ?? null
+				}),
+				assignmentStatus: parsed.data.assignment.status,
+				driverName: parsed.data.assignment.driverName,
+				bidWindowClosesAt:
+					parsed.data.bidWindow?.status === 'open' ? parsed.data.bidWindow.closesAt : null
+			});
+
+			toastStore.success(successMessage(parsed.data));
+			return {
+				ok: true,
+				notifiedCount: parsed.data.notifiedCount ?? undefined
+			};
+		} catch {
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				this.rollbackAssignmentUpdate(originalRoute);
+				toastStore.error(errorMessage());
+			}
+			return { ok: false };
+		} finally {
+			if (
+				state.overridingAssignmentId === assignmentId &&
+				isLatestMutationVersion(mutationKey, mutationVersion)
+			) {
+				state.overridingAssignmentId = null;
+			}
+		}
+	},
+
 	rollbackAssignmentUpdate(original: RouteWithWarehouse | null) {
 		if (!original) return;
 		if (matchesFilters(original, state.filters)) {
@@ -519,63 +707,7 @@ export const routeStore = {
 		}
 	},
 
-	/**
-	 * Emergency reopen: create emergency bid window for today's assignment
-	 */
 	async emergencyReopen(assignmentId: string): Promise<{ ok: boolean; notifiedCount?: number }> {
-		if (!ensureOnlineForWrite()) {
-			return { ok: false };
-		}
-
-		const mutationKey = `emergencyReopen:${assignmentId}`;
-		const mutationVersion = nextMutationVersion(mutationKey);
-		state.emergencyReopenAssignmentId = assignmentId;
-
-		try {
-			const res = await fetch(`/api/assignments/${assignmentId}/emergency-reopen`, {
-				method: 'POST'
-			});
-
-			if (!res.ok) {
-				const payload = await res.json().catch(() => ({}));
-				const message = typeof payload?.message === 'string' ? payload.message : null;
-				if (isLatestMutationVersion(mutationKey, mutationVersion)) {
-					toastStore.error(message ?? m.manager_emergency_reopen_error());
-				}
-				return { ok: false };
-			}
-
-			const parsed = emergencyReopenResponseSchema.safeParse(await res.json().catch(() => ({})));
-			if (!parsed.success) {
-				throw new Error('Invalid emergency reopen response');
-			}
-
-			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
-				return { ok: true, notifiedCount: parsed.data.notifiedCount };
-			}
-
-			// Update route status to show bidding active
-			this.applyAssignmentUpdate(assignmentId, {
-				status: 'bidding',
-				driverName: null
-			});
-
-			toastStore.success(
-				m.manager_emergency_reopen_success({ count: parsed.data.notifiedCount ?? 0 })
-			);
-			return { ok: true, notifiedCount: parsed.data.notifiedCount };
-		} catch {
-			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
-				toastStore.error(m.manager_emergency_reopen_error());
-			}
-			return { ok: false };
-		} finally {
-			if (
-				state.emergencyReopenAssignmentId === assignmentId &&
-				isLatestMutationVersion(mutationKey, mutationVersion)
-			) {
-				state.emergencyReopenAssignmentId = null;
-			}
-		}
+		return this.openUrgentBidding(assignmentId);
 	}
 };

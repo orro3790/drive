@@ -37,7 +37,7 @@ The select border turns red when errors are present.
 		'aria-label': ariaLabel,
 		errors = [],
 		maxErrors = DEFAULT_MAX_ERRORS,
-		size = 'sm' as 'sm' | 'small' | 'xs' | 'xl',
+		size = 'base' as 'base' | 'sm' | 'small' | 'xs' | 'xl',
 		fitContent = false,
 		renderTrigger = undefined,
 		renderOption = undefined,
@@ -53,7 +53,7 @@ The select border turns red when errors are present.
 		'aria-label'?: string;
 		errors?: string[];
 		maxErrors?: number;
-		size?: 'sm' | 'small' | 'xs' | 'xl';
+		size?: 'base' | 'sm' | 'small' | 'xs' | 'xl';
 		fitContent?: boolean;
 		renderTrigger?: Snippet<[SelectOption | undefined]>;
 		renderOption?: Snippet<[SelectOption]>;
@@ -62,6 +62,7 @@ The select border turns red when errors are present.
 	} = $props();
 
 	const displayPlaceholder = $derived(placeholder ?? m.select_placeholder());
+	const normalizedSize = $derived(size === 'small' ? 'sm' : size);
 
 	let isOpen = $state(false);
 	let id = $state<string | undefined>(undefined);
@@ -252,8 +253,9 @@ The select border turns red when errors are present.
 		class="select-container"
 		class:has-errors={errorDisplay.hasErrors}
 		class:fit-content={fitContent}
-		class:size-xs={size === 'xs'}
-		class:size-xl={size === 'xl'}
+		class:size-sm={normalizedSize === 'sm'}
+		class:size-xs={normalizedSize === 'xs'}
+		class:size-xl={normalizedSize === 'xl'}
 		bind:this={selectElement}
 		role="presentation"
 	>
@@ -367,6 +369,10 @@ The select border turns red when errors are present.
 	.select-container {
 		position: relative;
 		width: 100%;
+		height: 36px;
+	}
+
+	.select-container.size-sm {
 		height: 28px;
 	}
 

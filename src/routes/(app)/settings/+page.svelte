@@ -11,6 +11,7 @@
 	import { pageHeaderStore } from '$lib/stores/app-shell/pageHeaderStore.svelte';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import AccountSection from '$lib/components/settings/AccountSection.svelte';
+	import ManagerDispatchSection from '$lib/components/settings/ManagerDispatchSection.svelte';
 	import ManagerOnboardingSection from '$lib/components/settings/ManagerOnboardingSection.svelte';
 	import type { PageData } from './$types';
 	import type { Breadcrumb } from '$lib/schemas/ui/breadcrumb';
@@ -102,6 +103,7 @@
 			<section class="settings-content-area" aria-live="polite">
 				<AccountSection {user} />
 				{#if user?.role === 'manager'}
+					<ManagerDispatchSection />
 					<ManagerOnboardingSection />
 				{/if}
 			</section>

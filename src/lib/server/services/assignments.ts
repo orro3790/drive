@@ -1,11 +1,12 @@
 import { parseISO } from 'date-fns';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { assignments, bids, bidWindows, routes, user } from '$lib/server/db/schema';
 import { createAuditLog } from '$lib/server/services/audit';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
 import { getDriverWeeklyAssignmentCount, getWeekStart } from '$lib/server/services/scheduling';
+import type { AssignmentStatus } from '$lib/schemas/assignment';
 
 export type ManualAssignErrorCode =
 	| 'assignment_not_found'
@@ -37,7 +38,10 @@ export async function manualAssignDriverToAssignment(params: {
 	assignmentId: string;
 	driverId: string;
 	actorId: string;
+	allowedStatuses?: AssignmentStatus[];
 }): Promise<ManualAssignResult> {
+	const allowedStatuses = params.allowedStatuses ?? ['unfilled'];
+
 	const [assignment] = await db
 		.select({
 			id: assignments.id,
@@ -64,7 +68,7 @@ export async function manualAssignDriverToAssignment(params: {
 		return { ok: false, code: 'forbidden' };
 	}
 
-	if (assignment.status !== 'unfilled') {
+	if (!allowedStatuses.includes(assignment.status)) {
 		return { ok: false, code: 'assignment_not_assignable' };
 	}
 
@@ -122,7 +126,7 @@ export async function manualAssignDriverToAssignment(params: {
 				assignedAt,
 				updatedAt: assignedAt
 			})
-			.where(and(eq(assignments.id, assignment.id), eq(assignments.status, 'unfilled')))
+			.where(and(eq(assignments.id, assignment.id), inArray(assignments.status, allowedStatuses)))
 			.returning({ id: assignments.id });
 
 		if (!updatedAssignment) {

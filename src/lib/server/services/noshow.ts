@@ -2,7 +2,7 @@
  * No-Show Detection Service
  *
  * Detects confirmed assignments where drivers failed to arrive by 9 AM Toronto time.
- * Creates emergency bid windows with 20% pay bonus and notifies available drivers.
+ * Creates emergency bid windows using the runtime global urgent bonus.
  */
 
 import { db } from '$lib/server/db';
@@ -17,11 +17,9 @@ import {
 	warehouses
 } from '$lib/server/db/schema';
 import { createBidWindow } from '$lib/server/services/bidding';
-import {
-	notifyAvailableDriversForEmergency,
-	sendManagerAlert
-} from '$lib/server/services/notifications';
+import { sendManagerAlert } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
+import { getEmergencyBonusPercent } from '$lib/server/services/dispatchSettings';
 import { and, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import logger from '$lib/server/logger';
 import { dispatchPolicy, parseRouteStartTime } from '$lib/config/dispatchPolicy';
@@ -53,15 +51,17 @@ export interface NoShowDetectionResult {
  * "Arrived" means a shift record exists with arrivedAt set.
  *
  * For each no-show:
- * 1. Create emergency bid window (mode='emergency', payBonusPercent=20)
+ * 1. Create emergency bid window (mode='emergency', payBonusPercent from dispatch settings)
  * 2. Increment driver's noShows metric
  * 3. Alert the route's manager
- * 4. Notify available drivers about the emergency route
+ *
+ * Driver fanout is owned by createBidWindow() to prevent duplicate emergency notifications.
  */
 export async function detectNoShows(): Promise<NoShowDetectionResult> {
 	const log = logger.child({ operation: 'detectNoShows' });
 	const nowToronto = getTorontoNow();
 	const today = toTorontoDateString(nowToronto);
+	const emergencyBonusPercent = await getEmergencyBonusPercent();
 
 	// Find confirmed assignments for today where driver hasn't arrived.
 	// We fetch all confirmed-but-not-arrived assignments and filter per-route
@@ -130,7 +130,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 			const result = await createBidWindow(candidate.assignmentId, {
 				mode: 'emergency',
 				trigger: 'no_show',
-				payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent,
+				payBonusPercent: emergencyBonusPercent,
 				allowPastShift: true
 			});
 
@@ -184,24 +184,9 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 					);
 				}
 
-				// 4. Notify available drivers about emergency route
-				try {
-					const notifiedCount = await notifyAvailableDriversForEmergency({
-						assignmentId: candidate.assignmentId,
-						routeName: candidate.routeName ?? 'Unknown Route',
-						warehouseName: candidate.warehouseName ?? 'Unknown Warehouse',
-						date: candidate.assignmentDate,
-						payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent
-					});
-					driversNotified += notifiedCount;
-				} catch (error) {
-					log.warn(
-						{ assignmentId: candidate.assignmentId, error },
-						'Emergency notification failed'
-					);
-				}
+				driversNotified += result.notifiedCount ?? 0;
 
-				// 5. Create audit log
+				// 4. Create audit log
 				await createAuditLog({
 					entityType: 'assignment',
 					entityId: candidate.assignmentId,
