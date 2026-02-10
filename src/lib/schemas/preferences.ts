@@ -22,6 +22,18 @@ export const preferencesSchema = z.object({
 
 export type Preferences = z.infer<typeof preferencesSchema>;
 
+export const routeDetailSchema = z.object({
+	id: z.string().uuid(),
+	name: z.string().min(1),
+	warehouseName: z.string().min(1)
+});
+
+export const preferencesWithDetailsSchema = preferencesSchema.extend({
+	preferredRoutesDetails: z.array(routeDetailSchema)
+});
+
+export type PreferencesWithDetails = z.infer<typeof preferencesWithDetailsSchema>;
+
 /**
  * Schema for updating preferences (PUT)
  */
@@ -36,9 +48,9 @@ export type PreferencesUpdate = z.infer<typeof preferencesUpdateSchema>;
  * API response schema with lock status
  */
 export const preferencesResponseSchema = z.object({
-	preferences: preferencesSchema.nullable(),
+	preferences: preferencesWithDetailsSchema.nullable(),
 	isLocked: z.boolean(),
-	lockDeadline: z.coerce.date(),
+	lockDeadline: z.coerce.date().nullable(),
 	lockedUntil: z.coerce.date().nullable()
 });
 

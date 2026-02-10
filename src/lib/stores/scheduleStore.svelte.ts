@@ -4,10 +4,15 @@
  * Manages driver schedule state and cancellation actions.
  */
 
-import type { AssignmentStatus, CancelReason } from '$lib/schemas/assignment';
+import {
+	assignmentStatusSchema,
+	type AssignmentStatus,
+	type CancelReason
+} from '$lib/schemas/assignment';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
+import { z } from 'zod';
 
 export type ShiftData = {
 	id: string;
@@ -60,6 +65,75 @@ const state = $state<{
 	error: null
 });
 
+const shiftDataSchema = z.object({
+	id: z.string().min(1),
+	arrivedAt: z.string().min(1).nullable(),
+	parcelsStart: z.number().int().nonnegative().nullable(),
+	parcelsDelivered: z.number().int().nonnegative().nullable(),
+	parcelsReturned: z.number().int().nonnegative().nullable(),
+	startedAt: z.string().min(1).nullable(),
+	completedAt: z.string().min(1).nullable(),
+	editableUntil: z.string().min(1).nullable()
+});
+
+const scheduleAssignmentSchema = z.object({
+	id: z.string().min(1),
+	date: z.string().min(1),
+	status: assignmentStatusSchema,
+	confirmedAt: z.string().min(1).nullable(),
+	confirmationOpensAt: z.string().min(1),
+	confirmationDeadline: z.string().min(1),
+	isConfirmable: z.boolean(),
+	routeName: z.string().min(1),
+	warehouseName: z.string().min(1),
+	isCancelable: z.boolean(),
+	isLateCancel: z.boolean(),
+	isArrivable: z.boolean(),
+	isStartable: z.boolean(),
+	isCompletable: z.boolean(),
+	shift: shiftDataSchema.nullable()
+});
+
+const scheduleLoadResponseSchema = z.object({
+	assignments: z.array(scheduleAssignmentSchema),
+	weekStart: z.string().min(1).nullable().optional(),
+	nextWeekStart: z.string().min(1).nullable().optional()
+});
+
+const confirmShiftResponseSchema = z.object({
+	success: z.literal(true),
+	confirmedAt: z.string().min(1)
+});
+
+const cancelAssignmentResponseSchema = z.object({
+	assignment: z.object({
+		id: z.string().min(1),
+		status: assignmentStatusSchema
+	})
+});
+
+const shiftStartResponseSchema = z.object({
+	shift: z.object({
+		id: z.string().min(1),
+		parcelsStart: z.number().int().nonnegative(),
+		startedAt: z.string().min(1)
+	}),
+	assignmentStatus: assignmentStatusSchema
+});
+
+const shiftCompleteResponseSchema = z.object({
+	shift: z.object({
+		id: z.string().min(1),
+		parcelsStart: z.number().int().nonnegative(),
+		parcelsDelivered: z.number().int().nonnegative(),
+		parcelsReturned: z.number().int().nonnegative(),
+		startedAt: z.string().min(1).nullable(),
+		completedAt: z.string().min(1).nullable(),
+		editableUntil: z.string().min(1).nullable()
+	}),
+	assignmentStatus: assignmentStatusSchema
+});
+
 export const scheduleStore = {
 	get assignments() {
 		return state.assignments;
@@ -99,10 +173,14 @@ export const scheduleStore = {
 				throw new Error('Failed to load schedule');
 			}
 
-			const data = await res.json();
-			state.assignments = data.assignments ?? [];
-			state.weekStart = data.weekStart ?? null;
-			state.nextWeekStart = data.nextWeekStart ?? null;
+			const parsed = scheduleLoadResponseSchema.safeParse(await res.json());
+			if (!parsed.success) {
+				throw new Error('Invalid schedule response');
+			}
+
+			state.assignments = parsed.data.assignments;
+			state.weekStart = parsed.data.weekStart ?? null;
+			state.nextWeekStart = parsed.data.nextWeekStart ?? null;
 		} catch (err) {
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.schedule_load_error());
@@ -127,9 +205,14 @@ export const scheduleStore = {
 				throw new Error('Failed to confirm shift');
 			}
 
+			const parsed = confirmShiftResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Failed to confirm shift');
+			}
+
 			state.assignments = state.assignments.map((item) =>
 				item.id === assignmentId
-					? { ...item, confirmedAt: new Date().toISOString(), isConfirmable: false }
+					? { ...item, confirmedAt: parsed.data.confirmedAt, isConfirmable: false }
 					: item
 			);
 
@@ -161,7 +244,12 @@ export const scheduleStore = {
 				throw new Error('Failed to cancel assignment');
 			}
 
-			const { assignment } = await res.json();
+			const parsed = cancelAssignmentResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid cancel response');
+			}
+
+			const { assignment } = parsed.data;
 			if (assignment?.id) {
 				state.assignments = state.assignments.map((item) =>
 					item.id === assignment.id
@@ -202,7 +290,12 @@ export const scheduleStore = {
 				throw new Error('Failed to start shift');
 			}
 
-			const { shift, assignmentStatus } = await res.json();
+			const parsed = shiftStartResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid shift start response');
+			}
+
+			const { shift, assignmentStatus } = parsed.data;
 
 			state.assignments = state.assignments.map((item) =>
 				item.id === assignmentId
@@ -254,7 +347,12 @@ export const scheduleStore = {
 				throw new Error('Failed to complete shift');
 			}
 
-			const { shift, assignmentStatus } = await res.json();
+			const parsed = shiftCompleteResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid shift completion response');
+			}
+
+			const { shift, assignmentStatus } = parsed.data;
 
 			state.assignments = state.assignments.map((item) =>
 				item.id === assignmentId
