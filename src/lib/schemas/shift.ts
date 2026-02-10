@@ -30,10 +30,14 @@ export const shiftCompleteSchema = z
 		message: 'Excepted returns cannot exceed total returns',
 		path: ['exceptedReturns']
 	})
-	.refine((data) => data.exceptedReturns === 0 || (data.exceptionNotes && data.exceptionNotes.trim().length > 0), {
-		message: 'Notes are required when filing return exceptions',
-		path: ['exceptionNotes']
-	});
+	.refine(
+		(data) =>
+			data.exceptedReturns === 0 || (data.exceptionNotes && data.exceptionNotes.trim().length > 0),
+		{
+			message: 'Notes are required when filing return exceptions',
+			path: ['exceptionNotes']
+		}
+	);
 
 export type ShiftCompleteInput = z.infer<typeof shiftCompleteSchema>;
 

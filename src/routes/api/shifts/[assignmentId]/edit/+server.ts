@@ -112,7 +112,10 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 		throw error(400, 'Excepted returns cannot exceed total returns');
 	}
 
-	if (finalExceptedReturns > 0 && (!finalExceptionNotes || finalExceptionNotes.trim().length === 0)) {
+	if (
+		finalExceptedReturns > 0 &&
+		(!finalExceptionNotes || finalExceptionNotes.trim().length === 0)
+	) {
 		throw error(400, 'Notes are required when filing return exceptions');
 	}
 

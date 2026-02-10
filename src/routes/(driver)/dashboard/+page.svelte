@@ -737,9 +737,7 @@
 
 											{#if parcelsReturned > 0}
 												<div class="form-field">
-													<label for="excepted-returns"
-														>{m.shift_exception_returned_label()}</label
-													>
+													<label for="excepted-returns">{m.shift_exception_returned_label()}</label>
 													<InlineEditor
 														id="excepted-returns"
 														inputType="number"
@@ -757,9 +755,7 @@
 												</div>
 												{#if exceptedReturns > 0}
 													<div class="form-field">
-														<label for="exception-notes"
-															>{m.shift_exception_notes_label()}</label
-														>
+														<label for="exception-notes">{m.shift_exception_notes_label()}</label>
 														<InlineEditor
 															id="exception-notes"
 															mode="form"
