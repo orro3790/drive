@@ -310,6 +310,64 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 		expect(createAuditLogMock).toHaveBeenCalledTimes(2);
 	});
 
+	it('stays idempotent when the cron handler runs twice for the same assignment', async () => {
+		freezeTime('2026-03-10T11:00:00.000Z');
+
+		const repeatedCandidate: AutoDropCandidate = {
+			id: 'assignment-repeat',
+			userId: 'driver-repeat',
+			routeId: 'route-repeat',
+			date: '2026-03-11',
+			routeName: 'Route Repeat'
+		};
+
+		selectWhereMock.mockResolvedValue([repeatedCandidate]);
+		createBidWindowMock
+			.mockResolvedValueOnce({ success: true, bidWindowId: 'window-repeat' })
+			.mockResolvedValueOnce({ success: false, reason: 'Open bid window already exists' });
+		sendNotificationMock.mockResolvedValue(undefined);
+
+		const firstResponse = await GET(
+			createRequestEvent({
+				method: 'GET',
+				headers: {
+					authorization: 'Bearer test-cron-secret'
+				}
+			}) as Parameters<typeof GET>[0]
+		);
+		const secondResponse = await GET(
+			createRequestEvent({
+				method: 'GET',
+				headers: {
+					authorization: 'Bearer test-cron-secret'
+				}
+			}) as Parameters<typeof GET>[0]
+		);
+
+		expect(firstResponse.status).toBe(200);
+		expect(secondResponse.status).toBe(200);
+		await expect(firstResponse.json()).resolves.toMatchObject({
+			success: true,
+			dropped: 1,
+			bidWindowsCreated: 1,
+			skippedNoWindow: 0,
+			errors: 0
+		});
+		await expect(secondResponse.json()).resolves.toMatchObject({
+			success: true,
+			dropped: 0,
+			bidWindowsCreated: 0,
+			skippedNoWindow: 1,
+			errors: 0
+		});
+
+		expect(createBidWindowMock).toHaveBeenCalledTimes(2);
+		expect(transactionMock).toHaveBeenCalledTimes(1);
+		expect(updateMock).toHaveBeenCalledTimes(2);
+		expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
+	});
+
 	it('returns 500 when candidate lookup fails', async () => {
 		selectWhereMock.mockRejectedValue(new Error('database unavailable'));
 
