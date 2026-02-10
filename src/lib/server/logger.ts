@@ -12,6 +12,43 @@ import { dev } from '$app/environment';
 const AXIOM_DATASET = 'driver-ops';
 const AXIOM_TOKEN = process.env.AXIOM_TOKEN;
 
+const REDACTED = '[REDACTED]';
+
+const sensitiveLogPaths: string[] = [
+	'userId',
+	'driverId',
+	'managerId',
+	'assignmentId',
+	'bidWindowId',
+	'routeId',
+	'warehouseId',
+	'winnerId',
+	'existingWindowId',
+	'email',
+	'token',
+	'fcmToken',
+	'authorization',
+	'cookie',
+	'session',
+	'ip',
+	'*.userId',
+	'*.driverId',
+	'*.managerId',
+	'*.assignmentId',
+	'*.bidWindowId',
+	'*.routeId',
+	'*.warehouseId',
+	'*.winnerId',
+	'*.existingWindowId',
+	'*.email',
+	'*.token',
+	'*.fcmToken',
+	'*.authorization',
+	'*.cookie',
+	'*.session',
+	'*.ip'
+];
+
 // Build transport configuration
 function getTransport() {
 	if (dev) {
@@ -45,6 +82,10 @@ const baseLoggerConfig = {
 	level: dev ? 'debug' : 'info',
 	formatters: {
 		level: (label: string) => ({ level: label })
+	},
+	redact: {
+		paths: sensitiveLogPaths,
+		censor: REDACTED
 	},
 	timestamp: pino.stdTimeFunctions.isoTime,
 	base: {
@@ -113,6 +154,18 @@ export function redactSensitive<T extends Record<string, unknown>>(
 		}
 	}
 	return redacted;
+}
+
+export function toSafeErrorMessage(error: unknown): string {
+	if (error instanceof Error) {
+		return error.name || 'Error';
+	}
+
+	if (typeof error === 'string') {
+		return 'Error';
+	}
+
+	return 'UnknownError';
 }
 
 export default logger;

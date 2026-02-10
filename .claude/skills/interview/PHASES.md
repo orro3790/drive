@@ -248,7 +248,7 @@ Structure the output as a proper spec document:
 
 ### Save the Spec
 
-Write the spec to an appropriate location (e.g., `docs/specs/`, `plans/`).
+Write the spec to an appropriate location (e.g., `documentation/specs/`, `plans/`).
 
 ### Create Bead for Tracking
 

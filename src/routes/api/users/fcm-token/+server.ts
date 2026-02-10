@@ -10,14 +10,20 @@ import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/schema';
 import { fcmTokenSchema } from '$lib/schemas/fcm-token';
 import { eq } from 'drizzle-orm';
-import logger from '$lib/server/logger';
+import logger, { toSafeErrorMessage } from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
 		throw error(401, 'Unauthorized');
 	}
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
 	const result = fcmTokenSchema.safeParse(body);
 
 	if (!result.success) {
@@ -25,7 +31,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	const { token } = result.data;
-	const log = logger.child({ operation: 'registerFcmToken', userId: locals.user.id });
+	const log = logger.child({ operation: 'registerFcmToken' });
 
 	try {
 		await db
@@ -40,7 +46,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 		return json({ success: true });
 	} catch (err) {
-		log.error({ error: err }, 'Failed to register FCM token');
+		log.error({ errorMessage: toSafeErrorMessage(err) }, 'Failed to register FCM token');
 		throw error(500, 'Failed to register token');
 	}
 };
@@ -53,7 +59,7 @@ export const DELETE: RequestHandler = async ({ locals }) => {
 		throw error(401, 'Unauthorized');
 	}
 
-	const log = logger.child({ operation: 'unregisterFcmToken', userId: locals.user.id });
+	const log = logger.child({ operation: 'unregisterFcmToken' });
 
 	try {
 		await db
@@ -68,7 +74,7 @@ export const DELETE: RequestHandler = async ({ locals }) => {
 
 		return json({ success: true });
 	} catch (err) {
-		log.error({ error: err }, 'Failed to remove FCM token');
+		log.error({ errorMessage: toSafeErrorMessage(err) }, 'Failed to remove FCM token');
 		throw error(500, 'Failed to remove token');
 	}
 };

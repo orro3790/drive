@@ -475,4 +475,4 @@ Follow the same pattern as Phase 4 collections (see Section 3), but:
 For complete architecture details, see:
 
 - (Legacy note) The referenced Typesense architecture docs were not copied into Drive.
-- `documentation/implementation-plans/integrations/2026-01-04-typesense-search-integration.md`
+- No Drive-local Typesense integration plan is currently checked in.

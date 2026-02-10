@@ -6,9 +6,9 @@ on:
     - cron: '0 * * * *'
     - cron: '0 13,14 * * *'
     - cron: '59 4 * * 1'
-    - cron: '0 6 * * *'
+    - cron: '0 10,11 * * *'
+    - cron: '5 10,11 * * *'
     - cron: '0 1 * * *'
-    - cron: '0 11 * * *'
     - cron: '0 7 * * *'
     - cron: '0 8 * * 1'
   workflow_dispatch:
@@ -53,9 +53,9 @@ jobs:
               '0 * * * *') route='/api/cron/auto-drop-unconfirmed' ;;
               '0 13,14 * * *') route='/api/cron/no-show-detection' ;;
               '59 4 * * 1') route='/api/cron/lock-preferences' ;;
-              '0 6 * * *') route='/api/cron/shift-reminders' ;;
+              '0 10,11 * * *') route='/api/cron/shift-reminders' ;;
+              '5 10,11 * * *') route='/api/cron/send-confirmation-reminders' ;;
               '0 1 * * *') route='/api/cron/performance-check' ;;
-              '0 11 * * *') route='/api/cron/send-confirmation-reminders' ;;
               '0 7 * * *') route='/api/cron/health-daily' ;;
               '0 8 * * 1') route='/api/cron/health-weekly' ;;
               *)

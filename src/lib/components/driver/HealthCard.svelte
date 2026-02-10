@@ -20,6 +20,11 @@
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import type { HealthResponse } from '$lib/schemas/health';
+	import {
+		deriveHealthCardState,
+		deriveHealthScoreColor,
+		deriveThresholdFlags
+	} from '$lib/components/driver/healthCardState';
 
 	let { healthUrl = '/api/driver-health' }: { healthUrl?: string } = $props();
 
@@ -28,14 +33,8 @@
 	let hasError = $state(false);
 	let showContributions = $state(false);
 
-	const scoreColor = $derived.by(() => {
-		if (!health) return 'var(--text-muted)';
-		if (health.hardStop.triggered) return 'var(--status-error)';
-		const score = health.score ?? 0;
-		if (score >= health.tierThreshold) return 'var(--status-success)';
-		if (score >= health.tierThreshold / 2) return 'var(--status-warning)';
-		return 'var(--status-error)';
-	});
+	const scoreColor = $derived.by(() => deriveHealthScoreColor(health));
+	const healthState = $derived.by(() => deriveHealthCardState(health));
 
 	// Bar scale: threshold sits at 80%, leaving 20% buffer zone beyond it
 	const thresholdPosition = 80;
@@ -46,11 +45,9 @@
 			: 0
 	);
 
-	const isPastThreshold = $derived(
-		health?.score !== null && health?.score !== undefined && health.score >= health.tierThreshold
-	);
-	const isBuffActive = $derived(isPastThreshold && !!health?.simulation.bonusEligible);
-	const isCharging = $derived(isPastThreshold && !isBuffActive);
+	const isPastThreshold = $derived.by(() => deriveThresholdFlags(health).isPastThreshold);
+	const isBuffActive = $derived.by(() => deriveThresholdFlags(health).isBuffActive);
+	const isCharging = $derived.by(() => deriveThresholdFlags(health).isCharging);
 
 	const buffTooltipText = $derived(
 		health
@@ -80,21 +77,64 @@
 		if (!health?.contributions) return [];
 		const c = health.contributions;
 		const rows: ContributionRow[] = [
-			{ label: m.dashboard_health_contribution_confirmed(), count: c.confirmedOnTime.count, perPoint: c.confirmedOnTime.count > 0 ? c.confirmedOnTime.points / c.confirmedOnTime.count : 1, total: c.confirmedOnTime.points },
-			{ label: m.dashboard_health_contribution_arrived(), count: c.arrivedOnTime.count, perPoint: c.arrivedOnTime.count > 0 ? c.arrivedOnTime.points / c.arrivedOnTime.count : 2, total: c.arrivedOnTime.points },
-			{ label: m.dashboard_health_contribution_completed(), count: c.completedShifts.count, perPoint: c.completedShifts.count > 0 ? c.completedShifts.points / c.completedShifts.count : 2, total: c.completedShifts.points },
-			{ label: m.dashboard_health_contribution_high_delivery(), count: c.highDelivery.count, perPoint: c.highDelivery.count > 0 ? c.highDelivery.points / c.highDelivery.count : 1, total: c.highDelivery.points },
-			{ label: m.dashboard_health_contribution_bid_pickup(), count: c.bidPickups.count, perPoint: c.bidPickups.count > 0 ? c.bidPickups.points / c.bidPickups.count : 2, total: c.bidPickups.points },
-			{ label: m.dashboard_health_contribution_urgent_pickup(), count: c.urgentPickups.count, perPoint: c.urgentPickups.count > 0 ? c.urgentPickups.points / c.urgentPickups.count : 4, total: c.urgentPickups.points },
-			{ label: m.dashboard_health_contribution_auto_drop(), count: c.autoDrops.count, perPoint: c.autoDrops.count > 0 ? c.autoDrops.points / c.autoDrops.count : -12, total: c.autoDrops.points },
-			{ label: m.dashboard_health_contribution_late_cancel(), count: c.lateCancellations.count, perPoint: c.lateCancellations.count > 0 ? c.lateCancellations.points / c.lateCancellations.count : -48, total: c.lateCancellations.points }
+			{
+				label: m.dashboard_health_contribution_confirmed(),
+				count: c.confirmedOnTime.count,
+				perPoint:
+					c.confirmedOnTime.count > 0 ? c.confirmedOnTime.points / c.confirmedOnTime.count : 1,
+				total: c.confirmedOnTime.points
+			},
+			{
+				label: m.dashboard_health_contribution_arrived(),
+				count: c.arrivedOnTime.count,
+				perPoint: c.arrivedOnTime.count > 0 ? c.arrivedOnTime.points / c.arrivedOnTime.count : 2,
+				total: c.arrivedOnTime.points
+			},
+			{
+				label: m.dashboard_health_contribution_completed(),
+				count: c.completedShifts.count,
+				perPoint:
+					c.completedShifts.count > 0 ? c.completedShifts.points / c.completedShifts.count : 2,
+				total: c.completedShifts.points
+			},
+			{
+				label: m.dashboard_health_contribution_high_delivery(),
+				count: c.highDelivery.count,
+				perPoint: c.highDelivery.count > 0 ? c.highDelivery.points / c.highDelivery.count : 1,
+				total: c.highDelivery.points
+			},
+			{
+				label: m.dashboard_health_contribution_bid_pickup(),
+				count: c.bidPickups.count,
+				perPoint: c.bidPickups.count > 0 ? c.bidPickups.points / c.bidPickups.count : 2,
+				total: c.bidPickups.points
+			},
+			{
+				label: m.dashboard_health_contribution_urgent_pickup(),
+				count: c.urgentPickups.count,
+				perPoint: c.urgentPickups.count > 0 ? c.urgentPickups.points / c.urgentPickups.count : 4,
+				total: c.urgentPickups.points
+			},
+			{
+				label: m.dashboard_health_contribution_auto_drop(),
+				count: c.autoDrops.count,
+				perPoint: c.autoDrops.count > 0 ? c.autoDrops.points / c.autoDrops.count : -12,
+				total: c.autoDrops.points
+			},
+			{
+				label: m.dashboard_health_contribution_late_cancel(),
+				count: c.lateCancellations.count,
+				perPoint:
+					c.lateCancellations.count > 0
+						? c.lateCancellations.points / c.lateCancellations.count
+						: -48,
+				total: c.lateCancellations.points
+			}
 		];
 		return rows.filter((r) => r.count > 0);
 	});
 
-	const contributionsTotal = $derived(
-		contributionRows.reduce((sum, r) => sum + r.total, 0)
-	);
+	const contributionsTotal = $derived(contributionRows.reduce((sum, r) => sum + r.total, 0));
 
 	async function loadHealth() {
 		isLoading = true;
@@ -117,7 +157,11 @@
 	});
 </script>
 
-<section class="health-card" aria-label={m.dashboard_health_section()}>
+<section
+	class="health-card"
+	data-health-state={healthState}
+	aria-label={m.dashboard_health_section()}
+>
 	<div class="section-header">
 		<h2>{m.dashboard_health_section()}</h2>
 	</div>
@@ -129,14 +173,6 @@
 	{:else if hasError || !health}
 		<p class="health-error">{m.dashboard_health_load_error()}</p>
 	{:else}
-		<!-- Hard-stop warning -->
-		{#if health.hardStop.triggered}
-			<NoticeBanner variant="warning" align="start">
-				<p class="hard-stop-title">{m.dashboard_health_hard_stop_title()}</p>
-				<p class="hard-stop-message">{m.dashboard_health_hard_stop_message()}</p>
-			</NoticeBanner>
-		{/if}
-
 		<!-- Score bar -->
 		<div class="score-section">
 			<div class="score-header">
@@ -241,20 +277,35 @@
 								<span class="contribution-calc">
 									{row.count} × ({row.perPoint > 0 ? '+' : ''}{row.perPoint})
 								</span>
-								<span class="contribution-total" class:positive-text={row.total > 0} class:negative-text={row.total < 0}>
+								<span
+									class="contribution-total"
+									class:positive-text={row.total > 0}
+									class:negative-text={row.total < 0}
+								>
 									{row.total > 0 ? '+' : ''}{row.total}
 								</span>
 							</div>
 						{/each}
 						<div class="contribution-row contribution-net">
 							<span class="contribution-label">{m.dashboard_health_contributions_total()}</span>
-							<span class="contribution-total" class:positive-text={contributionsTotal > 0} class:negative-text={contributionsTotal < 0}>
+							<span
+								class="contribution-total"
+								class:positive-text={contributionsTotal > 0}
+								class:negative-text={contributionsTotal < 0}
+							>
 								{contributionsTotal > 0 ? '+' : ''}{contributionsTotal}
 							</span>
 						</div>
 					</div>
 				{/if}
 			</div>
+		{/if}
+
+		{#if health.hardStop.triggered}
+			<NoticeBanner variant="warning" align="start">
+				<p class="hard-stop-title">{m.dashboard_health_hard_stop_title()}</p>
+				<p class="hard-stop-message">{m.dashboard_health_hard_stop_message()}</p>
+			</NoticeBanner>
 		{/if}
 	{/if}
 </section>
@@ -306,6 +357,10 @@
 		margin: var(--spacing-1) 0 0;
 		font-size: var(--font-size-sm);
 		color: var(--text-normal);
+	}
+
+	:global(.health-card .notice-banner) {
+		margin: var(--spacing-2) var(--spacing-3) 0;
 	}
 
 	/* Score section */

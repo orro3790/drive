@@ -174,10 +174,7 @@ export function generateHealth(
 				lateCancellations: { count: lateCancels, points: lateCancels * pts.lateCancel }
 			};
 
-			const rawTotal = Object.values(contributions).reduce(
-				(sum, line) => sum + line.points,
-				0
-			);
+			const rawTotal = Object.values(contributions).reduce((sum, line) => sum + line.points, 0);
 			const score = Math.max(0, rawTotal);
 
 			// Hard-stop check (rolling 30-day window)
@@ -235,9 +232,7 @@ export function generateHealth(
 		let anyHardStop = false;
 
 		for (const weekStartStr of sortedWeekStarts) {
-			const weekEndStr = toTorontoDateString(
-				addDays(new Date(`${weekStartStr}T12:00:00`), 6)
-			);
+			const weekEndStr = toTorontoDateString(addDays(new Date(`${weekStartStr}T12:00:00`), 6));
 
 			const weekAssignments = driverAssignments.filter(
 				(d) => d.assignment.date >= weekStartStr && d.assignment.date <= weekEndStr
@@ -289,8 +284,7 @@ export function generateHealth(
 					weekParcelsDelivered += shift.parcelsDelivered;
 				}
 			}
-			const weekCompletion =
-				weekParcelsStart > 0 ? weekParcelsDelivered / weekParcelsStart : 0;
+			const weekCompletion = weekParcelsStart > 0 ? weekParcelsDelivered / weekParcelsStart : 0;
 
 			const weekLateCancellations = weekAssignments.filter(
 				(d) => d.assignment.cancelType === 'late'

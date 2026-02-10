@@ -13,7 +13,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { bids, bidWindows, assignments, user } from '$lib/server/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { parseISO, set, startOfDay } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { getWeekStart, canDriverTakeAssignment } from '$lib/server/services/scheduling';
@@ -23,10 +23,24 @@ import {
 	broadcastBidWindowClosed
 } from '$lib/server/realtime/managerSse';
 import { sendNotification } from '$lib/server/services/notifications';
+import { bidSubmissionSchema } from '$lib/schemas/api/bidding';
 import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 
 const INSTANT_MODE_CUTOFF_MS = dispatchPolicy.bidding.instantModeCutoffHours * 60 * 60 * 1000;
+const PG_UNIQUE_VIOLATION = '23505';
+const WINDOW_USER_UNIQUE_CONSTRAINT = 'uq_bids_window_user';
+
+function isWindowScopedDuplicateBidError(err: unknown): boolean {
+	if (typeof err !== 'object' || err === null) {
+		return false;
+	}
+
+	const code = 'code' in err ? (err as { code?: unknown }).code : undefined;
+	const constraint = 'constraint' in err ? (err as { constraint?: unknown }).constraint : undefined;
+
+	return code === PG_UNIQUE_VIOLATION && constraint === WINDOW_USER_UNIQUE_CONSTRAINT;
+}
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -37,7 +51,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(403, 'Only drivers can submit bids');
 	}
 
-	const log = logger.child({ operation: 'submitBid', userId: locals.user.id });
+	const driverId = locals.user.id;
+
+	const log = logger.child({ operation: 'submitBid' });
 
 	let body: unknown;
 	try {
@@ -46,17 +62,18 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'Invalid JSON body');
 	}
 
-	const { assignmentId } = body as { assignmentId?: unknown };
-
-	if (!assignmentId || typeof assignmentId !== 'string') {
-		throw error(400, 'assignmentId is required');
+	const parsedBody = bidSubmissionSchema.safeParse(body);
+	if (!parsedBody.success) {
+		throw error(400, 'assignmentId must be a valid assignment ID');
 	}
+
+	const { assignmentId } = parsedBody.data;
 
 	// Check if driver is flagged
 	const [driverInfo] = await db
 		.select({ isFlagged: user.isFlagged })
 		.from(user)
-		.where(eq(user.id, locals.user.id));
+		.where(eq(user.id, driverId));
 
 	if (driverInfo?.isFlagged) {
 		log.warn('Flagged driver attempted to bid');
@@ -91,7 +108,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const [existingBid] = await db
 		.select({ id: bids.id })
 		.from(bids)
-		.where(and(eq(bids.assignmentId, assignmentId), eq(bids.userId, locals.user.id)));
+		.where(and(eq(bids.bidWindowId, window.id), eq(bids.userId, driverId)));
 
 	if (existingBid) {
 		throw error(400, 'You have already bid on this assignment');
@@ -99,14 +116,14 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	// Check weekly cap for the assignment's week
 	const assignmentWeekStart = getWeekStart(parseISO(window.assignmentDate));
-	const canTake = await canDriverTakeAssignment(locals.user.id, assignmentWeekStart);
+	const canTake = await canDriverTakeAssignment(driverId, assignmentWeekStart);
 	if (!canTake) {
 		throw error(400, 'You have reached your weekly cap for that week');
 	}
 
 	// Belt-and-suspenders: if < 24h to shift, treat as instant regardless of stored mode
-	const parsed = parseISO(window.assignmentDate);
-	const toronto = toZonedTime(parsed, dispatchPolicy.timezone.toronto);
+	const parsedAssignmentDate = parseISO(window.assignmentDate);
+	const toronto = toZonedTime(parsedAssignmentDate, dispatchPolicy.timezone.toronto);
 	const shiftStart = set(startOfDay(toronto), {
 		hours: dispatchPolicy.shifts.startHourLocal,
 		minutes: 0,
@@ -121,30 +138,60 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	// Instant or emergency mode: assign immediately
 	if (effectiveMode === 'instant' || effectiveMode === 'emergency') {
-		const result = await instantAssign(assignmentId, locals.user.id, window.id);
+		const result = await instantAssign(assignmentId, driverId, window.id);
 
 		if (!result.instantlyAssigned) {
 			throw error(400, result.error ?? 'Route already assigned');
 		}
 
-		broadcastBidWindowClosed({
-			assignmentId,
-			bidWindowId: window.id,
-			winnerId: locals.user.id
-		});
+		try {
+			broadcastBidWindowClosed({
+				assignmentId,
+				bidWindowId: window.id,
+				winnerId: driverId
+			});
+		} catch (err) {
+			log.warn(
+				{
+					errorName: err instanceof Error ? err.name : 'UnknownError',
+					errorMessage: err instanceof Error ? err.message : 'UnknownError'
+				},
+				'Bid window close broadcast failed'
+			);
+		}
 
-		broadcastAssignmentUpdated({
-			assignmentId,
-			status: 'scheduled',
-			driverId: locals.user.id,
-			routeId: window.routeId
-		});
+		try {
+			broadcastAssignmentUpdated({
+				assignmentId,
+				status: 'scheduled',
+				driverId,
+				routeId: window.routeId
+			});
+		} catch (err) {
+			log.warn(
+				{
+					errorName: err instanceof Error ? err.name : 'UnknownError',
+					errorMessage: err instanceof Error ? err.message : 'UnknownError'
+				},
+				'Assignment update broadcast failed'
+			);
+		}
 
-		await sendNotification(locals.user.id, 'bid_won', {
-			data: { assignmentId, bidWindowId: window.id }
-		});
+		try {
+			await sendNotification(driverId, 'bid_won', {
+				data: { assignmentId, bidWindowId: window.id }
+			});
+		} catch (err) {
+			log.warn(
+				{
+					errorName: err instanceof Error ? err.name : 'UnknownError',
+					errorMessage: err instanceof Error ? err.message : 'UnknownError'
+				},
+				'Bid won notification failed'
+			);
+		}
 
-		log.info({ bidId: result.bidId, mode: effectiveMode }, 'Instant assignment');
+		log.info({ mode: effectiveMode }, 'Instant assignment');
 
 		return json({
 			success: true,
@@ -154,24 +201,84 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		});
 	}
 
-	// Competitive mode: create pending bid
-	const [newBid] = await db
-		.insert(bids)
-		.values({
-			assignmentId,
-			userId: locals.user.id,
-			status: 'pending',
-			windowClosesAt: window.closesAt
+	// Competitive mode: lock active window and submit pending bid atomically
+	const competitiveResult = await db
+		.transaction(async (tx) => {
+			const lockResult = await tx.execute(
+				sql`SELECT id, status, closes_at FROM bid_windows WHERE id = ${window.id} FOR UPDATE`
+			);
+			const lockedWindow = (lockResult as { rows?: Array<Record<string, unknown>> }).rows?.[0];
+
+			if (!lockedWindow || lockedWindow.status !== 'open') {
+				return { outcome: 'window_closed' as const };
+			}
+
+			const closesAtRaw = lockedWindow.closes_at;
+			const closesAt =
+				closesAtRaw instanceof Date ? closesAtRaw : new Date(String(closesAtRaw ?? ''));
+			if (
+				!(closesAt instanceof Date) ||
+				Number.isNaN(closesAt.getTime()) ||
+				closesAt <= new Date()
+			) {
+				return { outcome: 'window_closed' as const };
+			}
+
+			const [lockedExistingBid] = await tx
+				.select({ id: bids.id })
+				.from(bids)
+				.where(and(eq(bids.bidWindowId, window.id), eq(bids.userId, driverId)));
+
+			if (lockedExistingBid) {
+				return { outcome: 'duplicate' as const };
+			}
+
+			const [createdBid] = await tx
+				.insert(bids)
+				.values({
+					assignmentId,
+					bidWindowId: window.id,
+					userId: driverId,
+					status: 'pending',
+					windowClosesAt: closesAt
+				})
+				.returning({
+					id: bids.id,
+					assignmentId: bids.assignmentId,
+					status: bids.status,
+					bidAt: bids.bidAt,
+					windowClosesAt: bids.windowClosesAt
+				});
+
+			if (!createdBid) {
+				return { outcome: 'failed' as const };
+			}
+
+			return { outcome: 'created' as const, bid: createdBid };
 		})
-		.returning({
-			id: bids.id,
-			assignmentId: bids.assignmentId,
-			status: bids.status,
-			bidAt: bids.bidAt,
-			windowClosesAt: bids.windowClosesAt
+		.catch((err) => {
+			if (isWindowScopedDuplicateBidError(err)) {
+				return { outcome: 'duplicate' as const };
+			}
+
+			throw err;
 		});
 
-	log.info({ bidId: newBid.id, assignmentId }, 'Bid submitted');
+	if (competitiveResult.outcome === 'window_closed') {
+		throw error(400, 'Bid window has closed');
+	}
+
+	if (competitiveResult.outcome === 'duplicate') {
+		throw error(400, 'You have already bid on this assignment');
+	}
+
+	if (competitiveResult.outcome !== 'created') {
+		throw error(500, 'Failed to submit bid');
+	}
+
+	const newBid = competitiveResult.bid;
+
+	log.info('Bid submitted');
 
 	return json({
 		success: true,

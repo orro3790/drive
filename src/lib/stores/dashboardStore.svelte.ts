@@ -168,8 +168,8 @@ export const dashboardStore = {
 
 		try {
 			const [dashboardRes, metricsRes] = await Promise.all([
-				fetch('/api/dashboard'),
-				fetch('/api/metrics').catch(() => null)
+				fetch('/api/dashboard', { cache: 'no-store' }),
+				fetch('/api/metrics', { cache: 'no-store' }).catch(() => null)
 			]);
 
 			if (!dashboardRes.ok) {

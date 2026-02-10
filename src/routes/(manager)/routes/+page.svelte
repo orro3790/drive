@@ -1320,7 +1320,6 @@
 
 	.driver-unassigned {
 		color: var(--text-muted);
-		font-style: italic;
 	}
 
 	.bid-closes {
@@ -1533,6 +1532,5 @@
 	/* Bid window detail styling */
 	.winner-unfilled {
 		color: var(--status-warning);
-		font-style: italic;
 	}
 </style>

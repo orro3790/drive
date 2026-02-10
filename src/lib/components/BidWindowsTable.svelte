@@ -203,7 +203,6 @@
 
 	.winner-unfilled {
 		color: var(--status-warning);
-		font-style: italic;
 	}
 
 	.winner-pending {

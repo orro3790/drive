@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Drive Mobile Shell</title>
+		<style>
+			:root {
+				color-scheme: light;
+				font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+			}
+
+			body {
+				margin: 0;
+				min-height: 100vh;
+				display: grid;
+				place-items: center;
+				background: #eef3f8;
+				color: #142033;
+			}
+
+			main {
+				width: min(520px, calc(100% - 3rem));
+				padding: 1.5rem;
+				border-radius: 0.75rem;
+				border: 1px solid #c7d3e1;
+				background: #ffffff;
+				box-shadow: 0 12px 26px rgba(20, 32, 51, 0.08);
+			}
+
+			h1 {
+				margin: 0 0 0.75rem;
+				font-size: 1.1rem;
+			}
+
+			p {
+				margin: 0;
+				line-height: 1.5;
+			}
+
+			code {
+				font-family: 'Cascadia Mono', Consolas, 'Courier New', monospace;
+				font-size: 0.95em;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>Drive mobile shell is configured.</h1>
+			<p>
+				Set <code>CAP_SERVER_URL</code> before running <code>pnpm mobile:android:sync</code>
+				so Android loads the hosted Drive web app.
+			</p>
+		</main>
+	</body>
+</html>

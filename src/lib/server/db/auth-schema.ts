@@ -5,7 +5,7 @@
  * Keep separate from domain schema (schema.ts).
  */
 
-import { boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigint, boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 
 /**
  * Better Auth User table
@@ -78,4 +78,15 @@ export const verification = pgTable('verification', {
 	expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});
+
+/**
+ * Better Auth rate limit table
+ * Used when auth rate limits are persisted in PostgreSQL.
+ */
+export const rateLimit = pgTable('rate_limit', {
+	id: text('id').primaryKey(),
+	key: text('key').notNull().unique(),
+	count: integer('count').notNull(),
+	lastRequest: bigint('last_request', { mode: 'number' }).notNull()
 });

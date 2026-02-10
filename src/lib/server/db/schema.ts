@@ -1,7 +1,7 @@
 /**
  * Database Schema - Driver Operations Platform
  *
- * See docs/specs/data-model.md for full documentation.
+ * See documentation/specs/data-model.md for full documentation.
  *
  * Note: User data is managed by Better Auth in auth-schema.ts.
  * Domain tables reference the auth user table via text user_id columns.
@@ -20,9 +20,10 @@ import {
 	text,
 	timestamp,
 	unique,
+	uniqueIndex,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { desc, relations } from 'drizzle-orm';
+import { desc, relations, sql } from 'drizzle-orm';
 import { user } from './auth-schema';
 
 // Re-export auth user for convenience
@@ -72,6 +73,12 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 	'corrective_warning'
 ]);
 export const actorTypeEnum = pgEnum('actor_type', ['user', 'system']);
+export const signupOnboardingKindEnum = pgEnum('signup_onboarding_kind', ['approval', 'invite']);
+export const signupOnboardingStatusEnum = pgEnum('signup_onboarding_status', [
+	'pending',
+	'consumed',
+	'revoked'
+]);
 
 // Warehouses
 export const warehouses = pgTable('warehouses', {
@@ -158,7 +165,10 @@ export const assignments = pgTable(
 	(table) => ({
 		userDateIdx: index('idx_assignments_user_date').on(table.userId, table.date),
 		statusDateIdx: index('idx_assignments_status_date').on(table.status, table.date),
-		routeDateIdx: index('idx_assignments_route_date').on(table.routeId, table.date)
+		routeDateIdx: index('idx_assignments_route_date').on(table.routeId, table.date),
+		activeUserDateUniqueIdx: uniqueIndex('uq_assignments_active_user_date')
+			.on(table.userId, table.date)
+			.where(sql`${table.userId} is not null and ${table.status} <> 'cancelled'`)
 	})
 );
 
@@ -190,6 +200,9 @@ export const bids = pgTable(
 		assignmentId: uuid('assignment_id')
 			.notNull()
 			.references(() => assignments.id, { onDelete: 'cascade' }),
+		bidWindowId: uuid('bid_window_id')
+			.notNull()
+			.references(() => bidWindows.id, { onDelete: 'cascade' }),
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id),
@@ -200,7 +213,9 @@ export const bids = pgTable(
 		resolvedAt: timestamp('resolved_at', { withTimezone: true })
 	},
 	(table) => ({
-		assignmentStatusIdx: index('idx_bids_assignment_status').on(table.assignmentId, table.status)
+		assignmentStatusIdx: index('idx_bids_assignment_status').on(table.assignmentId, table.status),
+		windowStatusIdx: index('idx_bids_window_status').on(table.bidWindowId, table.status),
+		windowUserUniqueIdx: uniqueIndex('uq_bids_window_user').on(table.bidWindowId, table.userId)
 	})
 );
 
@@ -225,7 +240,10 @@ export const bidWindows = pgTable(
 		assignmentStatusIdx: index('idx_bid_windows_assignment_status').on(
 			table.assignmentId,
 			table.status
-		)
+		),
+		openAssignmentUniqueIdx: uniqueIndex('uq_bid_windows_open_assignment')
+			.on(table.assignmentId)
+			.where(sql`${table.status} = 'open'`)
 	})
 );
 
@@ -313,6 +331,36 @@ export const auditLogs = pgTable(
 			table.entityId,
 			desc(table.createdAt)
 		)
+	})
+);
+
+// Signup Onboarding (manager approvals + one-time invites)
+export const signupOnboarding = pgTable(
+	'signup_onboarding',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		email: text('email').notNull(),
+		kind: signupOnboardingKindEnum('kind').notNull().default('approval'),
+		tokenHash: text('token_hash'),
+		status: signupOnboardingStatusEnum('status').notNull().default('pending'),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		expiresAt: timestamp('expires_at', { withTimezone: true }),
+		consumedAt: timestamp('consumed_at', { withTimezone: true }),
+		consumedByUserId: text('consumed_by_user_id').references(() => user.id, {
+			onDelete: 'set null'
+		}),
+		revokedAt: timestamp('revoked_at', { withTimezone: true }),
+		revokedByUserId: text('revoked_by_user_id').references(() => user.id, {
+			onDelete: 'set null'
+		}),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => ({
+		emailStatusIdx: index('idx_signup_onboarding_email_status').on(table.email, table.status),
+		expiresAtIdx: index('idx_signup_onboarding_expires_at').on(table.expiresAt),
+		tokenHashIdx: index('idx_signup_onboarding_token_hash').on(table.tokenHash),
+		tokenHashUnique: unique('uq_signup_onboarding_token_hash').on(table.tokenHash)
 	})
 );
 
@@ -441,13 +489,17 @@ export const bidsRelations = relations(bids, ({ one }) => ({
 		fields: [bids.assignmentId],
 		references: [assignments.id]
 	}),
+	bidWindow: one(bidWindows, {
+		fields: [bids.bidWindowId],
+		references: [bidWindows.id]
+	}),
 	user: one(user, {
 		fields: [bids.userId],
 		references: [user.id]
 	})
 }));
 
-export const bidWindowsRelations = relations(bidWindows, ({ one }) => ({
+export const bidWindowsRelations = relations(bidWindows, ({ one, many }) => ({
 	assignment: one(assignments, {
 		fields: [bidWindows.assignmentId],
 		references: [assignments.id]
@@ -455,7 +507,8 @@ export const bidWindowsRelations = relations(bidWindows, ({ one }) => ({
 	winner: one(user, {
 		fields: [bidWindows.winnerId],
 		references: [user.id]
-	})
+	}),
+	bids: many(bids)
 }));
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({

@@ -4,7 +4,7 @@ Task: DRV-e30
 
 ## Steps
 
-1. Review docs/specs/SPEC.md and docs/adr/003-scheduling-model.md plus existing scheduling/notification services to define Week N+2 boundary (e.g., Monday 00:00 America/Toronto) and confirm locking, scheduling, and notification rules.
+1. Review documentation/specs/SPEC.md and documentation/adr/003-scheduling-model.md plus existing scheduling/notification services to define Week N+2 boundary (e.g., Monday 00:00 America/Toronto) and confirm locking, scheduling, and notification rules.
 2. Implement or update src/routes/api/cron/lock-preferences/+server.ts to validate CRON_SECRET, compute Toronto Week N+2 start using a DST-safe helper, and add structured logs (start/end, target week, counts, errors).
 3. Add idempotent preference locking for Week N+2 (skip already locked) and ensure safe retries if later steps fail.
 4. Run schedule generation with idempotency guards (avoid duplicate assignments for the target week) and capture results for logging/diagnostics.

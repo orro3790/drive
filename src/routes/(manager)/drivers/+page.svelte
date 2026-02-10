@@ -353,7 +353,14 @@
 	{#if score === null}
 		<span class="health-score-null">&mdash;</span>
 	{:else}
-		<span class="health-score" style:color={score >= 96 ? 'var(--status-success)' : score >= 48 ? 'var(--status-warning)' : 'var(--status-error)'}>
+		<span
+			class="health-score"
+			style:color={score >= 96
+				? 'var(--status-success)'
+				: score >= 48
+					? 'var(--status-warning)'
+					: 'var(--status-error)'}
+		>
 			{Math.round(score)}
 		</span>
 	{/if}
@@ -433,7 +440,11 @@
 		</div>
 		<div class="detail-row">
 			<dt>
-				<Tooltip tooltip={m.drivers_detail_tooltip_completed_shifts()} delay={250} focusable={false}>
+				<Tooltip
+					tooltip={m.drivers_detail_tooltip_completed_shifts()}
+					delay={250}
+					focusable={false}
+				>
 					<span class="dt-with-tooltip">{m.drivers_detail_completed_shifts()}</span>
 				</Tooltip>
 			</dt>
@@ -530,7 +541,11 @@
 		</div>
 		<div class="detail-row">
 			<dt>
-				<Tooltip tooltip={m.drivers_detail_tooltip_completed_shifts()} delay={250} focusable={false}>
+				<Tooltip
+					tooltip={m.drivers_detail_tooltip_completed_shifts()}
+					delay={250}
+					focusable={false}
+				>
 					<span class="dt-with-tooltip">{m.drivers_detail_completed_shifts()}</span>
 				</Tooltip>
 			</dt>
@@ -727,7 +742,10 @@
 		onSave={handleSave}
 		viewContent={driverDetailView}
 		editContent={driverDetailEdit}
-		viewActions={selectedDriver && (selectedDriver.isFlagged || !selectedDriver.assignmentPoolEligible) ? driverDetailActions : undefined}
+		viewActions={selectedDriver &&
+		(selectedDriver.isFlagged || !selectedDriver.assignmentPoolEligible)
+			? driverDetailActions
+			: undefined}
 		{tableContent}
 		storageKey="drivers"
 	/>
@@ -783,7 +801,6 @@
 
 	.no-phone {
 		color: var(--text-muted);
-		font-style: italic;
 	}
 
 	.health-indicator {

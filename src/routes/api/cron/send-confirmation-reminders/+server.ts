@@ -1,10 +1,10 @@
 /**
  * Confirmation Reminders Cron Job
  *
- * Runs daily at 11:00 UTC (06:00 Toronto EST / 07:00 EDT).
+ * Runs at 10:05 and 11:05 UTC to guarantee one 06:05 Toronto run across DST.
  * Sends reminders to drivers with unconfirmed shifts 3 days out.
  *
- * Schedule: 0 11 * * *
+ * Schedule: 5 10,11 * * *
  */
 
 import { json } from '@sveltejs/kit';
@@ -13,9 +13,9 @@ import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { addDays, format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
-import { and, eq, gte, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { assignments, routes } from '$lib/server/db/schema';
+import { assignments, notifications, routes } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { sendNotification } from '$lib/server/services/notifications';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
@@ -58,10 +58,45 @@ export const GET: RequestHandler = async ({ request }) => {
 			);
 
 		let sent = 0;
+		let skippedDuplicates = 0;
 		let errors = 0;
+
+		const candidateUserIds = Array.from(
+			new Set(
+				unconfirmed
+					.map((assignment) => assignment.userId)
+					.filter((userId): userId is string => Boolean(userId))
+			)
+		);
+
+		const existingDedupeRows =
+			candidateUserIds.length === 0
+				? []
+				: await db
+						.select({ dedupeKey: sql<string>`${notifications.data} ->> 'dedupeKey'` })
+						.from(notifications)
+						.where(
+							and(
+								eq(notifications.type, 'confirmation_reminder'),
+								inArray(notifications.userId, candidateUserIds),
+								sql`${notifications.data} ->> 'date' = ${targetDate}`
+							)
+						);
+
+		const seenDedupeKeys = new Set(
+			existingDedupeRows
+				.map((row) => row.dedupeKey)
+				.filter((dedupeKey): dedupeKey is string => Boolean(dedupeKey))
+		);
 
 		for (const assignment of unconfirmed) {
 			if (!assignment.userId) continue;
+
+			const dedupeKey = `confirmation_reminder:${assignment.assignmentId}:${assignment.userId}:${assignment.date}`;
+			if (seenDedupeKeys.has(dedupeKey)) {
+				skippedDuplicates++;
+				continue;
+			}
 
 			try {
 				await sendNotification(assignment.userId, 'confirmation_reminder', {
@@ -69,9 +104,11 @@ export const GET: RequestHandler = async ({ request }) => {
 					data: {
 						assignmentId: assignment.assignmentId,
 						routeName: assignment.routeName,
-						date: assignment.date
+						date: assignment.date,
+						dedupeKey
 					}
 				});
+				seenDedupeKeys.add(dedupeKey);
 				sent++;
 			} catch (err) {
 				errors++;
@@ -83,9 +120,12 @@ export const GET: RequestHandler = async ({ request }) => {
 		}
 
 		const elapsedMs = Date.now() - startedAt;
-		log.info({ sent, errors, targetDate, elapsedMs }, 'Confirmation reminders cron completed');
+		log.info(
+			{ sent, skippedDuplicates, errors, targetDate, elapsedMs },
+			'Confirmation reminders cron completed'
+		);
 
-		return json({ success: true, sent, errors, date: targetDate, elapsedMs });
+		return json({ success: true, sent, skippedDuplicates, errors, date: targetDate, elapsedMs });
 	} catch (err) {
 		log.error({ error: err }, 'Confirmation reminders cron failed');
 		return json({ error: 'Internal server error' }, { status: 500 });

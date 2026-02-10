@@ -7,7 +7,7 @@ Driver Operations Platform for delivery logistics.
 
 ## Project Status: Ready for Implementation
 
-Tech stack interview **completed**. Specifications documented in `docs/specs/`. Ready to begin implementation.
+Tech stack interview **completed**. Specifications documented in `documentation/specs/`. Ready to begin implementation.
 
 ## Quick Reference
 
@@ -41,14 +41,14 @@ Tech stack interview **completed**. Specifications documented in `docs/specs/`. 
 
 | Document               | Location                                                 |
 | ---------------------- | -------------------------------------------------------- |
-| Technical Spec         | `docs/specs/tech-stack.md`                               |
-| Data Model             | `docs/specs/data-model.md`                               |
-| Agent Guidelines       | `docs/agent-guidelines.md`                               |
+| Technical Spec         | `documentation/specs/SPEC.md`                            |
+| Data Model             | `documentation/specs/data-model.md`                      |
+| Agent Guidelines       | `documentation/agent-guidelines.md`                      |
 | Agent Guidelines Index | `documentation/agent-guidelines/index.md`                |
 | Domain Context         | `non-technical-specs.md`, `project-summary-condensed.md` |
-| ADR: Tech Stack        | `docs/adr/001-tech-stack.md`                             |
-| ADR: Bidding System    | `docs/adr/002-replacement-bidding-system.md`             |
-| ADR: Scheduling        | `docs/adr/003-scheduling-model.md`                       |
+| ADR: Tech Stack        | `documentation/adr/001-tech-stack.md`                    |
+| ADR: Bidding System    | `documentation/adr/002-replacement-bidding-system.md`    |
+| ADR: Scheduling        | `documentation/adr/003-scheduling-model.md`              |
 
 ## Server Services
 
@@ -63,7 +63,7 @@ Business logic in `src/lib/server/services/`:
 - `managers.ts` - Manager access control (`getManagerWarehouseIds`, `canManagerAccessWarehouse`, `getRouteManager`)
 - `health.ts` - Driver health scoring and star progression (`computeDailyScore`, `evaluateWeek`, `runDailyHealthEvaluation`, `runWeeklyHealthEvaluation`)
 
-See `docs/agent-guidelines.md` for detailed usage patterns.
+See `documentation/agent-guidelines.md` for detailed usage patterns.
 
 For deeper conventions and patterns, start at `documentation/agent-guidelines/index.md`.
 
@@ -190,7 +190,7 @@ Svelte 5 stores in `src/lib/stores/`:
 - **Pool Eligibility**: Hard-stop events remove driver from assignment pool (manager intervention required)
 - **V1 Scope**: UI + simulation only (no automatic pay/cap changes yet)
 - **Simulation**: 4 stars shows +10% bonus preview and higher shift access tier
-- See `docs/plans/driver-health-gamification.md` for full specification
+- See `documentation/plans/driver-health-gamification.md` for full specification
 
 ### Bidding Modes
 
@@ -292,18 +292,20 @@ async function submitBid(assignmentId: string) {
 
 Reference: `.env.example` for full documentation.
 
-| Variable                  | Purpose                                             | Required  |
-| ------------------------- | --------------------------------------------------- | --------- |
-| `DATABASE_URL`            | Neon PostgreSQL connection (pooled)                 | Yes       |
-| `BETTER_AUTH_SECRET`      | Session signing key                                 | Yes       |
-| `BETTER_AUTH_URL`         | App base URL — local dev only, Vercel auto-provides | Dev only  |
-| `BETTER_AUTH_INVITE_CODE` | Optional signup gate for drivers                    | No        |
-| `FIREBASE_PROJECT_ID`     | FCM project identifier                              | Yes       |
-| `FIREBASE_CLIENT_EMAIL`   | FCM service account email                           | Yes       |
-| `FIREBASE_PRIVATE_KEY`    | FCM service account private key                     | Yes       |
-| `AXIOM_TOKEN`             | Axiom API token for log shipping                    | Prod only |
-| `TEST_USER_EMAIL`         | Dev/test user email                                 | Dev only  |
-| `TEST_USER_PASSWORD`      | Dev/test user password                              | Dev only  |
+| Variable                       | Purpose                                             | Required  |
+| ------------------------------ | --------------------------------------------------- | --------- |
+| `DATABASE_URL`                 | Neon PostgreSQL connection (pooled)                 | Yes       |
+| `BETTER_AUTH_SECRET`           | Session signing key                                 | Yes       |
+| `BETTER_AUTH_URL`              | App base URL — local dev only, Vercel auto-provides | Dev only  |
+| `BETTER_AUTH_SIGNUP_POLICY`    | Signup onboarding mode (`allowlist` or `open`)      | No        |
+| `BETTER_AUTH_SIGNUP_ALLOWLIST` | Approved signup emails (comma-separated)            | Prod only |
+| `BETTER_AUTH_INVITE_CODE`      | Optional dev-only invite code                       | Dev only  |
+| `FIREBASE_PROJECT_ID`          | FCM project identifier                              | Yes       |
+| `FIREBASE_CLIENT_EMAIL`        | FCM service account email                           | Yes       |
+| `FIREBASE_PRIVATE_KEY`         | FCM service account private key                     | Yes       |
+| `AXIOM_TOKEN`                  | Axiom API token for log shipping                    | Prod only |
+| `TEST_USER_EMAIL`              | Dev/test user email                                 | Dev only  |
+| `TEST_USER_PASSWORD`           | Dev/test user password                              | Dev only  |
 
 ### Usage in Code
 

@@ -233,7 +233,7 @@ This is a **valid test update** because:
 ## 10. Test Design Workflow (Feature-first, Behavior-driven)
 
 - Define behaviors before coding (Given/When/Then). Link each behavior to one or more tests.
-- Derive tests from implementation plans and acceptance criteria (see `documentation/implementation-plans/README.md`).
+- Derive tests from implementation plans and acceptance criteria in `documentation/plans/`.
 - Prioritize what breaks user value first:
   - Utilities with invariants (e.g., normalization, parsing)
   - Services hitting persistence/boundaries (Firestore, HTTP)

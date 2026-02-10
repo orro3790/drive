@@ -11,8 +11,6 @@ import { json } from '@sveltejs/kit';
 import { CRON_SECRET } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
-import { toZonedTime } from 'date-fns-tz';
-import { parseISO, set } from 'date-fns';
 import { and, eq, gte, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { assignments, driverMetrics, routes } from '$lib/server/db/schema';
@@ -21,6 +19,7 @@ import { createBidWindow } from '$lib/server/services/bidding';
 import { sendNotification } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
 
 export const GET: RequestHandler = async ({ request }) => {
 	const authHeader = request.headers.get('authorization')?.trim();
@@ -32,7 +31,6 @@ export const GET: RequestHandler = async ({ request }) => {
 	const log = logger.child({ cron: 'auto-drop-unconfirmed' });
 	const startedAt = Date.now();
 	const now = new Date();
-	const nowToronto = toZonedTime(now, dispatchPolicy.timezone.toronto);
 
 	log.info('Starting auto-drop unconfirmed cron');
 
@@ -59,19 +57,15 @@ export const GET: RequestHandler = async ({ request }) => {
 
 		let dropped = 0;
 		let bidWindowsCreated = 0;
+		let skippedNoWindow = 0;
 		let errors = 0;
 
 		for (const candidate of candidates) {
 			// Check if past the 48h deadline
-			const parsed = parseISO(candidate.date);
-			const toronto = toZonedTime(parsed, dispatchPolicy.timezone.toronto);
-			const shiftStart = set(toronto, {
-				hours: dispatchPolicy.shifts.startHourLocal,
-				minutes: 0,
-				seconds: 0,
-				milliseconds: 0
+			const shiftStart = getTorontoDateTimeInstant(candidate.date, {
+				hours: dispatchPolicy.shifts.startHourLocal
 			});
-			const hoursUntilShift = (shiftStart.getTime() - nowToronto.getTime()) / (1000 * 60 * 60);
+			const hoursUntilShift = (shiftStart.getTime() - now.getTime()) / (1000 * 60 * 60);
 
 			if (hoursUntilShift > dispatchPolicy.confirmation.deadlineHoursBeforeShift) {
 				continue; // Not past deadline yet
@@ -80,53 +74,73 @@ export const GET: RequestHandler = async ({ request }) => {
 			try {
 				const originalUserId = candidate.userId!;
 
-				// Set cancelType on the assignment before creating bid window
-				await db
-					.update(assignments)
-					.set({ cancelType: 'auto_drop', updatedAt: now })
-					.where(eq(assignments.id, candidate.id));
-
-				// Increment autoDroppedShifts metric
-				await db
-					.update(driverMetrics)
-					.set({
-						autoDroppedShifts: sql`${driverMetrics.autoDroppedShifts} + 1`,
-						updatedAt: now
-					})
-					.where(eq(driverMetrics.userId, originalUserId));
-
 				// Create bid window
 				const result = await createBidWindow(candidate.id, {
 					trigger: 'auto_drop'
 				});
-				if (result.success) {
-					bidWindowsCreated++;
+				if (!result.success) {
+					skippedNoWindow++;
+					log.info(
+						{ assignmentId: candidate.id, reason: result.reason },
+						'Skipping auto-drop side effects because bid window was not created'
+					);
+					continue;
 				}
 
-				// Notify the original driver
-				await sendNotification(originalUserId, 'shift_auto_dropped', {
-					customBody: `Your shift on ${candidate.date} at ${candidate.routeName} was dropped because it wasn't confirmed in time.`,
-					data: {
-						assignmentId: candidate.id,
-						routeName: candidate.routeName,
-						date: candidate.date
-					}
-				});
+				bidWindowsCreated++;
 
-				await createAuditLog({
-					entityType: 'assignment',
-					entityId: candidate.id,
-					action: 'auto_drop',
-					actorType: 'system',
-					actorId: null,
-					changes: {
-						before: { status: 'scheduled', userId: originalUserId },
-						after: { status: 'unfilled' },
-						reason: 'unconfirmed_past_deadline'
-					}
+				await db.transaction(async (tx) => {
+					// Set cancelType after bid window creation succeeds
+					await tx
+						.update(assignments)
+						.set({ cancelType: 'auto_drop', updatedAt: now })
+						.where(eq(assignments.id, candidate.id));
+
+					// Increment autoDroppedShifts metric only when replacement window exists
+					await tx
+						.update(driverMetrics)
+						.set({
+							autoDroppedShifts: sql`${driverMetrics.autoDroppedShifts} + 1`,
+							updatedAt: now
+						})
+						.where(eq(driverMetrics.userId, originalUserId));
+
+					await createAuditLog(
+						{
+							entityType: 'assignment',
+							entityId: candidate.id,
+							action: 'auto_drop',
+							actorType: 'system',
+							actorId: null,
+							changes: {
+								before: { status: 'scheduled', userId: originalUserId },
+								after: { status: 'unfilled' },
+								reason: 'unconfirmed_past_deadline'
+							}
+						},
+						tx
+					);
 				});
 
 				dropped++;
+
+				// Notify the original driver
+				try {
+					await sendNotification(originalUserId, 'shift_auto_dropped', {
+						customBody: `Your shift on ${candidate.date} at ${candidate.routeName} was dropped because it wasn't confirmed in time.`,
+						data: {
+							assignmentId: candidate.id,
+							routeName: candidate.routeName,
+							date: candidate.date
+						}
+					});
+				} catch (notifyError) {
+					errors++;
+					log.error(
+						{ assignmentId: candidate.id, error: notifyError },
+						'Failed to notify driver after auto-drop'
+					);
+				}
 			} catch (err) {
 				errors++;
 				log.error({ assignmentId: candidate.id, error: err }, 'Failed to auto-drop assignment');
@@ -134,9 +148,12 @@ export const GET: RequestHandler = async ({ request }) => {
 		}
 
 		const elapsedMs = Date.now() - startedAt;
-		log.info({ dropped, bidWindowsCreated, errors, elapsedMs }, 'Auto-drop cron completed');
+		log.info(
+			{ dropped, bidWindowsCreated, skippedNoWindow, errors, elapsedMs },
+			'Auto-drop cron completed'
+		);
 
-		return json({ success: true, dropped, bidWindowsCreated, errors, elapsedMs });
+		return json({ success: true, dropped, bidWindowsCreated, skippedNoWindow, errors, elapsedMs });
 	} catch (err) {
 		log.error({ error: err }, 'Auto-drop cron failed');
 		return json({ error: 'Internal server error' }, { status: 500 });

@@ -7,9 +7,10 @@ Uses SidebarItem for consistent styling with app sidebar.
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import SidebarItem from '$lib/components/app-shell/SidebarItem.svelte';
 	import UserCircle from '$lib/components/icons/UserCircle.svelte';
+	import Badge from '$lib/components/icons/Badge.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
-	export type Category = 'account';
+	export type Category = 'account' | 'onboarding';
 
 	export interface NavGroup {
 		label?: string;
@@ -27,11 +28,13 @@ Uses SidebarItem for consistent styling with app sidebar.
 	}>();
 
 	const ICONS = {
-		account: UserCircle
+		account: UserCircle,
+		onboarding: Badge
 	} as const;
 
 	const LABELS: Record<Category, string> = $derived({
-		account: m.settings_account_section()
+		account: m.settings_account_section(),
+		onboarding: m.settings_onboarding_section()
 	});
 
 	function iconFor(category: Category) {

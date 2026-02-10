@@ -2,7 +2,7 @@
  * Driver Flagging Service
  *
  * Applies attendance-based flagging rules and weekly cap adjustments.
- * See docs/specs/SPEC.md Performance & Flagging.
+ * See documentation/specs/SPEC.md Performance & Flagging.
  */
 
 import { addDays } from 'date-fns';

@@ -4,7 +4,7 @@ Purpose: help agents find the minimal, most relevant docs quickly. Start with th
 
 Start here:
 
-- `docs/agent-guidelines.md` (Drive-specific conventions)
+- `documentation/agent-guidelines.md` (Drive-specific conventions)
 - `documentation/agent-guidelines/system-overview.md` (what we're building)
 
 Frontend & UX:
@@ -44,4 +44,4 @@ Legacy (copied from a previous project; not yet applicable to Drive):
 - `documentation/agent-guidelines/mutation-strategies.md` (Firestore-first constraints)
 - `documentation/agent-guidelines/testing-standards.md` (Firestore/GCS E2E assumptions)
 
-Tip: If you still aren't sure what to open, read `docs/agent-guidelines.md`, then pull exactly one deep-dive doc from this index.
+Tip: If you still aren't sure what to open, read `documentation/agent-guidelines.md`, then pull exactly one deep-dive doc from this index.

@@ -4,8 +4,13 @@ This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get sta
 
 Project conventions and coding-agent guidelines:
 
-- Start here: `docs/agent-guidelines.md`
+- Start here: `documentation/agent-guidelines.md`
 - Index (deep dives): `documentation/agent-guidelines/index.md`
+
+## Testing Workflow
+
+- For any test-related task (writing tests, fixing failing tests, updating Vitest config, or reviewing test changes), load and follow `.claude/skills/vitest/SKILL.md`.
+- Treat failing tests as possible implementation defects first; do not weaken tests just to get green.
 
 ## Quick Reference
 

@@ -10,7 +10,12 @@ import { db } from '$lib/server/db';
 import { assignments, bidWindows, bids, routes, warehouses } from '$lib/server/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
-import { getBidWindowDetail, resolveBidWindow } from '$lib/server/services/bidding';
+import {
+	getBidWindowDetail,
+	resolveBidWindow,
+	type ResolveBidWindowResult
+} from '$lib/server/services/bidding';
+import { bidWindowIdParamsSchema } from '$lib/schemas/api/bidding';
 import { createAuditLog } from '$lib/server/services/audit';
 import {
 	broadcastAssignmentUpdated,
@@ -28,7 +33,12 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 
 	const actorId = locals.user.id;
 
-	const windowId = params.id;
+	const paramsResult = bidWindowIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid bid window ID');
+	}
+
+	const windowId = paramsResult.data.id;
 
 	const [window] = await db
 		.select({
@@ -36,6 +46,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 			assignmentId: bidWindows.assignmentId,
 			status: bidWindows.status,
 			assignmentStatus: assignments.status,
+			assignmentUserId: assignments.userId,
 			assignmentDate: assignments.date,
 			routeId: assignments.routeId,
 			routeName: routes.name,
@@ -63,22 +74,32 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 	const pendingBids = await db
 		.select({ id: bids.id })
 		.from(bids)
-		.where(and(eq(bids.assignmentId, window.assignmentId), eq(bids.status, 'pending')));
+		.where(and(eq(bids.bidWindowId, window.id), eq(bids.status, 'pending')));
 
 	const closedAt = new Date();
-	let resolvedResult: { resolved: boolean; bidCount: number; winnerId?: string } | null = null;
+	let resolvedResult: ResolveBidWindowResult | null = null;
 
 	if (pendingBids.length === 0) {
 		await db.transaction(async (tx) => {
-			await tx
+			const [closedWindow] = await tx
 				.update(bidWindows)
 				.set({ status: 'closed', winnerId: null })
-				.where(eq(bidWindows.id, window.id));
+				.where(and(eq(bidWindows.id, window.id), eq(bidWindows.status, 'open')))
+				.returning({ id: bidWindows.id });
+
+			if (!closedWindow) {
+				throw error(409, 'Bid window already closed');
+			}
 
 			await tx
 				.update(assignments)
-				.set({ status: 'unfilled', updatedAt: closedAt })
+				.set({ status: 'unfilled', userId: null, updatedAt: closedAt })
 				.where(eq(assignments.id, window.assignmentId));
+
+			await tx
+				.update(bids)
+				.set({ status: 'lost', resolvedAt: closedAt })
+				.where(and(eq(bids.bidWindowId, window.id), eq(bids.status, 'pending')));
 
 			await createAuditLog(
 				{
@@ -88,8 +109,8 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 					actorType: 'user',
 					actorId,
 					changes: {
-						before: { status: window.assignmentStatus },
-						after: { status: 'unfilled' },
+						before: { status: window.assignmentStatus, userId: window.assignmentUserId },
+						after: { status: 'unfilled', userId: null },
 						bidWindowId: window.id
 					}
 				},
@@ -114,6 +135,10 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 			actorType: 'user',
 			actorId
 		});
+
+		if (resolvedResult.reason === 'not_open') {
+			throw error(409, 'Bid window already closed');
+		}
 	}
 
 	const nextStatus =

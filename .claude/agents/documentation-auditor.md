@@ -25,7 +25,7 @@ List all modules and their documentation status:
 ls -d src/*/ 2>/dev/null || echo "No src directory"
 
 # List documented modules
-ls docs/ 2>/dev/null || echo "No docs directory"
+ls documentation/ 2>/dev/null || echo "No documentation directory"
 ```
 
 Report gaps: modules in `src/` without corresponding documentation.
@@ -39,7 +39,7 @@ For modules with existing docs, check if code is newer than documentation:
 git log -1 --format="%ci" -- src/{module}/
 
 # Last doc change
-git log -1 --format="%ci" -- docs/{module}.md
+git log -1 --format="%ci" -- documentation/{module}.md
 ```
 
 Flag as potentially stale if code was modified after the documentation.
@@ -99,7 +99,7 @@ After completing your audit, report:
 
 ### Actions Taken
 
-- Created: `docs/{module}.md`
+- Created: `documentation/{module}.md`
 - Updated: `.env.example` with new variables
 
 ### No Action Needed
