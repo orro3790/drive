@@ -5,10 +5,15 @@
  * metrics, and pending bids.
  */
 
-import type { AssignmentStatus, CancelReason } from '$lib/schemas/assignment';
+import {
+	assignmentStatusSchema,
+	type AssignmentStatus,
+	type CancelReason
+} from '$lib/schemas/assignment';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
+import { z } from 'zod';
 
 export type ShiftData = {
 	id: string;
@@ -115,6 +120,105 @@ const state = $state<{
 	error: null
 });
 
+const shiftDataSchema = z.object({
+	id: z.string().min(1),
+	arrivedAt: z.string().min(1).nullable(),
+	parcelsStart: z.number().int().nonnegative().nullable(),
+	parcelsDelivered: z.number().int().nonnegative().nullable(),
+	parcelsReturned: z.number().int().nonnegative().nullable(),
+	startedAt: z.string().min(1).nullable(),
+	completedAt: z.string().min(1).nullable(),
+	editableUntil: z.string().min(1).nullable()
+});
+
+const dashboardAssignmentSchema = z.object({
+	id: z.string().min(1),
+	date: z.string().min(1),
+	status: assignmentStatusSchema,
+	confirmedAt: z.string().min(1).nullable(),
+	confirmationOpensAt: z.string().min(1),
+	confirmationDeadline: z.string().min(1),
+	isConfirmable: z.boolean(),
+	routeName: z.string().min(1),
+	warehouseName: z.string().min(1),
+	isCancelable: z.boolean(),
+	isLateCancel: z.boolean(),
+	isArrivable: z.boolean(),
+	isStartable: z.boolean(),
+	isCompletable: z.boolean(),
+	shift: shiftDataSchema.nullable()
+});
+
+const unconfirmedShiftSchema = z.object({
+	id: z.string().min(1),
+	date: z.string().min(1),
+	routeName: z.string().min(1),
+	warehouseName: z.string().min(1),
+	confirmationOpensAt: z.string().min(1),
+	confirmationDeadline: z.string().min(1),
+	isConfirmable: z.boolean()
+});
+
+const weekSummarySchema = z.object({
+	weekStart: z.string().min(1),
+	assignedDays: z.number().int().nonnegative(),
+	assignments: z.array(dashboardAssignmentSchema)
+});
+
+const driverMetricsSchema = z.object({
+	totalShifts: z.number().int().nonnegative(),
+	completedShifts: z.number().int().nonnegative(),
+	attendanceRate: z.number().nonnegative(),
+	completionRate: z.number().nonnegative(),
+	totalAssigned: z.number().int().nonnegative(),
+	avgParcelsDelivered: z.number().nonnegative()
+});
+
+const pendingBidSchema = z.object({
+	id: z.string().min(1),
+	assignmentId: z.string().min(1),
+	assignmentDate: z.string().min(1),
+	routeName: z.string().min(1),
+	warehouseName: z.string().min(1),
+	bidAt: z.string().min(1),
+	windowClosesAt: z.string().min(1)
+});
+
+const dashboardResponseSchema = z.object({
+	todayShift: dashboardAssignmentSchema.nullable().optional(),
+	thisWeek: weekSummarySchema.nullable().optional(),
+	nextWeek: weekSummarySchema.nullable().optional(),
+	metrics: driverMetricsSchema.optional(),
+	pendingBids: z.array(pendingBidSchema).optional(),
+	unconfirmedShifts: z.array(unconfirmedShiftSchema).optional(),
+	isNewDriver: z.boolean().optional()
+});
+
+const metricsApiResponseSchema = z.object({
+	metrics: z.object({
+		totalShifts: z.number().int().nonnegative(),
+		completedShifts: z.number().int().nonnegative(),
+		attendanceRate: z.number().nonnegative(),
+		completionRate: z.number().nonnegative(),
+		totalAssigned: z.number().int().nonnegative().optional(),
+		avgParcelsDelivered: z.number().nonnegative().optional()
+	})
+});
+
+const confirmShiftResponseSchema = z.object({
+	success: z.literal(true),
+	confirmedAt: z.string().min(1)
+});
+
+const emptyDriverMetrics: DriverMetrics = {
+	totalShifts: 0,
+	completedShifts: 0,
+	attendanceRate: 0,
+	completionRate: 0,
+	totalAssigned: 0,
+	avgParcelsDelivered: 0
+};
+
 export const dashboardStore = {
 	get todayShift() {
 		return state.todayShift;
@@ -176,21 +280,28 @@ export const dashboardStore = {
 				throw new Error('Failed to load dashboard');
 			}
 
-			const dashboardData = await dashboardRes.json();
-			const metricsData = metricsRes?.ok ? await metricsRes.json() : null;
+			const dashboardParsed = dashboardResponseSchema.safeParse(await dashboardRes.json());
+			if (!dashboardParsed.success) {
+				throw new Error('Invalid dashboard response');
+			}
+
+			let parsedMetrics: DriverMetrics | null = null;
+			if (metricsRes?.ok) {
+				const metricsPayload = metricsApiResponseSchema.safeParse(await metricsRes.json());
+				if (metricsPayload.success) {
+					parsedMetrics = {
+						...emptyDriverMetrics,
+						...metricsPayload.data.metrics
+					};
+				}
+			}
+
+			const dashboardData = dashboardParsed.data;
 
 			state.todayShift = dashboardData.todayShift ?? null;
 			state.thisWeek = dashboardData.thisWeek ?? null;
 			state.nextWeek = dashboardData.nextWeek ?? null;
-			state.metrics = metricsData?.metrics ??
-				dashboardData.metrics ?? {
-					totalShifts: 0,
-					completedShifts: 0,
-					attendanceRate: 0,
-					completionRate: 0,
-					totalAssigned: 0,
-					avgParcelsDelivered: 0
-				};
+			state.metrics = parsedMetrics ?? dashboardData.metrics ?? emptyDriverMetrics;
 			state.pendingBids = dashboardData.pendingBids ?? [];
 			state.unconfirmedShifts = dashboardData.unconfirmedShifts ?? [];
 			state.isNewDriver = dashboardData.isNewDriver ?? false;
@@ -347,13 +458,18 @@ export const dashboardStore = {
 				throw new Error(data?.message ?? 'Failed to confirm shift');
 			}
 
+			const parsed = confirmShiftResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Failed to confirm shift');
+			}
+
 			// Remove from unconfirmedShifts locally
 			state.unconfirmedShifts = state.unconfirmedShifts.filter((s) => s.id !== assignmentId);
 
 			// Update the assignment in week summaries
 			const updateAssignment = (a: DashboardAssignment) => {
 				if (a.id === assignmentId) {
-					return { ...a, confirmedAt: new Date().toISOString(), isConfirmable: false };
+					return { ...a, confirmedAt: parsed.data.confirmedAt, isConfirmable: false };
 				}
 				return a;
 			};

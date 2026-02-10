@@ -5,7 +5,7 @@
  * Handles preferred days and routes selection.
  */
 
-import type { PreferencesUpdate } from '$lib/schemas/preferences';
+import { preferencesResponseSchema, type PreferencesUpdate } from '$lib/schemas/preferences';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
@@ -44,6 +44,18 @@ const state = $state<{
 	error: null
 });
 
+const mutationVersions = new Map<string, number>();
+
+function nextMutationVersion(mutationKey: string): number {
+	const version = (mutationVersions.get(mutationKey) ?? 0) + 1;
+	mutationVersions.set(mutationKey, version);
+	return version;
+}
+
+function isLatestMutationVersion(mutationKey: string, version: number): boolean {
+	return (mutationVersions.get(mutationKey) ?? 0) === version;
+}
+
 export const preferencesStore = {
 	get preferences() {
 		return state.preferences;
@@ -80,18 +92,15 @@ export const preferencesStore = {
 				throw new Error('Failed to load preferences');
 			}
 
-			const data = await res.json();
+			const parsed = preferencesResponseSchema.safeParse(await res.json());
+			if (!parsed.success) {
+				throw new Error('Invalid preferences response');
+			}
 
-			state.preferences = data.preferences
-				? {
-						...data.preferences,
-						updatedAt: new Date(data.preferences.updatedAt),
-						lockedAt: data.preferences.lockedAt ? new Date(data.preferences.lockedAt) : null
-					}
-				: null;
-			state.isLocked = data.isLocked;
-			state.lockDeadline = data.lockDeadline ? new Date(data.lockDeadline) : null;
-			state.lockedUntil = data.lockedUntil ? new Date(data.lockedUntil) : null;
+			state.preferences = parsed.data.preferences;
+			state.isLocked = parsed.data.isLocked;
+			state.lockDeadline = parsed.data.lockDeadline;
+			state.lockedUntil = parsed.data.lockedUntil;
 		} catch (err) {
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.preferences_load_error());
@@ -115,6 +124,8 @@ export const preferencesStore = {
 
 		const original = state.preferences;
 		const now = new Date();
+		const mutationKey = 'preferences:save';
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		// Optimistic update
 		state.preferences = {
@@ -122,7 +133,7 @@ export const preferencesStore = {
 			userId: original?.userId ?? '',
 			preferredDays: data.preferredDays,
 			preferredRoutes: data.preferredRoutes,
-			preferredRoutesDetails: routeDetails ?? [],
+			preferredRoutesDetails: routeDetails ?? original?.preferredRoutesDetails ?? [],
 			updatedAt: now,
 			lockedAt: original?.lockedAt ?? null
 		};
@@ -137,23 +148,34 @@ export const preferencesStore = {
 
 			if (!res.ok) {
 				if (res.status === 423) {
-					state.isLocked = true;
+					if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+						state.isLocked = true;
+					}
 					throw new Error('locked');
 				}
 				throw new Error('Failed to save preferences');
 			}
 
-			const result = await res.json();
-			state.preferences = {
-				...result.preferences,
-				updatedAt: new Date(result.preferences.updatedAt),
-				lockedAt: result.preferences.lockedAt ? new Date(result.preferences.lockedAt) : null
-			};
-			state.isLocked = result.isLocked;
-			state.lockDeadline = result.lockDeadline ? new Date(result.lockDeadline) : null;
+			const parsed = preferencesResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid preferences response');
+			}
+
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
+			state.preferences = parsed.data.preferences;
+			state.isLocked = parsed.data.isLocked;
+			state.lockDeadline = parsed.data.lockDeadline;
+			state.lockedUntil = parsed.data.lockedUntil;
 
 			toastStore.success(m.preferences_saved_success());
 		} catch (err) {
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
 			// Rollback
 			state.preferences = original;
 
@@ -163,7 +185,9 @@ export const preferencesStore = {
 				toastStore.error(m.preferences_save_error());
 			}
 		} finally {
-			state.isSaving = false;
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				state.isSaving = false;
+			}
 		}
 	},
 

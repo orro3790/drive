@@ -7,6 +7,7 @@
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
+import { z } from 'zod';
 
 export type BidStatus = 'pending' | 'won' | 'lost';
 export type BidWindowMode = 'competitive' | 'instant' | 'emergency';
@@ -52,6 +53,78 @@ const state = $state<{
 	error: null
 });
 
+const availableBidWindowSchema = z.object({
+	id: z.string().min(1),
+	assignmentId: z.string().min(1),
+	assignmentDate: z.string().min(1),
+	routeName: z.string().min(1),
+	warehouseName: z.string().min(1),
+	mode: z.enum(['competitive', 'instant', 'emergency']),
+	payBonusPercent: z.number(),
+	opensAt: z.string().min(1),
+	closesAt: z.string().min(1)
+});
+
+const driverBidSchema = z.object({
+	id: z.string().min(1),
+	assignmentId: z.string().min(1),
+	assignmentDate: z.string().min(1),
+	routeName: z.string().min(1),
+	warehouseName: z.string().min(1),
+	status: z.enum(['pending', 'won', 'lost']),
+	score: z.number().nullable(),
+	bidAt: z.string().min(1),
+	windowClosesAt: z.string().min(1),
+	resolvedAt: z.string().min(1).nullable()
+});
+
+const availableBidsResponseSchema = z.object({
+	bidWindows: z.array(availableBidWindowSchema)
+});
+
+const myBidsResponseSchema = z.object({
+	bids: z.array(driverBidSchema)
+});
+
+const submitBidResponseSchema = z.union([
+	z.object({
+		success: z.literal(true),
+		status: z.literal('won'),
+		assignmentId: z.string().min(1),
+		bonusPercent: z.number().nonnegative().optional()
+	}),
+	z.object({
+		success: z.literal(true),
+		status: z.literal('pending'),
+		bid: z
+			.object({
+				id: z.string().min(1),
+				assignmentId: z.string().min(1),
+				status: z.literal('pending'),
+				bidAt: z.string().min(1),
+				windowClosesAt: z.string().min(1)
+			})
+			.optional()
+	})
+]);
+
+const loadRequestVersions = {
+	available: 0,
+	myBids: 0
+};
+
+function nextLoadRequestVersion(kind: keyof typeof loadRequestVersions): number {
+	loadRequestVersions[kind] += 1;
+	return loadRequestVersions[kind];
+}
+
+function isLatestLoadRequestVersion(
+	kind: keyof typeof loadRequestVersions,
+	version: number
+): boolean {
+	return loadRequestVersions[kind] === version;
+}
+
 export const bidsStore = {
 	get availableWindows() {
 		return state.availableWindows;
@@ -76,6 +149,7 @@ export const bidsStore = {
 	},
 
 	async loadAvailable() {
+		const requestVersion = nextLoadRequestVersion('available');
 		state.isLoadingAvailable = true;
 		state.error = null;
 
@@ -85,17 +159,32 @@ export const bidsStore = {
 				throw new Error('Failed to load available bids');
 			}
 
-			const data = await res.json();
-			state.availableWindows = data.bidWindows ?? [];
+			const parsed = availableBidsResponseSchema.safeParse(await res.json());
+			if (!parsed.success) {
+				throw new Error('Invalid available bids response');
+			}
+
+			if (!isLatestLoadRequestVersion('available', requestVersion)) {
+				return;
+			}
+
+			state.availableWindows = parsed.data.bidWindows;
 		} catch (err) {
+			if (!isLatestLoadRequestVersion('available', requestVersion)) {
+				return;
+			}
+
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.bids_load_available_error());
 		} finally {
-			state.isLoadingAvailable = false;
+			if (isLatestLoadRequestVersion('available', requestVersion)) {
+				state.isLoadingAvailable = false;
+			}
 		}
 	},
 
 	async loadMyBids() {
+		const requestVersion = nextLoadRequestVersion('myBids');
 		state.isLoadingMyBids = true;
 		state.error = null;
 
@@ -105,13 +194,27 @@ export const bidsStore = {
 				throw new Error('Failed to load my bids');
 			}
 
-			const data = await res.json();
-			state.myBids = data.bids ?? [];
+			const parsed = myBidsResponseSchema.safeParse(await res.json());
+			if (!parsed.success) {
+				throw new Error('Invalid bids response');
+			}
+
+			if (!isLatestLoadRequestVersion('myBids', requestVersion)) {
+				return;
+			}
+
+			state.myBids = parsed.data.bids;
 		} catch (err) {
+			if (!isLatestLoadRequestVersion('myBids', requestVersion)) {
+				return;
+			}
+
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.bids_load_mine_error());
 		} finally {
-			state.isLoadingMyBids = false;
+			if (isLatestLoadRequestVersion('myBids', requestVersion)) {
+				state.isLoadingMyBids = false;
+			}
 		}
 	},
 
@@ -138,12 +241,19 @@ export const bidsStore = {
 				throw new Error(errorData.message || 'Failed to submit bid');
 			}
 
-			const data = await res.json();
+			const parsed = submitBidResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid bid submission response');
+			}
+
+			const data = parsed.data;
 
 			// Handle instant/emergency assignment (won immediately)
 			if (data.status === 'won') {
 				const bonusText =
-					data.bonusPercent > 0 ? m.bids_accept_success_bonus({ bonus: data.bonusPercent }) : '';
+					(data.bonusPercent ?? 0) > 0
+						? m.bids_accept_success_bonus({ bonus: data.bonusPercent ?? 0 })
+						: '';
 				toastStore.success(m.bids_accept_success() + bonusText);
 
 				// Remove from available and refresh
