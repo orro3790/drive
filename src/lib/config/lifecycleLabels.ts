@@ -23,15 +23,7 @@ export const statusLabels: Record<AssignmentStatus, string> = {
 	unfilled: m.schedule_status_unfilled()
 };
 
-export const statusChipVariants: Record<AssignmentStatus, ChipStatus> = {
-	scheduled: 'info',
-	active: 'warning',
-	completed: 'success',
-	cancelled: 'neutral',
-	unfilled: 'warning'
-};
-
-export const cancelReasonLabels: Record<CancelReason, string> = {
+const cancelReasonLabels: Record<CancelReason, string> = {
 	vehicle_breakdown: m.schedule_cancel_reason_vehicle_breakdown(),
 	medical_emergency: m.schedule_cancel_reason_medical_emergency(),
 	family_emergency: m.schedule_cancel_reason_family_emergency(),

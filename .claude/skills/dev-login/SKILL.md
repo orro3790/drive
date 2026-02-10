@@ -45,7 +45,7 @@ Look for:
 
 ```bash
 agent-browser --session driver-ops fill @e1 "justin.myddp@proton.me"
-agent-browser --session driver-ops fill @e2 "jeF4g9mrCd1hPsDn!"
+agent-browser --session driver-ops fill @e2 "test1234"
 agent-browser --session driver-ops click @e3
 agent-browser --session driver-ops wait --url "**/"
 ```
@@ -87,7 +87,7 @@ powershell -Command "Remove-Item '.agent-browser/driver-ops-auth.json' -ErrorAct
 ### Manager Credentials (Real)
 
 - Email: `justin.myddp@proton.me`
-- Password: `jeF4g9mrCd1hPsDn!`
+- Password: `test1234`
 - Invite code (for sign-up): `drive-2026`
 
 ### Seeded Test Users
@@ -120,7 +120,7 @@ If no user exists, sign up first. **Note:** The invite code must be sent as a he
 curl -X POST http://localhost:5173/api/auth/sign-up/email \
   -H "Content-Type: application/json" \
   -H "x-invite-code: drive-2026" \
-  -d '{"email":"justin.myddp@proton.me","password":"jeF4g9mrCd1hPsDn!","name":"Test Manager"}'
+  -d '{"email":"justin.myddp@proton.me","password":"test1234","name":"Test Manager"}'
 ```
 
 If the user already exists and you need to reset the password, update directly in the database:

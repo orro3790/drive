@@ -60,7 +60,7 @@ async function hashPassword(password: string): Promise<string> {
 
 async function main() {
 	const EMAIL = 'justin.myddp@proton.me';
-	const NEW_PASSWORD = 'jeF4g9mrCd1hPsDn!';
+	const NEW_PASSWORD = 'test1234';
 
 	console.log(`Resetting password for: ${EMAIL}`);
 
