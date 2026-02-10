@@ -451,9 +451,7 @@ describe('POST /api/shifts/complete contract', () => {
 	it('returns 409 when shift is already completed', async () => {
 		selectWhereMock
 			.mockResolvedValueOnce([createAssignment()])
-			.mockResolvedValueOnce([
-				createShift({ completedAt: new Date('2026-02-09T14:00:00.000Z') })
-			]);
+			.mockResolvedValueOnce([createShift({ completedAt: new Date('2026-02-09T14:00:00.000Z') })]);
 
 		const event = createRequestEvent({
 			method: 'POST',

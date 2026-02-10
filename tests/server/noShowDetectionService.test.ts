@@ -223,9 +223,7 @@ describe('LC-05 cron service: detectNoShows', () => {
 	it('respects per-route deadline across DST spring-forward boundary', async () => {
 		// Spring forward: 09:00 EDT = 13:00 UTC on 2026-03-08
 		freezeTime('2026-03-08T12:59:59.000Z');
-		candidates.push(
-			createCandidate({ assignmentDate: '2026-03-08', routeStartTime: '09:00' })
-		);
+		candidates.push(createCandidate({ assignmentDate: '2026-03-08', routeStartTime: '09:00' }));
 
 		const beforeCutoff = await detectNoShows();
 		expect(beforeCutoff).toMatchObject({
@@ -248,9 +246,7 @@ describe('LC-05 cron service: detectNoShows', () => {
 	it('respects per-route deadline across DST fall-back boundary', async () => {
 		// Fall back: 09:00 EST = 14:00 UTC on 2026-11-01
 		freezeTime('2026-11-01T13:59:59.000Z');
-		candidates.push(
-			createCandidate({ assignmentDate: '2026-11-01', routeStartTime: '09:00' })
-		);
+		candidates.push(createCandidate({ assignmentDate: '2026-11-01', routeStartTime: '09:00' }));
 
 		const beforeCutoff = await detectNoShows();
 		expect(beforeCutoff).toMatchObject({

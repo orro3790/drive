@@ -184,15 +184,15 @@ beforeEach(async () => {
 
 	createAssignmentLifecycleContextMock = vi.fn(() => ({ torontoToday: '2026-02-09' }));
 	deriveAssignmentLifecycleMock = vi.fn(() => createLifecycleOutput());
-	calculateArrivalDeadlineMock = vi.fn(
-		(date: string, _tz?: string, startTime?: string | null) => {
-			// Default 9 AM Toronto (UTC-5) = 14:00 UTC
-			const st = startTime ?? '09:00';
-			const [h, m] = st.split(':').map(Number);
-			// Approximate: Toronto is UTC-5 in winter
-			return new Date(`${date}T${String(h + 5).padStart(2, '0')}:${String(m).padStart(2, '0')}:00.000Z`);
-		}
-	);
+	calculateArrivalDeadlineMock = vi.fn((date: string, _tz?: string, startTime?: string | null) => {
+		// Default 9 AM Toronto (UTC-5) = 14:00 UTC
+		const st = startTime ?? '09:00';
+		const [h, m] = st.split(':').map(Number);
+		// Approximate: Toronto is UTC-5 in winter
+		return new Date(
+			`${date}T${String(h + 5).padStart(2, '0')}:${String(m).padStart(2, '0')}:00.000Z`
+		);
+	});
 	createAuditLogMock = vi.fn(async () => undefined);
 	broadcastAssignmentUpdatedMock = vi.fn();
 	freezeTime('2026-02-09T13:00:00.000Z');
@@ -403,11 +403,7 @@ describe('POST /api/shifts/arrive contract', () => {
 		});
 
 		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
-		expect(calculateArrivalDeadlineMock).toHaveBeenCalledWith(
-			'2026-02-09',
-			undefined,
-			'07:30'
-		);
+		expect(calculateArrivalDeadlineMock).toHaveBeenCalledWith('2026-02-09', undefined, '07:30');
 	});
 
 	it('allows arrival before per-route start time (late 11:00 route)', async () => {
