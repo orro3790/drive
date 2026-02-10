@@ -19,6 +19,7 @@ import { z } from 'zod';
 export type RouteWithWarehouse = {
 	id: string;
 	name: string;
+	startTime: string;
 	warehouseId: string;
 	warehouseName: string;
 	managerId?: string | null;
@@ -71,6 +72,7 @@ function buildQuery(filters: RouteFilters) {
 const routeWithWarehouseSchema = z.object({
 	id: z.string().min(1),
 	name: z.string().min(1),
+	startTime: z.string().min(1),
 	warehouseId: z.string().min(1),
 	warehouseName: z.string().min(1),
 	managerId: z.string().min(1).nullable().optional(),
@@ -186,6 +188,7 @@ export const routeStore = {
 		const optimisticRoute: RouteWithWarehouse = {
 			id: tempId,
 			name: data.name,
+			startTime: data.startTime,
 			warehouseId: data.warehouseId,
 			warehouseName,
 			createdBy: null,

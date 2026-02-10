@@ -10,6 +10,8 @@ export const routeStatusSchema = z.enum(['assigned', 'unfilled', 'bidding']);
 
 export type RouteStatus = z.infer<typeof routeStatusSchema>;
 
+const startTimeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 /**
  * Full route schema (as stored in DB)
  */
@@ -17,6 +19,7 @@ export const routeSchema = z.object({
 	id: z.string().uuid(),
 	name: z.string().min(1, 'Name is required'),
 	warehouseId: z.string().uuid(),
+	startTime: z.string().regex(startTimeRegex, 'Must be HH:MM format'),
 	createdBy: z.string().uuid().nullable(),
 	createdAt: z.coerce.date(),
 	updatedAt: z.coerce.date()
@@ -30,7 +33,8 @@ export type Route = z.infer<typeof routeSchema>;
 export const routeCreateSchema = z.object({
 	name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
 	warehouseId: z.string().uuid('Warehouse is required'),
-	managerId: z.string().optional()
+	managerId: z.string().optional(),
+	startTime: z.string().regex(startTimeRegex, 'Must be HH:MM format (e.g., 07:00)')
 });
 
 export type RouteCreate = z.infer<typeof routeCreateSchema>;
@@ -42,7 +46,8 @@ export const routeUpdateSchema = z
 	.object({
 		name: z.string().min(1, 'Name is required').max(100, 'Name too long').optional(),
 		warehouseId: z.string().uuid('Warehouse is required').optional(),
-		managerId: z.string().nullable().optional()
+		managerId: z.string().nullable().optional(),
+		startTime: z.string().regex(startTimeRegex, 'Must be HH:MM format (e.g., 07:00)').optional()
 	})
 	.strict();
 

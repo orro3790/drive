@@ -7,9 +7,10 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, shifts } from '$lib/server/db/schema';
+import { assignments, routes, shifts } from '$lib/server/db/schema';
 import { shiftEditSchema } from '$lib/schemas/shift';
 import { updateDriverMetrics } from '$lib/server/services/metrics';
+import { sendManagerAlert } from '$lib/server/services/notifications';
 import { eq } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
 
@@ -29,9 +30,19 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 		throw error(400, 'Validation failed');
 	}
 
-	const { parcelsStart: newParcelsStart, parcelsReturned: newParcelsReturned } = result.data;
+	const {
+		parcelsStart: newParcelsStart,
+		parcelsReturned: newParcelsReturned,
+		exceptedReturns: newExceptedReturns,
+		exceptionNotes: newExceptionNotes
+	} = result.data;
 
-	if (newParcelsStart === undefined && newParcelsReturned === undefined) {
+	if (
+		newParcelsStart === undefined &&
+		newParcelsReturned === undefined &&
+		newExceptedReturns === undefined &&
+		newExceptionNotes === undefined
+	) {
 		throw error(400, 'Provide at least one field to edit');
 	}
 
@@ -39,9 +50,13 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 	const [assignment] = await db
 		.select({
 			id: assignments.id,
-			userId: assignments.userId
+			userId: assignments.userId,
+			routeId: assignments.routeId,
+			date: assignments.date,
+			routeName: routes.name
 		})
 		.from(assignments)
+		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.where(eq(assignments.id, params.assignmentId));
 
 	if (!assignment) {
@@ -59,6 +74,8 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 			parcelsStart: shifts.parcelsStart,
 			parcelsReturned: shifts.parcelsReturned,
 			parcelsDelivered: shifts.parcelsDelivered,
+			exceptedReturns: shifts.exceptedReturns,
+			exceptionNotes: shifts.exceptionNotes,
 			completedAt: shifts.completedAt,
 			editableUntil: shifts.editableUntil
 		})
@@ -80,6 +97,8 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 	// Calculate new values
 	const finalParcelsStart = newParcelsStart ?? shift.parcelsStart;
 	const finalParcelsReturned = newParcelsReturned ?? shift.parcelsReturned;
+	const finalExceptedReturns = newExceptedReturns ?? shift.exceptedReturns ?? 0;
+	const finalExceptionNotes = newExceptionNotes ?? shift.exceptionNotes;
 
 	if (finalParcelsStart === null || finalParcelsReturned === null) {
 		throw error(400, 'Cannot edit — missing parcel data');
@@ -89,12 +108,26 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 		throw error(400, 'Returns cannot exceed starting parcels');
 	}
 
+	if (finalExceptedReturns > finalParcelsReturned) {
+		throw error(400, 'Excepted returns cannot exceed total returns');
+	}
+
+	if (
+		finalExceptedReturns > 0 &&
+		(!finalExceptionNotes || finalExceptionNotes.trim().length === 0)
+	) {
+		throw error(400, 'Notes are required when filing return exceptions');
+	}
+
 	const parcelsDelivered = finalParcelsStart - finalParcelsReturned;
+	const previousExceptedReturns = shift.exceptedReturns ?? 0;
 
 	const before = {
 		parcelsStart: shift.parcelsStart,
 		parcelsReturned: shift.parcelsReturned,
-		parcelsDelivered: shift.parcelsDelivered
+		parcelsDelivered: shift.parcelsDelivered,
+		exceptedReturns: shift.exceptedReturns,
+		exceptionNotes: shift.exceptionNotes
 	};
 
 	// Update shift
@@ -103,7 +136,9 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 		.set({
 			parcelsStart: finalParcelsStart,
 			parcelsReturned: finalParcelsReturned,
-			parcelsDelivered
+			parcelsDelivered,
+			exceptedReturns: finalExceptedReturns,
+			exceptionNotes: finalExceptionNotes ?? null
 		})
 		.where(eq(shifts.id, shift.id))
 		.returning({
@@ -111,6 +146,8 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 			parcelsStart: shifts.parcelsStart,
 			parcelsDelivered: shifts.parcelsDelivered,
 			parcelsReturned: shifts.parcelsReturned,
+			exceptedReturns: shifts.exceptedReturns,
+			exceptionNotes: shifts.exceptionNotes,
 			startedAt: shifts.startedAt,
 			completedAt: shifts.completedAt,
 			editableUntil: shifts.editableUntil
@@ -127,10 +164,21 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 			after: {
 				parcelsStart: finalParcelsStart,
 				parcelsReturned: finalParcelsReturned,
-				parcelsDelivered
+				parcelsDelivered,
+				exceptedReturns: finalExceptedReturns,
+				exceptionNotes: finalExceptionNotes
 			}
 		}
 	});
+
+	// Notify manager on 0→>0 exception transition
+	if (previousExceptedReturns === 0 && finalExceptedReturns > 0) {
+		await sendManagerAlert(assignment.routeId, 'return_exception', {
+			routeName: assignment.routeName ?? 'Unknown Route',
+			driverName: locals.user.name ?? 'A driver',
+			date: assignment.date
+		});
+	}
 
 	// Recalculate driver metrics
 	await updateDriverMetrics(locals.user.id);

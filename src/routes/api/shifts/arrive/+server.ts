@@ -7,17 +7,16 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, driverMetrics, shifts } from '$lib/server/db/schema';
+import { assignments, driverMetrics, routes, shifts } from '$lib/server/db/schema';
 import { shiftArriveSchema } from '$lib/schemas/shift';
 import { eq, sql } from 'drizzle-orm';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
 import {
+	calculateArrivalDeadline,
 	createAssignmentLifecycleContext,
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
-import { dispatchPolicy } from '$lib/config/dispatchPolicy';
-import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -37,16 +36,18 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	const { assignmentId } = result.data;
 
-	// Get assignment
+	// Get assignment with route start time
 	const [assignment] = await db
 		.select({
 			id: assignments.id,
 			userId: assignments.userId,
 			date: assignments.date,
 			status: assignments.status,
-			confirmedAt: assignments.confirmedAt
+			confirmedAt: assignments.confirmedAt,
+			routeStartTime: routes.startTime
 		})
 		.from(assignments)
+		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.where(eq(assignments.id, assignmentId));
 
 	if (!assignment) {
@@ -87,12 +88,15 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	const arrivedAt = new Date();
-	const arrivalDeadline = getTorontoDateTimeInstant(assignment.date, {
-		hours: dispatchPolicy.shifts.arrivalDeadlineHourLocal
-	});
+	const arrivalDeadline = calculateArrivalDeadline(
+		assignment.date,
+		undefined,
+		assignment.routeStartTime
+	);
 
 	if (arrivedAt >= arrivalDeadline) {
-		throw error(400, 'Arrival cutoff is 9:00 AM Toronto time');
+		const startTime = assignment.routeStartTime ?? '09:00';
+		throw error(400, `Arrival cutoff is ${startTime} Toronto time`);
 	}
 
 	const lifecycle = deriveAssignmentLifecycle(
@@ -102,7 +106,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			confirmedAt: assignment.confirmedAt,
 			shiftArrivedAt: existingShiftArrivedAt,
 			parcelsStart: existingShiftParcelsStart,
-			shiftCompletedAt: existingShiftCompletedAt
+			shiftCompletedAt: existingShiftCompletedAt,
+			routeStartTime: assignment.routeStartTime
 		},
 		lifecycleContext
 	);

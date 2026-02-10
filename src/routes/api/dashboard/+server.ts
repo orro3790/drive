@@ -80,11 +80,14 @@ export const GET: RequestHandler = async ({ locals }) => {
 				status: assignments.status,
 				confirmedAt: assignments.confirmedAt,
 				routeName: routes.name,
+				routeStartTime: routes.startTime,
 				warehouseName: warehouses.name,
 				shiftId: shifts.id,
 				parcelsStart: shifts.parcelsStart,
 				parcelsDelivered: shifts.parcelsDelivered,
 				parcelsReturned: shifts.parcelsReturned,
+				exceptedReturns: shifts.exceptedReturns,
+				exceptionNotes: shifts.exceptionNotes,
 				shiftStartedAt: shifts.startedAt,
 				shiftCompletedAt: shifts.completedAt,
 				shiftArrivedAt: shifts.arrivedAt,
@@ -141,7 +144,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				confirmedAt: assignment.confirmedAt,
 				shiftArrivedAt: assignment.shiftArrivedAt,
 				parcelsStart: assignment.parcelsStart,
-				shiftCompletedAt: assignment.shiftCompletedAt
+				shiftCompletedAt: assignment.shiftCompletedAt,
+				routeStartTime: assignment.routeStartTime
 			},
 			lifecycleContext
 		);
@@ -155,6 +159,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			confirmationDeadline: lifecycle.confirmationDeadline.toISOString(),
 			isConfirmable: lifecycle.isConfirmable,
 			routeName: assignment.routeName,
+			routeStartTime: assignment.routeStartTime,
 			warehouseName: assignment.warehouseName,
 			isCancelable: lifecycle.isCancelable,
 			isLateCancel: lifecycle.isLateCancel,
@@ -168,6 +173,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 						parcelsStart: assignment.parcelsStart,
 						parcelsDelivered: assignment.parcelsDelivered,
 						parcelsReturned: assignment.parcelsReturned,
+						exceptedReturns: assignment.exceptedReturns,
+						exceptionNotes: assignment.exceptionNotes,
 						startedAt: assignment.shiftStartedAt,
 						completedAt: assignment.shiftCompletedAt,
 						editableUntil: assignment.shiftEditableUntil

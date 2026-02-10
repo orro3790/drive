@@ -103,6 +103,21 @@ export function isRewardEligible(totalShifts: number, attendanceRate: number): b
 	);
 }
 
+/**
+ * Parse a route's HH:MM start time into hours and minutes.
+ * Falls back to the global arrival deadline if the value is missing or malformed.
+ */
+export function parseRouteStartTime(startTime: string | null | undefined): {
+	hours: number;
+	minutes: number;
+} {
+	if (startTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
+		const [h, m] = startTime.split(':').map(Number);
+		return { hours: h, minutes: m };
+	}
+	return { hours: dispatchPolicy.shifts.arrivalDeadlineHourLocal, minutes: 0 };
+}
+
 type BidScoreInputs = {
 	healthScore: number;
 	routeFamiliarityCount: number;

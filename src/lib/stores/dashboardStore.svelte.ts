@@ -21,6 +21,8 @@ export type ShiftData = {
 	parcelsStart: number | null;
 	parcelsDelivered: number | null;
 	parcelsReturned: number | null;
+	exceptedReturns: number;
+	exceptionNotes: string | null;
 	startedAt: string | null;
 	completedAt: string | null;
 	editableUntil: string | null;
@@ -35,6 +37,7 @@ export type DashboardAssignment = {
 	confirmationDeadline: string;
 	isConfirmable: boolean;
 	routeName: string;
+	routeStartTime: string;
 	warehouseName: string;
 	isCancelable: boolean;
 	isLateCancel: boolean;
@@ -126,6 +129,8 @@ const shiftDataSchema = z.object({
 	parcelsStart: z.number().int().nonnegative().nullable(),
 	parcelsDelivered: z.number().int().nonnegative().nullable(),
 	parcelsReturned: z.number().int().nonnegative().nullable(),
+	exceptedReturns: z.number().int().nonnegative().default(0),
+	exceptionNotes: z.string().nullable().default(null),
 	startedAt: z.string().min(1).nullable(),
 	completedAt: z.string().min(1).nullable(),
 	editableUntil: z.string().min(1).nullable()
@@ -140,6 +145,7 @@ const dashboardAssignmentSchema = z.object({
 	confirmationDeadline: z.string().min(1),
 	isConfirmable: z.boolean(),
 	routeName: z.string().min(1),
+	routeStartTime: z.string().min(1),
 	warehouseName: z.string().min(1),
 	isCancelable: z.boolean(),
 	isLateCancel: z.boolean(),
@@ -375,7 +381,12 @@ export const dashboardStore = {
 		}
 	},
 
-	async completeShift(assignmentId: string, parcelsReturned: number) {
+	async completeShift(
+		assignmentId: string,
+		parcelsReturned: number,
+		exceptedReturns = 0,
+		exceptionNotes?: string
+	) {
 		if (!ensureOnlineForWrite()) {
 			return false;
 		}
@@ -386,7 +397,7 @@ export const dashboardStore = {
 			const res = await fetch('/api/shifts/complete', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ assignmentId, parcelsReturned })
+				body: JSON.stringify({ assignmentId, parcelsReturned, exceptedReturns, exceptionNotes })
 			});
 
 			if (!res.ok) {
@@ -405,7 +416,13 @@ export const dashboardStore = {
 		}
 	},
 
-	async editShift(assignmentId: string, parcelsStart?: number, parcelsReturned?: number) {
+	async editShift(
+		assignmentId: string,
+		parcelsStart?: number,
+		parcelsReturned?: number,
+		exceptedReturns?: number,
+		exceptionNotes?: string
+	) {
 		if (!ensureOnlineForWrite()) {
 			return false;
 		}
@@ -413,9 +430,11 @@ export const dashboardStore = {
 		state.isEditingShift = true;
 
 		try {
-			const body: Record<string, number> = {};
+			const body: Record<string, number | string> = {};
 			if (parcelsStart !== undefined) body.parcelsStart = parcelsStart;
 			if (parcelsReturned !== undefined) body.parcelsReturned = parcelsReturned;
+			if (exceptedReturns !== undefined) body.exceptedReturns = exceptedReturns;
+			if (exceptionNotes !== undefined) body.exceptionNotes = exceptionNotes;
 
 			const res = await fetch(`/api/shifts/${assignmentId}/edit`, {
 				method: 'PATCH',

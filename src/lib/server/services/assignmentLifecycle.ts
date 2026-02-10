@@ -1,6 +1,6 @@
 import { fromZonedTime } from 'date-fns-tz';
 
-import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { dispatchPolicy, parseRouteStartTime } from '$lib/config/dispatchPolicy';
 import type { AssignmentStatus } from '$lib/schemas/assignment';
 import {
 	addDaysToDateString,
@@ -21,6 +21,7 @@ export interface AssignmentLifecycleInput {
 	shiftArrivedAt: Date | null;
 	parcelsStart: number | null;
 	shiftCompletedAt: Date | null;
+	routeStartTime?: string | null;
 }
 
 export interface AssignmentLifecycleOutput {
@@ -59,15 +60,18 @@ function getShiftStart(assignmentDate: string, timezone: string): Date {
 
 export function calculateArrivalDeadline(
 	assignmentDate: string,
-	timezone: string = dispatchPolicy.timezone.toronto
+	timezone: string = dispatchPolicy.timezone.toronto,
+	routeStartTime?: string | null
 ): Date {
+	const { hours, minutes } = routeStartTime
+		? parseRouteStartTime(routeStartTime)
+		: { hours: dispatchPolicy.shifts.arrivalDeadlineHourLocal, minutes: 0 };
+
 	if (timezone === dispatchPolicy.timezone.toronto) {
-		return getTorontoDateTimeInstant(assignmentDate, {
-			hours: dispatchPolicy.shifts.arrivalDeadlineHourLocal
-		});
+		return getTorontoDateTimeInstant(assignmentDate, { hours, minutes });
 	}
 
-	const localDateTime = `${assignmentDate}T${String(dispatchPolicy.shifts.arrivalDeadlineHourLocal).padStart(2, '0')}:00:00`;
+	const localDateTime = `${assignmentDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
 	return fromZonedTime(localDateTime, timezone);
 }
 
@@ -94,7 +98,11 @@ export function deriveAssignmentLifecycle(
 	context: AssignmentLifecycleContext
 ): AssignmentLifecycleOutput {
 	const { opensAt, deadline } = calculateConfirmationWindow(input.assignmentDate, context.timezone);
-	const arrivalDeadline = calculateArrivalDeadline(input.assignmentDate, context.timezone);
+	const arrivalDeadline = calculateArrivalDeadline(
+		input.assignmentDate,
+		context.timezone,
+		input.routeStartTime
+	);
 	const isCancelable =
 		input.assignmentDate > context.torontoToday && input.assignmentStatus !== 'cancelled';
 	const isLateCancel = isCancelable && context.nowToronto >= deadline;

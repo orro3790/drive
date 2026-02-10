@@ -17,6 +17,7 @@ import {
 	driverHealthState,
 	driverMetrics,
 	notifications,
+	routes,
 	shifts,
 	user
 } from '$lib/server/db/schema';
@@ -180,16 +181,17 @@ export async function computeContributions(userId: string): Promise<{
 				)
 			),
 
-		// Arrived on time: shifts with arrivedAt before 9 AM Toronto
+		// Arrived on time: shifts with arrivedAt before route's start time
 		db
 			.select({ count: sql<number>`count(*)::int` })
 			.from(shifts)
 			.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
+			.innerJoin(routes, eq(assignments.routeId, routes.id))
 			.where(
 				and(
 					eq(assignments.userId, userId),
 					isNotNull(shifts.arrivedAt),
-					sql`extract(hour from ${shifts.arrivedAt} at time zone 'America/Toronto') < ${dispatchPolicy.shifts.arrivalDeadlineHourLocal}`,
+					sql`${shifts.arrivedAt} < (${assignments.date}::date + coalesce(${routes.startTime}, '09:00')::time) AT TIME ZONE 'America/Toronto'`,
 					gte(assignments.date, sinceDate),
 					lte(assignments.date, todayStr)
 				)
@@ -209,7 +211,8 @@ export async function computeContributions(userId: string): Promise<{
 				)
 			),
 
-		// High delivery (95%+): completed shifts where (parcelsStart - parcelsReturned) / parcelsStart >= 0.95
+		// High delivery (95%+): adjusted for excepted returns
+		// Formula: (parcelsStart - parcelsReturned + exceptedReturns) / parcelsStart >= 0.95
 		db
 			.select({ count: sql<number>`count(*)::int` })
 			.from(shifts)
@@ -220,7 +223,7 @@ export async function computeContributions(userId: string): Promise<{
 					isNotNull(shifts.completedAt),
 					isNotNull(shifts.parcelsStart),
 					sql`${shifts.parcelsStart} > 0`,
-					sql`(${shifts.parcelsStart} - coalesce(${shifts.parcelsReturned}, 0))::float / ${shifts.parcelsStart} >= 0.95`,
+					sql`(${shifts.parcelsStart} - coalesce(${shifts.parcelsReturned}, 0) + coalesce(${shifts.exceptedReturns}, 0))::float / ${shifts.parcelsStart} >= 0.95`,
 					gte(assignments.date, sinceDate),
 					lte(assignments.date, todayStr)
 				)
@@ -625,7 +628,8 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 	const weekShifts = await db
 		.select({
 			parcelsStart: shifts.parcelsStart,
-			parcelsDelivered: shifts.parcelsDelivered
+			parcelsReturned: shifts.parcelsReturned,
+			exceptedReturns: shifts.exceptedReturns
 		})
 		.from(shifts)
 		.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
@@ -640,10 +644,15 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 			)
 		);
 
+	// Adjusted completion: (parcelsStart - parcelsReturned + exceptedReturns) / parcelsStart
 	const weekCompletionRate =
 		weekShifts.length > 0
-			? weekShifts.reduce((sum, s) => sum + (s.parcelsDelivered ?? 0) / (s.parcelsStart ?? 1), 0) /
-				weekShifts.length
+			? weekShifts.reduce((sum, s) => {
+					const start = s.parcelsStart ?? 1;
+					const returned = s.parcelsReturned ?? 0;
+					const excepted = s.exceptedReturns ?? 0;
+					return sum + (start - returned + excepted) / start;
+				}, 0) / weekShifts.length
 			: 0;
 
 	const weekNoShows = await db

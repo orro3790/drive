@@ -140,7 +140,8 @@ describe('routeStore', () => {
 		store.create(
 			{
 				name: 'Downtown',
-				warehouseId: 'warehouse-1'
+				warehouseId: 'warehouse-1',
+				startTime: '09:00'
 			},
 			'Main Warehouse'
 		);

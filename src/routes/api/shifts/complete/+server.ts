@@ -7,13 +7,14 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, driverMetrics, shifts } from '$lib/server/db/schema';
+import { assignments, driverMetrics, routes, shifts } from '$lib/server/db/schema';
 import { recordRouteCompletion, updateDriverMetrics } from '$lib/server/services/metrics';
 import { shiftCompleteSchema } from '$lib/schemas/shift';
 import { eq, sql } from 'drizzle-orm';
 import { addHours } from 'date-fns';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
+import { sendManagerAlert } from '$lib/server/services/notifications';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import {
 	createAssignmentLifecycleContext,
@@ -36,9 +37,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'Validation failed');
 	}
 
-	const { assignmentId, parcelsReturned } = result.data;
+	const { assignmentId, parcelsReturned, exceptedReturns, exceptionNotes } = result.data;
 
-	// Get assignment with shift
+	// Get assignment with route info
 	const [assignment] = await db
 		.select({
 			id: assignments.id,
@@ -46,9 +47,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			routeId: assignments.routeId,
 			date: assignments.date,
 			status: assignments.status,
-			confirmedAt: assignments.confirmedAt
+			confirmedAt: assignments.confirmedAt,
+			routeName: routes.name,
+			routeStartTime: routes.startTime
 		})
 		.from(assignments)
+		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.where(eq(assignments.id, assignmentId));
 
 	if (!assignment) {
@@ -92,7 +96,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			confirmedAt: assignment.confirmedAt,
 			shiftArrivedAt: shift.arrivedAt,
 			parcelsStart: shift.parcelsStart,
-			shiftCompletedAt: shift.completedAt
+			shiftCompletedAt: shift.completedAt,
+			routeStartTime: assignment.routeStartTime
 		},
 		lifecycleContext
 	);
@@ -125,6 +130,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.set({
 			parcelsDelivered,
 			parcelsReturned,
+			exceptedReturns,
+			exceptionNotes: exceptionNotes ?? null,
 			completedAt,
 			editableUntil
 		})
@@ -134,13 +141,16 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			parcelsStart: shifts.parcelsStart,
 			parcelsDelivered: shifts.parcelsDelivered,
 			parcelsReturned: shifts.parcelsReturned,
+			exceptedReturns: shifts.exceptedReturns,
+			exceptionNotes: shifts.exceptionNotes,
 			startedAt: shifts.startedAt,
 			completedAt: shifts.completedAt,
 			editableUntil: shifts.editableUntil
 		});
 
-	// Check if high delivery (95%+) → increment highDeliveryCount
-	if (shift.parcelsStart > 0 && parcelsDelivered / shift.parcelsStart >= 0.95) {
+	// Check if high delivery (95%+) using adjusted rate (excludes excepted returns)
+	const adjustedDelivered = parcelsDelivered + exceptedReturns;
+	if (shift.parcelsStart > 0 && adjustedDelivered / shift.parcelsStart >= 0.95) {
 		await db
 			.update(driverMetrics)
 			.set({
@@ -148,6 +158,15 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 				updatedAt: new Date()
 			})
 			.where(eq(driverMetrics.userId, locals.user.id));
+	}
+
+	// Notify manager if exceptions were filed
+	if (exceptedReturns > 0) {
+		await sendManagerAlert(assignment.routeId, 'return_exception', {
+			routeName: assignment.routeName ?? 'Unknown Route',
+			driverName: locals.user.name ?? 'A driver',
+			date: assignment.date
+		});
 	}
 
 	// Update assignment status to completed
@@ -184,7 +203,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		action: 'complete',
 		actorType: 'user',
 		actorId: locals.user.id,
-		changes: { parcelsDelivered, parcelsReturned, assignmentId }
+		changes: { parcelsDelivered, parcelsReturned, exceptedReturns, exceptionNotes, assignmentId }
 	});
 
 	await Promise.all([
