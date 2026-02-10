@@ -24,6 +24,7 @@ type SendNotificationMock = ReturnType<
 					assignmentId: string;
 					routeName: string;
 					date: string;
+					dedupeKey: string;
 				};
 			}
 		],
@@ -65,6 +66,7 @@ beforeEach(async () => {
 					assignmentId: string;
 					routeName: string;
 					date: string;
+					dedupeKey: string;
 				};
 			}
 		],
@@ -73,7 +75,7 @@ beforeEach(async () => {
 
 	whereMock = vi.fn(async (_condition: unknown) => [] as ReminderCandidate[]);
 	innerJoinMock = vi.fn((_table: unknown, _on: unknown) => ({ where: whereMock }));
-	fromMock = vi.fn((_table: unknown) => ({ innerJoin: innerJoinMock }));
+	fromMock = vi.fn((_table: unknown) => ({ innerJoin: innerJoinMock, where: whereMock }));
 	selectMock = vi.fn((_shape: Record<string, unknown>) => ({ from: fromMock }));
 
 	const childLogger = {
@@ -103,6 +105,11 @@ beforeEach(async () => {
 		routes: {
 			id: 'routes.id',
 			name: 'routes.name'
+		},
+		notifications: {
+			type: 'notifications.type',
+			userId: 'notifications.userId',
+			data: 'notifications.data'
 		}
 	}));
 
@@ -110,8 +117,10 @@ beforeEach(async () => {
 		and: (...conditions: unknown[]) => ({ conditions }),
 		eq: (left: unknown, right: unknown) => ({ left, right }),
 		gte: (left: unknown, right: unknown) => ({ left, right }),
+		inArray: (left: unknown, right: unknown[]) => ({ left, right }),
 		isNotNull: (column: unknown) => ({ column }),
-		isNull: (column: unknown) => ({ column })
+		isNull: (column: unknown) => ({ column }),
+		sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values })
 	}));
 
 	vi.doMock('$lib/server/logger', () => ({
@@ -141,20 +150,22 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 
 	it('sends reminders for deterministic target date', async () => {
 		freezeTime('2026-03-02T12:00:00.000Z');
-		whereMock.mockResolvedValue([
-			{
-				assignmentId: 'assignment-1',
-				userId: 'driver-1',
-				date: '2026-03-05',
-				routeName: 'Route A'
-			},
-			{
-				assignmentId: 'assignment-2',
-				userId: 'driver-2',
-				date: '2026-03-05',
-				routeName: 'Route B'
-			}
-		]);
+		whereMock
+			.mockResolvedValueOnce([
+				{
+					assignmentId: 'assignment-1',
+					userId: 'driver-1',
+					date: '2026-03-05',
+					routeName: 'Route A'
+				},
+				{
+					assignmentId: 'assignment-2',
+					userId: 'driver-2',
+					date: '2026-03-05',
+					routeName: 'Route B'
+				}
+			])
+			.mockResolvedValueOnce([]);
 		sendNotificationMock.mockResolvedValue(undefined);
 
 		const response = await GET(createAuthorizedCronEvent() as Parameters<typeof GET>[0]);
@@ -163,6 +174,7 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 		const payload = (await response.json()) as {
 			success: boolean;
 			sent: number;
+			skippedDuplicates: number;
 			errors: number;
 			date: string;
 			elapsedMs: number;
@@ -170,6 +182,7 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 
 		expect(payload.success).toBe(true);
 		expect(payload.sent).toBe(2);
+		expect(payload.skippedDuplicates).toBe(0);
 		expect(payload.errors).toBe(0);
 		expect(payload.date).toBe('2026-03-05');
 		expect(payload.elapsedMs).toBeTypeOf('number');
@@ -180,7 +193,8 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 			data: {
 				assignmentId: 'assignment-1',
 				routeName: 'Route A',
-				date: '2026-03-05'
+				date: '2026-03-05',
+				dedupeKey: 'confirmation_reminder:assignment-1:driver-1:2026-03-05'
 			}
 		});
 	});
@@ -221,20 +235,22 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 	});
 
 	it('continues processing when a reminder send fails', async () => {
-		whereMock.mockResolvedValue([
-			{
-				assignmentId: 'assignment-fails',
-				userId: 'driver-1',
-				date: '2026-03-05',
-				routeName: 'Route A'
-			},
-			{
-				assignmentId: 'assignment-succeeds',
-				userId: 'driver-2',
-				date: '2026-03-05',
-				routeName: 'Route B'
-			}
-		]);
+		whereMock
+			.mockResolvedValueOnce([
+				{
+					assignmentId: 'assignment-fails',
+					userId: 'driver-1',
+					date: '2026-03-05',
+					routeName: 'Route A'
+				},
+				{
+					assignmentId: 'assignment-succeeds',
+					userId: 'driver-2',
+					date: '2026-03-05',
+					routeName: 'Route B'
+				}
+			])
+			.mockResolvedValueOnce([]);
 		sendNotificationMock.mockRejectedValueOnce(new Error('FCM unavailable'));
 		sendNotificationMock.mockResolvedValueOnce(undefined);
 
@@ -247,5 +263,48 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 			errors: 1
 		});
 		expect(sendNotificationMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('skips reminders when matching dedupe keys already exist', async () => {
+		freezeTime('2026-03-02T12:00:00.000Z');
+		whereMock
+			.mockResolvedValueOnce([
+				{
+					assignmentId: 'assignment-1',
+					userId: 'driver-1',
+					date: '2026-03-05',
+					routeName: 'Route A'
+				},
+				{
+					assignmentId: 'assignment-2',
+					userId: 'driver-2',
+					date: '2026-03-05',
+					routeName: 'Route B'
+				}
+			])
+			.mockResolvedValueOnce([
+				{ dedupeKey: 'confirmation_reminder:assignment-1:driver-1:2026-03-05' }
+			]);
+		sendNotificationMock.mockResolvedValue(undefined);
+
+		const response = await GET(createAuthorizedCronEvent() as Parameters<typeof GET>[0]);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toMatchObject({
+			success: true,
+			sent: 1,
+			skippedDuplicates: 1,
+			errors: 0
+		});
+		expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+		expect(sendNotificationMock).toHaveBeenCalledWith(
+			'driver-2',
+			'confirmation_reminder',
+			expect.objectContaining({
+				data: expect.objectContaining({
+					dedupeKey: 'confirmation_reminder:assignment-2:driver-2:2026-03-05'
+				})
+			})
+		);
 	});
 });

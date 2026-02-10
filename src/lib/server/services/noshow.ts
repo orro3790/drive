@@ -22,26 +22,18 @@ import {
 	sendManagerAlert
 } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
-import { format, toZonedTime } from 'date-fns-tz';
-import { set, startOfDay } from 'date-fns';
+import { and, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { getTorontoDateTimeInstant, toTorontoDateString } from '$lib/server/time/toronto';
 
 function getTorontoNow(): Date {
-	return toZonedTime(new Date(), dispatchPolicy.timezone.toronto);
+	return new Date();
 }
 
-function getTorontoDateString(date: Date): string {
-	return format(date, 'yyyy-MM-dd');
-}
-
-function getArrivalDeadline(date: Date): Date {
-	return set(startOfDay(date), {
-		hours: dispatchPolicy.shifts.arrivalDeadlineHourLocal,
-		minutes: 0,
-		seconds: 0,
-		milliseconds: 0
+function getArrivalDeadline(dateString: string): Date {
+	return getTorontoDateTimeInstant(dateString, {
+		hours: dispatchPolicy.shifts.arrivalDeadlineHourLocal
 	});
 }
 
@@ -70,8 +62,8 @@ export interface NoShowDetectionResult {
 export async function detectNoShows(): Promise<NoShowDetectionResult> {
 	const log = logger.child({ operation: 'detectNoShows' });
 	const nowToronto = getTorontoNow();
-	const today = getTorontoDateString(nowToronto);
-	const arrivalDeadline = getArrivalDeadline(nowToronto);
+	const today = toTorontoDateString(nowToronto);
+	const arrivalDeadline = getArrivalDeadline(today);
 
 	// Skip if called before 9 AM Toronto time (DST-safe: dual cron handles this)
 	if (nowToronto < arrivalDeadline) {
@@ -123,7 +115,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 				eq(assignments.status, 'scheduled'),
 				isNotNull(assignments.userId),
 				isNotNull(assignments.confirmedAt),
-				isNull(shifts.arrivedAt)
+				or(isNull(shifts.arrivedAt), gt(shifts.arrivedAt, arrivalDeadline))
 			)
 		);
 

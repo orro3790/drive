@@ -60,6 +60,7 @@ let sendNotificationMock: ReturnType<
 					routeName: string;
 					warehouseName: string;
 					date: string;
+					dedupeKey: string;
 				};
 			}
 		) => Promise<unknown>
@@ -114,6 +115,11 @@ beforeEach(async () => {
 
 	vi.doMock('$lib/server/db/schema', () => ({
 		assignments: assignmentsTable,
+		notifications: {
+			type: 'notifications.type',
+			userId: 'notifications.userId',
+			data: 'notifications.data'
+		},
 		routes: routesTable,
 		shifts: shiftsTable,
 		warehouses: warehousesTable
@@ -122,7 +128,9 @@ beforeEach(async () => {
 	vi.doMock('drizzle-orm', () => ({
 		and: (...conditions: unknown[]) => ({ conditions }),
 		eq: (left: unknown, right: unknown) => ({ left, right }),
-		isNotNull: (column: unknown) => ({ column })
+		inArray: (left: unknown, right: unknown[]) => ({ left, right }),
+		isNotNull: (column: unknown) => ({ column }),
+		sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values })
 	}));
 
 	vi.doMock('$lib/server/services/notifications', () => ({
@@ -195,12 +203,16 @@ describe('GET /api/cron/shift-reminders contract', () => {
 		];
 		const startedRows: StartedShiftRow[] = [{ assignmentId: 'assignment-2' }];
 
-		selectWhereMock.mockResolvedValueOnce(todayAssignments).mockResolvedValueOnce(startedRows);
+		selectWhereMock
+			.mockResolvedValueOnce(todayAssignments)
+			.mockResolvedValueOnce(startedRows)
+			.mockResolvedValueOnce([]);
 
 		const response = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);
 		const payload = (await response.json()) as {
 			success: boolean;
 			sentCount: number;
+			skippedDuplicates: number;
 			errorCount: number;
 			elapsedMs: number;
 		};
@@ -208,6 +220,7 @@ describe('GET /api/cron/shift-reminders contract', () => {
 		expect(response.status).toBe(200);
 		expect(payload.success).toBe(true);
 		expect(payload.sentCount).toBe(2);
+		expect(payload.skippedDuplicates).toBe(0);
 		expect(payload.errorCount).toBe(0);
 		expect(payload.elapsedMs).toBeTypeOf('number');
 
@@ -218,7 +231,8 @@ describe('GET /api/cron/shift-reminders contract', () => {
 				assignmentId: 'assignment-1',
 				routeName: 'Route A',
 				warehouseName: 'Warehouse A',
-				date: '2026-02-09'
+				date: '2026-02-09',
+				dedupeKey: 'shift_reminder:assignment-1:driver-1:2026-02-09'
 			}
 		});
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(2, 'driver-3', 'shift_reminder', {
@@ -227,7 +241,8 @@ describe('GET /api/cron/shift-reminders contract', () => {
 				assignmentId: 'assignment-3',
 				routeName: 'Route C',
 				warehouseName: 'Warehouse C',
-				date: '2026-02-09'
+				date: '2026-02-09',
+				dedupeKey: 'shift_reminder:assignment-3:driver-3:2026-02-09'
 			}
 		});
 	});
@@ -248,7 +263,10 @@ describe('GET /api/cron/shift-reminders contract', () => {
 			}
 		];
 
-		selectWhereMock.mockResolvedValueOnce(todayAssignments).mockResolvedValueOnce([]);
+		selectWhereMock
+			.mockResolvedValueOnce(todayAssignments)
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([]);
 		sendNotificationMock.mockRejectedValueOnce(new Error('push failure'));
 		sendNotificationMock.mockResolvedValueOnce({ inAppCreated: true, pushSent: true });
 
@@ -261,6 +279,48 @@ describe('GET /api/cron/shift-reminders contract', () => {
 			errorCount: 1
 		});
 		expect(sendNotificationMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('returns 200 and skips reminders with existing dedupe keys', async () => {
+		const todayAssignments: TodayAssignment[] = [
+			{
+				assignmentId: 'assignment-1',
+				userId: 'driver-1',
+				routeName: 'Route A',
+				warehouseName: 'Warehouse A'
+			},
+			{
+				assignmentId: 'assignment-2',
+				userId: 'driver-2',
+				routeName: 'Route B',
+				warehouseName: 'Warehouse B'
+			}
+		];
+
+		selectWhereMock
+			.mockResolvedValueOnce(todayAssignments)
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([{ dedupeKey: 'shift_reminder:assignment-1:driver-1:2026-02-09' }]);
+
+		const response = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toMatchObject({
+			success: true,
+			sentCount: 1,
+			skippedDuplicates: 1,
+			errorCount: 0
+		});
+		expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+		expect(sendNotificationMock).toHaveBeenCalledWith(
+			'driver-2',
+			'shift_reminder',
+			expect.objectContaining({
+				data: expect.objectContaining({
+					dedupeKey: 'shift_reminder:assignment-2:driver-2:2026-02-09'
+				})
+			})
+		);
 	});
 
 	it('returns 500 when assignment candidate query fails', async () => {

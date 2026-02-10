@@ -1,7 +1,7 @@
 /**
  * Performance Check Cron Job
  *
- * Runs daily at 1:00 AM Toronto time.
+ * Runs daily at 01:00 UTC (configured in .github/workflows/cron-jobs.yml).
  * Recalculates driver metrics and applies flagging rules.
  *
  * @see DRV-qen

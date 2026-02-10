@@ -1,6 +1,6 @@
 import { addMilliseconds } from 'date-fns';
 import { describe, expect, it } from 'vitest';
-import { format } from 'date-fns-tz';
+import { formatInTimeZone } from 'date-fns-tz';
 
 import {
 	calculateConfirmationWindow,
@@ -11,7 +11,7 @@ import {
 function createTorontoContext(nowToronto: Date) {
 	return {
 		nowToronto,
-		torontoToday: format(nowToronto, 'yyyy-MM-dd'),
+		torontoToday: formatInTimeZone(nowToronto, 'America/Toronto', 'yyyy-MM-dd'),
 		timezone: 'America/Toronto'
 	} as const;
 }
@@ -78,8 +78,8 @@ describe('LC-05 lifecycle service: deriveAssignmentLifecycle', () => {
 	});
 
 	it('applies cancelability and late-cancel boundaries', () => {
-		const contextAtMidnight = createAssignmentLifecycleContext(
-			new Date('2026-02-10T05:00:00.000Z')
+		const contextAtBoundary = createAssignmentLifecycleContext(
+			new Date('2026-02-10T12:00:00.000Z')
 		);
 
 		const today = deriveAssignmentLifecycle(
@@ -91,7 +91,7 @@ describe('LC-05 lifecycle service: deriveAssignmentLifecycle', () => {
 				parcelsStart: null,
 				shiftCompletedAt: null
 			},
-			contextAtMidnight
+			contextAtBoundary
 		);
 
 		const exactlyFortyEightHours = deriveAssignmentLifecycle(
@@ -103,23 +103,23 @@ describe('LC-05 lifecycle service: deriveAssignmentLifecycle', () => {
 				parcelsStart: null,
 				shiftCompletedAt: null
 			},
-			contextAtMidnight
+			contextAtBoundary
 		);
 
-		const contextJustBeforeMidnight = createAssignmentLifecycleContext(
-			new Date('2026-02-11T04:59:00.000Z')
+		const contextJustOverBoundary = createAssignmentLifecycleContext(
+			new Date('2026-02-10T11:59:00.000Z')
 		);
 
 		const justOverFortyEightHours = deriveAssignmentLifecycle(
 			{
-				assignmentDate: '2026-02-13',
+				assignmentDate: '2026-02-12',
 				assignmentStatus: 'scheduled',
 				confirmedAt: null,
 				shiftArrivedAt: null,
 				parcelsStart: null,
 				shiftCompletedAt: null
 			},
-			contextJustBeforeMidnight
+			contextJustOverBoundary
 		);
 
 		expect(today.isCancelable).toBe(false);
@@ -130,7 +130,7 @@ describe('LC-05 lifecycle service: deriveAssignmentLifecycle', () => {
 	});
 
 	it('derives arrive, start, and complete states', () => {
-		const context = createAssignmentLifecycleContext(new Date('2026-02-10T15:00:00.000Z'));
+		const context = createAssignmentLifecycleContext(new Date('2026-02-10T13:00:00.000Z'));
 		const confirmedAt = new Date('2026-02-08T13:00:00.000Z');
 
 		const arrivable = deriveAssignmentLifecycle(
@@ -177,6 +177,56 @@ describe('LC-05 lifecycle service: deriveAssignmentLifecycle', () => {
 		expect(startable.isCompletable).toBe(false);
 		expect(completable.isStartable).toBe(false);
 		expect(completable.isCompletable).toBe(true);
+	});
+
+	it('marks arrivals as unavailable at and after the 9 AM Toronto cutoff', () => {
+		const confirmedAt = new Date('2026-02-08T13:00:00.000Z');
+
+		const beforeCutoff = deriveAssignmentLifecycle(
+			{
+				assignmentDate: '2026-02-10',
+				assignmentStatus: 'scheduled',
+				confirmedAt,
+				shiftArrivedAt: null,
+				parcelsStart: null,
+				shiftCompletedAt: null
+			},
+			createAssignmentLifecycleContext(new Date('2026-02-10T13:59:59.000Z'))
+		);
+
+		const atCutoff = deriveAssignmentLifecycle(
+			{
+				assignmentDate: '2026-02-10',
+				assignmentStatus: 'scheduled',
+				confirmedAt,
+				shiftArrivedAt: null,
+				parcelsStart: null,
+				shiftCompletedAt: null
+			},
+			createAssignmentLifecycleContext(new Date('2026-02-10T14:00:00.000Z'))
+		);
+
+		expect(beforeCutoff.isArrivable).toBe(true);
+		expect(atCutoff.isArrivable).toBe(false);
+	});
+
+	it('keeps confirmation boundaries pinned to 7 AM Toronto across DST transitions', () => {
+		const springForward = calculateConfirmationWindow('2026-03-08');
+		const fallBack = calculateConfirmationWindow('2026-11-01');
+
+		expect(formatInTimeZone(springForward.opensAt, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
+			'2026-03-01 07:00'
+		);
+		expect(formatInTimeZone(springForward.deadline, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
+			'2026-03-06 07:00'
+		);
+
+		expect(formatInTimeZone(fallBack.opensAt, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
+			'2026-10-25 07:00'
+		);
+		expect(formatInTimeZone(fallBack.deadline, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
+			'2026-10-30 07:00'
+		);
 	});
 
 	it('uses Toronto date context when UTC date differs', () => {

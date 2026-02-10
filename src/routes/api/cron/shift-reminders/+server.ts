@@ -1,7 +1,7 @@
 /**
  * Shift Reminders Cron Job
  *
- * Runs daily at 6:00 AM Toronto time.
+ * Runs at 10:00 and 11:00 UTC to guarantee one 06:00 Toronto run across DST.
  * Sends push notifications to drivers with shifts today.
  *
  * @see DRV-n1y
@@ -12,9 +12,9 @@ import { CRON_SECRET } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { format, toZonedTime } from 'date-fns-tz';
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { assignments, routes, shifts, warehouses } from '$lib/server/db/schema';
+import { assignments, notifications, routes, shifts, warehouses } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { sendNotification } from '$lib/server/services/notifications';
 
@@ -83,11 +83,46 @@ export const GET: RequestHandler = async ({ request }) => {
 		);
 
 		let sentCount = 0;
+		let skippedDuplicates = 0;
 		let errorCount = 0;
+
+		const candidateUserIds = Array.from(
+			new Set(
+				toNotify
+					.map((assignment) => assignment.userId)
+					.filter((userId): userId is string => Boolean(userId))
+			)
+		);
+
+		const existingDedupeRows =
+			candidateUserIds.length === 0
+				? []
+				: await db
+						.select({ dedupeKey: sql<string>`${notifications.data} ->> 'dedupeKey'` })
+						.from(notifications)
+						.where(
+							and(
+								eq(notifications.type, 'shift_reminder'),
+								inArray(notifications.userId, candidateUserIds),
+								sql`${notifications.data} ->> 'date' = ${today}`
+							)
+						);
+
+		const seenDedupeKeys = new Set(
+			existingDedupeRows
+				.map((row) => row.dedupeKey)
+				.filter((dedupeKey): dedupeKey is string => Boolean(dedupeKey))
+		);
 
 		// Send notifications
 		for (const assignment of toNotify) {
 			if (!assignment.userId) continue;
+
+			const dedupeKey = `shift_reminder:${assignment.assignmentId}:${assignment.userId}:${today}`;
+			if (seenDedupeKeys.has(dedupeKey)) {
+				skippedDuplicates++;
+				continue;
+			}
 
 			try {
 				await sendNotification(assignment.userId, 'shift_reminder', {
@@ -96,9 +131,11 @@ export const GET: RequestHandler = async ({ request }) => {
 						assignmentId: assignment.assignmentId,
 						routeName: assignment.routeName,
 						warehouseName: assignment.warehouseName,
-						date: today
+						date: today,
+						dedupeKey
 					}
 				});
+				seenDedupeKeys.add(dedupeKey);
 				sentCount++;
 			} catch (error) {
 				errorCount++;
@@ -113,6 +150,7 @@ export const GET: RequestHandler = async ({ request }) => {
 		log.info(
 			{
 				sentCount,
+				skippedDuplicates,
 				errorCount,
 				elapsedMs,
 				today
@@ -123,6 +161,7 @@ export const GET: RequestHandler = async ({ request }) => {
 		return json({
 			success: true,
 			sentCount,
+			skippedDuplicates,
 			errorCount,
 			elapsedMs
 		});

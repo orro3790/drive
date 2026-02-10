@@ -17,7 +17,7 @@ import {
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
-import { toZonedTime } from 'date-fns-tz';
+import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -68,22 +68,18 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		})
 		.from(shifts)
 		.where(eq(shifts.assignmentId, assignmentId));
+	const existingShiftArrivedAt = existingShift?.arrivedAt ?? null;
+	const existingShiftParcelsStart = existingShift?.parcelsStart ?? null;
+	const existingShiftCompletedAt = existingShift?.completedAt ?? null;
 
 	const lifecycleContext = createAssignmentLifecycleContext();
-	const lifecycle = deriveAssignmentLifecycle(
-		{
-			assignmentDate: assignment.date,
-			assignmentStatus: assignment.status,
-			confirmedAt: assignment.confirmedAt,
-			shiftArrivedAt: existingShift?.arrivedAt ?? null,
-			parcelsStart: existingShift?.parcelsStart ?? null,
-			shiftCompletedAt: existingShift?.completedAt ?? null
-		},
-		lifecycleContext
-	);
 
-	if (!lifecycle.isArrivable) {
-		throw error(409, 'Assignment is not ready for arrival');
+	if (assignment.date !== lifecycleContext.torontoToday) {
+		throw error(400, "Arrival can only be recorded for today's shift");
+	}
+
+	if (assignment.confirmedAt === null) {
+		throw error(400, 'Assignment must be confirmed before arrival');
 	}
 
 	if (existingShift) {
@@ -91,6 +87,29 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	const arrivedAt = new Date();
+	const arrivalDeadline = getTorontoDateTimeInstant(assignment.date, {
+		hours: dispatchPolicy.shifts.arrivalDeadlineHourLocal
+	});
+
+	if (arrivedAt >= arrivalDeadline) {
+		throw error(400, 'Arrival cutoff is 9:00 AM Toronto time');
+	}
+
+	const lifecycle = deriveAssignmentLifecycle(
+		{
+			assignmentDate: assignment.date,
+			assignmentStatus: assignment.status,
+			confirmedAt: assignment.confirmedAt,
+			shiftArrivedAt: existingShiftArrivedAt,
+			parcelsStart: existingShiftParcelsStart,
+			shiftCompletedAt: existingShiftCompletedAt
+		},
+		lifecycleContext
+	);
+
+	if (!lifecycle.isArrivable) {
+		throw error(409, 'Assignment is not ready for arrival');
+	}
 
 	// Create shift record
 	const [shift] = await db
@@ -105,8 +124,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		});
 
 	// Check if arrived before 9 AM Toronto time → increment arrivedOnTimeCount
-	const arrivedToronto = toZonedTime(arrivedAt, dispatchPolicy.timezone.toronto);
-	if (arrivedToronto.getHours() < dispatchPolicy.shifts.arrivalDeadlineHourLocal) {
+	if (arrivedAt < arrivalDeadline) {
 		await db
 			.update(driverMetrics)
 			.set({

@@ -763,26 +763,26 @@ Drops drivers who haven't confirmed shifts within 48h deadline. Creates bid wind
 
 1. Find scheduled assignments with no `confirmedAt` >= deployment date
 2. Check if past 48h deadline
-3. Increment driver's `autoDroppedShifts` metric
-4. Create bid window with `trigger: 'auto_drop'`
+3. Create bid window with `trigger: 'auto_drop'`
+4. If bid-window creation succeeds, record auto-drop metric + audit data in one transaction
 5. Notify original driver
-6. Create audit log
 
-**Returns:** `{ success, dropped, bidWindowsCreated, errors, elapsedMs }`
+**Returns:** `{ success, dropped, bidWindowsCreated, skippedNoWindow, errors, elapsedMs }`
 
 ### `GET /api/cron/send-confirmation-reminders`
 
 Sends reminder notifications to drivers with unconfirmed shifts 3 days out (72h before deadline).
 
-**Schedule:** `0 11 * * *` (daily at 06:00 Toronto time)
+**Schedule:** `5 10,11 * * *` (runs at both UTC offsets; dedupe guarantees one reminder per assignment/user/date)
 
 **Process:**
 
 1. Calculate target date (now + 3 days)
 2. Find scheduled assignments on target date with no `confirmedAt`
-3. Send `confirmation_reminder` notification to each driver
+3. Skip rows with an existing `dedupeKey`
+4. Send `confirmation_reminder` notification with deterministic `dedupeKey`
 
-**Returns:** `{ success, sent, errors, date, elapsedMs }`
+**Returns:** `{ success, sent, skippedDuplicates, errors, date, elapsedMs }`
 
 ### `GET /api/cron/close-bid-windows`
 

@@ -77,6 +77,12 @@ describe('scheduling service boundaries', () => {
 		expect(format(weekStart, 'yyyy-MM-dd', { timeZone: 'America/Toronto' })).toBe('2026-02-02');
 	});
 
+	it('keeps week-start boundaries stable across DST fallback weekend', () => {
+		const weekStart = getWeekStart(new Date('2026-11-01T05:30:00.000Z'));
+
+		expect(format(weekStart, 'yyyy-MM-dd', { timeZone: 'America/Toronto' })).toBe('2026-10-26');
+	});
+
 	it('returns zero when no weekly assignment count row exists', async () => {
 		setSelectResults([[]]);
 

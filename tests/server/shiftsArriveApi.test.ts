@@ -173,6 +173,7 @@ beforeEach(async () => {
 	deriveAssignmentLifecycleMock = vi.fn(() => createLifecycleOutput());
 	createAuditLogMock = vi.fn(async () => undefined);
 	broadcastAssignmentUpdatedMock = vi.fn();
+	freezeTime('2026-02-09T13:00:00.000Z');
 
 	vi.doMock('$lib/server/db', () => ({
 		db: {
@@ -209,10 +210,6 @@ beforeEach(async () => {
 		broadcastAssignmentUpdated: broadcastAssignmentUpdatedMock
 	}));
 
-	vi.doMock('date-fns-tz', () => ({
-		toZonedTime: vi.fn(() => new Date('2026-02-09T12:00:00.000Z'))
-	}));
-
 	({ POST } = await import('../../src/routes/api/shifts/arrive/+server'));
 });
 
@@ -225,7 +222,6 @@ afterEach(() => {
 	vi.doUnmock('$lib/server/services/assignmentLifecycle');
 	vi.doUnmock('$lib/server/services/audit');
 	vi.doUnmock('$lib/server/realtime/managerSse');
-	vi.doUnmock('date-fns-tz');
 });
 
 describe('POST /api/shifts/arrive contract', () => {
@@ -293,6 +289,68 @@ describe('POST /api/shifts/arrive contract', () => {
 		expect(selectWhereMock).toHaveBeenCalledTimes(1);
 	});
 
+	it('returns 400 when assignment is not for today in Toronto', async () => {
+		const assignment: AssignmentRow = {
+			id: 'assignment-1',
+			userId: 'driver-1',
+			date: '2026-02-10',
+			status: 'scheduled',
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
+		};
+
+		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb' }
+		});
+
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
+	});
+
+	it('returns 400 when assignment is unconfirmed', async () => {
+		const assignment: AssignmentRow = {
+			id: 'assignment-1',
+			userId: 'driver-1',
+			date: '2026-02-09',
+			status: 'scheduled',
+			confirmedAt: null
+		};
+
+		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb' }
+		});
+
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
+	});
+
+	it('returns 400 when current time is at/after 9 AM Toronto cutoff', async () => {
+		freezeTime('2026-02-09T14:00:00.000Z');
+
+		const assignment: AssignmentRow = {
+			id: 'assignment-1',
+			userId: 'driver-1',
+			date: '2026-02-09',
+			status: 'scheduled',
+			confirmedAt: new Date('2026-02-08T12:00:00.000Z')
+		};
+
+		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb' }
+		});
+
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
+	});
+
 	it('returns 409 when assignment is not arrivable by lifecycle rules', async () => {
 		const assignment: AssignmentRow = {
 			id: 'assignment-1',
@@ -341,7 +399,7 @@ describe('POST /api/shifts/arrive contract', () => {
 	});
 
 	it('returns 200 with success payload and arrived timestamp', async () => {
-		freezeTime('2026-02-09T15:00:00.000Z');
+		freezeTime('2026-02-09T13:00:00.000Z');
 
 		const assignment: AssignmentRow = {
 			id: 'assignment-1',
@@ -355,7 +413,7 @@ describe('POST /api/shifts/arrive contract', () => {
 		insertReturningMock.mockResolvedValueOnce([
 			{
 				id: 'shift-1',
-				arrivedAt: new Date('2026-02-09T15:00:00.000Z')
+				arrivedAt: new Date('2026-02-09T13:00:00.000Z')
 			}
 		]);
 
@@ -370,10 +428,10 @@ describe('POST /api/shifts/arrive contract', () => {
 		expect(response.status).toBe(200);
 		await expect(response.json()).resolves.toEqual({
 			success: true,
-			arrivedAt: '2026-02-09T15:00:00.000Z'
+			arrivedAt: '2026-02-09T13:00:00.000Z'
 		});
 		expect(insertMock).toHaveBeenCalledWith(shiftsTable);
-		expect(updateMock).toHaveBeenCalledTimes(1);
+		expect(updateMock).toHaveBeenCalledTimes(2);
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
 		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
 			expect.objectContaining({

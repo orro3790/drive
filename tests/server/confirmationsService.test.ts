@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { formatInTimeZone } from 'date-fns-tz';
 
 import { freezeTime, resetTime } from '../harness/time';
 
@@ -97,6 +98,25 @@ describe('confirmation service boundaries', () => {
 
 		expect(deadline.getTime()).toBeGreaterThan(opensAt.getTime());
 		expect(deadline.getTime() - opensAt.getTime()).toBe(120 * 60 * 60 * 1000);
+	});
+
+	it('keeps confirmation windows pinned to 7 AM Toronto across DST boundaries', () => {
+		const springForward = calculateConfirmationDeadline('2026-03-08');
+		const fallBack = calculateConfirmationDeadline('2026-11-01');
+
+		expect(formatInTimeZone(springForward.opensAt, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
+			'2026-03-01 07:00'
+		);
+		expect(formatInTimeZone(springForward.deadline, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
+			'2026-03-06 07:00'
+		);
+
+		expect(formatInTimeZone(fallBack.opensAt, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
+			'2026-10-25 07:00'
+		);
+		expect(formatInTimeZone(fallBack.deadline, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
+			'2026-10-30 07:00'
+		);
 	});
 
 	it('returns assignment_not_found when the assignment does not exist', async () => {

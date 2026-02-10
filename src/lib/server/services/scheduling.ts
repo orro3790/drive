@@ -15,37 +15,21 @@ import {
 	user
 } from '$lib/server/db/schema';
 import { and, eq, gte, lt, ne, sql } from 'drizzle-orm';
-import { toZonedTime, format } from 'date-fns-tz';
-import { addDays, startOfDay } from 'date-fns';
 import logger from '$lib/server/logger';
 import { createAuditLog } from '$lib/server/services/audit';
-
-const TORONTO_TZ = 'America/Toronto';
+import {
+	addDaysToDateString,
+	getDayOfWeekFromDateString,
+	getTorontoDateTimeInstant,
+	getTorontoWeekStartDateString
+} from '$lib/server/time/toronto';
 
 /**
  * Get the start of a week (Monday) in Toronto timezone
  */
 export function getWeekStart(date: Date): Date {
-	const zonedDate = toZonedTime(date, TORONTO_TZ);
-	const day = zonedDate.getDay();
-	// Adjust to Monday (day 1). If Sunday (0), go back 6 days
-	const diff = day === 0 ? -6 : 1 - day;
-	const monday = addDays(zonedDate, diff);
-	return startOfDay(monday);
-}
-
-/**
- * Convert a date to Toronto date string (YYYY-MM-DD)
- */
-function toTorontoDateString(date: Date): string {
-	return format(toZonedTime(date, TORONTO_TZ), 'yyyy-MM-dd');
-}
-
-/**
- * Get day of week (0=Sunday, 1=Monday, ..., 6=Saturday) in Toronto timezone
- */
-function getTorontoDayOfWeek(date: Date): number {
-	return toZonedTime(date, TORONTO_TZ).getDay();
+	const weekStartDate = getTorontoWeekStartDateString(date);
+	return getTorontoDateTimeInstant(weekStartDate, { hours: 0 });
 }
 
 interface EligibleDriver {
@@ -92,10 +76,10 @@ export async function generateWeekSchedule(
 	};
 
 	// Normalize to start of Monday in Toronto
-	const weekStart = getWeekStart(targetWeekStart);
-	const weekEnd = addDays(weekStart, 7);
+	const weekStartDate = getTorontoWeekStartDateString(targetWeekStart);
+	const weekEndDate = addDaysToDateString(weekStartDate, 7);
 
-	log.info({ weekStart, weekEnd }, 'Starting schedule generation');
+	log.info({ weekStartDate, weekEndDate }, 'Starting schedule generation');
 
 	// Get all routes
 	const allRoutes = await db.select().from(routes);
@@ -145,8 +129,8 @@ export async function generateWeekSchedule(
 		.from(assignments)
 		.where(
 			and(
-				gte(assignments.date, toTorontoDateString(weekStart)),
-				lt(assignments.date, toTorontoDateString(weekEnd)),
+				gte(assignments.date, weekStartDate),
+				lt(assignments.date, weekEndDate),
 				ne(assignments.status, 'cancelled')
 			)
 		);
@@ -164,9 +148,8 @@ export async function generateWeekSchedule(
 
 	// Process each day of the week (Monday through Sunday)
 	for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-		const currentDate = addDays(weekStart, dayOffset);
-		const dateString = toTorontoDateString(currentDate);
-		const dayOfWeek = getTorontoDayOfWeek(currentDate);
+		const dateString = addDaysToDateString(weekStartDate, dayOffset);
+		const dayOfWeek = getDayOfWeekFromDateString(dateString);
 
 		log.debug({ date: dateString, dayOfWeek }, 'Processing day');
 
@@ -338,8 +321,8 @@ export async function getDriverWeeklyAssignmentCount(
 	userId: string,
 	weekStart: Date
 ): Promise<number> {
-	const weekStartNormalized = getWeekStart(weekStart);
-	const weekEnd = addDays(weekStartNormalized, 7);
+	const weekStartDate = getTorontoWeekStartDateString(weekStart);
+	const weekEndDate = addDaysToDateString(weekStartDate, 7);
 
 	const [result] = await db
 		.select({ count: sql<number>`count(*)::int` })
@@ -347,8 +330,8 @@ export async function getDriverWeeklyAssignmentCount(
 		.where(
 			and(
 				eq(assignments.userId, userId),
-				gte(assignments.date, toTorontoDateString(weekStartNormalized)),
-				lt(assignments.date, toTorontoDateString(weekEnd)),
+				gte(assignments.date, weekStartDate),
+				lt(assignments.date, weekEndDate),
 				ne(assignments.status, 'cancelled')
 			)
 		);

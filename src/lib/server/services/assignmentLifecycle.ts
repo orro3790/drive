@@ -1,8 +1,12 @@
-import { addDays, addHours, differenceInCalendarDays, parseISO, set } from 'date-fns';
-import { format, toZonedTime } from 'date-fns-tz';
+import { fromZonedTime } from 'date-fns-tz';
 
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import type { AssignmentStatus } from '$lib/schemas/assignment';
+import {
+	addDaysToDateString,
+	getTorontoDateTimeInstant,
+	toTorontoDateString
+} from '$lib/server/time/toronto';
 
 export interface AssignmentLifecycleContext {
 	nowToronto: Date;
@@ -34,45 +38,53 @@ export function createAssignmentLifecycleContext(
 	now: Date = new Date()
 ): AssignmentLifecycleContext {
 	const timezone = dispatchPolicy.timezone.toronto;
-	const nowToronto = toZonedTime(now, timezone);
 
 	return {
-		nowToronto,
-		torontoToday: format(nowToronto, 'yyyy-MM-dd'),
+		nowToronto: now,
+		torontoToday: toTorontoDateString(now),
 		timezone
 	};
 }
 
 function getShiftStart(assignmentDate: string, timezone: string): Date {
-	const parsed = parseISO(assignmentDate);
-	const toronto = toZonedTime(parsed, timezone);
+	if (timezone === dispatchPolicy.timezone.toronto) {
+		return getTorontoDateTimeInstant(assignmentDate, {
+			hours: dispatchPolicy.shifts.startHourLocal
+		});
+	}
 
-	return set(toronto, {
-		hours: dispatchPolicy.shifts.startHourLocal,
-		minutes: 0,
-		seconds: 0,
-		milliseconds: 0
-	});
+	const localDateTime = `${assignmentDate}T${String(dispatchPolicy.shifts.startHourLocal).padStart(2, '0')}:00:00`;
+	return fromZonedTime(localDateTime, timezone);
 }
 
-function calculateHoursUntilShift(
+export function calculateArrivalDeadline(
 	assignmentDate: string,
-	nowToronto: Date,
-	torontoToday: string
-): number {
-	const dayDiff = differenceInCalendarDays(parseISO(assignmentDate), parseISO(torontoToday));
-	const currentMinutes = nowToronto.getHours() * 60 + nowToronto.getMinutes();
+	timezone: string = dispatchPolicy.timezone.toronto
+): Date {
+	if (timezone === dispatchPolicy.timezone.toronto) {
+		return getTorontoDateTimeInstant(assignmentDate, {
+			hours: dispatchPolicy.shifts.arrivalDeadlineHourLocal
+		});
+	}
 
-	return (dayDiff * 24 * 60 - currentMinutes) / 60;
+	const localDateTime = `${assignmentDate}T${String(dispatchPolicy.shifts.arrivalDeadlineHourLocal).padStart(2, '0')}:00:00`;
+	return fromZonedTime(localDateTime, timezone);
 }
 
 export function calculateConfirmationWindow(
 	assignmentDate: string,
 	timezone: string = dispatchPolicy.timezone.toronto
 ): { opensAt: Date; deadline: Date } {
-	const shiftStart = getShiftStart(assignmentDate, timezone);
-	const opensAt = addDays(shiftStart, -dispatchPolicy.confirmation.windowDaysBeforeShift);
-	const deadline = addHours(shiftStart, -dispatchPolicy.confirmation.deadlineHoursBeforeShift);
+	const opensAtDate = addDaysToDateString(
+		assignmentDate,
+		-dispatchPolicy.confirmation.windowDaysBeforeShift
+	);
+	const deadlineDate = addDaysToDateString(
+		assignmentDate,
+		-(dispatchPolicy.confirmation.deadlineHoursBeforeShift / 24)
+	);
+	const opensAt = getShiftStart(opensAtDate, timezone);
+	const deadline = getShiftStart(deadlineDate, timezone);
 
 	return { opensAt, deadline };
 }
@@ -82,15 +94,10 @@ export function deriveAssignmentLifecycle(
 	context: AssignmentLifecycleContext
 ): AssignmentLifecycleOutput {
 	const { opensAt, deadline } = calculateConfirmationWindow(input.assignmentDate, context.timezone);
+	const arrivalDeadline = calculateArrivalDeadline(input.assignmentDate, context.timezone);
 	const isCancelable =
 		input.assignmentDate > context.torontoToday && input.assignmentStatus !== 'cancelled';
-	const hoursUntilShift = calculateHoursUntilShift(
-		input.assignmentDate,
-		context.nowToronto,
-		context.torontoToday
-	);
-	const isLateCancel =
-		isCancelable && hoursUntilShift <= dispatchPolicy.confirmation.deadlineHoursBeforeShift;
+	const isLateCancel = isCancelable && context.nowToronto >= deadline;
 	const isToday = input.assignmentDate === context.torontoToday;
 
 	return {
@@ -107,7 +114,8 @@ export function deriveAssignmentLifecycle(
 			isToday &&
 			input.assignmentStatus === 'scheduled' &&
 			input.confirmedAt !== null &&
-			!input.shiftArrivedAt,
+			!input.shiftArrivedAt &&
+			context.nowToronto < arrivalDeadline,
 		isStartable:
 			input.assignmentStatus === 'active' &&
 			input.shiftArrivedAt !== null &&

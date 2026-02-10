@@ -83,6 +83,9 @@ let updateSetMock: ReturnType<
 	typeof vi.fn<(setValues: Record<string, unknown>) => { where: typeof updateWhereMock }>
 >;
 let updateMock: ReturnType<typeof vi.fn<(table: unknown) => { set: typeof updateSetMock }>>;
+let transactionMock: ReturnType<
+	typeof vi.fn<(callback: (tx: { update: typeof updateMock }) => Promise<void>) => Promise<void>>
+>;
 
 beforeEach(async () => {
 	vi.resetModules();
@@ -138,6 +141,9 @@ beforeEach(async () => {
 	updateMock = vi.fn<(table: unknown) => { set: typeof updateSetMock }>(() => ({
 		set: updateSetMock
 	}));
+	transactionMock = vi.fn(async (callback) => {
+		await callback({ update: updateMock });
+	});
 
 	const loggerInfoMock = vi.fn();
 	const loggerErrorMock = vi.fn();
@@ -153,7 +159,8 @@ beforeEach(async () => {
 	vi.doMock('$lib/server/db', () => ({
 		db: {
 			select: selectMock,
-			update: updateMock
+			update: updateMock,
+			transaction: transactionMock
 		}
 	}));
 
@@ -210,7 +217,7 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 	});
 
 	it('applies the 48-hour boundary and surfaces per-assignment failures', async () => {
-		freezeTime('2026-03-10T04:00:00.000Z');
+		freezeTime('2026-03-10T11:00:00.000Z');
 
 		selectWhereMock.mockResolvedValue([
 			{
@@ -228,6 +235,13 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 				routeName: 'Route B'
 			},
 			{
+				id: 'assignment-24h-no-window',
+				userId: 'driver-no-window',
+				routeId: 'route-c',
+				date: '2026-03-11',
+				routeName: 'Route C'
+			},
+			{
 				id: 'assignment-24h-error',
 				userId: 'driver-error',
 				routeId: 'route-c',
@@ -241,7 +255,7 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 				return { success: true, bidWindowId: 'window-1' };
 			}
 
-			if (assignmentId === 'assignment-24h-error') {
+			if (assignmentId === 'assignment-24h-no-window') {
 				return { success: false, reason: 'no_eligible_drivers' };
 			}
 
@@ -266,28 +280,34 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 			success: boolean;
 			dropped: number;
 			bidWindowsCreated: number;
+			skippedNoWindow: number;
 			errors: number;
 			elapsedMs: number;
 		};
 
 		expect(response.status).toBe(200);
 		expect(payload.success).toBe(true);
-		expect(payload.dropped).toBe(1);
-		expect(payload.bidWindowsCreated).toBe(1);
+		expect(payload.dropped).toBe(2);
+		expect(payload.bidWindowsCreated).toBe(2);
+		expect(payload.skippedNoWindow).toBe(1);
 		expect(payload.errors).toBe(1);
 		expect(payload.elapsedMs).toBeTypeOf('number');
 
-		expect(createBidWindowMock).toHaveBeenCalledTimes(2);
+		expect(createBidWindowMock).toHaveBeenCalledTimes(3);
 		expect(createBidWindowMock).toHaveBeenNthCalledWith(1, 'assignment-48h', {
 			trigger: 'auto_drop'
 		});
-		expect(createBidWindowMock).toHaveBeenNthCalledWith(2, 'assignment-24h-error', {
+		expect(createBidWindowMock).toHaveBeenNthCalledWith(2, 'assignment-24h-no-window', {
+			trigger: 'auto_drop'
+		});
+		expect(createBidWindowMock).toHaveBeenNthCalledWith(3, 'assignment-24h-error', {
 			trigger: 'auto_drop'
 		});
 
 		expect(sendNotificationMock).toHaveBeenCalledTimes(2);
 		expect(updateMock).toHaveBeenCalledTimes(4);
-		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
+		expect(transactionMock).toHaveBeenCalledTimes(2);
+		expect(createAuditLogMock).toHaveBeenCalledTimes(2);
 	});
 
 	it('returns 500 when candidate lookup fails', async () => {
