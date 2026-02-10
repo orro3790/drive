@@ -434,6 +434,13 @@
 	"shift_complete_summary_started": "起始：{count} 個包裹",
 	"shift_complete_summary_returning": "退回：{count} 個包裹",
 	"shift_complete_summary_delivered": "已派送：{count} 個包裹",
+	"shift_complete_summary_excepted": "例外：{count} 個包裹",
+	"shift_exception_returned_label": "其中有幾個係例外退回？",
+	"shift_exception_returned_placeholder": "例如商戶已關門、假期",
+	"shift_exception_notes_label": "例外原因",
+	"shift_exception_notes_placeholder": "例如商戶因假期關門",
+	"shift_exception_notes_required": "請說明呢啲包裹點解係例外。",
+	"shift_exception_exceeds_returned": "例外數量唔可以超過退回總數。",
 
 	"shift_edit_button": "編輯",
 	"shift_edit_success": "班次已更新。",

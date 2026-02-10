@@ -55,17 +55,23 @@
 
 	// Shift complete state
 	let parcelsReturned = $state(0);
+	let exceptedReturns = $state(0);
+	let exceptionNotes = $state('');
 	let completeError = $state<string | null>(null);
 	let completeConfirmTarget = $state<{
 		assignmentId: string;
 		parcelsReturned: number;
 		parcelsDelivered: number;
+		exceptedReturns: number;
+		exceptionNotes: string;
 	} | null>(null);
 
 	// Shift edit state
 	let isEditing = $state(false);
 	let editParcelsStart = $state<number | ''>('');
 	let editParcelsReturned = $state<number | ''>(0);
+	let editExceptedReturns = $state<number | ''>(0);
+	let editExceptionNotes = $state('');
 	let editError = $state<string | null>(null);
 
 	// Edit countdown timer
@@ -319,6 +325,8 @@
 	function closeCompleteStep() {
 		completingStep = false;
 		parcelsReturned = 0;
+		exceptedReturns = 0;
+		exceptionNotes = '';
 		completeError = null;
 	}
 
@@ -329,7 +337,9 @@
 
 		const success = await dashboardStore.completeShift(
 			completeConfirmTarget.assignmentId,
-			completeConfirmTarget.parcelsReturned
+			completeConfirmTarget.parcelsReturned,
+			completeConfirmTarget.exceptedReturns,
+			completeConfirmTarget.exceptionNotes || undefined
 		);
 
 		if (success) {
@@ -364,6 +374,8 @@
 	// Complete
 	function openCompleteStep() {
 		parcelsReturned = 0;
+		exceptedReturns = 0;
+		exceptionNotes = '';
 		completeError = null;
 		completingStep = true;
 	}
@@ -384,11 +396,24 @@
 			return;
 		}
 
+		const exceptedValue = Math.max(0, Math.trunc(exceptedReturns));
+		if (exceptedValue > returnedValue) {
+			completeError = m.shift_exception_exceeds_returned();
+			return;
+		}
+
+		if (exceptedValue > 0 && !exceptionNotes.trim()) {
+			completeError = m.shift_exception_notes_required();
+			return;
+		}
+
 		const parcelsStartValue = shift.shift?.parcelsStart ?? 0;
 		completeConfirmTarget = {
 			assignmentId: shift.id,
 			parcelsReturned: returnedValue,
-			parcelsDelivered: Math.max(0, parcelsStartValue - returnedValue)
+			parcelsDelivered: Math.max(0, parcelsStartValue - returnedValue),
+			exceptedReturns: exceptedValue,
+			exceptionNotes: exceptionNotes.trim()
 		};
 	}
 
@@ -398,6 +423,8 @@
 		if (!shift) return;
 		editParcelsStart = shift.parcelsStart ?? '';
 		editParcelsReturned = shift.parcelsReturned ?? 0;
+		editExceptedReturns = shift.exceptedReturns ?? 0;
+		editExceptionNotes = shift.exceptionNotes ?? '';
 		editError = null;
 		isEditing = true;
 	}
@@ -413,13 +440,25 @@
 
 		const ps = editParcelsStart === '' ? undefined : editParcelsStart;
 		const pr = editParcelsReturned === '' ? undefined : (editParcelsReturned as number);
+		const er = editExceptedReturns === '' ? undefined : (editExceptedReturns as number);
+		const en = editExceptionNotes.trim() || undefined;
 
 		if (ps !== undefined && pr !== undefined && pr > ps) {
 			editError = m.shift_complete_returned_exceeds();
 			return;
 		}
 
-		const success = await dashboardStore.editShift(shift.id, ps, pr);
+		if (er !== undefined && pr !== undefined && er > pr) {
+			editError = m.shift_exception_exceeds_returned();
+			return;
+		}
+
+		if (er !== undefined && er > 0 && !en) {
+			editError = m.shift_exception_notes_required();
+			return;
+		}
+
+		const success = await dashboardStore.editShift(shift.id, ps, pr, er, en);
 		if (success) {
 			isEditing = false;
 			editError = null;
@@ -696,6 +735,47 @@
 												{/if}
 											</div>
 
+											{#if parcelsReturned > 0}
+												<div class="form-field">
+													<label for="excepted-returns"
+														>{m.shift_exception_returned_label()}</label
+													>
+													<InlineEditor
+														id="excepted-returns"
+														inputType="number"
+														inputmode="numeric"
+														mode="form"
+														min="0"
+														max={parcelsReturned}
+														placeholder={m.shift_exception_returned_placeholder()}
+														value={String(exceptedReturns)}
+														onInput={(v) => {
+															exceptedReturns = v === '' ? 0 : Number(v);
+															completeError = null;
+														}}
+													/>
+												</div>
+												{#if exceptedReturns > 0}
+													<div class="form-field">
+														<label for="exception-notes"
+															>{m.shift_exception_notes_label()}</label
+														>
+														<InlineEditor
+															id="exception-notes"
+															mode="form"
+															hasError={!!completeError &&
+																completeError === m.shift_exception_notes_required()}
+															placeholder={m.shift_exception_notes_placeholder()}
+															value={exceptionNotes}
+															onInput={(v) => {
+																exceptionNotes = v;
+																completeError = null;
+															}}
+														/>
+													</div>
+												{/if}
+											{/if}
+
 											<div class="delivery-summary">
 												<p>
 													{m.shift_complete_summary_started({
@@ -707,6 +787,13 @@
 														count: String(parcelsReturned)
 													})}
 												</p>
+												{#if exceptedReturns > 0}
+													<p>
+														{m.shift_complete_summary_excepted({
+															count: String(exceptedReturns)
+														})}
+													</p>
+												{/if}
 												<p class="summary-delivered">
 													{m.shift_complete_summary_delivered({
 														count: String(
@@ -780,6 +867,43 @@
 														}}
 													/>
 												</div>
+												<div class="form-field">
+													<label for="edit-excepted-returns"
+														>{m.shift_exception_returned_label()}</label
+													>
+													<InlineEditor
+														id="edit-excepted-returns"
+														inputType="number"
+														inputmode="numeric"
+														mode="form"
+														min="0"
+														max={typeof editParcelsReturned === 'number'
+															? editParcelsReturned
+															: 999}
+														value={editExceptedReturns === '' ? '' : String(editExceptedReturns)}
+														onInput={(v) => {
+															editExceptedReturns = v === '' ? '' : Number(v);
+															editError = null;
+														}}
+													/>
+												</div>
+												{#if (typeof editExceptedReturns === 'number' && editExceptedReturns > 0) || editExceptionNotes}
+													<div class="form-field">
+														<label for="edit-exception-notes"
+															>{m.shift_exception_notes_label()}</label
+														>
+														<InlineEditor
+															id="edit-exception-notes"
+															mode="form"
+															placeholder={m.shift_exception_notes_placeholder()}
+															value={editExceptionNotes}
+															onInput={(v) => {
+																editExceptionNotes = v;
+																editError = null;
+															}}
+														/>
+													</div>
+												{/if}
 												{#if editError}
 													<p class="field-error">{editError}</p>
 												{/if}
@@ -809,6 +933,13 @@
 														count: String(todayShift.shift?.parcelsReturned ?? 0)
 													})}
 												</p>
+												{#if todayShift.shift && todayShift.shift.exceptedReturns > 0}
+													<p>
+														{m.shift_complete_summary_excepted({
+															count: String(todayShift.shift.exceptedReturns)
+														})}
+													</p>
+												{/if}
 												<p class="summary-delivered">
 													{m.shift_complete_summary_delivered({
 														count: String(todayShift.shift?.parcelsDelivered ?? 0)
@@ -836,6 +967,13 @@
 													count: String(todayShift.shift?.parcelsReturned ?? 0)
 												})}
 											</p>
+											{#if todayShift.shift && todayShift.shift.exceptedReturns > 0}
+												<p>
+													{m.shift_complete_summary_excepted({
+														count: String(todayShift.shift.exceptedReturns)
+													})}
+												</p>
+											{/if}
 											<p class="summary-delivered">
 												{m.shift_complete_summary_delivered({
 													count: String(todayShift.shift?.parcelsDelivered ?? 0)

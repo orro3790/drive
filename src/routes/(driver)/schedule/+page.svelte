@@ -48,6 +48,8 @@
 	// Shift complete modal state
 	let completeTarget = $state<ScheduleAssignment | null>(null);
 	let parcelsReturned = $state<number | ''>(0);
+	let exceptedReturns = $state(0);
+	let exceptionNotes = $state('');
 	let completeError = $state<string | null>(null);
 	const lateCancelPenaltyPoints = Math.abs(dispatchPolicy.health.displayDeltas.lateCancel);
 
@@ -233,12 +235,16 @@
 	function openCompleteModal(assignment: ScheduleAssignment) {
 		completeTarget = assignment;
 		parcelsReturned = 0;
+		exceptedReturns = 0;
+		exceptionNotes = '';
 		completeError = null;
 	}
 
 	function closeCompleteModal() {
 		completeTarget = null;
 		parcelsReturned = 0;
+		exceptedReturns = 0;
+		exceptionNotes = '';
 		completeError = null;
 	}
 
@@ -250,7 +256,24 @@
 		}
 
 		const returnedValue = typeof parcelsReturned === 'number' ? parcelsReturned : 0;
-		const success = await scheduleStore.completeShift(completeTarget.id, returnedValue);
+		const exceptedValue = Math.max(0, Math.trunc(exceptedReturns));
+
+		if (exceptedValue > returnedValue) {
+			completeError = m.shift_exception_exceeds_returned();
+			return;
+		}
+
+		if (exceptedValue > 0 && !exceptionNotes.trim()) {
+			completeError = m.shift_exception_notes_required();
+			return;
+		}
+
+		const success = await scheduleStore.completeShift(
+			completeTarget.id,
+			returnedValue,
+			exceptedValue,
+			exceptionNotes.trim() || undefined
+		);
 		if (success) {
 			closeCompleteModal();
 		}
@@ -572,10 +595,44 @@
 						completeError = null;
 					}}
 				/>
-				{#if completeError}
-					<p class="field-error">{completeError}</p>
-				{/if}
 			</div>
+			{#if typeof parcelsReturned === 'number' && parcelsReturned > 0}
+				<div class="form-field">
+					<label for="excepted-returns">{m.shift_exception_returned_label()}</label>
+					<InlineEditor
+						id="excepted-returns"
+						inputType="number"
+						inputmode="numeric"
+						mode="form"
+						min="0"
+						max={typeof parcelsReturned === 'number' ? parcelsReturned : 999}
+						placeholder={m.shift_exception_returned_placeholder()}
+						value={String(exceptedReturns)}
+						onInput={(v) => {
+							exceptedReturns = v === '' ? 0 : Number(v);
+							completeError = null;
+						}}
+					/>
+				</div>
+				{#if exceptedReturns > 0}
+					<div class="form-field">
+						<label for="exception-notes">{m.shift_exception_notes_label()}</label>
+						<InlineEditor
+							id="exception-notes"
+							mode="form"
+							placeholder={m.shift_exception_notes_placeholder()}
+							value={exceptionNotes}
+							onInput={(v) => {
+								exceptionNotes = v;
+								completeError = null;
+							}}
+						/>
+					</div>
+				{/if}
+			{/if}
+			{#if completeError}
+				<p class="field-error">{completeError}</p>
+			{/if}
 
 			<div class="modal-actions">
 				<Button variant="secondary" onclick={closeCompleteModal} fill>
