@@ -19,7 +19,13 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 
 	const currentUser = locals.user;
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
 	const result = userProfileUpdateSchema.safeParse(body);
 
 	if (!result.success) {

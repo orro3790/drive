@@ -2,27 +2,28 @@
  * Admin Password Reset - Server Actions
  *
  * Allows managers to reset any user's password directly.
- * NOTE: This is a workaround until email-based password reset is enabled.
  */
 
 import { fail } from '@sveltejs/kit';
 import { eq, and } from 'drizzle-orm';
-import { scrypt, randomBytes } from 'crypto';
-import { promisify } from 'util';
+import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import * as authSchema from '$lib/server/db/auth-schema';
 import logger from '$lib/server/logger';
 import type { Actions } from './$types';
 
-const scryptAsync = promisify(scrypt);
+async function readAuthErrorMessage(response: Response): Promise<string | null> {
+	const payload = await response
+		.clone()
+		.json()
+		.catch(() => null);
 
-/**
- * Hash password using scrypt (matching Better Auth's default implementation)
- */
-async function hashPassword(password: string): Promise<string> {
-	const salt = randomBytes(16).toString('hex');
-	const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
-	return `${salt}:${derivedKey.toString('hex')}`;
+	if (!payload || typeof payload !== 'object') {
+		return null;
+	}
+
+	const message = (payload as { message?: unknown }).message;
+	return typeof message === 'string' ? message : null;
 }
 
 export const actions: Actions = {
@@ -81,17 +82,41 @@ export const actions: Actions = {
 				});
 			}
 
-			// Hash the new password
-			const hashedPassword = await hashPassword(newPassword);
+			const authResponse = await auth.api.setUserPassword({
+				headers: request.headers,
+				body: {
+					newPassword,
+					userId: targetUser.id
+				},
+				asResponse: true
+			});
 
-			// Update the password
-			await db
-				.update(authSchema.account)
-				.set({
-					password: hashedPassword,
-					updatedAt: new Date()
-				})
-				.where(eq(authSchema.account.id, credentialAccount.id));
+			if (!authResponse.ok) {
+				if (authResponse.status === 401 || authResponse.status === 403) {
+					return fail(403, { error: 'Access denied', email });
+				}
+
+				const authMessage = await readAuthErrorMessage(authResponse);
+				if (authMessage === 'PASSWORD_TOO_SHORT') {
+					return fail(400, { error: 'Password must be at least 8 characters', email });
+				}
+
+				if (authMessage === 'PASSWORD_TOO_LONG') {
+					return fail(400, { error: 'Password is too long', email });
+				}
+
+				logger.error(
+					{
+						targetEmail: email,
+						adminEmail: locals.user.email,
+						status: authResponse.status,
+						authMessage
+					},
+					'Admin password reset failed via Better Auth'
+				);
+
+				return fail(500, { error: 'Failed to reset password. Please try again.', email });
+			}
 
 			logger.info(
 				{ targetEmail: email, adminEmail: locals.user.email },

@@ -76,6 +76,7 @@ export const actorTypeEnum = pgEnum('actor_type', ['user', 'system']);
 export const signupOnboardingKindEnum = pgEnum('signup_onboarding_kind', ['approval', 'invite']);
 export const signupOnboardingStatusEnum = pgEnum('signup_onboarding_status', [
 	'pending',
+	'reserved',
 	'consumed',
 	'revoked'
 ]);
@@ -361,7 +362,10 @@ export const signupOnboarding = pgTable(
 		emailStatusIdx: index('idx_signup_onboarding_email_status').on(table.email, table.status),
 		expiresAtIdx: index('idx_signup_onboarding_expires_at').on(table.expiresAt),
 		tokenHashIdx: index('idx_signup_onboarding_token_hash').on(table.tokenHash),
-		tokenHashUnique: unique('uq_signup_onboarding_token_hash').on(table.tokenHash)
+		tokenHashUnique: unique('uq_signup_onboarding_token_hash').on(table.tokenHash),
+		pendingEmailKindUniqueIdx: uniqueIndex('uq_signup_onboarding_pending_email_kind')
+			.on(table.email, table.kind)
+			.where(sql`${table.status} = 'pending'`)
 	})
 );
 

@@ -323,6 +323,44 @@ describe('GET /api/cron/shift-reminders contract', () => {
 		);
 	});
 
+	it('stays idempotent when executed twice for the same day', async () => {
+		const todayAssignments: TodayAssignment[] = [
+			{
+				assignmentId: 'assignment-1',
+				userId: 'driver-1',
+				routeName: 'Route A',
+				warehouseName: 'Warehouse A'
+			}
+		];
+
+		selectWhereMock
+			.mockResolvedValueOnce(todayAssignments)
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce(todayAssignments)
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([{ dedupeKey: 'shift_reminder:assignment-1:driver-1:2026-02-09' }]);
+
+		const firstResponse = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);
+		const secondResponse = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);
+
+		expect(firstResponse.status).toBe(200);
+		expect(secondResponse.status).toBe(200);
+		await expect(firstResponse.json()).resolves.toMatchObject({
+			success: true,
+			sentCount: 1,
+			skippedDuplicates: 0,
+			errorCount: 0
+		});
+		await expect(secondResponse.json()).resolves.toMatchObject({
+			success: true,
+			sentCount: 0,
+			skippedDuplicates: 1,
+			errorCount: 0
+		});
+		expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+	});
+
 	it('returns 500 when assignment candidate query fails', async () => {
 		selectWhereMock.mockRejectedValueOnce(new Error('database unavailable'));
 

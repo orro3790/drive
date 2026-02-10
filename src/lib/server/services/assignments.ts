@@ -1,5 +1,5 @@
 import { parseISO } from 'date-fns';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { assignments, bids, bidWindows, routes, user } from '$lib/server/db/schema';
 import { createAuditLog } from '$lib/server/services/audit';
@@ -96,22 +96,24 @@ export async function manualAssignDriverToAssignment(params: {
 		return { ok: false, code: 'driver_over_weekly_cap' };
 	}
 
-	const [window] = await db
-		.select({ id: bidWindows.id })
-		.from(bidWindows)
-		.where(and(eq(bidWindows.assignmentId, assignment.id), eq(bidWindows.status, 'open')));
-
-	const pendingBids = window
-		? await db
-				.select({ id: bids.id, userId: bids.userId })
-				.from(bids)
-				.where(and(eq(bids.bidWindowId, window.id), eq(bids.status, 'pending')))
-		: [];
-
 	const assignedAt = new Date();
 
-	await db.transaction(async (tx) => {
-		await tx
+	const transactionResult = await db.transaction(async (tx) => {
+		const [window] = await tx
+			.select({ id: bidWindows.id })
+			.from(bidWindows)
+			.where(and(eq(bidWindows.assignmentId, assignment.id), eq(bidWindows.status, 'open')))
+			.orderBy(desc(bidWindows.opensAt), desc(bidWindows.id))
+			.limit(1);
+
+		const pendingBids = window
+			? await tx
+					.select({ id: bids.id, userId: bids.userId })
+					.from(bids)
+					.where(and(eq(bids.bidWindowId, window.id), eq(bids.status, 'pending')))
+			: [];
+
+		const [updatedAssignment] = await tx
 			.update(assignments)
 			.set({
 				userId: driver.id,
@@ -120,26 +122,40 @@ export async function manualAssignDriverToAssignment(params: {
 				assignedAt,
 				updatedAt: assignedAt
 			})
-			.where(eq(assignments.id, assignment.id));
+			.where(and(eq(assignments.id, assignment.id), eq(assignments.status, 'unfilled')))
+			.returning({ id: assignments.id });
+
+		if (!updatedAssignment) {
+			return { outcome: 'assignment_not_assignable' as const };
+		}
+
+		let resolvedBidWindowId: string | null = null;
+		let windowPendingBids: Array<{ id: string; userId: string }> = [];
 
 		if (window) {
-			await tx
+			const [updatedWindow] = await tx
 				.update(bidWindows)
 				.set({
 					status: 'resolved',
 					winnerId: null
 				})
-				.where(eq(bidWindows.id, window.id));
-		}
+				.where(and(eq(bidWindows.id, window.id), eq(bidWindows.status, 'open')))
+				.returning({ id: bidWindows.id });
 
-		if (window && pendingBids.length > 0) {
-			await tx
-				.update(bids)
-				.set({
-					status: 'lost',
-					resolvedAt: assignedAt
-				})
-				.where(and(eq(bids.bidWindowId, window.id), eq(bids.status, 'pending')));
+			if (updatedWindow) {
+				resolvedBidWindowId = updatedWindow.id;
+				windowPendingBids = pendingBids;
+
+				if (pendingBids.length > 0) {
+					await tx
+						.update(bids)
+						.set({
+							status: 'lost',
+							resolvedAt: assignedAt
+						})
+						.where(and(eq(bids.bidWindowId, window.id), eq(bids.status, 'pending')));
+				}
+			}
 		}
 
 		await createAuditLog(
@@ -160,20 +176,30 @@ export async function manualAssignDriverToAssignment(params: {
 						assignedBy: 'manager',
 						assignedAt
 					},
-					bidWindowId: window?.id ?? null
+					bidWindowId: resolvedBidWindowId
 				}
 			},
 			tx
 		);
+
+		return {
+			outcome: 'ok' as const,
+			bidWindowId: resolvedBidWindowId,
+			pendingBids: windowPendingBids
+		};
 	});
+
+	if (transactionResult.outcome !== 'ok') {
+		return { ok: false, code: 'assignment_not_assignable' };
+	}
 
 	const notificationData: Record<string, string> = {
 		assignmentId: assignment.id,
 		routeName: assignment.routeName,
 		assignmentDate: assignment.date
 	};
-	if (window?.id) {
-		notificationData.bidWindowId = window.id;
+	if (transactionResult.bidWindowId) {
+		notificationData.bidWindowId = transactionResult.bidWindowId;
 	}
 
 	await sendNotification(driver.id, 'assignment_confirmed', {
@@ -181,7 +207,9 @@ export async function manualAssignDriverToAssignment(params: {
 		data: notificationData
 	});
 
-	const loserIds = pendingBids.filter((bid) => bid.userId !== driver.id).map((bid) => bid.userId);
+	const loserIds = transactionResult.pendingBids
+		.filter((bid) => bid.userId !== driver.id)
+		.map((bid) => bid.userId);
 	if (loserIds.length > 0) {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
 			customBody: `${assignment.routeName} for ${assignment.date} was assigned by a manager.`,
@@ -197,6 +225,6 @@ export async function manualAssignDriverToAssignment(params: {
 		assignmentDate: assignment.date,
 		driverId: driver.id,
 		driverName: driver.name,
-		bidWindowId: window?.id ?? null
+		bidWindowId: transactionResult.bidWindowId
 	};
 }

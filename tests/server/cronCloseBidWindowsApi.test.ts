@@ -185,4 +185,42 @@ describe('LC-05 cron decision logic: GET /api/cron/close-bid-windows', () => {
 		expect(updateSetMock).toHaveBeenCalledWith({ status: 'closed' });
 		expect(updateWhereMock).toHaveBeenCalledTimes(1);
 	});
+
+	it('stays idempotent when rerun after closing a no-bids window', async () => {
+		getExpiredBidWindowsMock
+			.mockResolvedValueOnce([{ id: 'window-closed', mode: 'instant' }])
+			.mockResolvedValueOnce([]);
+
+		resolveBidWindowMock.mockResolvedValue({
+			resolved: false,
+			transitioned: false,
+			reason: 'no_bids'
+		});
+
+		const firstResponse = await GET(createAuthorizedCronEvent() as Parameters<typeof GET>[0]);
+		const secondResponse = await GET(createAuthorizedCronEvent() as Parameters<typeof GET>[0]);
+
+		expect(firstResponse.status).toBe(200);
+		expect(secondResponse.status).toBe(200);
+		await expect(firstResponse.json()).resolves.toEqual({
+			success: true,
+			processed: 1,
+			resolved: 0,
+			transitioned: 0,
+			closed: 1,
+			errors: 0
+		});
+		await expect(secondResponse.json()).resolves.toEqual({
+			success: true,
+			processed: 0,
+			resolved: 0,
+			transitioned: 0,
+			closed: 0,
+			errors: 0
+		});
+
+		expect(resolveBidWindowMock).toHaveBeenCalledTimes(1);
+		expect(dbUpdateMock).toHaveBeenCalledTimes(1);
+		expect(updateWhereMock).toHaveBeenCalledTimes(1);
+	});
 });

@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { assignmentManualAssignSchema } from '$lib/schemas/assignment';
+import { assignmentIdParamsSchema, assignmentManualAssignSchema } from '$lib/schemas/assignment';
 import { manualAssignDriverToAssignment } from '$lib/server/services/assignments';
 import {
 	broadcastAssignmentUpdated,
@@ -16,14 +16,25 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	const body = await request.json();
+	const paramsResult = assignmentIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid assignment ID');
+	}
+
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
 	const parsed = assignmentManualAssignSchema.safeParse(body);
 	if (!parsed.success) {
 		throw error(400, 'Validation failed');
 	}
 
 	const result = await manualAssignDriverToAssignment({
-		assignmentId: params.id,
+		assignmentId: paramsResult.data.id,
 		driverId: parsed.data.userId,
 		actorId: locals.user.id
 	});

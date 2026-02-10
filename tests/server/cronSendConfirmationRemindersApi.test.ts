@@ -307,4 +307,51 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 			})
 		);
 	});
+
+	it('remains idempotent when the cron handler runs twice for the same cycle', async () => {
+		freezeTime('2026-03-02T12:00:00.000Z');
+
+		whereMock
+			.mockResolvedValueOnce([
+				{
+					assignmentId: 'assignment-1',
+					userId: 'driver-1',
+					date: '2026-03-05',
+					routeName: 'Route A'
+				}
+			])
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([
+				{
+					assignmentId: 'assignment-1',
+					userId: 'driver-1',
+					date: '2026-03-05',
+					routeName: 'Route A'
+				}
+			])
+			.mockResolvedValueOnce([
+				{ dedupeKey: 'confirmation_reminder:assignment-1:driver-1:2026-03-05' }
+			]);
+
+		sendNotificationMock.mockResolvedValue(undefined);
+
+		const firstResponse = await GET(createAuthorizedCronEvent() as Parameters<typeof GET>[0]);
+		const secondResponse = await GET(createAuthorizedCronEvent() as Parameters<typeof GET>[0]);
+
+		expect(firstResponse.status).toBe(200);
+		expect(secondResponse.status).toBe(200);
+		await expect(firstResponse.json()).resolves.toMatchObject({
+			success: true,
+			sent: 1,
+			skippedDuplicates: 0,
+			errors: 0
+		});
+		await expect(secondResponse.json()).resolves.toMatchObject({
+			success: true,
+			sent: 0,
+			skippedDuplicates: 1,
+			errors: 0
+		});
+		expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+	});
 });

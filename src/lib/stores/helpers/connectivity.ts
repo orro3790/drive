@@ -1,7 +1,7 @@
 import * as m from '$lib/paraglide/messages.js';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 
-export function isOffline(): boolean {
+function isOffline(): boolean {
 	return typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 

@@ -182,6 +182,20 @@ describe('LC-05 cron service: detectNoShows', () => {
 		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
 	});
 
+	it('honors the Toronto 9 AM cutoff on DST fall-back day', async () => {
+		freezeTime('2026-11-01T13:59:59.000Z');
+
+		const beforeCutoff = await detectNoShows();
+		expect(beforeCutoff.skippedBeforeDeadline).toBe(true);
+
+		freezeTime('2026-11-01T14:00:00.000Z');
+		candidates.push(createCandidate({ assignmentDate: '2026-11-01' }));
+
+		const atCutoff = await detectNoShows();
+		expect(atCutoff.skippedBeforeDeadline).toBe(false);
+		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
+	});
+
 	it('remains idempotent when an open bid window already exists', async () => {
 		freezeTime('2026-02-10T14:05:00.000Z');
 		candidates.push(createCandidate({ existingWindowId: 'existing-window-1' }));

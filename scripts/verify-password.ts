@@ -46,7 +46,7 @@ async function verifyPassword(password: string, hash: string): Promise<boolean> 
 
 async function main() {
 	const EMAIL = 'justin.myddp@proton.me';
-	const PASSWORD = 'jeF4g9mrCd1hPsDn!';
+	const PASSWORD = 'test1234';
 
 	// Find user
 	const [targetUser] = await db.select().from(user).where(eq(user.email, EMAIL)).limit(1);
