@@ -48,7 +48,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			date: assignments.date,
 			status: assignments.status,
 			confirmedAt: assignments.confirmedAt,
-			routeName: routes.name
+			routeName: routes.name,
+			routeStartTime: routes.startTime
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
@@ -95,7 +96,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			confirmedAt: assignment.confirmedAt,
 			shiftArrivedAt: shift.arrivedAt,
 			parcelsStart: shift.parcelsStart,
-			shiftCompletedAt: shift.completedAt
+			shiftCompletedAt: shift.completedAt,
+			routeStartTime: assignment.routeStartTime
 		},
 		lifecycleContext
 	);
@@ -201,7 +203,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		action: 'complete',
 		actorType: 'user',
 		actorId: locals.user.id,
-		changes: { parcelsDelivered, parcelsReturned, assignmentId }
+		changes: { parcelsDelivered, parcelsReturned, exceptedReturns, exceptionNotes, assignmentId }
 	});
 
 	await Promise.all([

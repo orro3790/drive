@@ -142,7 +142,7 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	},
 	return_exception: {
 		title: 'Return Exception Filed',
-		body: 'A driver filed return exceptions on a completed shift.'
+		body: 'A driver filed return exceptions on A route.'
 	}
 };
 

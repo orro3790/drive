@@ -56,7 +56,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 			shiftStartedAt: shifts.startedAt,
 			shiftCompletedAt: shifts.completedAt,
 			shiftArrivedAt: shifts.arrivedAt,
-			shiftEditableUntil: shifts.editableUntil
+			shiftEditableUntil: shifts.editableUntil,
+			shiftExceptedReturns: shifts.exceptedReturns,
+			shiftExceptionNotes: shifts.exceptionNotes
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
@@ -110,7 +112,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 						parcelsReturned: assignment.parcelsReturned,
 						startedAt: assignment.shiftStartedAt,
 						completedAt: assignment.shiftCompletedAt,
-						editableUntil: assignment.shiftEditableUntil
+						editableUntil: assignment.shiftEditableUntil,
+						exceptedReturns: assignment.shiftExceptedReturns,
+						exceptionNotes: assignment.shiftExceptionNotes
 					}
 				: null
 		};
