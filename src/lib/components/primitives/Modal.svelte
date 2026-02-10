@@ -20,6 +20,7 @@
 	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
 	import { portal } from '$lib/actions/portal';
+	import { setupDialogFocusTrap } from './dialogFocus';
 	import IconButton from './IconButton.svelte';
 	import Icon from './Icon.svelte';
 	import XIcon from '$lib/components/icons/XIcon.svelte';
@@ -53,18 +54,14 @@
 	}>();
 
 	let isBackdropPointerDown = false;
+	let dialogElement: HTMLDivElement | null = null;
 
-	// Escape key handling
 	onMount(() => {
-		if (!closeOnEscape) return;
+		if (!dialogElement) {
+			return;
+		}
 
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') {
-				onClose();
-			}
-		};
-		document.addEventListener('keydown', handleKeyDown);
-		return () => document.removeEventListener('keydown', handleKeyDown);
+		return setupDialogFocusTrap(dialogElement, onClose, { closeOnEscape });
 	});
 
 	function handleBackdropPointerDown(e: PointerEvent) {
@@ -82,21 +79,26 @@
 <div
 	class="modal-backdrop"
 	use:portal
-	role="dialog"
-	aria-modal="true"
-	aria-labelledby="modal-title"
-	tabindex="-1"
+	role="presentation"
 	onpointerdown={handleBackdropPointerDown}
 	onpointerup={handleBackdropPointerUp}
 	onpointercancel={() => (isBackdropPointerDown = false)}
-	onkeydown={(e) => closeOnEscape && e.key === 'Escape' && onClose()}
 >
-	<div class="modal-container" style="max-width: {maxWidth}">
+	<div
+		class="modal-container"
+		style="max-width: {maxWidth}"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="modal-title"
+		aria-describedby={description ? 'modal-description' : undefined}
+		tabindex="-1"
+		bind:this={dialogElement}
+	>
 		<header class="modal-header">
 			<div class="header-text">
 				<h2 id="modal-title">{title}</h2>
 				{#if description}
-					<p class="modal-description">{description}</p>
+					<p id="modal-description" class="modal-description">{description}</p>
 				{/if}
 			</div>
 			<div class="header-actions">

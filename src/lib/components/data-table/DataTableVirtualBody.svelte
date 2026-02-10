@@ -286,7 +286,6 @@ Priority: cellComponents > cells > columnDef.cell > default rendering
 			onclick={(e) => isRowClickable && handleRowClick(rowData, e)}
 			onkeydown={(e) => isRowClickable && handleRowKeyDown(rowData, e)}
 			tabindex={isRowClickable ? 0 : undefined}
-			role={isRowClickable ? 'button' : undefined}
 		>
 			{#if selectionEnabled}
 				<td class="col-select">

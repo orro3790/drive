@@ -157,27 +157,16 @@ Shows unique values with counts, auto-computed from table data.
 	{#if uniqueValues.length === 0}
 		<div class="empty-state">{m.table_filter_dropdown_no_values()}</div>
 	{:else}
-		<div class="filter-options" role="listbox" aria-multiselectable="true">
+		<div class="filter-options" role="group" aria-label={label()}>
 			{#each uniqueValues as [value, count] (`${column.id}-${value}`)}
 				{@const selected = isSelected(value)}
 				{@const displayValue = String(value)}
-				<button
-					type="button"
-					class="filter-option"
-					role="option"
-					aria-selected={selected}
-					onclick={() => toggleValue(value)}
-				>
-					<Checkbox
-						checked={selected}
-						onclick={(event) => {
-							event.stopPropagation();
-							toggleValue(value);
-						}}
-					/>
-					<span class="option-label">{displayValue}</span>
-					<span class="option-count">{count}</span>
-				</button>
+				<div class="filter-option">
+					<Checkbox checked={selected} ariaLabel={displayValue} onclick={() => toggleValue(value)}>
+						<span class="option-label">{displayValue}</span>
+						<span class="option-count">{count}</span>
+					</Checkbox>
+				</div>
 			{/each}
 		</div>
 	{/if}
@@ -217,22 +206,23 @@ Shows unique values with counts, auto-computed from table data.
 	}
 
 	.filter-option {
+		border-radius: var(--radius-sm);
+	}
+
+	.filter-option :global(.checkbox-container) {
 		display: flex;
 		align-items: center;
+		justify-content: flex-start;
 		gap: var(--spacing-2);
+		width: 100%;
 		padding: var(--spacing-2);
-		background: transparent;
-		border: none;
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		text-align: left;
+		border-radius: inherit;
 	}
 
-	.filter-option:hover {
+	.filter-option :global(.checkbox-container:hover),
+	.filter-option :global(.checkbox-container:focus-within) {
 		background: var(--interactive-hover);
 	}
-
-	/* Removed .selected background style */
 
 	.option-label {
 		flex: 1;
@@ -244,6 +234,7 @@ Shows unique values with counts, auto-computed from table data.
 	}
 
 	.option-count {
+		margin-left: auto;
 		font-size: var(--font-size-sm);
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;

@@ -199,6 +199,16 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 		return sortItem.desc ? 'desc' : 'asc';
 	}
 
+	function getAriaSort(
+		sortDirection: 'asc' | 'desc' | false,
+		canSort: boolean
+	): 'ascending' | 'descending' | 'none' | undefined {
+		if (!canSort) return undefined;
+		if (sortDirection === 'asc') return 'ascending';
+		if (sortDirection === 'desc') return 'descending';
+		return 'none';
+	}
+
 	/**
 	 * Handle sort click with 3-state cycle: none → asc → desc → none
 	 */
@@ -380,6 +390,7 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 				}}
 				<th
 					class="data-table-th"
+					aria-sort={getAriaSort(sortDir, canSort)}
 					class:sortable={canSort}
 					class:sorted={sortDir !== false}
 					class:sticky-left={meta.stickyLeft || pinnedPosition === 'left'}

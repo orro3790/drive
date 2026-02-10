@@ -21,6 +21,7 @@
 	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
 	import { portal } from '$lib/actions/portal';
+	import { setupDialogFocusTrap } from './dialogFocus';
 	import IconButton from './IconButton.svelte';
 	import Icon from './Icon.svelte';
 	import XIcon from '$lib/components/icons/XIcon.svelte';
@@ -54,18 +55,14 @@
 	}>();
 
 	let isBackdropPointerDown = false;
+	let drawerElement: HTMLDivElement | null = null;
 
-	// Escape key handling
 	onMount(() => {
-		if (!closeOnEscape) return;
+		if (!drawerElement) {
+			return;
+		}
 
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') {
-				onClose();
-			}
-		};
-		document.addEventListener('keydown', handleKeyDown);
-		return () => document.removeEventListener('keydown', handleKeyDown);
+		return setupDialogFocusTrap(drawerElement, onClose, { closeOnEscape });
 	});
 
 	function handleBackdropPointerDown(e: PointerEvent) {
@@ -83,21 +80,26 @@
 <div
 	class="drawer-backdrop"
 	use:portal
-	role="dialog"
-	aria-modal="true"
-	aria-labelledby="drawer-title"
-	tabindex="-1"
+	role="presentation"
 	onpointerdown={handleBackdropPointerDown}
 	onpointerup={handleBackdropPointerUp}
 	onpointercancel={() => (isBackdropPointerDown = false)}
-	onkeydown={(e) => closeOnEscape && e.key === 'Escape' && onClose()}
 >
-	<div class="drawer-container" style="width: {width}">
+	<div
+		class="drawer-container"
+		style="width: {width}"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="drawer-title"
+		aria-describedby={description ? 'drawer-description' : undefined}
+		tabindex="-1"
+		bind:this={drawerElement}
+	>
 		<header class="drawer-header">
 			<div class="header-text">
 				<h2 id="drawer-title">{title}</h2>
 				{#if description}
-					<p class="drawer-description">{description}</p>
+					<p id="drawer-description" class="drawer-description">{description}</p>
 				{/if}
 			</div>
 			<div class="header-actions">
