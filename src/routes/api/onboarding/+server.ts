@@ -32,7 +32,11 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	const body = await request.json();
+	const body = await request.json().catch(() => null);
+	if (body === null) {
+		return json({ error: 'invalid_json' }, { status: 400 });
+	}
+
 	const parsed = onboardingCreateSchema.safeParse(body);
 	if (!parsed.success) {
 		throw error(400, 'Validation failed');
