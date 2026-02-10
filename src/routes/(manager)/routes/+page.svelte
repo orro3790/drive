@@ -61,8 +61,9 @@
 
 	// Form state
 	let formName = $state('');
+	let formStartTime = $state('09:00');
 	let formWarehouseId = $state('');
-	let formErrors = $state<{ name?: string[]; warehouseId?: string[] }>({});
+	let formErrors = $state<{ name?: string[]; warehouseId?: string[]; startTime?: string[] }>({});
 	let showRouteAssignModal = $state(false);
 	let routeAssignTarget = $state<RouteWithWarehouse | null>(null);
 	let routeAssignDriverId = $state('');
@@ -247,6 +248,7 @@
 		if (selectedRouteId === route.id) return;
 		selectedRouteId = route.id;
 		formName = route.name;
+		formStartTime = route.startTime;
 		formWarehouseId = route.warehouseId;
 		formErrors = {};
 		isEditing = false;
@@ -264,6 +266,7 @@
 
 	function openCreateModal() {
 		formName = '';
+		formStartTime = '09:00';
 		formWarehouseId = '';
 		formErrors = {};
 		showCreateModal = true;
@@ -274,6 +277,7 @@
 			selectedRouteId = route.id;
 		}
 		formName = route.name;
+		formStartTime = route.startTime;
 		formWarehouseId = route.warehouseId;
 		formErrors = {};
 		isEditing = true;
@@ -282,6 +286,7 @@
 	function cancelEditing() {
 		if (selectedRoute) {
 			formName = selectedRoute.name;
+			formStartTime = selectedRoute.startTime;
 			formWarehouseId = selectedRoute.warehouseId;
 		}
 		formErrors = {};
@@ -305,6 +310,7 @@
 	function handleCreate() {
 		const result = routeCreateSchema.safeParse({
 			name: formName,
+			startTime: formStartTime,
 			warehouseId: formWarehouseId
 		});
 		if (!result.success) {
@@ -324,6 +330,7 @@
 
 		const result = routeUpdateSchema.safeParse({
 			name: formName,
+			startTime: formStartTime,
 			warehouseId: formWarehouseId
 		});
 		if (!result.success) {
@@ -385,7 +392,9 @@
 	);
 	const hasChanges = $derived(
 		!!selectedRoute &&
-			(formName !== selectedRoute.name || formWarehouseId !== selectedRoute.warehouseId)
+			(formName !== selectedRoute.name ||
+				formStartTime !== selectedRoute.startTime ||
+				formWarehouseId !== selectedRoute.warehouseId)
 	);
 
 	// Tab switching logic
@@ -703,6 +712,10 @@
 			<dd>{route.warehouseName}</dd>
 		</div>
 		<div class="detail-row">
+			<dt>{m.route_start_time_label()}</dt>
+			<dd>{route.startTime}</dd>
+		</div>
+		<div class="detail-row">
 			<dt>{m.manager_dashboard_detail_date()}</dt>
 			<dd>{formatDate(dateFilter)}</dd>
 		</div>
@@ -781,6 +794,20 @@
 		/>
 		{#if formErrors.name}
 			<p class="field-error">{formErrors.name[0]}</p>
+		{/if}
+	</div>
+
+	<div class="form-field">
+		<label for="route-edit-start-time">{m.route_start_time_label()}</label>
+		<InlineEditor
+			id="route-edit-start-time"
+			value={formStartTime}
+			onInput={(v) => (formStartTime = v)}
+			placeholder={m.route_start_time_placeholder()}
+			required
+		/>
+		{#if formErrors.startTime}
+			<p class="field-error">{formErrors.startTime[0]}</p>
 		{/if}
 	</div>
 
@@ -1130,6 +1157,20 @@
 				/>
 				{#if formErrors.name}
 					<p class="field-error">{formErrors.name[0]}</p>
+				{/if}
+			</div>
+
+			<div class="form-field">
+				<label for="create-start-time">{m.route_start_time_label()}</label>
+				<InlineEditor
+					id="create-start-time"
+					value={formStartTime}
+					onInput={(v) => (formStartTime = v)}
+					placeholder={m.route_start_time_placeholder()}
+					required
+				/>
+				{#if formErrors.startTime}
+					<p class="field-error">{formErrors.startTime[0]}</p>
 				{/if}
 			</div>
 
