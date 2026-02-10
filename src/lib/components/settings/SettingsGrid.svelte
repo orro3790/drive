@@ -22,8 +22,4 @@ SettingsGrid - Container for settings rows with consistent spacing.
 		grid-template-columns: 1fr;
 		gap: 0;
 	}
-
-	.settings-grid :global(.setting-row:last-of-type) {
-		border-bottom: none;
-	}
 </style>

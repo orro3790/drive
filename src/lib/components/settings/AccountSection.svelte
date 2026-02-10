@@ -417,6 +417,10 @@ Displays and updates user's account info, password, and preferences.
 						{/snippet}
 					</SettingsRow>
 
+					{#if user.role === 'driver'}
+						<DriverPreferencesSection />
+					{/if}
+
 					<SettingsRow>
 						{#snippet label()}
 							<div class="title">{m.settings_theme_label()}</div>
@@ -640,10 +644,6 @@ Displays and updates user's account info, password, and preferences.
 				</div>
 			</form>
 		</div>
-
-		{#if user.role === 'driver'}
-			<DriverPreferencesSection />
-		{/if}
 	{:else}
 		<div class="settings-card">
 			<p class="not-signed-in">{m.settings_not_signed_in()}</p>

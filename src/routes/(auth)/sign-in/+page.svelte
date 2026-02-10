@@ -59,7 +59,6 @@
 <div class="auth-card">
 	<header class="auth-header">
 		<h2>{m.auth_sign_in_title()}</h2>
-		<p class="subtitle">{m.auth_sign_in_subtitle()}</p>
 	</header>
 
 	{#if errorMessage}
@@ -179,12 +178,6 @@
 		font-weight: var(--font-weight-medium);
 		letter-spacing: -0.01em;
 		color: var(--text-normal);
-	}
-
-	.subtitle {
-		margin: var(--spacing-2) 0 0;
-		color: var(--text-muted);
-		font-size: var(--font-size-sm);
 	}
 
 	.auth-form {
