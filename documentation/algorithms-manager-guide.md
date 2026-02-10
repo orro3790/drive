@@ -30,12 +30,12 @@ For manager-facing signup approvals and invite operations, see `documentation/ma
 
 ## Algorithm catalog (manager view)
 
-| Algorithm                    | Status                | What it decides                           | Main goal                                                    | Manager control                            |
-| ---------------------------- | --------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------------------------------------------ |
-| Assignment planning          | Live                  | Who gets pre-scheduled routes             | Keep routes covered with reliable matches                    | Can override assignments manually          |
-| Open shift auction           | Live                  | Which bidder wins an open shift           | Fill gaps with strongest available driver                    | Can bypass algorithm and assign directly   |
-| Emergency recovery           | Live                  | Who gets day-of urgent routes             | Restore coverage fast to avoid service failure               | Can trigger emergency route manually       |
-| Driver health and incentives | Designed (next phase) | Reliability/quality score and progression | Incentivize dependable behavior and improve coverage quality | Managers retain unflag/reinstate authority |
+| Algorithm                    | Status                            | What it decides                           | Main goal                                                    | Manager control                            |
+| ---------------------------- | --------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------------------------------------------ |
+| Assignment planning          | Live                              | Who gets pre-scheduled routes             | Keep routes covered with reliable matches                    | Can override assignments manually          |
+| Open shift auction           | Live                              | Which bidder wins an open shift           | Fill gaps with strongest available driver                    | Can bypass algorithm and assign directly   |
+| Emergency recovery           | Live                              | Who gets day-of urgent routes             | Restore coverage fast to avoid service failure               | Can trigger emergency route manually       |
+| Driver health and incentives | Live (simulation-only incentives) | Reliability/quality score and progression | Incentivize dependable behavior and improve coverage quality | Managers retain unflag/reinstate authority |
 
 ---
 
@@ -56,7 +56,7 @@ This keeps the concept understandable while preserving internal bidding logic.
 
 Instead of giving most dashboard space to raw stats only, drivers will see:
 
-1. A **Health Score** (0-100).
+1. A **Health Score** (additive points).
 2. A **4-star streak tracker** (weekly progression).
 3. A clear explanation of what helped or hurt the score.
 4. A visible next milestone and incentive target.
@@ -105,15 +105,15 @@ When multiple drivers bid for the same open shift, score components are:
 
 Rationale: delivery quality first, then route experience, then reliability, then preference fit.
 
-### B) Driver Health score (next phase, manager-facing summary)
+### B) Driver Health score (live additive model)
 
-Initial model is reliability-first, with hard-stop overrides:
+Current model is additive event points with hard-stop overrides:
 
-- **Attendance component: 50 points**
-- **Completion component: 30 points**
-- **Consistency/reliability component: 20 points**
+- Positive events add points (confirm on time, arrive on time, completed shift, high delivery, bid pickups).
+- Negative events subtract points (`auto_drop=-12`, `late_cancel=-48`).
+- Score accumulates since the last reset marker.
 
-Hard-stop events (no-show, or late-cancel threshold breach) cap the score below healthy range for that period.
+Hard-stop events (no-show, or late-cancel threshold breach) cap score at 49 for that period.
 
 Additional guardrail:
 

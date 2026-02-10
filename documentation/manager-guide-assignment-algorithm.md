@@ -175,7 +175,7 @@ If a driver doesn't confirm by 48 hours before:
 
 ## 4. Driver Health & Reputation
 
-Every driver has a **health score** (0-100) and a **star rating** (0-4). These are visible to the driver and affect their bidding competitiveness.
+Every driver has a **health score** (additive points) and a **star rating** (0-4). These are visible to the driver and affect their bidding competitiveness.
 
 ### How Points Are Earned and Lost
 

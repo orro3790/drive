@@ -83,6 +83,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	// Check for late cancellation using lifecycle contract boundaries
 	const isLateCancellation = existing.confirmedAt !== null && lifecycle.isLateCancel;
+	const cancelledAt = new Date();
 
 	// Cancel the assignment
 	const [updated] = await db
@@ -90,7 +91,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		.set({
 			status: 'cancelled',
 			cancelType: isLateCancellation ? 'late' : 'driver',
-			updatedAt: new Date()
+			cancelledAt,
+			updatedAt: cancelledAt
 		})
 		.where(and(eq(assignments.id, id), eq(assignments.userId, locals.user.id)))
 		.returning({

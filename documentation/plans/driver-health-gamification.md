@@ -23,7 +23,7 @@ Gap: there is no driver-facing aggregate health score + progression UX + streak/
 1. **Primary objective**: behavior incentive.
 2. **V1 scope**: UI + simulation only (no automated pay/cap changes yet).
 3. **Shift pickup terminology**: `Open Shifts` + `Place Bid`.
-4. **Score UX**: 0-100 score + 0-4 stars.
+4. **Score UX**: additive score + 0-4 stars (Tier II threshold marker at 96).
 5. **State source of truth**: server-side persisted snapshots/state.
 6. **Demotion**: immediate reset to 0 stars on hard-stop event.
 7. **Hard-stop weekly score behavior**: cap score to 49 for impacted period.
@@ -43,7 +43,7 @@ Gap: there is no driver-facing aggregate health score + progression UX + streak/
 ### In Scope (V1)
 
 1. Driver-facing Health card replaces current high-emphasis raw-metrics block.
-2. 0-100 health score with threshold marker and explanatory breakdown.
+2. Additive health score with threshold marker and explanatory breakdown.
 3. 0-4 star weekly streak system with immediate hard-stop reset behavior.
 4. Simulation-only incentive preview (4 stars => +10% bonus, higher shift access preview).
 5. Daily/weekly health evaluation pipeline using server-side persisted state.
@@ -58,16 +58,24 @@ Gap: there is no driver-facing aggregate health score + progression UX + streak/
 
 ## Proposed Health Model
 
-### 1) Daily Score (0-100)
+### 1) Daily Score (Additive Points)
 
-Use reliability-first weighting with hard-stop caps:
+Current implementation uses additive event points with hard-stop caps:
 
 ```txt
-base_score = attendance_component (50)
-           + completion_component (30)
-           + reliability_component (20)
+score = sum(event_point_contributions_since_last_reset)
 
-hard-stop cap: if no-show OR late-cancel threshold breach -> score = min(base_score, 49)
+event points:
+  confirm on time +1
+  arrive on time +2
+  complete shift +2
+  high delivery (95%+) +1
+  bid pickup +2
+  urgent pickup +4
+  auto-drop -12
+  late cancellation -48
+
+hard-stop cap: if no-show OR late-cancel threshold breach -> score = min(score, 49)
 ```
 
 Policy overlays:
@@ -178,7 +186,7 @@ Add/extend driver notifications for:
 
 ## Acceptance Criteria (V1)
 
-1. Driver dashboard shows a health score (0-100) and star progression (0-4).
+1. Driver dashboard shows a health score and star progression (0-4).
 2. Hard-stop events cap score to <=49 and reset stars to 0.
 3. Weekly qualification uses strict criteria exactly as defined.
 4. Weeks with zero assignments are neutral.
