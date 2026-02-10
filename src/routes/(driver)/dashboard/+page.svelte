@@ -885,20 +885,22 @@
 									<div class="assignment-content">
 										<div class="assignment-header">
 											<span class="assignment-date">{formatAssignmentDate(shift.date)}</span>
-											<IconButton
-												tooltip={m.dashboard_confirm_button()}
-												disabled={dashboardStore.isConfirming || dashboardStore.isCancelling}
-												onclick={() => dashboardStore.confirmShift(shift.id)}
-											>
-												<IconBase size="small"><CheckCircleIcon /></IconBase>
-											</IconButton>
-											<IconButton
-												tooltip={m.common_cancel()}
-												disabled={dashboardStore.isConfirming || dashboardStore.isCancelling}
-												onclick={() => openCancelModal({ id: shift.id, isLateCancel: false })}
-											>
-												<IconBase size="small"><CalendarX /></IconBase>
-											</IconButton>
+											<div class="assignment-actions">
+												<IconButton
+													tooltip={m.dashboard_confirm_button()}
+													disabled={dashboardStore.isConfirming || dashboardStore.isCancelling}
+													onclick={() => dashboardStore.confirmShift(shift.id)}
+												>
+													<IconBase size="small"><CheckCircleIcon /></IconBase>
+												</IconButton>
+												<IconButton
+													tooltip={m.common_cancel()}
+													disabled={dashboardStore.isConfirming || dashboardStore.isCancelling}
+													onclick={() => openCancelModal({ id: shift.id, isLateCancel: false })}
+												>
+													<IconBase size="small"><CalendarX /></IconBase>
+												</IconButton>
+											</div>
 										</div>
 										<span class={confirmInfo.overdue ? 'header-overdue' : 'header-confirm-by'}>
 											{confirmInfo.text}
@@ -1273,6 +1275,12 @@
 
 	.assignment-header .assignment-date {
 		margin-right: auto;
+	}
+
+	.assignment-actions {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
 	}
 
 	.assignment-date-group {

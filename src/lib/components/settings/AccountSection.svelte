@@ -621,7 +621,7 @@ Displays and updates user's account info, password, and preferences.
 
 				<div class="password-actions">
 					<Button
-						variant="secondary"
+						variant="ghost"
 						size="small"
 						type="button"
 						onclick={resetPasswordForm}
@@ -672,7 +672,6 @@ Displays and updates user's account info, password, and preferences.
 	}
 
 	.password-form :global(.setting-row) {
-		border-bottom: none;
 		padding: var(--spacing-2) 0;
 	}
 

@@ -315,23 +315,27 @@
 			<div class="assignment-header">
 				<span class="assignment-date">{formatAssignmentDate(assignment.date)}</span>
 				{#if assignment.status === 'scheduled'}
-					{#if confirmAction}
-						<IconButton
-							tooltip={getScheduleActionLabel('confirm_shift')}
-							disabled={scheduleStore.isConfirming || scheduleStore.isCancelling}
-							onclick={() => handleScheduleAction('confirm_shift', assignment)}
-						>
-							<IconBase size="small"><CheckCircleIcon /></IconBase>
-						</IconButton>
-					{/if}
-					{#if cancelAction}
-						<IconButton
-							tooltip={m.common_cancel()}
-							disabled={scheduleStore.isConfirming || scheduleStore.isCancelling}
-							onclick={() => handleScheduleAction('cancel_shift', assignment)}
-						>
-							<IconBase size="small"><CalendarX /></IconBase>
-						</IconButton>
+					{#if confirmAction || cancelAction}
+						<div class="assignment-actions">
+							{#if confirmAction}
+								<IconButton
+									tooltip={getScheduleActionLabel('confirm_shift')}
+									disabled={scheduleStore.isConfirming || scheduleStore.isCancelling}
+									onclick={() => handleScheduleAction('confirm_shift', assignment)}
+								>
+									<IconBase size="small"><CheckCircleIcon /></IconBase>
+								</IconButton>
+							{/if}
+							{#if cancelAction}
+								<IconButton
+									tooltip={m.common_cancel()}
+									disabled={scheduleStore.isConfirming || scheduleStore.isCancelling}
+									onclick={() => handleScheduleAction('cancel_shift', assignment)}
+								>
+									<IconBase size="small"><CalendarX /></IconBase>
+								</IconButton>
+							{/if}
+						</div>
 					{/if}
 				{:else if assignment.status !== 'active'}
 					<span class="assignment-status">{statusLabels[assignment.status]}</span>
@@ -738,6 +742,12 @@
 
 	.assignment-header .assignment-date {
 		margin-right: auto;
+	}
+
+	.assignment-actions {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
 	}
 
 	.assignment-date {

@@ -10,6 +10,7 @@
 		tooltip = false,
 		position = 'top',
 		delay = 1000,
+		touchable = false,
 		fallbackToSide = false,
 		anchorSelector,
 		children,
@@ -20,6 +21,7 @@
 		tooltip?: string | boolean;
 		position?: TooltipPosition;
 		delay?: number;
+		touchable?: boolean;
 		fallbackToSide?: boolean;
 		anchorSelector?: string;
 		children?: Snippet;
@@ -34,9 +36,11 @@
 
 	let showTooltip = $state(false);
 	let isHovering = $state(false);
+	let isTouchTooltipVisible = $state(false);
 	let isPositioned = $state(false);
 	let wrapperElement = $state<HTMLElement>();
 	let tooltipElement = $state<HTMLElement>();
+	let touchHideTimeout = $state<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 	// Touch device detection (runs on client mount)
 	let isTouchDevice = $state(false);
@@ -66,6 +70,40 @@
 		isHovering = false;
 	}
 
+	function clearTouchTimeout() {
+		if (touchHideTimeout) {
+			clearTimeout(touchHideTimeout);
+			touchHideTimeout = undefined;
+		}
+	}
+
+	function showTouchTooltip() {
+		isTouchTooltipVisible = true;
+		clearTouchTimeout();
+		touchHideTimeout = setTimeout(() => {
+			isTouchTooltipVisible = false;
+			touchHideTimeout = undefined;
+		}, 2200);
+	}
+
+	function handlePointerDown(event: PointerEvent) {
+		if (!isTouchDevice || !touchable || !tooltip) {
+			return;
+		}
+
+		if (event.pointerType === 'mouse') {
+			return;
+		}
+
+		if (isTouchTooltipVisible) {
+			isTouchTooltipVisible = false;
+			clearTouchTimeout();
+			return;
+		}
+
+		showTouchTooltip();
+	}
+
 	function handleKeyDown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			isHovering = false;
@@ -77,13 +115,17 @@
 	 */
 	function hideTooltip() {
 		isHovering = false;
+		isTouchTooltipVisible = false;
+		clearTouchTimeout();
 		showTooltip = false;
 	}
 
 	$effect(() => {
 		let timeoutId: ReturnType<typeof setTimeout>;
 
-		if (isHovering) {
+		if (isTouchTooltipVisible) {
+			showTooltip = true;
+		} else if (isHovering) {
 			timeoutId = setTimeout(() => {
 				showTooltip = true;
 			}, delay);
@@ -95,6 +137,7 @@
 		// or when the component is unmounted. This prevents memory leaks and race conditions.
 		return () => {
 			clearTimeout(timeoutId);
+			clearTouchTimeout();
 		};
 	});
 
@@ -139,6 +182,7 @@
 	aria-label={displayAriaLabel}
 	onmouseenter={handleMouseEnter}
 	onmouseleave={handleMouseLeave}
+	onpointerdown={handlePointerDown}
 	onfocus={handleMouseEnter}
 	onblur={handleMouseLeave}
 	onkeydown={handleKeyDown}
@@ -152,6 +196,7 @@
 		class="tooltip"
 		class:animate-in={isPositioned}
 		data-actual-position={position}
+		data-touch-enabled={touchable ? 'true' : 'false'}
 		role="tooltip"
 		aria-describedby="tooltip-content"
 		style:--tooltip-max-width={maxWidth}
@@ -277,7 +322,7 @@
 
 	/* Disable tooltips on touch devices where hover is unreliable */
 	@media (hover: none) {
-		.tooltip {
+		.tooltip[data-touch-enabled='false'] {
 			display: none !important;
 		}
 	}
