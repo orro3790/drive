@@ -35,6 +35,10 @@
 		editContent?: Snippet<[T]>;
 		/** Custom actions in view mode */
 		viewActions?: Snippet<[T]>;
+		/** Optional header actions rendered left of close */
+		headerActions?: Snippet<[T]>;
+		/** Whether to show default edit action in footer */
+		showDefaultViewEditAction?: boolean;
 		/** Table content snippet */
 		tableContent: Snippet<[TableContext]>;
 		/** localStorage key for wide mode preference */
@@ -54,6 +58,8 @@
 		viewContent,
 		editContent,
 		viewActions,
+		headerActions,
+		showDefaultViewEditAction = true,
 		tableContent,
 		storageKey
 	}: Props<ItemType> = $props();
@@ -127,6 +133,8 @@
 					{viewContent}
 					{editContent}
 					{viewActions}
+					{headerActions}
+					{showDefaultViewEditAction}
 					variant="panel"
 				/>
 			</aside>
@@ -161,6 +169,8 @@
 				{viewContent}
 				{editContent}
 				{viewActions}
+				{headerActions}
+				{showDefaultViewEditAction}
 				variant="modal"
 			/>
 		</div>

@@ -106,32 +106,32 @@ function createDbClientMock(
 }
 
 describe('onboarding service reservation flow', () => {
-	it('reserves invite authorization and finalizes it after signup success', async () => {
-		const pendingInvite = createEntry({
+	it('reserves approval authorization and finalizes it after signup success', async () => {
+		const pendingApproval = createEntry({
 			id: '11111111-1111-4111-8111-111111111111',
 			email: 'approved@driver.test',
-			kind: 'invite'
+			kind: 'approval'
 		});
-		const reservedInvite = createEntry({
-			...pendingInvite,
+		const reservedApproval = createEntry({
+			...pendingApproval,
 			status: 'reserved'
 		});
-		const consumedInvite = createEntry({
-			...pendingInvite,
+		const consumedApproval = createEntry({
+			...pendingApproval,
 			status: 'consumed',
 			consumedAt: new Date('2026-02-10T00:00:00.000Z'),
 			consumedByUserId: 'driver-1'
 		});
 
 		const { dbClient } = createDbClientMock(
-			[[], [pendingInvite]],
-			[[reservedInvite], [consumedInvite]]
+			[[], [pendingApproval]],
+			[[reservedApproval], [consumedApproval]]
 		);
 
 		const reservation = await reserveProductionSignupAuthorization(
 			{
 				email: 'approved@driver.test',
-				inviteCodeHeader: 'invite-token',
+				inviteCodeHeader: null,
 				now: new Date('2026-02-10T00:00:00.000Z')
 			},
 			dbClient
@@ -139,14 +139,14 @@ describe('onboarding service reservation flow', () => {
 
 		expect(reservation).toMatchObject({
 			allowed: true,
-			reservationId: pendingInvite.id,
-			matchedEntryId: pendingInvite.id,
-			matchedKind: 'invite'
+			reservationId: pendingApproval.id,
+			matchedEntryId: pendingApproval.id,
+			matchedKind: 'approval'
 		});
 
 		const finalized = await finalizeProductionSignupAuthorizationReservation(
 			{
-				reservationId: pendingInvite.id,
+				reservationId: pendingApproval.id,
 				userId: 'driver-1',
 				now: new Date('2026-02-10T00:00:00.000Z')
 			},
@@ -155,6 +155,21 @@ describe('onboarding service reservation flow', () => {
 
 		expect(finalized?.status).toBe('consumed');
 		expect(finalized?.consumedByUserId).toBe('driver-1');
+	});
+
+	it('does not authorize signup from invite codes without an approval entry', async () => {
+		const { dbClient } = createDbClientMock([[], []], []);
+
+		const reservation = await reserveProductionSignupAuthorization(
+			{
+				email: 'invite-only@driver.test',
+				inviteCodeHeader: 'legacy-invite-code',
+				now: new Date('2026-02-10T00:00:00.000Z')
+			},
+			dbClient
+		);
+
+		expect(reservation).toEqual({ allowed: false });
 	});
 
 	it('allows only one reservation winner under contention', async () => {

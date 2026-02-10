@@ -103,15 +103,6 @@ function normalizeEmail(email: string): string {
 	return email.trim().toLowerCase();
 }
 
-function normalizeInviteCode(inviteCode: string | null | undefined): string | null {
-	if (!inviteCode) {
-		return null;
-	}
-
-	const normalized = inviteCode.trim();
-	return normalized.length > 0 ? normalized : null;
-}
-
 function normalizeReservationId(reservationId: string): string | null {
 	const normalized = reservationId.trim();
 	const parsed = signupOnboardingReservationIdSchema.safeParse(normalized);
@@ -195,28 +186,6 @@ async function getReservedEntriesByEmailAndKind(
 			)
 		)
 		.orderBy(desc(signupOnboarding.createdAt));
-}
-
-async function getPendingInviteByHash(
-	email: string,
-	tokenHash: string,
-	dbClient: DbClient = db
-): Promise<SignupOnboardingEntryRecord | null> {
-	const [invite] = await dbClient
-		.select()
-		.from(signupOnboarding)
-		.where(
-			and(
-				eq(signupOnboarding.email, email),
-				eq(signupOnboarding.kind, 'invite'),
-				eq(signupOnboarding.tokenHash, tokenHash),
-				eq(signupOnboarding.status, 'pending')
-			)
-		)
-		.orderBy(desc(signupOnboarding.createdAt))
-		.limit(1);
-
-	return invite ?? null;
 }
 
 async function getLatestPendingApproval(
@@ -451,26 +420,8 @@ export async function reserveProductionSignupAuthorization(
 ): Promise<ReserveProductionSignupAuthorizationResult> {
 	const now = input.now ?? new Date();
 	const normalizedEmail = normalizeEmail(input.email);
-	const inviteCode = normalizeInviteCode(input.inviteCodeHeader);
 
 	await releaseStaleReservationsForEmail(normalizedEmail, now, dbClient);
-
-	if (inviteCode) {
-		const tokenHash = hashInviteCode(inviteCode);
-		const invite = await getPendingInviteByHash(normalizedEmail, tokenHash, dbClient);
-
-		if (invite && isEntryUsable(invite, now)) {
-			const reservation = await reserveEntryById(invite.id, now, dbClient);
-			if (reservation) {
-				return {
-					allowed: true,
-					reservationId: reservation.id,
-					matchedEntryId: reservation.id,
-					matchedKind: 'invite'
-				};
-			}
-		}
-	}
 
 	const approval = await getLatestPendingApproval(normalizedEmail, dbClient);
 	if (approval && isEntryUsable(approval, now)) {

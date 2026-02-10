@@ -77,10 +77,10 @@ Driver-facing endpoints in `src/routes/api/`:
 - `PATCH /api/notifications/[id]/read` - Mark notification as read
 - `POST /api/notifications/mark-all-read` - Mark all notifications as read
 - `POST /api/assignments/[id]/confirm` - Confirm an upcoming shift (7 days to 48h before)
-- `POST /api/shifts/arrive` - Signal on-site arrival for today's confirmed assignment (creates shift record, must be before 9 AM)
+- `POST /api/shifts/arrive` - Signal on-site arrival for today's confirmed assignment (creates shift record, must be before route start time)
 - `POST /api/shifts/start` - Record starting parcel inventory (sets parcelsStart on existing shift after arrival)
-- `POST /api/shifts/complete` - Complete shift (takes parcelsReturned, server calculates delivered, sets 1-hour edit window)
-- `PATCH /api/shifts/[assignmentId]/edit` - Edit parcel counts within 1-hour window after completion
+- `POST /api/shifts/complete` - Complete shift (takes parcelsReturned + optional exceptedReturns/exceptionNotes, server calculates delivered, sets 1-hour edit window)
+- `PATCH /api/shifts/[assignmentId]/edit` - Edit parcel counts and exception fields within 1-hour window after completion
 
 ## UI Components
 
@@ -164,10 +164,11 @@ Svelte 5 stores in `src/lib/stores/`:
 
 ### Arrival & Shift Lifecycle
 
-- Drivers must arrive (tap "Arrive") by **9:00 AM Toronto time** on shift day
-- 9 AM no-show auto-detected by cron → triggers emergency bid window
+- Each route has a configurable `startTime` (default 09:00). Drivers must arrive by that time on shift day
+- No-show auto-detected by cron at route start time → triggers emergency bid window
 - After completing shift, driver has **1-hour edit window** to correct parcel counts
-- Shift flow: Confirm → Arrive → Start (parcelsStart) → Complete (parcelsReturned) → Edit window
+- Drivers can declare returned parcels as **exceptions** (holidays, closures) that don't count against health scoring
+- Shift flow: Confirm → Arrive → Start (parcelsStart) → Complete (parcelsReturned + exceptedReturns) → Edit window
 
 ### Weekly Caps
 
@@ -232,7 +233,7 @@ score = (health * 0.45) +
 All business rule constants centralized in `src/lib/config/dispatchPolicy.ts`:
 
 - `timezone` - Toronto/Eastern time settings
-- `shifts` - Shift timing (7 AM start, 9 AM arrival deadline, 1-hour edit window)
+- `shifts` - Shift timing (default 9 AM start, per-route arrival deadline, 1-hour edit window)
 - `scheduling` - Schedule generation parameters
 - `confirmation` - Confirmation windows and deadlines
 - `bidding` - Bid scoring weights and mode cutoffs
@@ -304,6 +305,7 @@ Reference: `.env.example` for full documentation.
 | `FIREBASE_CLIENT_EMAIL`        | FCM service account email                           | Yes       |
 | `FIREBASE_PRIVATE_KEY`         | FCM service account private key                     | Yes       |
 | `AXIOM_TOKEN`                  | Axiom API token for log shipping                    | Prod only |
+| `AXIOM_DATASET`                | Optional Axiom dataset (defaults to `driver-ops`)   | No        |
 | `TEST_USER_EMAIL`              | Dev/test user email                                 | Dev only  |
 | `TEST_USER_PASSWORD`           | Dev/test user password                              | Dev only  |
 
@@ -379,7 +381,7 @@ const firebaseConfig = {
 Structured logging using Pino with Axiom transport for production log shipping.
 
 **Development**: Pretty-printed colored logs to console (no Axiom required)
-**Production**: JSON logs shipped to Axiom dataset `driver-ops`
+**Production**: JSON logs shipped to Axiom (`AXIOM_DATASET` or default `driver-ops`)
 
 ```typescript
 // Basic usage
@@ -397,4 +399,4 @@ import { redactSensitive } from '$lib/server/logger';
 log.info(redactSensitive(userData), 'User data');
 ```
 
-Setup: Get Axiom token from Axiom Console > Settings > API Tokens. Set `AXIOM_TOKEN` in Vercel.
+Setup: Get Axiom token from Axiom Console > Settings > API Tokens. Set `AXIOM_TOKEN` in Vercel (and optional `AXIOM_DATASET`).

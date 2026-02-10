@@ -417,6 +417,10 @@ Displays and updates user's account info, password, and preferences.
 						{/snippet}
 					</SettingsRow>
 
+					{#if user.role === 'driver'}
+						<DriverPreferencesSection />
+					{/if}
+
 					<SettingsRow>
 						{#snippet label()}
 							<div class="title">{m.settings_theme_label()}</div>
@@ -454,7 +458,7 @@ Displays and updates user's account info, password, and preferences.
 								name="uiLanguage"
 								options={languageOptions}
 								value={currentLocale}
-								size="sm"
+								size="base"
 								onChange={handleLanguageChange}
 								aria-label={m.settings_language_label()}
 							/>
@@ -471,6 +475,15 @@ Displays and updates user's account info, password, and preferences.
 				id="password-section"
 			/>
 			<form class="password-form" onsubmit={handlePasswordSubmit} novalidate>
+				<input
+					type="email"
+					name="settings-password-username"
+					autocomplete="username"
+					value={accountForm.email || user?.email || ''}
+					tabindex="-1"
+					aria-hidden="true"
+					class="a11y-hidden-username"
+				/>
 				<SettingsGrid>
 					<SettingsRow ariaDisabled={isPasswordSaving}>
 						{#snippet label()}
@@ -640,10 +653,6 @@ Displays and updates user's account info, password, and preferences.
 				</div>
 			</form>
 		</div>
-
-		{#if user.role === 'driver'}
-			<DriverPreferencesSection />
-		{/if}
 	{:else}
 		<div class="settings-card">
 			<p class="not-signed-in">{m.settings_not_signed_in()}</p>
@@ -669,6 +678,19 @@ Displays and updates user's account info, password, and preferences.
 		display: flex;
 		flex-direction: column;
 		width: 100%;
+	}
+
+	.a11y-hidden-username {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		padding: 0;
+		border: 0;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		clip-path: inset(50%);
+		white-space: nowrap;
 	}
 
 	.password-form :global(.setting-row) {

@@ -20,6 +20,8 @@ export type ShiftData = {
 	parcelsStart: number | null;
 	parcelsDelivered: number | null;
 	parcelsReturned: number | null;
+	exceptedReturns: number;
+	exceptionNotes: string | null;
 	startedAt: string | null;
 	completedAt: string | null;
 	editableUntil: string | null;
@@ -34,6 +36,7 @@ export type ScheduleAssignment = {
 	confirmationDeadline: string;
 	isConfirmable: boolean;
 	routeName: string;
+	routeStartTime: string;
 	warehouseName: string;
 	isCancelable: boolean;
 	isLateCancel: boolean;
@@ -71,6 +74,8 @@ const shiftDataSchema = z.object({
 	parcelsStart: z.number().int().nonnegative().nullable(),
 	parcelsDelivered: z.number().int().nonnegative().nullable(),
 	parcelsReturned: z.number().int().nonnegative().nullable(),
+	exceptedReturns: z.number().int().nonnegative().default(0),
+	exceptionNotes: z.string().nullable().default(null),
 	startedAt: z.string().min(1).nullable(),
 	completedAt: z.string().min(1).nullable(),
 	editableUntil: z.string().min(1).nullable()
@@ -85,6 +90,7 @@ const scheduleAssignmentSchema = z.object({
 	confirmationDeadline: z.string().min(1),
 	isConfirmable: z.boolean(),
 	routeName: z.string().min(1),
+	routeStartTime: z.string().min(1),
 	warehouseName: z.string().min(1),
 	isCancelable: z.boolean(),
 	isLateCancel: z.boolean(),
@@ -127,6 +133,8 @@ const shiftCompleteResponseSchema = z.object({
 		parcelsStart: z.number().int().nonnegative(),
 		parcelsDelivered: z.number().int().nonnegative(),
 		parcelsReturned: z.number().int().nonnegative(),
+		exceptedReturns: z.number().int().nonnegative().default(0),
+		exceptionNotes: z.string().nullable().default(null),
 		startedAt: z.string().min(1).nullable(),
 		completedAt: z.string().min(1).nullable(),
 		editableUntil: z.string().min(1).nullable()
@@ -311,6 +319,8 @@ export const scheduleStore = {
 								parcelsStart: shift.parcelsStart,
 								parcelsDelivered: null,
 								parcelsReturned: null,
+								exceptedReturns: 0,
+								exceptionNotes: null,
 								startedAt: shift.startedAt,
 								completedAt: null,
 								editableUntil: null
@@ -329,7 +339,12 @@ export const scheduleStore = {
 		}
 	},
 
-	async completeShift(assignmentId: string, parcelsReturned: number) {
+	async completeShift(
+		assignmentId: string,
+		parcelsReturned: number,
+		exceptedReturns = 0,
+		exceptionNotes?: string
+	) {
 		if (!ensureOnlineForWrite()) {
 			return false;
 		}
@@ -340,7 +355,7 @@ export const scheduleStore = {
 			const res = await fetch('/api/shifts/complete', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ assignmentId, parcelsReturned })
+				body: JSON.stringify({ assignmentId, parcelsReturned, exceptedReturns, exceptionNotes })
 			});
 
 			if (!res.ok) {
@@ -368,6 +383,8 @@ export const scheduleStore = {
 								parcelsStart: shift.parcelsStart,
 								parcelsDelivered: shift.parcelsDelivered,
 								parcelsReturned: shift.parcelsReturned,
+								exceptedReturns: shift.exceptedReturns,
+								exceptionNotes: shift.exceptionNotes,
 								startedAt: shift.startedAt,
 								completedAt: shift.completedAt,
 								editableUntil: shift.editableUntil ?? null

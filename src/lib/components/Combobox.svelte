@@ -50,7 +50,7 @@ The combobox border turns red when errors are present.
 		'aria-label': ariaLabel,
 		errors = [],
 		maxErrors = DEFAULT_MAX_ERRORS,
-		size = 'sm' as 'sm' | 'xs' | 'xl',
+		size = 'base' as 'base' | 'sm' | 'small' | 'xs' | 'xl',
 		fitContent = false,
 		pageSize = 25,
 		searchDebounceMs = 300,
@@ -79,7 +79,7 @@ The combobox border turns red when errors are present.
 		'aria-label'?: string;
 		errors?: string[];
 		maxErrors?: number;
-		size?: 'sm' | 'xs' | 'xl';
+		size?: 'base' | 'sm' | 'small' | 'xs' | 'xl';
 		fitContent?: boolean;
 		pageSize?: number;
 		searchDebounceMs?: number;
@@ -92,6 +92,7 @@ The combobox border turns red when errors are present.
 
 	const displayPlaceholder = $derived(placeholder ?? m.select_placeholder());
 	const displaySearchPlaceholder = $derived(searchPlaceholder ?? m.select_search_placeholder());
+	const normalizedSize = $derived(size === 'small' ? 'sm' : size);
 
 	let isOpen = $state(false);
 	let id = $state<string | undefined>(undefined);
@@ -509,8 +510,9 @@ The combobox border turns red when errors are present.
 		class="combobox-container"
 		class:has-errors={errorDisplay.hasErrors}
 		class:fit-content={fitContent}
-		class:size-xs={size === 'xs'}
-		class:size-xl={size === 'xl'}
+		class:size-sm={normalizedSize === 'sm'}
+		class:size-xs={normalizedSize === 'xs'}
+		class:size-xl={normalizedSize === 'xl'}
 		bind:this={selectElement}
 		role="presentation"
 		aria-busy={isBusy ? 'true' : 'false'}
@@ -658,6 +660,10 @@ The combobox border turns red when errors are present.
 	.combobox-container {
 		position: relative;
 		width: 100%;
+		height: 36px;
+	}
+
+	.combobox-container.size-sm {
 		height: 28px;
 	}
 

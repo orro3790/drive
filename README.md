@@ -193,7 +193,13 @@ Deploy to Vercel:
    - `BETTER_AUTH_SIGNUP_ALLOWLIST` (approved onboarding emails)
    - Firebase credentials
    - `AXIOM_TOKEN` (for production logging)
+   - `AXIOM_DATASET` (optional, defaults to `driver-ops`)
 3. Deploy
+
+Quick observability verification after deploy:
+
+- Confirm startup log contains `observability.transport.axiom.enabled`.
+- Trigger a known API request and confirm matching events in your Axiom dataset.
 
 Note: `BETTER_AUTH_URL` is auto-detected from `VERCEL_URL` in production.
 

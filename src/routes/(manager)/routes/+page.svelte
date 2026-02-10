@@ -38,6 +38,8 @@
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Filter from '$lib/components/icons/Filter.svelte';
 	import Reset from '$lib/components/icons/Reset.svelte';
+	import Pencil from '$lib/components/icons/Pencil.svelte';
+	import Trash from '$lib/components/icons/Trash.svelte';
 	import { routeStore, type RouteWithWarehouse } from '$lib/stores/routeStore.svelte';
 	import { warehouseStore } from '$lib/stores/warehouseStore.svelte';
 	import { bidWindowStore, type BidWindow } from '$lib/stores/bidWindowStore.svelte';
@@ -49,6 +51,7 @@
 
 	// Tab state
 	type TabId = 'routes' | 'bidWindows';
+	type RouteOverrideAction = 'open_bidding' | 'open_urgent_bidding';
 	let activeTab = $state<TabId>('routes');
 
 	// State
@@ -61,8 +64,9 @@
 
 	// Form state
 	let formName = $state('');
+	let formStartTime = $state('09:00');
 	let formWarehouseId = $state('');
-	let formErrors = $state<{ name?: string[]; warehouseId?: string[] }>({});
+	let formErrors = $state<{ name?: string[]; warehouseId?: string[]; startTime?: string[] }>({});
 	let showRouteAssignModal = $state(false);
 	let routeAssignTarget = $state<RouteWithWarehouse | null>(null);
 	let routeAssignDriverId = $state('');
@@ -72,7 +76,13 @@
 	let assignDriverId = $state('');
 	let assignErrors = $state<{ driverId?: string[] }>({});
 	let closeConfirmWindow = $state<BidWindow | null>(null);
-	let emergencyConfirm = $state<{ route: RouteWithWarehouse; x: number; y: number } | null>(null);
+	let overrideConfirm = $state<{
+		route: RouteWithWarehouse;
+		action: RouteOverrideAction;
+		x: number;
+		y: number;
+	} | null>(null);
+	let urgentBonusPercent = $state(20);
 	let managerStream: EventSource | null = null;
 
 	// Filter state
@@ -105,6 +115,15 @@
 			minWidth: 180,
 			mobileVisible: true,
 			mobilePriority: 2
+		}),
+		helper.text('startTime', {
+			header: m.route_start_time_header(),
+			sortable: true,
+			sizing: 'fixed',
+			width: 120,
+			minWidth: 96,
+			mobileVisible: true,
+			mobilePriority: 3
 		}),
 		helper.display({
 			id: 'driver',
@@ -247,6 +266,7 @@
 		if (selectedRouteId === route.id) return;
 		selectedRouteId = route.id;
 		formName = route.name;
+		formStartTime = route.startTime;
 		formWarehouseId = route.warehouseId;
 		formErrors = {};
 		isEditing = false;
@@ -264,6 +284,7 @@
 
 	function openCreateModal() {
 		formName = '';
+		formStartTime = '09:00';
 		formWarehouseId = '';
 		formErrors = {};
 		showCreateModal = true;
@@ -274,6 +295,7 @@
 			selectedRouteId = route.id;
 		}
 		formName = route.name;
+		formStartTime = route.startTime;
 		formWarehouseId = route.warehouseId;
 		formErrors = {};
 		isEditing = true;
@@ -282,6 +304,7 @@
 	function cancelEditing() {
 		if (selectedRoute) {
 			formName = selectedRoute.name;
+			formStartTime = selectedRoute.startTime;
 			formWarehouseId = selectedRoute.warehouseId;
 		}
 		formErrors = {};
@@ -305,6 +328,7 @@
 	function handleCreate() {
 		const result = routeCreateSchema.safeParse({
 			name: formName,
+			startTime: formStartTime,
 			warehouseId: formWarehouseId
 		});
 		if (!result.success) {
@@ -324,6 +348,7 @@
 
 		const result = routeUpdateSchema.safeParse({
 			name: formName,
+			startTime: formStartTime,
 			warehouseId: formWarehouseId
 		});
 		if (!result.success) {
@@ -385,7 +410,9 @@
 	);
 	const hasChanges = $derived(
 		!!selectedRoute &&
-			(formName !== selectedRoute.name || formWarehouseId !== selectedRoute.warehouseId)
+			(formName !== selectedRoute.name ||
+				formStartTime !== selectedRoute.startTime ||
+				formWarehouseId !== selectedRoute.warehouseId)
 	);
 
 	// Tab switching logic
@@ -469,11 +496,82 @@
 	}
 
 	function canManualAssignRoute(route: RouteWithWarehouse) {
-		return !!route.assignmentId && (route.status === 'unfilled' || route.status === 'bidding');
+		if (!route.assignmentId) return false;
+		return route.assignmentStatus === 'scheduled' || route.assignmentStatus === 'unfilled';
 	}
 
 	function isRouteAssigning(route: RouteWithWarehouse) {
 		return route.assignmentId ? routeStore.isAssigningAssignment(route.assignmentId) : false;
+	}
+
+	function isRouteOverriding(route: RouteWithWarehouse) {
+		return route.assignmentId ? routeStore.isOverridingAssignment(route.assignmentId) : false;
+	}
+
+	function getRouteOverrideAction(route: RouteWithWarehouse): RouteOverrideAction | null {
+		if (!route.assignmentId || !route.assignmentStatus) {
+			return null;
+		}
+
+		if (route.assignmentStatus === 'scheduled') {
+			return 'open_urgent_bidding';
+		}
+
+		if (route.assignmentStatus !== 'unfilled') {
+			return null;
+		}
+
+		if (route.status === 'bidding') {
+			return 'open_urgent_bidding';
+		}
+
+		return route.isShiftStarted ? 'open_urgent_bidding' : 'open_bidding';
+	}
+
+	function getOverrideActionLabel(action: RouteOverrideAction): string {
+		return action === 'open_bidding'
+			? m.manager_override_open_bidding_button()
+			: m.manager_override_open_urgent_bidding_button();
+	}
+
+	function getOverrideConfirmTitle(action: RouteOverrideAction): string {
+		return action === 'open_bidding'
+			? m.manager_override_open_bidding_title()
+			: m.manager_override_open_urgent_bidding_title();
+	}
+
+	function getOverrideConfirmDescription(confirm: {
+		route: RouteWithWarehouse;
+		action: RouteOverrideAction;
+	}): string {
+		if (confirm.action === 'open_bidding') {
+			return m.manager_override_open_bidding_description({ routeName: confirm.route.name });
+		}
+
+		if (confirm.route.driverName) {
+			return m.manager_override_open_urgent_bidding_description_assigned({
+				routeName: confirm.route.name,
+				driverName: confirm.route.driverName,
+				bonusPercent: urgentBonusPercent
+			});
+		}
+
+		return m.manager_override_open_urgent_bidding_description_unfilled({
+			routeName: confirm.route.name,
+			bonusPercent: urgentBonusPercent
+		});
+	}
+
+	function getOverrideConfirmLabel(action: RouteOverrideAction): string {
+		return action === 'open_bidding'
+			? m.manager_override_open_bidding_confirm()
+			: m.manager_override_open_urgent_bidding_confirm();
+	}
+
+	function getAssignButtonLabel(route: RouteWithWarehouse): string {
+		return route.assignmentStatus === 'scheduled' && route.driverName
+			? m.manager_override_reassign_button()
+			: m.manager_dashboard_assign_button();
 	}
 
 	function openRouteAssignModal(route: RouteWithWarehouse) {
@@ -570,22 +668,51 @@
 		closeCloseConfirm();
 	}
 
-	function canEmergencyReopen(route: RouteWithWarehouse) {
-		return !!route.assignmentId && route.status === 'unfilled' && dateFilter === toLocalYmd();
+	function openOverrideConfirm(
+		route: RouteWithWarehouse,
+		action: RouteOverrideAction,
+		event: MouseEvent
+	) {
+		if (!route.assignmentId) return;
+		overrideConfirm = {
+			route,
+			action,
+			x: event.clientX,
+			y: event.clientY
+		};
 	}
 
-	function openEmergencyConfirm(route: RouteWithWarehouse, event: MouseEvent) {
-		if (!canEmergencyReopen(route)) return;
-		emergencyConfirm = { route, x: event.clientX, y: event.clientY };
-	}
-
-	async function handleEmergencyReopen() {
-		if (!emergencyConfirm?.route.assignmentId) return;
+	async function handleOverrideAction() {
+		if (!overrideConfirm?.route.assignmentId) return;
 		if (!ensureOnlineForWrite()) return;
 
-		const assignmentId = emergencyConfirm.route.assignmentId;
-		emergencyConfirm = null;
-		await routeStore.emergencyReopen(assignmentId);
+		const assignmentId = overrideConfirm.route.assignmentId;
+		const action = overrideConfirm.action;
+		overrideConfirm = null;
+
+		if (action === 'open_bidding') {
+			await routeStore.openBidding(assignmentId);
+			return;
+		}
+
+		await routeStore.openUrgentBidding(assignmentId);
+	}
+
+	async function loadDispatchSettingsBonus() {
+		try {
+			const response = await fetch('/api/settings/dispatch');
+			if (!response.ok) return;
+
+			const payload = (await response.json()) as {
+				settings?: { emergencyBonusPercent?: unknown };
+			};
+
+			if (typeof payload.settings?.emergencyBonusPercent === 'number') {
+				urgentBonusPercent = payload.settings.emergencyBonusPercent;
+			}
+		} catch {
+			// Keep default bonus for confirmation copy when settings are unavailable.
+		}
 	}
 
 	// Load data on mount
@@ -593,6 +720,7 @@
 		warehouseStore.load();
 		applyFilters();
 		startRealtime();
+		void loadDispatchSettingsBonus();
 	});
 
 	// Cleanup on destroy
@@ -703,6 +831,10 @@
 			<dd>{route.warehouseName}</dd>
 		</div>
 		<div class="detail-row">
+			<dt>{m.route_start_time_label()}</dt>
+			<dd>{route.startTime}</dd>
+		</div>
+		<div class="detail-row">
 			<dt>{m.manager_dashboard_detail_date()}</dt>
 			<dd>{formatDate(dateFilter)}</dd>
 		</div>
@@ -733,33 +865,8 @@
 
 	{#if !route.assignmentId}
 		<p class="detail-hint">{m.manager_dashboard_detail_no_assignment()}</p>
-	{:else if route.status === 'unfilled' || route.status === 'bidding'}
-		<div class="detail-actions">
-			<Button
-				fill
-				onclick={() => openRouteAssignModal(route)}
-				disabled={!canManualAssignRoute(route) || isRouteAssigning(route)}
-				isLoading={isRouteAssigning(route)}
-			>
-				{m.manager_dashboard_assign_button()}
-			</Button>
-			{#if canEmergencyReopen(route)}
-				<Button
-					variant="danger"
-					fill
-					onclick={(e) => openEmergencyConfirm(route, e)}
-					disabled={!route.assignmentId || routeStore.isEmergencyReopening(route.assignmentId)}
-					isLoading={route.assignmentId
-						? routeStore.isEmergencyReopening(route.assignmentId)
-						: false}
-				>
-					{m.manager_emergency_reopen_button()}
-				</Button>
-			{/if}
-			{#if route.status === 'bidding'}
-				<p class="detail-hint">{m.bid_windows_assign_description()}</p>
-			{/if}
-		</div>
+	{:else if route.status === 'bidding'}
+		<p class="detail-hint">{m.bid_windows_assign_description()}</p>
 	{/if}
 {/snippet}
 
@@ -785,6 +892,20 @@
 	</div>
 
 	<div class="form-field">
+		<label for="route-edit-start-time">{m.route_start_time_label()}</label>
+		<InlineEditor
+			id="route-edit-start-time"
+			value={formStartTime}
+			onInput={(v) => (formStartTime = v)}
+			placeholder={m.route_start_time_placeholder()}
+			required
+		/>
+		{#if formErrors.startTime}
+			<p class="field-error">{formErrors.startTime[0]}</p>
+		{/if}
+	</div>
+
+	<div class="form-field">
 		<label for="route-edit-warehouse">{m.route_warehouse_label()}</label>
 		<Select
 			id="route-edit-warehouse"
@@ -802,10 +923,44 @@
 	</div>
 {/snippet}
 
-{#snippet routeDetailActions(route: RouteWithWarehouse)}
-	<Button variant="secondary" size="small" fill onclick={(e) => openDeleteConfirm(route, e)}>
-		{m.common_delete()}
-	</Button>
+{#snippet routeHeaderActions(route: RouteWithWarehouse)}
+	<IconButton tooltip={m.common_edit()} onclick={() => startEditing(route)}>
+		<Icon><Pencil /></Icon>
+	</IconButton>
+	<IconButton tooltip={m.common_delete()} onclick={(e) => openDeleteConfirm(route, e)}>
+		<Icon><Trash /></Icon>
+	</IconButton>
+{/snippet}
+
+{#snippet routeFooterActions(route: RouteWithWarehouse)}
+	{@const overrideAction = getRouteOverrideAction(route)}
+	{@const canAssign = canManualAssignRoute(route)}
+	{#if overrideAction || canAssign}
+		<div class="route-footer-actions">
+			{#if overrideAction}
+				<Button
+					fill
+					variant="ghost"
+					onclick={(e) => openOverrideConfirm(route, overrideAction, e)}
+					disabled={isRouteAssigning(route) || isRouteOverriding(route)}
+					isLoading={isRouteOverriding(route)}
+				>
+					{getOverrideActionLabel(overrideAction)}
+				</Button>
+			{/if}
+			{#if canAssign}
+				<Button
+					fill
+					onclick={() => openRouteAssignModal(route)}
+					disabled={isRouteAssigning(route) || isRouteOverriding(route)}
+					isLoading={isRouteAssigning(route)}
+					style={overrideAction ? 'margin-left:auto;' : undefined}
+				>
+					{getAssignButtonLabel(route)}
+				</Button>
+			{/if}
+		</div>
+	{/if}
 {/snippet}
 
 {#snippet mobileDetail(route: RouteWithWarehouse)}
@@ -1047,7 +1202,9 @@
 			onSave={handleSave}
 			viewContent={routeDetailView}
 			editContent={routeDetailEdit}
-			viewActions={routeDetailActions}
+			headerActions={routeHeaderActions}
+			viewActions={routeFooterActions}
+			showDefaultViewEditAction={false}
 			{tableContent}
 			storageKey="routes"
 		/>
@@ -1134,6 +1291,20 @@
 			</div>
 
 			<div class="form-field">
+				<label for="create-start-time">{m.route_start_time_label()}</label>
+				<InlineEditor
+					id="create-start-time"
+					value={formStartTime}
+					onInput={(v) => (formStartTime = v)}
+					placeholder={m.route_start_time_placeholder()}
+					required
+				/>
+				{#if formErrors.startTime}
+					<p class="field-error">{formErrors.startTime[0]}</p>
+				{/if}
+			</div>
+
+			<div class="form-field">
 				<label for="create-warehouse">{m.route_warehouse_label()}</label>
 				<Select
 					id="create-warehouse"
@@ -1159,7 +1330,7 @@
 <!-- Route Manual Assign Modal -->
 {#if showRouteAssignModal && routeAssignTarget}
 	<Modal
-		title={m.manager_dashboard_assign_button()}
+		title={getAssignButtonLabel(routeAssignTarget)}
 		description={m.bid_windows_assign_description()}
 		onClose={closeRouteAssignModal}
 	>
@@ -1298,17 +1469,17 @@
 	/>
 {/if}
 
-<!-- Emergency Reopen Confirmation -->
-{#if emergencyConfirm}
+<!-- Override Confirmation -->
+{#if overrideConfirm}
 	<ConfirmationDialog
-		x={emergencyConfirm.x}
-		y={emergencyConfirm.y}
-		title={m.manager_emergency_reopen_title()}
-		description={m.manager_emergency_reopen_description({ routeName: emergencyConfirm.route.name })}
-		confirmLabel={m.manager_emergency_reopen_confirm()}
+		x={overrideConfirm.x}
+		y={overrideConfirm.y}
+		title={getOverrideConfirmTitle(overrideConfirm.action)}
+		description={getOverrideConfirmDescription(overrideConfirm)}
+		confirmLabel={getOverrideConfirmLabel(overrideConfirm.action)}
 		confirmVariant="danger"
-		onConfirm={handleEmergencyReopen}
-		onCancel={() => (emergencyConfirm = null)}
+		onConfirm={handleOverrideAction}
+		onCancel={() => (overrideConfirm = null)}
 	/>
 {/if}
 
@@ -1369,6 +1540,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-2);
+	}
+
+	.route-footer-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		width: 100%;
 	}
 
 	.detail-hint {

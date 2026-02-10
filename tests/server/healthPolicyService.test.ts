@@ -176,8 +176,8 @@ describe('driver health policy regression coverage', () => {
 			[{ count: 0 }],
 			[{ count: 0 }],
 			[
-				{ parcelsStart: 100, parcelsDelivered: 100 },
-				{ parcelsStart: 100, parcelsDelivered: 95 }
+				{ parcelsStart: 100, parcelsReturned: 0, exceptedReturns: 0 },
+				{ parcelsStart: 100, parcelsReturned: 5, exceptedReturns: 0 }
 			],
 			[{ count: 0 }],
 			[{ count: 0 }]
@@ -211,7 +211,7 @@ describe('driver health policy regression coverage', () => {
 			],
 			[{ count: 0 }],
 			[{ count: 0 }],
-			[{ parcelsStart: 100, parcelsDelivered: 80 }],
+			[{ parcelsStart: 100, parcelsReturned: 20, exceptedReturns: 0 }],
 			[{ count: 0 }],
 			[{ count: 1 }]
 		]);
@@ -232,5 +232,47 @@ describe('driver health policy regression coverage', () => {
 		});
 		expect(result.reasons.join(' | ')).toContain('Completion 80% < 95%');
 		expect(result.reasons.join(' | ')).toContain('1 late cancellation(s) this week');
+	});
+
+	it('counts excepted returns toward adjusted completion rate for qualifying week check', async () => {
+		// 100 start, 10 returned, 5 excepted → adjusted = (100 - 10 + 5) / 100 = 95%
+		// Without excepted returns, completion would be (100 - 10) / 100 = 90% — NOT qualifying
+		// With excepted returns, adjusted rate = 95% — meets qualifying threshold
+		setSelectResults([
+			[
+				{ id: 'a-1', status: 'completed', confirmedAt: new Date('2026-02-03T00:00:00.000Z') },
+				{ id: 'a-2', status: 'completed', confirmedAt: new Date('2026-02-04T00:00:00.000Z') }
+			],
+			[
+				{
+					stars: 1,
+					streakWeeks: 1
+				}
+			],
+			[{ count: 0 }],
+			[{ count: 0 }],
+			[
+				{ parcelsStart: 100, parcelsReturned: 10, exceptedReturns: 5 },
+				{ parcelsStart: 100, parcelsReturned: 0, exceptedReturns: 0 }
+			],
+			[{ count: 0 }],
+			[{ count: 0 }]
+		]);
+
+		const result = await evaluateWeek(
+			'driver-excepted-qualifying',
+			new Date('2026-02-02T00:00:00.000Z')
+		);
+
+		expect(result).toMatchObject({
+			qualified: true,
+			hardStopReset: false,
+			neutral: false,
+			previousStars: 1,
+			newStars: 2,
+			previousStreak: 1,
+			newStreak: 2
+		});
+		expect(result.reasons).toContain('Qualifying week — streak advanced');
 	});
 });

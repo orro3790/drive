@@ -20,21 +20,7 @@ export const onboardingApprovalCreateSchema = z.object({
 	email: onboardingEmailSchema
 });
 
-export const onboardingInviteCreateSchema = z.object({
-	kind: z.literal('invite'),
-	email: onboardingEmailSchema,
-	expiresInHours: z
-		.number()
-		.int()
-		.min(1)
-		.max(24 * 30)
-		.optional()
-});
-
-export const onboardingCreateSchema = z.discriminatedUnion('kind', [
-	onboardingApprovalCreateSchema,
-	onboardingInviteCreateSchema
-]);
+export const onboardingCreateSchema = onboardingApprovalCreateSchema;
 
 export type OnboardingCreateInput = z.infer<typeof onboardingCreateSchema>;
 

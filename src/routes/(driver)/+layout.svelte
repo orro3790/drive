@@ -49,6 +49,7 @@
 		min-height: 0;
 		overflow-x: hidden;
 		overflow-y: auto;
+		scrollbar-gutter: stable;
 		overscroll-behavior-y: contain;
 		-webkit-overflow-scrolling: touch;
 	}

@@ -2,7 +2,7 @@
  * No-Show Detection Service
  *
  * Detects confirmed assignments where drivers failed to arrive by 9 AM Toronto time.
- * Creates emergency bid windows with 20% pay bonus and notifies available drivers.
+ * Creates emergency bid windows using the runtime global urgent bonus.
  */
 
 import { db } from '$lib/server/db';
@@ -17,24 +17,21 @@ import {
 	warehouses
 } from '$lib/server/db/schema';
 import { createBidWindow } from '$lib/server/services/bidding';
-import {
-	notifyAvailableDriversForEmergency,
-	sendManagerAlert
-} from '$lib/server/services/notifications';
+import { sendManagerAlert } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
+import { getEmergencyBonusPercent } from '$lib/server/services/dispatchSettings';
 import { and, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import logger from '$lib/server/logger';
-import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { dispatchPolicy, parseRouteStartTime } from '$lib/config/dispatchPolicy';
 import { getTorontoDateTimeInstant, toTorontoDateString } from '$lib/server/time/toronto';
 
 function getTorontoNow(): Date {
 	return new Date();
 }
 
-function getArrivalDeadline(dateString: string): Date {
-	return getTorontoDateTimeInstant(dateString, {
-		hours: dispatchPolicy.shifts.arrivalDeadlineHourLocal
-	});
+function getRouteArrivalDeadline(dateString: string, startTime: string | null): Date {
+	const { hours, minutes } = parseRouteStartTime(startTime);
+	return getTorontoDateTimeInstant(dateString, { hours, minutes });
 }
 
 export interface NoShowDetectionResult {
@@ -54,38 +51,21 @@ export interface NoShowDetectionResult {
  * "Arrived" means a shift record exists with arrivedAt set.
  *
  * For each no-show:
- * 1. Create emergency bid window (mode='emergency', payBonusPercent=20)
+ * 1. Create emergency bid window (mode='emergency', payBonusPercent from dispatch settings)
  * 2. Increment driver's noShows metric
  * 3. Alert the route's manager
- * 4. Notify available drivers about the emergency route
+ *
+ * Driver fanout is owned by createBidWindow() to prevent duplicate emergency notifications.
  */
 export async function detectNoShows(): Promise<NoShowDetectionResult> {
 	const log = logger.child({ operation: 'detectNoShows' });
 	const nowToronto = getTorontoNow();
 	const today = toTorontoDateString(nowToronto);
-	const arrivalDeadline = getArrivalDeadline(today);
+	const emergencyBonusPercent = await getEmergencyBonusPercent();
 
-	// Skip if called before 9 AM Toronto time (DST-safe: dual cron handles this)
-	if (nowToronto < arrivalDeadline) {
-		log.info({ today, arrivalDeadline }, 'No-show detection skipped before 9 AM');
-		return {
-			evaluated: 0,
-			noShows: 0,
-			bidWindowsCreated: 0,
-			managerAlertsSent: 0,
-			driversNotified: 0,
-			errors: 0,
-			skippedBeforeDeadline: true
-		};
-	}
-
-	// Find confirmed assignments for today where driver hasn't arrived:
-	// - date = today
-	// - status = 'scheduled' (still scheduled, not active/completed)
-	// - confirmedAt IS NOT NULL (driver confirmed the shift)
-	// - userId IS NOT NULL (driver assigned)
-	// - Either no shift record exists OR shift exists but arrivedAt IS NULL
-	// - No open bid window already exists (idempotency)
+	// Find confirmed assignments for today where driver hasn't arrived.
+	// We fetch all confirmed-but-not-arrived assignments and filter per-route
+	// deadline below, since each route may have a different start time.
 	const candidates = await db
 		.select({
 			assignmentId: assignments.id,
@@ -96,6 +76,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 			driverId: assignments.userId,
 			driverName: user.name,
 			routeName: routes.name,
+			routeStartTime: routes.startTime,
 			warehouseName: warehouses.name,
 			existingWindowId: bidWindows.id,
 			arrivedAt: shifts.arrivedAt
@@ -115,7 +96,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 				eq(assignments.status, 'scheduled'),
 				isNotNull(assignments.userId),
 				isNotNull(assignments.confirmedAt),
-				or(isNull(shifts.arrivedAt), gt(shifts.arrivedAt, arrivalDeadline))
+				isNull(shifts.arrivedAt)
 			)
 		);
 
@@ -125,6 +106,16 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 	let errors = 0;
 
 	for (const candidate of candidates) {
+		// Per-route deadline: skip if current time hasn't passed this route's start time
+		const routeDeadline = getRouteArrivalDeadline(today, candidate.routeStartTime);
+		if (nowToronto < routeDeadline) {
+			log.debug(
+				{ assignmentId: candidate.assignmentId, routeStartTime: candidate.routeStartTime },
+				'Skipping — route deadline not yet passed'
+			);
+			continue;
+		}
+
 		// Skip if there's already an open bid window (idempotent for dual cron runs)
 		if (candidate.existingWindowId) {
 			log.debug(
@@ -139,7 +130,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 			const result = await createBidWindow(candidate.assignmentId, {
 				mode: 'emergency',
 				trigger: 'no_show',
-				payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent,
+				payBonusPercent: emergencyBonusPercent,
 				allowPastShift: true
 			});
 
@@ -193,24 +184,9 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 					);
 				}
 
-				// 4. Notify available drivers about emergency route
-				try {
-					const notifiedCount = await notifyAvailableDriversForEmergency({
-						assignmentId: candidate.assignmentId,
-						routeName: candidate.routeName ?? 'Unknown Route',
-						warehouseName: candidate.warehouseName ?? 'Unknown Warehouse',
-						date: candidate.assignmentDate,
-						payBonusPercent: dispatchPolicy.bidding.emergencyBonusPercent
-					});
-					driversNotified += notifiedCount;
-				} catch (error) {
-					log.warn(
-						{ assignmentId: candidate.assignmentId, error },
-						'Emergency notification failed'
-					);
-				}
+				driversNotified += result.notifiedCount ?? 0;
 
-				// 5. Create audit log
+				// 4. Create audit log
 				await createAuditLog({
 					entityType: 'assignment',
 					entityId: candidate.assignmentId,
@@ -220,7 +196,8 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 					changes: {
 						driverId: candidate.driverId,
 						driverName: candidate.driverName,
-						reason: 'no_arrival_by_9am',
+						reason: `no_arrival_by_${candidate.routeStartTime ?? '09:00'}`,
+						routeStartTime: candidate.routeStartTime,
 						bidWindowId: result.bidWindowId
 					}
 				});

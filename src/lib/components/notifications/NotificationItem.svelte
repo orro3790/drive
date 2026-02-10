@@ -76,11 +76,6 @@
 	function handleCtaClick() {
 		handleMarkRead();
 	}
-
-	function handleMarkReadButtonClick(event: MouseEvent) {
-		event.stopPropagation();
-		handleMarkRead();
-	}
 </script>
 
 {#snippet routeChipIcon()}
@@ -121,14 +116,6 @@
 				{/if}
 			</div>
 			<div class="notification-actions">
-				{#if isUnread}
-					<button
-						type="button"
-						class="mark-read-button"
-						aria-label={m.notifications_mark_read_aria({ title: notification.title })}
-						onclick={handleMarkReadButtonClick}
-					></button>
-				{/if}
 				{#if cta}
 					<a class="notification-cta" href={cta.href} onclick={handleCtaClick}>
 						<Chip variant="tag" size="xs" label={cta.label} />
@@ -286,37 +273,6 @@
 	.notification-cta {
 		text-decoration: none;
 		flex-shrink: 0;
-	}
-
-	.mark-read-button {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 24px;
-		height: 24px;
-		border: none;
-		border-radius: var(--radius-full);
-		background: transparent;
-		color: var(--text-faint);
-		cursor: pointer;
-	}
-
-	.mark-read-button::before {
-		content: '';
-		width: 8px;
-		height: 8px;
-		border-radius: var(--radius-full);
-		background: currentColor;
-	}
-
-	.notification-item.unread .mark-read-button {
-		color: var(--notification-accent);
-	}
-
-	.mark-read-button:hover,
-	.mark-read-button:focus-visible {
-		background: var(--interactive-hover);
-		outline: none;
 	}
 
 	.notification-cta:hover :global(.chip) {

@@ -8,6 +8,9 @@ type EditRouteModule = typeof import('../../src/routes/api/shifts/[assignmentId]
 interface AssignmentRow {
 	id: string;
 	userId: string | null;
+	routeId: string;
+	date: string;
+	routeName: string;
 }
 
 interface ShiftRow {
@@ -15,6 +18,8 @@ interface ShiftRow {
 	parcelsStart: number | null;
 	parcelsReturned: number | null;
 	parcelsDelivered: number | null;
+	exceptedReturns: number | null;
+	exceptionNotes: string | null;
 	completedAt: Date | null;
 	editableUntil: Date | null;
 }
@@ -24,6 +29,8 @@ interface UpdatedShiftRow {
 	parcelsStart: number;
 	parcelsDelivered: number;
 	parcelsReturned: number;
+	exceptedReturns: number;
+	exceptionNotes: string | null;
 	startedAt: Date | null;
 	completedAt: Date;
 	editableUntil: Date;
@@ -31,7 +38,14 @@ interface UpdatedShiftRow {
 
 const assignmentsTable = {
 	id: 'assignments.id',
-	userId: 'assignments.userId'
+	userId: 'assignments.userId',
+	routeId: 'assignments.routeId',
+	date: 'assignments.date'
+};
+
+const routesTable = {
+	id: 'routes.id',
+	name: 'routes.name'
 };
 
 const shiftsTable = {
@@ -40,6 +54,8 @@ const shiftsTable = {
 	parcelsStart: 'shifts.parcelsStart',
 	parcelsReturned: 'shifts.parcelsReturned',
 	parcelsDelivered: 'shifts.parcelsDelivered',
+	exceptedReturns: 'shifts.exceptedReturns',
+	exceptionNotes: 'shifts.exceptionNotes',
 	startedAt: 'shifts.startedAt',
 	completedAt: 'shifts.completedAt',
 	editableUntil: 'shifts.editableUntil'
@@ -48,17 +64,15 @@ const shiftsTable = {
 let PATCH: EditRouteModule['PATCH'];
 
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
-let selectFromMock: ReturnType<
-	typeof vi.fn<
-		(table: unknown) => {
-			where: typeof selectWhereMock;
-		}
-	>
->;
+let selectChainMock: {
+	from: ReturnType<typeof vi.fn>;
+	innerJoin: ReturnType<typeof vi.fn>;
+	where: typeof selectWhereMock;
+};
 let selectMock: ReturnType<
 	typeof vi.fn<
 		(shape: Record<string, unknown>) => {
-			from: typeof selectFromMock;
+			from: typeof selectChainMock.from;
 		}
 	>
 >;
@@ -90,6 +104,9 @@ let updateMock: ReturnType<
 
 let createAuditLogMock: ReturnType<typeof vi.fn<(entry: Record<string, unknown>) => Promise<void>>>;
 let updateDriverMetricsMock: ReturnType<typeof vi.fn<(userId: string) => Promise<void>>>;
+let sendManagerAlertMock: ReturnType<
+	typeof vi.fn<(routeId: string, type: string, data: Record<string, unknown>) => Promise<void>>
+>;
 
 function createUser(role: 'driver' | 'manager', id: string): App.Locals['user'] {
 	return {
@@ -100,16 +117,45 @@ function createUser(role: 'driver' | 'manager', id: string): App.Locals['user'] 
 	} as App.Locals['user'];
 }
 
+function createAssignment(overrides: Partial<AssignmentRow> = {}): AssignmentRow {
+	return {
+		id: 'assignment-1',
+		userId: 'driver-1',
+		routeId: 'route-1',
+		date: '2026-02-09',
+		routeName: 'Route Alpha',
+		...overrides
+	};
+}
+
+function createShift(overrides: Partial<ShiftRow> = {}): ShiftRow {
+	return {
+		id: 'shift-1',
+		parcelsStart: 10,
+		parcelsReturned: 2,
+		parcelsDelivered: 8,
+		exceptedReturns: 0,
+		exceptionNotes: null,
+		completedAt: new Date('2026-02-09T09:00:00.000Z'),
+		editableUntil: new Date('2099-01-01T00:00:00.000Z'),
+		...overrides
+	};
+}
+
 beforeEach(async () => {
 	vi.resetModules();
 
 	selectWhereMock = vi.fn<(whereClause: unknown) => Promise<unknown[]>>(async () => []);
-	selectFromMock = vi.fn<(table: unknown) => { where: typeof selectWhereMock }>(() => ({
+	selectChainMock = {
+		from: vi.fn(() => selectChainMock),
+		innerJoin: vi.fn((_table: unknown, _on: unknown) => selectChainMock),
 		where: selectWhereMock
-	}));
-	selectMock = vi.fn<(shape: Record<string, unknown>) => { from: typeof selectFromMock }>(() => ({
-		from: selectFromMock
-	}));
+	};
+	selectMock = vi.fn<
+		(shape: Record<string, unknown>) => {
+			from: typeof selectChainMock.from;
+		}
+	>(() => selectChainMock);
 
 	updateReturningMock = vi.fn<(shape: Record<string, unknown>) => Promise<UpdatedShiftRow[]>>(
 		async () => []
@@ -130,6 +176,7 @@ beforeEach(async () => {
 
 	createAuditLogMock = vi.fn(async () => undefined);
 	updateDriverMetricsMock = vi.fn(async () => undefined);
+	sendManagerAlertMock = vi.fn(async () => undefined);
 
 	vi.doMock('$lib/server/db', () => ({
 		db: {
@@ -140,6 +187,7 @@ beforeEach(async () => {
 
 	vi.doMock('$lib/server/db/schema', () => ({
 		assignments: assignmentsTable,
+		routes: routesTable,
 		shifts: shiftsTable
 	}));
 
@@ -155,6 +203,10 @@ beforeEach(async () => {
 		updateDriverMetrics: updateDriverMetricsMock
 	}));
 
+	vi.doMock('$lib/server/services/notifications', () => ({
+		sendManagerAlert: sendManagerAlertMock
+	}));
+
 	({ PATCH } = await import('../../src/routes/api/shifts/[assignmentId]/edit/+server'));
 });
 
@@ -166,6 +218,7 @@ afterEach(() => {
 	vi.doUnmock('drizzle-orm');
 	vi.doUnmock('$lib/server/services/audit');
 	vi.doUnmock('$lib/server/services/metrics');
+	vi.doUnmock('$lib/server/services/notifications');
 });
 
 describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
@@ -240,11 +293,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 	});
 
 	it('returns 403 when assignment ownership does not match', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-2'
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]);
+		selectWhereMock.mockResolvedValueOnce([createAssignment({ userId: 'driver-2' })]);
 
 		const event = createRequestEvent({
 			method: 'PATCH',
@@ -260,11 +309,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 	});
 
 	it('returns 404 when shift record is missing', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1'
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
+		selectWhereMock.mockResolvedValueOnce([createAssignment()]).mockResolvedValueOnce([]);
 
 		const event = createRequestEvent({
 			method: 'PATCH',
@@ -279,19 +324,9 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 	});
 
 	it('returns 400 when shift is not completed yet', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1'
-		};
-		const shift: ShiftRow = {
-			id: 'shift-1',
-			parcelsStart: 10,
-			parcelsReturned: 2,
-			parcelsDelivered: 8,
-			completedAt: null,
-			editableUntil: new Date('2099-01-01T00:00:00.000Z')
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift({ completedAt: null })]);
 
 		const event = createRequestEvent({
 			method: 'PATCH',
@@ -308,19 +343,11 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 	it('returns 400 when edit window has expired', async () => {
 		freezeTime('2026-02-09T12:00:00.000Z');
 
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1'
-		};
-		const shift: ShiftRow = {
-			id: 'shift-1',
-			parcelsStart: 10,
-			parcelsReturned: 2,
-			parcelsDelivered: 8,
-			completedAt: new Date('2026-02-09T09:00:00.000Z'),
-			editableUntil: new Date('2026-02-09T10:00:00.000Z')
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([
+				createShift({ editableUntil: new Date('2026-02-09T10:00:00.000Z') })
+			]);
 
 		const event = createRequestEvent({
 			method: 'PATCH',
@@ -335,19 +362,9 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 	});
 
 	it('returns 400 when parcel data is missing on existing shift', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1'
-		};
-		const shift: ShiftRow = {
-			id: 'shift-1',
-			parcelsStart: null,
-			parcelsReturned: 2,
-			parcelsDelivered: null,
-			completedAt: new Date('2026-02-09T09:00:00.000Z'),
-			editableUntil: new Date('2099-01-01T00:00:00.000Z')
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift({ parcelsStart: null })]);
 
 		const event = createRequestEvent({
 			method: 'PATCH',
@@ -362,19 +379,9 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 	});
 
 	it('returns 400 when returns exceed starting parcel count', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1'
-		};
-		const shift: ShiftRow = {
-			id: 'shift-1',
-			parcelsStart: 10,
-			parcelsReturned: 1,
-			parcelsDelivered: 9,
-			completedAt: new Date('2026-02-09T09:00:00.000Z'),
-			editableUntil: new Date('2099-01-01T00:00:00.000Z')
-		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift()]);
 
 		const event = createRequestEvent({
 			method: 'PATCH',
@@ -388,30 +395,56 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 		});
 	});
 
+	it('returns 400 when excepted returns exceed total returns', async () => {
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift({ parcelsReturned: 3 })]);
+
+		const event = createRequestEvent({
+			method: 'PATCH',
+			params: { assignmentId: 'assignment-1' },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { exceptedReturns: 4 }
+		});
+
+		await expect(PATCH(event as Parameters<typeof PATCH>[0])).rejects.toMatchObject({
+			status: 400
+		});
+	});
+
+	it('returns 400 when excepted returns > 0 but notes are empty', async () => {
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift()]);
+
+		const event = createRequestEvent({
+			method: 'PATCH',
+			params: { assignmentId: 'assignment-1' },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { exceptedReturns: 1, exceptionNotes: '   ' }
+		});
+
+		await expect(PATCH(event as Parameters<typeof PATCH>[0])).rejects.toMatchObject({
+			status: 400
+		});
+	});
+
 	it('returns 200 with success payload and updated shift', async () => {
-		const assignment: AssignmentRow = {
-			id: 'assignment-1',
-			userId: 'driver-1'
-		};
-		const shift: ShiftRow = {
-			id: 'shift-1',
-			parcelsStart: 10,
-			parcelsReturned: 2,
-			parcelsDelivered: 8,
-			completedAt: new Date('2026-02-09T09:00:00.000Z'),
-			editableUntil: new Date('2099-01-01T00:00:00.000Z')
-		};
 		const updatedShift: UpdatedShiftRow = {
 			id: 'shift-1',
 			parcelsStart: 10,
 			parcelsReturned: 3,
 			parcelsDelivered: 7,
+			exceptedReturns: 0,
+			exceptionNotes: null,
 			startedAt: new Date('2026-02-09T07:00:00.000Z'),
 			completedAt: new Date('2026-02-09T09:00:00.000Z'),
 			editableUntil: new Date('2099-01-01T00:00:00.000Z')
 		};
 
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift()]);
 		updateReturningMock.mockResolvedValueOnce([updatedShift]);
 
 		const event = createRequestEvent({
@@ -431,6 +464,8 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 				parcelsStart: 10,
 				parcelsDelivered: 7,
 				parcelsReturned: 3,
+				exceptedReturns: 0,
+				exceptionNotes: null,
 				startedAt: '2026-02-09T07:00:00.000Z',
 				completedAt: '2026-02-09T09:00:00.000Z',
 				editableUntil: '2099-01-01T00:00:00.000Z'
@@ -438,5 +473,119 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 		});
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
 		expect(updateDriverMetricsMock).toHaveBeenCalledWith('driver-1');
+		expect(sendManagerAlertMock).not.toHaveBeenCalled();
+	});
+
+	it('sends manager alert on 0-to->0 exception transition', async () => {
+		const updatedShift: UpdatedShiftRow = {
+			id: 'shift-1',
+			parcelsStart: 10,
+			parcelsReturned: 2,
+			parcelsDelivered: 8,
+			exceptedReturns: 1,
+			exceptionNotes: 'Damaged parcel',
+			startedAt: new Date('2026-02-09T07:00:00.000Z'),
+			completedAt: new Date('2026-02-09T09:00:00.000Z'),
+			editableUntil: new Date('2099-01-01T00:00:00.000Z')
+		};
+
+		// Shift previously had 0 excepted returns
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift({ exceptedReturns: 0 })]);
+		updateReturningMock.mockResolvedValueOnce([updatedShift]);
+
+		const event = createRequestEvent({
+			method: 'PATCH',
+			params: { assignmentId: 'assignment-1' },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { exceptedReturns: 1, exceptionNotes: 'Damaged parcel' }
+		});
+
+		await PATCH(event as Parameters<typeof PATCH>[0]);
+
+		expect(sendManagerAlertMock).toHaveBeenCalledWith('route-1', 'return_exception', {
+			routeName: 'Route Alpha',
+			driverName: 'driver-driver-1',
+			date: '2026-02-09'
+		});
+	});
+
+	it('does not send manager alert when exceptions already existed', async () => {
+		const updatedShift: UpdatedShiftRow = {
+			id: 'shift-1',
+			parcelsStart: 10,
+			parcelsReturned: 2,
+			parcelsDelivered: 8,
+			exceptedReturns: 2,
+			exceptionNotes: 'Updated notes',
+			startedAt: new Date('2026-02-09T07:00:00.000Z'),
+			completedAt: new Date('2026-02-09T09:00:00.000Z'),
+			editableUntil: new Date('2099-01-01T00:00:00.000Z')
+		};
+
+		// Shift previously had 1 excepted return (not a 0→>0 transition)
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([
+				createShift({ exceptedReturns: 1, exceptionNotes: 'Original notes' })
+			]);
+		updateReturningMock.mockResolvedValueOnce([updatedShift]);
+
+		const event = createRequestEvent({
+			method: 'PATCH',
+			params: { assignmentId: 'assignment-1' },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { exceptedReturns: 2, exceptionNotes: 'Updated notes' }
+		});
+
+		await PATCH(event as Parameters<typeof PATCH>[0]);
+
+		expect(sendManagerAlertMock).not.toHaveBeenCalled();
+	});
+
+	it('includes exception before/after in audit log', async () => {
+		const updatedShift: UpdatedShiftRow = {
+			id: 'shift-1',
+			parcelsStart: 10,
+			parcelsReturned: 2,
+			parcelsDelivered: 8,
+			exceptedReturns: 1,
+			exceptionNotes: 'Damaged parcel',
+			startedAt: new Date('2026-02-09T07:00:00.000Z'),
+			completedAt: new Date('2026-02-09T09:00:00.000Z'),
+			editableUntil: new Date('2099-01-01T00:00:00.000Z')
+		};
+
+		selectWhereMock
+			.mockResolvedValueOnce([createAssignment()])
+			.mockResolvedValueOnce([createShift()]);
+		updateReturningMock.mockResolvedValueOnce([updatedShift]);
+
+		const event = createRequestEvent({
+			method: 'PATCH',
+			params: { assignmentId: 'assignment-1' },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { exceptedReturns: 1, exceptionNotes: 'Damaged parcel' }
+		});
+
+		await PATCH(event as Parameters<typeof PATCH>[0]);
+
+		expect(createAuditLogMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				entityType: 'shift',
+				action: 'edit',
+				changes: {
+					before: expect.objectContaining({
+						exceptedReturns: 0,
+						exceptionNotes: null
+					}),
+					after: expect.objectContaining({
+						exceptedReturns: 1,
+						exceptionNotes: 'Damaged parcel'
+					})
+				}
+			})
+		);
 	});
 });

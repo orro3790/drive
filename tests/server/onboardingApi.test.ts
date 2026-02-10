@@ -32,4 +32,25 @@ describe('POST /api/onboarding', () => {
 		expect(response.status).toBe(400);
 		await expect(response.json()).resolves.toEqual({ error: 'invalid_json' });
 	});
+
+	it('rejects invite creation payloads and only allows approval entries', async () => {
+		const event = createRequestEvent({
+			method: 'POST',
+			body: {
+				kind: 'invite',
+				email: 'driver@example.test',
+				expiresInHours: 24
+			},
+			locals: {
+				user: {
+					id: 'manager-1',
+					name: 'Manager',
+					email: 'manager@example.test',
+					role: 'manager'
+				}
+			} as App.Locals
+		});
+
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
+	});
 });

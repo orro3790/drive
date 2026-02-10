@@ -47,6 +47,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			status: assignments.status,
 			confirmedAt: assignments.confirmedAt,
 			routeName: routes.name,
+			routeStartTime: routes.startTime,
 			warehouseName: warehouses.name,
 			shiftId: shifts.id,
 			parcelsStart: shifts.parcelsStart,
@@ -55,7 +56,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 			shiftStartedAt: shifts.startedAt,
 			shiftCompletedAt: shifts.completedAt,
 			shiftArrivedAt: shifts.arrivedAt,
-			shiftEditableUntil: shifts.editableUntil
+			shiftEditableUntil: shifts.editableUntil,
+			shiftExceptedReturns: shifts.exceptedReturns,
+			shiftExceptionNotes: shifts.exceptionNotes
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
@@ -78,7 +81,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				confirmedAt: assignment.confirmedAt,
 				shiftArrivedAt: assignment.shiftArrivedAt,
 				parcelsStart: assignment.parcelsStart,
-				shiftCompletedAt: assignment.shiftCompletedAt
+				shiftCompletedAt: assignment.shiftCompletedAt,
+				routeStartTime: assignment.routeStartTime
 			},
 			lifecycleContext
 		);
@@ -92,6 +96,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			confirmationDeadline: lifecycle.confirmationDeadline.toISOString(),
 			isConfirmable: lifecycle.isConfirmable,
 			routeName: assignment.routeName,
+			routeStartTime: assignment.routeStartTime,
 			warehouseName: assignment.warehouseName,
 			isCancelable: lifecycle.isCancelable,
 			isLateCancel: lifecycle.isLateCancel,
@@ -107,7 +112,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 						parcelsReturned: assignment.parcelsReturned,
 						startedAt: assignment.shiftStartedAt,
 						completedAt: assignment.shiftCompletedAt,
-						editableUntil: assignment.shiftEditableUntil
+						editableUntil: assignment.shiftEditableUntil,
+						exceptedReturns: assignment.shiftExceptedReturns,
+						exceptionNotes: assignment.shiftExceptionNotes
 					}
 				: null
 		};

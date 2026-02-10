@@ -9,12 +9,18 @@ import pino from 'pino';
 import { dev } from '$app/environment';
 
 // Axiom config from env (only needed in production)
-const AXIOM_DATASET = 'driver-ops';
-const AXIOM_TOKEN = process.env.AXIOM_TOKEN;
+const DEFAULT_AXIOM_DATASET = 'driver-ops';
+const AXIOM_DATASET = process.env.AXIOM_DATASET?.trim() || DEFAULT_AXIOM_DATASET;
+const AXIOM_TOKEN = process.env.AXIOM_TOKEN?.trim();
 
-const REDACTED = '[REDACTED]';
+export const REDACTED = '[REDACTED]';
 
-const sensitiveLogPaths: string[] = [
+/**
+ * Operational identifiers intentionally preserved in logs for incident debugging.
+ *
+ * Keep this list small and stable. Do not add direct PII fields here.
+ */
+export const allowedOperationalIdFields = [
 	'userId',
 	'driverId',
 	'managerId',
@@ -24,6 +30,13 @@ const sensitiveLogPaths: string[] = [
 	'warehouseId',
 	'winnerId',
 	'existingWindowId',
+	'requestId'
+] as const;
+
+/**
+ * Sensitive fields that must always be redacted before shipping logs.
+ */
+export const sensitiveFieldPaths = [
 	'email',
 	'token',
 	'fcmToken',
@@ -31,23 +44,28 @@ const sensitiveLogPaths: string[] = [
 	'cookie',
 	'session',
 	'ip',
-	'*.userId',
-	'*.driverId',
-	'*.managerId',
-	'*.assignmentId',
-	'*.bidWindowId',
-	'*.routeId',
-	'*.warehouseId',
-	'*.winnerId',
-	'*.existingWindowId',
-	'*.email',
-	'*.token',
-	'*.fcmToken',
-	'*.authorization',
-	'*.cookie',
-	'*.session',
-	'*.ip'
-];
+	'password',
+	'secret',
+	'apiKey',
+	'api_key',
+	'privateKey',
+	'private_key',
+	'headers.authorization',
+	'headers.cookie'
+] as const;
+
+function buildSensitiveLogPaths(paths: readonly string[]): string[] {
+	return [...paths, ...paths.map((path) => `*.${path}`)];
+}
+
+export const sensitiveLogPaths = buildSensitiveLogPaths(sensitiveFieldPaths);
+
+export function getLoggerRedactionConfig() {
+	return {
+		paths: sensitiveLogPaths,
+		censor: REDACTED
+	} as const;
+}
 
 // Build transport configuration
 function getTransport() {
@@ -84,8 +102,7 @@ const baseLoggerConfig = {
 		level: (label: string) => ({ level: label })
 	},
 	redact: {
-		paths: sensitiveLogPaths,
-		censor: REDACTED
+		...getLoggerRedactionConfig()
 	},
 	timestamp: pino.stdTimeFunctions.isoTime,
 	base: {
@@ -93,28 +110,71 @@ const baseLoggerConfig = {
 	}
 };
 
+type LoggerStartupMode = 'pretty' | 'axiom' | 'stdout-fallback';
+
+type LoggerStartupSignal = {
+	mode: LoggerStartupMode;
+	reason?: 'missing_axiom_token' | 'axiom_transport_init_failed';
+	errorType?: string;
+};
+
 function createLogger() {
 	const transport = getTransport();
+	const startupSignal: LoggerStartupSignal = dev
+		? { mode: 'pretty' }
+		: AXIOM_TOKEN
+			? { mode: 'axiom' }
+			: { mode: 'stdout-fallback', reason: 'missing_axiom_token' };
 
 	try {
-		return pino({
-			...baseLoggerConfig,
-			transport
-		});
+		return {
+			logger: pino({
+				...baseLoggerConfig,
+				transport
+			}),
+			startupSignal
+		};
 	} catch (error) {
-		if (
-			transport &&
-			error instanceof Error &&
-			error.message.includes('unable to determine transport target')
-		) {
-			return pino(baseLoggerConfig);
+		if (transport) {
+			return {
+				logger: pino(baseLoggerConfig),
+				startupSignal: {
+					mode: 'stdout-fallback',
+					reason: 'axiom_transport_init_failed',
+					errorType: toSafeErrorMessage(error)
+				}
+			};
 		}
 
 		throw error;
 	}
 }
 
-const logger = createLogger();
+const { logger, startupSignal } = createLogger();
+
+if (!dev && process.env.NODE_ENV !== 'test') {
+	if (startupSignal.mode === 'axiom') {
+		logger.info(
+			{
+				signal: 'observability.transport.axiom.enabled',
+				axiomDataset: AXIOM_DATASET
+			},
+			'Axiom transport enabled'
+		);
+	}
+
+	if (startupSignal.mode === 'stdout-fallback') {
+		logger.warn(
+			{
+				signal: 'observability.transport.stdout_fallback',
+				axiomDataset: AXIOM_DATASET,
+				reason: startupSignal.reason,
+				errorType: startupSignal.errorType
+			},
+			'Axiom transport unavailable; using stdout JSON logging'
+		);
+	}
+}
 
 /**
  * Create a child logger with context fields

@@ -9,7 +9,6 @@
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
-	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import Tooltip from '$lib/components/primitives/Tooltip.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
 	import StarEmpty from '$lib/components/icons/StarEmpty.svelte';
@@ -32,6 +31,7 @@
 	let isLoading = $state(true);
 	let hasError = $state(false);
 	let showContributions = $state(false);
+	let animateHealthIn = $state(false);
 
 	const scoreColor = $derived.by(() => deriveHealthScoreColor(health));
 	const healthState = $derived.by(() => deriveHealthCardState(health));
@@ -44,6 +44,7 @@
 			? Math.min((health.score / barMax) * 100, 100)
 			: 0
 	);
+	const displayStars = $derived((health ? health.stars : 0) * (animateHealthIn ? 1 : 0));
 
 	const isPastThreshold = $derived.by(() => deriveThresholdFlags(health).isPastThreshold);
 	const isBuffActive = $derived.by(() => deriveThresholdFlags(health).isBuffActive);
@@ -136,14 +137,23 @@
 
 	const contributionsTotal = $derived(contributionRows.reduce((sum, r) => sum + r.total, 0));
 
+	function triggerHealthEnterAnimation() {
+		animateHealthIn = false;
+		requestAnimationFrame(() => {
+			animateHealthIn = true;
+		});
+	}
+
 	async function loadHealth() {
 		isLoading = true;
 		hasError = false;
+		animateHealthIn = false;
 
 		try {
 			const res = await fetch(healthUrl);
 			if (!res.ok) throw new Error('Failed to load health data');
 			health = await res.json();
+			triggerHealthEnterAnimation();
 		} catch {
 			hasError = true;
 			toastStore.error(m.dashboard_health_load_error());
@@ -167,8 +177,32 @@
 	</div>
 
 	{#if isLoading}
-		<div class="health-loading">
-			<Spinner size={20} label={m.dashboard_health_loading()} />
+		<div class="score-section score-section-loading" aria-busy="true" aria-live="polite">
+			<div class="score-header">
+				<div class="score-stars">
+					<div class="stars-row" aria-hidden="true">
+						{#each Array(4) as _, i (i)}
+							<span class="star star-loading">
+								<StarEmpty stroke="var(--border-primary)" />
+							</span>
+						{/each}
+					</div>
+				</div>
+				<div class="score-label-group">
+					<span class="tier-label skeleton-block skeleton-tier" aria-hidden="true"></span>
+					<span class="score-value skeleton-value" aria-hidden="true">
+						<HealthLine stroke="var(--text-faint)" />
+						<span class="skeleton-block skeleton-score"></span>
+					</span>
+				</div>
+			</div>
+			<div class="score-bar-track" aria-hidden="true">
+				<div class="score-bar-fill score-bar-fill-loading" style:width="36%"></div>
+				<div class="elite-marker" style:left="{thresholdPosition}%">
+					<Dollar stroke="var(--text-muted)" />
+				</div>
+			</div>
+			<span class="sr-only">{m.dashboard_health_loading()}</span>
 		</div>
 	{:else if hasError || !health}
 		<p class="health-error">{m.dashboard_health_load_error()}</p>
@@ -179,12 +213,9 @@
 				<div class="score-stars">
 					<div class="stars-row" aria-label="{health.stars} of {health.maxStars} stars">
 						{#each Array(health.maxStars) as _, i (i)}
-							<span class="star" aria-hidden="true">
-								{#if i < health.stars}
-									<StarFilled fill="var(--status-warning)" />
-								{:else}
-									<StarEmpty stroke="var(--border-primary)" />
-								{/if}
+							<span class="star star-slot" class:is-filled={i < displayStars} aria-hidden="true">
+								<span class="star-empty"><StarEmpty stroke="currentColor" /></span>
+								<span class="star-filled"><StarFilled fill="currentColor" /></span>
 							</span>
 						{/each}
 					</div>
@@ -195,9 +226,17 @@
 					{/if}
 				</div>
 				<div class="score-label-group">
-					<span class="tier-label">{m.dashboard_health_tier_label({ tier: health.tier })}</span>
-					<span class="score-value" style:color={scoreColor}>
-						<HealthLine stroke={scoreColor} />
+					<span
+						class="tier-label"
+						style:color={animateHealthIn ? 'var(--text-muted)' : 'var(--text-faint)'}
+					>
+						{m.dashboard_health_tier_label({ tier: health.tier })}
+					</span>
+					<span
+						class="score-value"
+						style:color={animateHealthIn ? scoreColor : 'var(--text-faint)'}
+					>
+						<HealthLine stroke="currentColor" />
 						{health.score ?? 0}
 					</span>
 				</div>
@@ -212,11 +251,11 @@
 			>
 				<div
 					class="score-bar-fill"
-					class:charging={isCharging}
-					style:width="{scorePercent}%"
-					style:background={scoreColor}
+					class:charging={isCharging && animateHealthIn}
+					style:width="{animateHealthIn ? scorePercent : 0}%"
+					style:background={animateHealthIn ? scoreColor : 'var(--interactive-hover)'}
 				>
-					{#if isPastThreshold}
+					{#if isPastThreshold && animateHealthIn}
 						<span class="bar-tip-icon" class:tip-charging={isCharging}>
 							<Lightning stroke={isBuffActive ? 'var(--status-success)' : 'var(--text-muted)'} />
 						</span>
@@ -333,17 +372,71 @@
 		letter-spacing: var(--letter-spacing-sm);
 	}
 
-	.health-loading {
-		display: flex;
-		justify-content: center;
-		padding: var(--spacing-3);
-	}
-
 	.health-error {
 		font-size: var(--font-size-sm);
 		color: var(--status-error);
 		text-align: center;
 		padding: var(--spacing-2) var(--spacing-3);
+	}
+
+	.score-section-loading {
+		padding-top: var(--spacing-1);
+	}
+
+	.skeleton-block {
+		display: inline-flex;
+		border-radius: var(--radius-sm);
+		background: color-mix(in srgb, var(--interactive-hover) 65%, transparent);
+		animation: healthSkeletonPulse 1.4s ease-in-out infinite;
+	}
+
+	.skeleton-tier {
+		width: 64px;
+		height: 1.2em;
+	}
+
+	.skeleton-value {
+		color: var(--text-faint);
+	}
+
+	.skeleton-score {
+		width: 42px;
+		height: 1.2em;
+	}
+
+	.score-bar-fill-loading {
+		background: color-mix(in srgb, var(--interactive-hover) 75%, transparent);
+		animation: healthSkeletonPulse 1.4s ease-in-out infinite;
+	}
+
+	.star-loading {
+		opacity: 0.75;
+	}
+
+	@keyframes healthSkeletonPulse {
+		0%,
+		100% {
+			opacity: 0.55;
+		}
+		50% {
+			opacity: 1;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.skeleton-block,
+		.score-bar-fill-loading {
+			animation: none;
+		}
+
+		.tier-label,
+		.score-value,
+		.score-bar-fill,
+		.star-slot,
+		.star-slot .star-empty,
+		.star-slot .star-filled {
+			transition: none;
+		}
 	}
 
 	/* Hard-stop */
@@ -360,7 +453,7 @@
 	}
 
 	:global(.health-card .notice-banner) {
-		margin: var(--spacing-2) var(--spacing-3) 0;
+		margin: var(--spacing-4) var(--spacing-3) 0;
 	}
 
 	/* Score section */
@@ -391,11 +484,16 @@
 	}
 
 	.tier-label {
+		display: inline-flex;
+		align-items: center;
 		font-size: var(--font-size-xs);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-muted);
 		text-transform: uppercase;
 		letter-spacing: var(--letter-spacing-sm);
+		line-height: 1.2;
+		min-height: 1.2em;
+		transition: color 360ms var(--transition-ease);
 	}
 
 	.score-value {
@@ -404,6 +502,9 @@
 		gap: var(--spacing-1);
 		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-medium);
+		line-height: 1.2;
+		min-height: 1.2em;
+		transition: color 360ms var(--transition-ease);
 	}
 
 	.score-value :global(svg) {
@@ -423,7 +524,9 @@
 		position: relative;
 		height: 100%;
 		border-radius: var(--radius-full);
-		transition: width 0.4s var(--transition-ease);
+		transition:
+			width 0.45s var(--transition-ease),
+			background-color 0.45s var(--transition-ease);
 	}
 
 	/* Charging animation */
@@ -523,7 +626,55 @@
 	}
 
 	.star {
-		display: flex;
+		display: inline-grid;
+		place-items: center;
+		width: 16px;
+		height: 16px;
+	}
+
+	.star :global(svg) {
+		width: 16px;
+		height: 16px;
+	}
+
+	.star-slot {
+		position: relative;
+		color: var(--border-primary);
+		transition: color 360ms var(--transition-ease);
+	}
+
+	.star-slot .star-empty,
+	.star-slot .star-filled {
+		position: absolute;
+		inset: 0;
+		display: inline-grid;
+		place-items: center;
+	}
+
+	.star-slot .star-empty {
+		opacity: 1;
+		transition: opacity 300ms var(--transition-ease);
+	}
+
+	.star-slot .star-filled {
+		opacity: 0;
+		transform: scale(0.9);
+		transition:
+			opacity 300ms var(--transition-ease),
+			transform 300ms var(--transition-ease);
+	}
+
+	.star-slot.is-filled {
+		color: var(--status-warning);
+	}
+
+	.star-slot.is-filled .star-empty {
+		opacity: 0;
+	}
+
+	.star-slot.is-filled .star-filled {
+		opacity: 1;
+		transform: scale(1);
 	}
 
 	/* Contributions section */

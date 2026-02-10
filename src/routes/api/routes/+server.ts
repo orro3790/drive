@@ -9,10 +9,12 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, bidWindows, routes, user, warehouses } from '$lib/server/db/schema';
+import { parseRouteStartTime } from '$lib/config/dispatchPolicy';
 import { routeCreateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getManagerWarehouseIds, canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { createAuditLog } from '$lib/server/services/audit';
+import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
 import { z } from 'zod';
 
 const VALID_STATUSES: RouteStatus[] = ['assigned', 'unfilled', 'bidding'];
@@ -31,11 +33,17 @@ function isValidDate(value: string) {
 
 type AssignmentInfo = {
 	assignmentId: string;
-	status: string;
+	status: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled';
 	userId: string | null;
 	driverName: string | null;
 	bidWindowClosesAt: Date | null;
 };
+
+function isShiftStarted(date: string, routeStartTime: string): boolean {
+	const { hours, minutes } = parseRouteStartTime(routeStartTime);
+	const shiftStart = getTorontoDateTimeInstant(date, { hours, minutes });
+	return new Date() >= shiftStart;
+}
 
 function resolveStatus(assignment?: AssignmentInfo): RouteStatus {
 	if (!assignment) return 'unfilled';
@@ -87,6 +95,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		.select({
 			id: routes.id,
 			name: routes.name,
+			startTime: routes.startTime,
 			warehouseId: warehouses.id,
 			warehouseName: warehouses.name,
 			managerId: routes.managerId,
@@ -153,6 +162,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 			return {
 				...route,
 				status,
+				assignmentStatus: assignment?.status ?? null,
+				isShiftStarted: isShiftStarted(date, route.startTime),
 				isMyRoute: route.managerId === currentUserId,
 				assignmentId: assignment?.assignmentId ?? null,
 				driverName: status === 'assigned' ? (assignment?.driverName ?? null) : null,
@@ -187,7 +198,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'Validation failed');
 	}
 
-	const { name, warehouseId, managerId } = result.data;
+	const { name, warehouseId, managerId, startTime } = result.data;
 
 	// Validate manager has access to this warehouse
 	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
@@ -218,7 +229,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.values({
 			name,
 			warehouseId,
-			managerId: managerId ?? locals.user.id
+			managerId: managerId ?? locals.user.id,
+			startTime
 		})
 		.returning();
 
@@ -229,7 +241,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		actorType: 'user',
 		actorId: locals.user.id,
 		changes: {
-			after: { name, warehouseId, managerId: created.managerId }
+			after: { name, warehouseId, managerId: created.managerId, startTime }
 		}
 	});
 
@@ -238,7 +250,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			route: {
 				...created,
 				warehouseName: warehouse.name,
-				status: 'unfilled'
+				status: 'unfilled',
+				assignmentStatus: null,
+				isShiftStarted: isShiftStarted(toLocalYmd(), created.startTime),
+				assignmentId: null,
+				driverName: null,
+				bidWindowClosesAt: null
 			}
 		},
 		{ status: 201 }

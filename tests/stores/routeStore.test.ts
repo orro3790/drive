@@ -25,9 +25,11 @@ vi.mock('$lib/paraglide/messages.js', () => ({
 	manager_dashboard_detail_no_assignment: () => 'manager_dashboard_detail_no_assignment',
 	bid_windows_assign_error: () => 'bid_windows_assign_error',
 	bid_windows_assign_success: () => 'bid_windows_assign_success',
-	manager_emergency_reopen_error: () => 'manager_emergency_reopen_error',
-	manager_emergency_reopen_success: ({ count }: { count: number }) =>
-		`manager_emergency_reopen_success_${count}`
+	manager_override_open_bidding_error: () => 'manager_override_open_bidding_error',
+	manager_override_open_bidding_success: () => 'manager_override_open_bidding_success',
+	manager_override_open_urgent_bidding_error: () => 'manager_override_open_urgent_bidding_error',
+	manager_override_open_urgent_bidding_success: ({ count }: { count: number }) =>
+		`manager_override_open_urgent_bidding_success_${count}`
 }));
 
 type RouteStatus = 'assigned' | 'unfilled' | 'bidding';
@@ -35,12 +37,15 @@ type RouteStatus = 'assigned' | 'unfilled' | 'bidding';
 type RouteWithWarehouse = {
 	id: string;
 	name: string;
+	startTime: string;
 	warehouseId: string;
 	warehouseName: string;
 	createdBy: string | null;
 	createdAt: Date;
 	updatedAt: Date;
 	status: RouteStatus;
+	assignmentStatus: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled' | null;
+	isShiftStarted: boolean;
 	assignmentId: string | null;
 	driverName: string | null;
 	bidWindowClosesAt: string | null;
@@ -78,12 +83,15 @@ function makeRoute(overrides: Partial<RouteWithWarehouse> = {}): RouteWithWareho
 	return {
 		id: 'route-1',
 		name: 'Downtown',
+		startTime: '09:00',
 		warehouseId: 'warehouse-1',
 		warehouseName: 'Main Warehouse',
 		createdBy: null,
 		createdAt: new Date('2026-02-01T09:00:00.000Z'),
 		updatedAt: new Date('2026-02-01T09:00:00.000Z'),
 		status: 'unfilled',
+		assignmentStatus: 'unfilled',
+		isShiftStarted: false,
 		assignmentId: 'assignment-1',
 		driverName: null,
 		bidWindowClosesAt: null,
@@ -140,7 +148,8 @@ describe('routeStore', () => {
 		store.create(
 			{
 				name: 'Downtown',
-				warehouseId: 'warehouse-1'
+				warehouseId: 'warehouse-1',
+				startTime: '09:00'
 			},
 			'Main Warehouse'
 		);
@@ -268,10 +277,16 @@ describe('routeStore', () => {
 
 		pending.resolve(
 			jsonResponse({
+				action: 'reassign',
 				assignment: {
 					id: 'assignment-assign-success',
-					driverName: 'Driver Three (Server)'
-				}
+					status: 'scheduled',
+					userId: 'driver-3',
+					driverName: 'Driver Three (Server)',
+					routeId: 'route-assign-success'
+				},
+				bidWindow: null,
+				notifiedCount: null
 			})
 		);
 
@@ -283,11 +298,12 @@ describe('routeStore', () => {
 		expect(mocked.toastSuccess).toHaveBeenCalledWith('bid_windows_assign_success');
 	});
 
-	it('transitions route state during successful emergency reopen', async () => {
+	it('transitions route state during successful urgent override', async () => {
 		const store = await importRouteStore();
 		const route = makeRoute({
 			id: 'route-emergency-success',
 			status: 'assigned',
+			assignmentStatus: 'scheduled',
 			driverName: 'Driver Active',
 			assignmentId: 'assignment-emergency-success'
 		});
@@ -296,21 +312,155 @@ describe('routeStore', () => {
 		await seedRoutes(store, [route]);
 		fetchMock.mockReturnValueOnce(pending.promise);
 
-		const emergencyPromise = store.emergencyReopen('assignment-emergency-success');
+		const urgentPromise = store.openUrgentBidding('assignment-emergency-success');
 
-		expect(store.emergencyReopenAssignmentId).toBe('assignment-emergency-success');
+		expect(store.overridingAssignmentId).toBe('assignment-emergency-success');
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/api/assignments/assignment-emergency-success/override',
+			expect.objectContaining({
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'open_urgent_bidding' })
+			})
+		);
 
-		pending.resolve(jsonResponse({ notifiedCount: 4 }));
+		pending.resolve(
+			jsonResponse({
+				action: 'open_urgent_bidding',
+				assignment: {
+					id: 'assignment-emergency-success',
+					status: 'unfilled',
+					userId: null,
+					driverName: null,
+					routeId: 'route-emergency-success'
+				},
+				bidWindow: {
+					id: 'window-urgent-1',
+					mode: 'emergency',
+					status: 'open',
+					closesAt: '2026-02-10T14:30:00.000Z',
+					payBonusPercent: 25
+				},
+				notifiedCount: 4
+			})
+		);
 
-		await expect(emergencyPromise).resolves.toEqual({ ok: true, notifiedCount: 4 });
+		await expect(urgentPromise).resolves.toEqual({ ok: true, notifiedCount: 4 });
+
+		expect(store.overridingAssignmentId).toBeNull();
+		expect(store.routes[0]?.status).toBe('bidding');
+		expect(store.routes[0]?.assignmentStatus).toBe('unfilled');
+		expect(store.routes[0]?.driverName).toBeNull();
+		expect(mocked.toastSuccess).toHaveBeenCalledWith(
+			'manager_override_open_urgent_bidding_success_4'
+		);
+	});
+
+	it('keeps legacy emergencyReopen alias wired to urgent override flow', async () => {
+		const store = await importRouteStore();
+		const route = makeRoute({
+			id: 'route-emergency-alias',
+			status: 'assigned',
+			assignmentStatus: 'scheduled',
+			driverName: 'Driver Active',
+			assignmentId: 'assignment-emergency-alias'
+		});
+		const pending = deferred<Response>();
+
+		await seedRoutes(store, [route]);
+		fetchMock.mockReturnValueOnce(pending.promise);
+
+		const reopenPromise = store.emergencyReopen('assignment-emergency-alias');
+
+		expect(store.emergencyReopenAssignmentId).toBe('assignment-emergency-alias');
+		expect(store.isEmergencyReopening('assignment-emergency-alias')).toBe(true);
+
+		pending.resolve(
+			jsonResponse({
+				action: 'open_urgent_bidding',
+				assignment: {
+					id: 'assignment-emergency-alias',
+					status: 'unfilled',
+					userId: null,
+					driverName: null,
+					routeId: 'route-emergency-alias'
+				},
+				bidWindow: {
+					id: 'window-urgent-alias',
+					mode: 'emergency',
+					status: 'open',
+					closesAt: '2026-02-10T14:50:00.000Z',
+					payBonusPercent: 25
+				},
+				notifiedCount: 1
+			})
+		);
+
+		await expect(reopenPromise).resolves.toEqual({ ok: true, notifiedCount: 1 });
 
 		expect(store.emergencyReopenAssignmentId).toBeNull();
 		expect(store.routes[0]?.status).toBe('bidding');
-		expect(store.routes[0]?.driverName).toBeNull();
-		expect(mocked.toastSuccess).toHaveBeenCalledWith('manager_emergency_reopen_success_4');
+		expect(store.routes[0]?.assignmentStatus).toBe('unfilled');
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/api/assignments/assignment-emergency-alias/override',
+			expect.objectContaining({ body: JSON.stringify({ action: 'open_urgent_bidding' }) })
+		);
+		expect(mocked.toastSuccess).toHaveBeenCalledWith(
+			'manager_override_open_urgent_bidding_success_1'
+		);
 	});
 
-	it('surfaces backend error details when emergency reopen is rejected', async () => {
+	it('opens standard bidding through explicit override action', async () => {
+		const store = await importRouteStore();
+		const route = makeRoute({
+			id: 'route-open-bidding-success',
+			status: 'unfilled',
+			assignmentStatus: 'unfilled',
+			assignmentId: 'assignment-open-bidding-success'
+		});
+
+		await seedRoutes(store, [route]);
+		fetchMock.mockResolvedValueOnce(
+			jsonResponse({
+				action: 'open_bidding',
+				assignment: {
+					id: 'assignment-open-bidding-success',
+					status: 'unfilled',
+					userId: null,
+					driverName: null,
+					routeId: 'route-open-bidding-success'
+				},
+				bidWindow: {
+					id: 'window-open-1',
+					mode: 'competitive',
+					status: 'open',
+					closesAt: '2026-02-10T12:00:00.000Z',
+					payBonusPercent: 0
+				},
+				notifiedCount: 3
+			})
+		);
+
+		await expect(store.openBidding('assignment-open-bidding-success')).resolves.toEqual({
+			ok: true,
+			notifiedCount: 3
+		});
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/api/assignments/assignment-open-bidding-success/override',
+			expect.objectContaining({
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'open_bidding' })
+			})
+		);
+
+		expect(store.routes[0]?.status).toBe('bidding');
+		expect(store.routes[0]?.assignmentStatus).toBe('unfilled');
+		expect(mocked.toastSuccess).toHaveBeenCalledWith('manager_override_open_bidding_success');
+	});
+
+	it('surfaces backend error details when urgent override is rejected', async () => {
 		const store = await importRouteStore();
 		const route = makeRoute({
 			id: 'route-emergency-error',
@@ -320,15 +470,15 @@ describe('routeStore', () => {
 		await seedRoutes(store, [route]);
 		fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'window already open' }, 400));
 
-		await expect(store.emergencyReopen('assignment-emergency-error')).resolves.toEqual({
+		await expect(store.openUrgentBidding('assignment-emergency-error')).resolves.toEqual({
 			ok: false
 		});
 
-		expect(store.emergencyReopenAssignmentId).toBeNull();
+		expect(store.overridingAssignmentId).toBeNull();
 		expect(mocked.toastError).toHaveBeenCalledWith('window already open');
 	});
 
-	it('shows generic error when emergency reopen response payload is invalid', async () => {
+	it('shows generic error when urgent override response payload is invalid', async () => {
 		const store = await importRouteStore();
 		const route = makeRoute({
 			id: 'route-emergency-invalid-payload',
@@ -342,19 +492,20 @@ describe('routeStore', () => {
 			})
 		);
 
-		await expect(store.emergencyReopen('assignment-emergency-invalid-payload')).resolves.toEqual({
+		await expect(store.openUrgentBidding('assignment-emergency-invalid-payload')).resolves.toEqual({
 			ok: false
 		});
 
-		expect(store.emergencyReopenAssignmentId).toBeNull();
-		expect(mocked.toastError).toHaveBeenCalledWith('manager_emergency_reopen_error');
+		expect(store.overridingAssignmentId).toBeNull();
+		expect(mocked.toastError).toHaveBeenCalledWith('manager_override_open_urgent_bidding_error');
 	});
 
-	it('ignores stale emergency reopen completion from older mutation versions', async () => {
+	it('ignores stale urgent override completion from older mutation versions', async () => {
 		const store = await importRouteStore();
 		const route = makeRoute({
 			id: 'route-emergency-stale',
 			status: 'assigned',
+			assignmentStatus: 'scheduled',
 			driverName: 'Driver Active',
 			assignmentId: 'assignment-emergency-stale'
 		});
@@ -362,19 +513,59 @@ describe('routeStore', () => {
 
 		await seedRoutes(store, [route]);
 		fetchMock.mockReturnValueOnce(firstPending.promise);
-		fetchMock.mockResolvedValueOnce(jsonResponse({ notifiedCount: 2 }));
+		fetchMock.mockResolvedValueOnce(
+			jsonResponse({
+				action: 'open_urgent_bidding',
+				assignment: {
+					id: 'assignment-emergency-stale',
+					status: 'unfilled',
+					userId: null,
+					driverName: null,
+					routeId: 'route-emergency-stale'
+				},
+				bidWindow: {
+					id: 'window-urgent-2',
+					mode: 'emergency',
+					status: 'open',
+					closesAt: '2026-02-10T14:30:00.000Z',
+					payBonusPercent: 20
+				},
+				notifiedCount: 2
+			})
+		);
 
-		const firstPromise = store.emergencyReopen('assignment-emergency-stale');
-		const secondResult = await store.emergencyReopen('assignment-emergency-stale');
+		const firstPromise = store.openUrgentBidding('assignment-emergency-stale');
+		const secondResult = await store.openUrgentBidding('assignment-emergency-stale');
 
 		expect(secondResult).toEqual({ ok: true, notifiedCount: 2 });
 		expect(store.routes[0]?.status).toBe('bidding');
-		expect(store.emergencyReopenAssignmentId).toBeNull();
+		expect(store.overridingAssignmentId).toBeNull();
 
-		firstPending.resolve(jsonResponse({ notifiedCount: 9 }));
+		firstPending.resolve(
+			jsonResponse({
+				action: 'open_urgent_bidding',
+				assignment: {
+					id: 'assignment-emergency-stale',
+					status: 'unfilled',
+					userId: null,
+					driverName: null,
+					routeId: 'route-emergency-stale'
+				},
+				bidWindow: {
+					id: 'window-urgent-3',
+					mode: 'emergency',
+					status: 'open',
+					closesAt: '2026-02-10T14:40:00.000Z',
+					payBonusPercent: 20
+				},
+				notifiedCount: 9
+			})
+		);
 		await expect(firstPromise).resolves.toEqual({ ok: true, notifiedCount: 9 });
 
 		expect(mocked.toastSuccess).toHaveBeenCalledTimes(1);
-		expect(mocked.toastSuccess).toHaveBeenCalledWith('manager_emergency_reopen_success_2');
+		expect(mocked.toastSuccess).toHaveBeenCalledWith(
+			'manager_override_open_urgent_bidding_success_2'
+		);
 	});
 });
