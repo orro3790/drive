@@ -6,6 +6,9 @@ type UsersMeRouteModule = typeof import('../../src/routes/api/users/me/+server')
 
 let PATCH: UsersMeRouteModule['PATCH'];
 let transactionMock: ReturnType<typeof vi.fn<(runner: unknown) => Promise<unknown>>>;
+let loggerWarnMock: ReturnType<typeof vi.fn>;
+let childLoggerWarnMock: ReturnType<typeof vi.fn>;
+let childLoggerErrorMock: ReturnType<typeof vi.fn>;
 
 function createUser(
 	id: string,
@@ -24,6 +27,9 @@ beforeEach(async () => {
 	vi.resetModules();
 
 	transactionMock = vi.fn(async (_runner: unknown) => null);
+	loggerWarnMock = vi.fn();
+	childLoggerWarnMock = vi.fn();
+	childLoggerErrorMock = vi.fn();
 
 	vi.doMock('$lib/server/db', () => ({
 		db: {
@@ -31,11 +37,24 @@ beforeEach(async () => {
 		}
 	}));
 
+	vi.doMock('$lib/server/logger', () => ({
+		default: {
+			warn: loggerWarnMock,
+			child: vi.fn(() => ({
+				info: vi.fn(),
+				warn: childLoggerWarnMock,
+				error: childLoggerErrorMock
+			}))
+		},
+		toSafeErrorMessage: vi.fn(() => 'safe_error')
+	}));
+
 	({ PATCH } = await import('../../src/routes/api/users/me/+server'));
 }, 20_000);
 
 afterEach(() => {
 	vi.doUnmock('$lib/server/db');
+	vi.doUnmock('$lib/server/logger');
 	vi.clearAllMocks();
 });
 
@@ -47,6 +66,10 @@ describe('PATCH /api/users/me route contract', () => {
 			status: 401
 		});
 		expect(transactionMock).not.toHaveBeenCalled();
+		expect(loggerWarnMock).toHaveBeenCalledWith(
+			expect.objectContaining({ errorCode: 'USER_PROFILE_UNAUTHORIZED' }),
+			expect.any(String)
+		);
 	});
 
 	it('returns 400 for invalid JSON bodies', async () => {
@@ -61,6 +84,10 @@ describe('PATCH /api/users/me route contract', () => {
 			status: 400
 		});
 		expect(transactionMock).not.toHaveBeenCalled();
+		expect(childLoggerWarnMock).toHaveBeenCalledWith(
+			expect.objectContaining({ errorCode: 'USER_PROFILE_INVALID_JSON' }),
+			expect.any(String)
+		);
 	});
 
 	it('maps unique-email violations to 409 email_taken', async () => {
@@ -81,6 +108,35 @@ describe('PATCH /api/users/me route contract', () => {
 
 		expect(response.status).toBe(409);
 		await expect(response.json()).resolves.toEqual({ error: 'email_taken' });
+		expect(childLoggerWarnMock).toHaveBeenCalledWith(
+			expect.objectContaining({ errorCode: 'USER_PROFILE_EMAIL_CONFLICT' }),
+			expect.any(String)
+		);
+	});
+
+	it('logs database failures and returns 500 when transaction errors are unexpected', async () => {
+		transactionMock.mockRejectedValueOnce(new Error('db timeout'));
+
+		const event = createRequestEvent({
+			method: 'PATCH',
+			locals: { user: createUser('driver-500') },
+			body: {
+				name: 'Driver Five Hundred',
+				email: 'driver-500@example.test',
+				phone: null
+			}
+		});
+
+		await expect(PATCH(event as Parameters<typeof PATCH>[0])).rejects.toMatchObject({
+			status: 500
+		});
+		expect(childLoggerErrorMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				errorCode: 'USER_PROFILE_DB_TRANSACTION_FAILED',
+				errorType: 'safe_error'
+			}),
+			expect.any(String)
+		);
 	});
 
 	it('returns updated user payload when transaction succeeds', async () => {

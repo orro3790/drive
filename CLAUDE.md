@@ -304,6 +304,7 @@ Reference: `.env.example` for full documentation.
 | `FIREBASE_CLIENT_EMAIL`        | FCM service account email                           | Yes       |
 | `FIREBASE_PRIVATE_KEY`         | FCM service account private key                     | Yes       |
 | `AXIOM_TOKEN`                  | Axiom API token for log shipping                    | Prod only |
+| `AXIOM_DATASET`                | Optional Axiom dataset (defaults to `driver-ops`)   | No        |
 | `TEST_USER_EMAIL`              | Dev/test user email                                 | Dev only  |
 | `TEST_USER_PASSWORD`           | Dev/test user password                              | Dev only  |
 
@@ -379,7 +380,7 @@ const firebaseConfig = {
 Structured logging using Pino with Axiom transport for production log shipping.
 
 **Development**: Pretty-printed colored logs to console (no Axiom required)
-**Production**: JSON logs shipped to Axiom dataset `driver-ops`
+**Production**: JSON logs shipped to Axiom (`AXIOM_DATASET` or default `driver-ops`)
 
 ```typescript
 // Basic usage
@@ -397,4 +398,4 @@ import { redactSensitive } from '$lib/server/logger';
 log.info(redactSensitive(userData), 'User data');
 ```
 
-Setup: Get Axiom token from Axiom Console > Settings > API Tokens. Set `AXIOM_TOKEN` in Vercel.
+Setup: Get Axiom token from Axiom Console > Settings > API Tokens. Set `AXIOM_TOKEN` in Vercel (and optional `AXIOM_DATASET`).
