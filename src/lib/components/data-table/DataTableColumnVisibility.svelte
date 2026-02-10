@@ -46,19 +46,30 @@
 		open = false;
 	}
 
-	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape') {
-			event.stopPropagation();
-			close();
-		}
-	}
-
 	function handleOutsideClick(event: MouseEvent) {
 		if (!open) return;
 		const target = event.target as Node;
 		if (containerRef && containerRef.contains(target)) return;
 		close();
 	}
+
+	$effect(() => {
+		if (!open) {
+			return;
+		}
+
+		const handleEscape = (event: KeyboardEvent) => {
+			if (event.key !== 'Escape') {
+				return;
+			}
+
+			event.stopPropagation();
+			close();
+		};
+
+		window.addEventListener('keydown', handleEscape);
+		return () => window.removeEventListener('keydown', handleEscape);
+	});
 
 	onMount(() => {
 		window.addEventListener('mousedown', handleOutsideClick);
@@ -108,39 +119,30 @@
 	</IconButton>
 
 	{#if open}
-		<div class="column-menu" role="menu" tabindex="-1" onkeydown={handleKeydown}>
+		<div class="column-menu" role="group" aria-label={displayLabel} tabindex="-1">
 			{#if hideableColumns.length === 0}
 				<div class="empty">{m.table_columns_no_hideable()}</div>
 			{:else}
 				{#each hideableColumns as column (`${column.id}-${columnVisibility[column.id] ?? true}`)}
 					{@const visible = isColumnVisible(column.id)}
-					<button
-						type="button"
-						class="menu-item"
-						role="menuitemcheckbox"
-						aria-checked={visible}
-						onmousedown={(event) => event.stopPropagation()}
-						onclick={(event) => {
-							event.preventDefault();
-							event.stopPropagation();
-							column.toggleVisibility();
-						}}
-					>
+					<div class="menu-item">
 						<Checkbox
 							checked={visible}
+							ariaLabel={getColumnLabel(column)}
 							onclick={(event) => {
 								event.stopPropagation();
 								column.toggleVisibility();
 							}}
-						/>
-						<span class="label">{getColumnLabel(column)}</span>
-					</button>
+						>
+							<span class="label">{getColumnLabel(column)}</span>
+						</Checkbox>
+					</div>
 				{/each}
 				{#if isResizingEnabled}
 					<hr class="menu-divider" />
 					<button
 						type="button"
-						class="menu-item reset-btn"
+						class="menu-item-button reset-btn"
 						disabled={!hasCustomizedLayout}
 						onmousedown={(event) => event.stopPropagation()}
 						onclick={resetAllColumnPreferences}
@@ -175,6 +177,25 @@
 	}
 
 	.menu-item {
+		border-radius: var(--radius-sm);
+	}
+
+	.menu-item :global(.checkbox-container) {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		gap: var(--spacing-2);
+		width: 100%;
+		padding: var(--spacing-2);
+		border-radius: inherit;
+	}
+
+	.menu-item :global(.checkbox-container:hover),
+	.menu-item :global(.checkbox-container:focus-within) {
+		background: var(--interactive-hover);
+	}
+
+	.menu-item-button {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-2);
@@ -187,8 +208,8 @@
 		cursor: pointer;
 	}
 
-	.menu-item:hover,
-	.menu-item:focus-visible {
+	.menu-item-button:hover,
+	.menu-item-button:focus-visible {
 		background: var(--interactive-hover);
 		outline: none;
 	}

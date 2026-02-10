@@ -155,6 +155,19 @@ system to notify the user. The toggle should revert to its previous state on fai
 	.toggle.disabled .knob {
 		background: var(--text-muted);
 	}
+
+	@media (pointer: coarse), (hover: none) {
+		.toggle::before {
+			content: '';
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			width: 44px;
+			height: 44px;
+			transform: translate(-50%, -50%);
+		}
+	}
+
 	.sr-only {
 		position: absolute;
 		width: 1px;

@@ -73,8 +73,13 @@
 		onMarkRead(notification.id);
 	}
 
-	function handleCtaClick(event: MouseEvent) {
+	function handleCtaClick() {
+		handleMarkRead();
+	}
+
+	function handleMarkReadButtonClick(event: MouseEvent) {
 		event.stopPropagation();
+		handleMarkRead();
 	}
 </script>
 
@@ -90,13 +95,11 @@
 	</IconBase>
 {/snippet}
 
-<button
-	type="button"
+<article
 	class="notification-item"
 	class:unread={isUnread}
 	class:read={!isUnread}
 	style={`--notification-accent: var(${effectiveColor});`}
-	onclick={handleMarkRead}
 >
 	<div class="icon-circle" aria-hidden="true">
 		<Icon />
@@ -117,11 +120,21 @@
 					<span class="notification-time">{timeLabel}</span>
 				{/if}
 			</div>
-			{#if cta}
-				<a class="notification-cta" href={cta.href} onclick={handleCtaClick}>
-					<Chip variant="tag" size="xs" label={cta.label} />
-				</a>
-			{/if}
+			<div class="notification-actions">
+				{#if isUnread}
+					<button
+						type="button"
+						class="mark-read-button"
+						aria-label={m.notifications_mark_read_aria({ title: notification.title })}
+						onclick={handleMarkReadButtonClick}
+					></button>
+				{/if}
+				{#if cta}
+					<a class="notification-cta" href={cta.href} onclick={handleCtaClick}>
+						<Chip variant="tag" size="xs" label={cta.label} />
+					</a>
+				{/if}
+			</div>
 		</div>
 		<p class="notification-body">{notification.body}</p>
 		{#if metadataChips.length}
@@ -145,10 +158,11 @@
 			<span class="sr-only">{m.notifications_unread_label()}</span>
 		{/if}
 	</div>
-</button>
+</article>
 
 <style>
 	.notification-item {
+		margin: 0;
 		background: transparent;
 		border-radius: var(--radius-base);
 		display: grid;
@@ -157,7 +171,6 @@
 		padding: var(--spacing-3);
 		width: 100%;
 		text-align: left;
-		cursor: pointer;
 		transition:
 			background 150ms ease,
 			border-color 150ms ease,
@@ -220,6 +233,13 @@
 		min-width: 0;
 	}
 
+	.notification-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		flex-shrink: 0;
+	}
+
 	.notification-title {
 		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-medium);
@@ -266,6 +286,37 @@
 	.notification-cta {
 		text-decoration: none;
 		flex-shrink: 0;
+	}
+
+	.mark-read-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border: none;
+		border-radius: var(--radius-full);
+		background: transparent;
+		color: var(--text-faint);
+		cursor: pointer;
+	}
+
+	.mark-read-button::before {
+		content: '';
+		width: 8px;
+		height: 8px;
+		border-radius: var(--radius-full);
+		background: currentColor;
+	}
+
+	.notification-item.unread .mark-read-button {
+		color: var(--notification-accent);
+	}
+
+	.mark-read-button:hover,
+	.mark-read-button:focus-visible {
+		background: var(--interactive-hover);
+		outline: none;
 	}
 
 	.notification-cta:hover :global(.chip) {

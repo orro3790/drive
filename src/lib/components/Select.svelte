@@ -580,4 +580,16 @@ The select border turns red when errors are present.
 			transform: translateY(0);
 		}
 	}
+
+	@media (pointer: coarse), (hover: none) {
+		.select-container:not(.size-xl) {
+			height: 44px;
+			min-height: 44px;
+		}
+
+		.select-container .option-item {
+			height: auto;
+			min-height: 44px;
+		}
+	}
 </style>

@@ -272,4 +272,11 @@
 		background-color: color-mix(in srgb, var(--interactive-hover) 50%, transparent);
 		cursor: text;
 	}
+
+	@media (pointer: coarse), (hover: none) {
+		.ie-row.small,
+		.ie-row.base {
+			min-height: 44px;
+		}
+	}
 </style>

@@ -923,4 +923,21 @@ The combobox border turns red when errors are present.
 			transform: translateY(0);
 		}
 	}
+
+	@media (pointer: coarse), (hover: none) {
+		.combobox-container:not(.size-xl) {
+			height: 44px;
+			min-height: 44px;
+		}
+
+		.combobox-container .option-item {
+			height: auto;
+			min-height: 44px;
+		}
+
+		.combobox-container .search-input,
+		.combobox-container .loading-container {
+			min-height: 44px;
+		}
+	}
 </style>

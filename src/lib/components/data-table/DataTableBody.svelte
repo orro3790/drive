@@ -234,7 +234,6 @@ Priority: cellComponents > cells > columnDef.cell > default rendering
 			onmouseenter={() => onRowHover?.(rowData)}
 			onmouseleave={() => onRowHover?.(null)}
 			tabindex={isRowClickable ? 0 : undefined}
-			role={isRowClickable ? 'button' : undefined}
 		>
 			{#if selectionEnabled}
 				<td class="col-select">
