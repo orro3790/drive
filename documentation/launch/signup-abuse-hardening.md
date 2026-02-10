@@ -34,12 +34,12 @@ Reduce signup and sign-in abuse risk at launch by enforcing:
 
 Configured in `src/lib/server/auth-abuse-hardening.ts` and persisted via `rate_limit` table.
 
-| Endpoint pattern         | Window | Max requests | Purpose                                   |
-| ------------------------ | ------ | ------------ | ----------------------------------------- |
-| `/sign-up/*`             | 15 min | 3            | Slow down bot signups and invite probing  |
-| `/sign-in/*`             | 5 min  | 5            | Reduce credential stuffing burst impact   |
-| `/forget-password`       | 10 min | 3            | Throttle reset-link abuse                 |
-| global auth default rule | 60 sec | 60           | Catch-all safety net for other auth paths |
+| Endpoint pattern          | Window | Max requests | Purpose                                   |
+| ------------------------- | ------ | ------------ | ----------------------------------------- |
+| `/sign-up/*`              | 15 min | 3            | Slow down bot signups and invite probing  |
+| `/sign-in/*`              | 5 min  | 5            | Reduce credential stuffing burst impact   |
+| `/request-password-reset` | 10 min | 3            | Throttle reset-link abuse                 |
+| global auth default rule  | 60 sec | 60           | Catch-all safety net for other auth paths |
 
 Storage mode is set to `database`, so counters survive across instances and cold starts.
 

@@ -341,7 +341,11 @@ function getAuthBaseUrl(): string {
 }
 ```
 
-Trusted origins configured for localhost + `*.vercel.app` wildcard.
+Trusted origins are environment-scoped:
+
+- development defaults to localhost origins (with optional dev-only overrides)
+- preview uses explicit `https://${VERCEL_URL}`
+- production requires explicit canonical origins (no wildcard patterns)
 
 ### Firebase Configuration
 

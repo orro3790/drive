@@ -6,28 +6,22 @@
 
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { and, eq } from 'drizzle-orm';
-import { scrypt, randomBytes, timingSafeEqual } from 'crypto';
-import { promisify } from 'util';
-import { db } from '$lib/server/db';
-import { account } from '$lib/server/db/auth-schema';
+import { auth } from '$lib/server/auth';
+import { mapChangePasswordFailure } from '$lib/server/password-change-error-mapping';
 import { userPasswordUpdateSchema } from '$lib/schemas/user-settings';
 
-const scryptAsync = promisify(scrypt);
+async function readAuthErrorMessage(response: Response): Promise<string | null> {
+	const payload = await response
+		.clone()
+		.json()
+		.catch(() => null);
 
-async function hashPassword(password: string): Promise<string> {
-	const salt = randomBytes(16).toString('hex');
-	const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
-	return `${salt}:${derivedKey.toString('hex')}`;
-}
+	if (!payload || typeof payload !== 'object') {
+		return null;
+	}
 
-async function verifyPassword(password: string, stored: string): Promise<boolean> {
-	const [salt, key] = stored.split(':');
-	if (!salt || !key) return false;
-	const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
-	const storedBuffer = Buffer.from(key, 'hex');
-	if (storedBuffer.length !== derivedKey.length) return false;
-	return timingSafeEqual(storedBuffer, derivedKey);
+	const message = (payload as { message?: unknown }).message;
+	return typeof message === 'string' ? message : null;
 }
 
 export const POST: RequestHandler = async ({ locals, request }) => {
@@ -35,7 +29,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(401, 'Unauthorized');
 	}
 
-	const body = await request.json();
+	const body = await request.json().catch(() => null);
 	const result = userPasswordUpdateSchema.safeParse(body);
 
 	if (!result.success) {
@@ -44,32 +38,21 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	const { currentPassword, newPassword } = result.data;
 
-	const [credentialAccount] = await db
-		.select({
-			id: account.id,
-			password: account.password
-		})
-		.from(account)
-		.where(and(eq(account.userId, locals.user.id), eq(account.providerId, 'credential')))
-		.limit(1);
+	const authResponse = await auth.api.changePassword({
+		headers: request.headers,
+		body: {
+			currentPassword,
+			newPassword
+		},
+		asResponse: true
+	});
 
-	if (!credentialAccount?.password) {
-		return json({ error: 'no_credential_account' }, { status: 400 });
+	if (authResponse.ok) {
+		return json({ success: true });
 	}
 
-	const matches = await verifyPassword(currentPassword, credentialAccount.password);
-	if (!matches) {
-		return json({ error: 'invalid_password' }, { status: 400 });
-	}
+	const authMessage = await readAuthErrorMessage(authResponse);
+	const mappedFailure = mapChangePasswordFailure(authMessage, authResponse.status);
 
-	const hashedPassword = await hashPassword(newPassword);
-	await db
-		.update(account)
-		.set({
-			password: hashedPassword,
-			updatedAt: new Date()
-		})
-		.where(eq(account.id, credentialAccount.id));
-
-	return json({ success: true });
+	return json({ error: mappedFailure.error }, { status: mappedFailure.status });
 };
