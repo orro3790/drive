@@ -396,6 +396,51 @@ describe('POST /api/shifts/arrive contract', () => {
 		});
 	});
 
+	it('enforces the 9 AM Toronto cutoff across DST fall-back boundaries', async () => {
+		const assignment: AssignmentRow = {
+			id: 'assignment-dst-fall',
+			userId: 'driver-1',
+			date: '2026-11-01',
+			status: 'scheduled',
+			confirmedAt: new Date('2026-10-31T12:00:00.000Z')
+		};
+
+		createAssignmentLifecycleContextMock
+			.mockReturnValueOnce({ torontoToday: '2026-11-01' })
+			.mockReturnValueOnce({ torontoToday: '2026-11-01' });
+
+		freezeTime('2026-11-01T13:59:59.000Z');
+		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
+		insertReturningMock.mockResolvedValueOnce([
+			{
+				id: 'shift-dst-fall',
+				arrivedAt: new Date('2026-11-01T13:59:59.000Z')
+			}
+		]);
+
+		const beforeCutoffEvent = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb' }
+		});
+
+		const beforeCutoffResponse = await POST(beforeCutoffEvent as Parameters<typeof POST>[0]);
+		expect(beforeCutoffResponse.status).toBe(200);
+
+		freezeTime('2026-11-01T14:00:00.000Z');
+		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([]);
+
+		const atCutoffEvent = createRequestEvent({
+			method: 'POST',
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb' }
+		});
+
+		await expect(POST(atCutoffEvent as Parameters<typeof POST>[0])).rejects.toMatchObject({
+			status: 400
+		});
+	});
+
 	it('returns 409 when assignment is not arrivable by lifecycle rules', async () => {
 		const assignment: AssignmentRow = {
 			id: 'assignment-1',
