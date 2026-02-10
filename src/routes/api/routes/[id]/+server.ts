@@ -106,6 +106,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 		.select({
 			id: routes.id,
 			name: routes.name,
+			startTime: routes.startTime,
 			warehouseId: routes.warehouseId,
 			warehouseName: warehouses.name,
 			managerId: routes.managerId,
@@ -205,12 +206,14 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 			before: {
 				name: existing.name,
 				warehouseId: existing.warehouseId,
-				managerId: existing.managerId
+				managerId: existing.managerId,
+				startTime: existing.startTime
 			},
 			after: {
 				name: updated.name,
 				warehouseId: updated.warehouseId,
-				managerId: updated.managerId
+				managerId: updated.managerId,
+				startTime: updated.startTime
 			}
 		}
 	});

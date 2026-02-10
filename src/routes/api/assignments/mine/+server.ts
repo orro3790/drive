@@ -47,6 +47,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			status: assignments.status,
 			confirmedAt: assignments.confirmedAt,
 			routeName: routes.name,
+			routeStartTime: routes.startTime,
 			warehouseName: warehouses.name,
 			shiftId: shifts.id,
 			parcelsStart: shifts.parcelsStart,
@@ -78,7 +79,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				confirmedAt: assignment.confirmedAt,
 				shiftArrivedAt: assignment.shiftArrivedAt,
 				parcelsStart: assignment.parcelsStart,
-				shiftCompletedAt: assignment.shiftCompletedAt
+				shiftCompletedAt: assignment.shiftCompletedAt,
+				routeStartTime: assignment.routeStartTime
 			},
 			lifecycleContext
 		);
@@ -92,6 +94,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			confirmationDeadline: lifecycle.confirmationDeadline.toISOString(),
 			isConfirmable: lifecycle.isConfirmable,
 			routeName: assignment.routeName,
+			routeStartTime: assignment.routeStartTime,
 			warehouseName: assignment.warehouseName,
 			isCancelable: lifecycle.isCancelable,
 			isLateCancel: lifecycle.isLateCancel,

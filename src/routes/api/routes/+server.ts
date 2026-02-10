@@ -87,6 +87,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		.select({
 			id: routes.id,
 			name: routes.name,
+			startTime: routes.startTime,
 			warehouseId: warehouses.id,
 			warehouseName: warehouses.name,
 			managerId: routes.managerId,
@@ -187,7 +188,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'Validation failed');
 	}
 
-	const { name, warehouseId, managerId } = result.data;
+	const { name, warehouseId, managerId, startTime } = result.data;
 
 	// Validate manager has access to this warehouse
 	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
@@ -218,7 +219,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.values({
 			name,
 			warehouseId,
-			managerId: managerId ?? locals.user.id
+			managerId: managerId ?? locals.user.id,
+			startTime
 		})
 		.returning();
 
@@ -229,7 +231,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		actorType: 'user',
 		actorId: locals.user.id,
 		changes: {
-			after: { name, warehouseId, managerId: created.managerId }
+			after: { name, warehouseId, managerId: created.managerId, startTime }
 		}
 	});
 
