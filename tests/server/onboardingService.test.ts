@@ -1,21 +1,26 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-	consumeProductionSignupAuthorization,
-	resolveProductionSignupAuthorization,
+	createOnboardingApproval,
+	createOnboardingInvite,
+	finalizeProductionSignupAuthorizationReservation,
+	releaseProductionSignupAuthorizationReservation,
+	revokeOnboardingEntry,
+	reserveProductionSignupAuthorization,
 	type SignupOnboardingEntryRecord
 } from '$lib/server/services/onboarding';
 
-type ServiceDbClient = NonNullable<Parameters<typeof resolveProductionSignupAuthorization>[1]>;
+type ServiceDbClient = NonNullable<Parameters<typeof reserveProductionSignupAuthorization>[1]>;
 
 type SelectResult = SignupOnboardingEntryRecord[];
-type UpdateResult = SignupOnboardingEntryRecord[];
+type UpdateResult = SignupOnboardingEntryRecord[] | Error;
+type InsertResult = SignupOnboardingEntryRecord[] | Error;
 
 function createEntry(overrides: Partial<SignupOnboardingEntryRecord>): SignupOnboardingEntryRecord {
 	const now = new Date('2026-02-09T00:00:00.000Z');
 
 	return {
-		id: overrides.id ?? 'entry-1',
+		id: overrides.id ?? '11111111-1111-4111-8111-111111111111',
 		email: overrides.email ?? 'driver@example.com',
 		kind: overrides.kind ?? 'approval',
 		tokenHash: overrides.tokenHash ?? null,
@@ -31,12 +36,18 @@ function createEntry(overrides: Partial<SignupOnboardingEntryRecord>): SignupOnb
 	};
 }
 
-function createDbClientMock(selectResults: SelectResult[], updateResults: UpdateResult[]) {
+function createDbClientMock(
+	selectResults: SelectResult[],
+	updateResults: UpdateResult[],
+	insertResults: InsertResult[] = []
+) {
 	const queuedSelectResults = [...selectResults];
 	const queuedUpdateResults = [...updateResults];
+	const queuedInsertResults = [...insertResults];
 
 	const nextSelect = () => queuedSelectResults.shift() ?? [];
 	const nextUpdate = () => queuedUpdateResults.shift() ?? [];
+	const nextInsert = () => queuedInsertResults.shift() ?? [];
 
 	const makeOrderByResult = () => {
 		const result = nextSelect();
@@ -58,12 +69,26 @@ function createDbClientMock(selectResults: SelectResult[], updateResults: Update
 	}));
 	const selectMock = vi.fn(() => ({ from: selectFromMock }));
 
-	const updateReturningMock = vi.fn(async () => nextUpdate());
+	const updateReturningMock = vi.fn(async () => {
+		const result = nextUpdate();
+		if (result instanceof Error) {
+			throw result;
+		}
+
+		return result;
+	});
 	const updateWhereMock = vi.fn(() => ({ returning: updateReturningMock }));
 	const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
 	const updateMock = vi.fn(() => ({ set: updateSetMock }));
 
-	const insertReturningMock = vi.fn(async () => [] as SignupOnboardingEntryRecord[]);
+	const insertReturningMock = vi.fn(async () => {
+		const result = nextInsert();
+		if (result instanceof Error) {
+			throw result;
+		}
+
+		return result;
+	});
 	const insertValuesMock = vi.fn(() => ({ returning: insertReturningMock }));
 	const insertMock = vi.fn(() => ({ values: insertValuesMock }));
 
@@ -72,164 +97,324 @@ function createDbClientMock(selectResults: SelectResult[], updateResults: Update
 			select: selectMock,
 			update: updateMock,
 			insert: insertMock
-		} as unknown as ServiceDbClient
+		} as unknown as ServiceDbClient,
+		mocks: {
+			updateReturningMock,
+			insertReturningMock
+		}
 	};
 }
 
-describe('manager onboarding signup policy', () => {
-	it('approve then signup success', async () => {
-		const approval = createEntry({
-			id: 'approval-1',
+describe('onboarding service reservation flow', () => {
+	it('reserves invite authorization and finalizes it after signup success', async () => {
+		const pendingInvite = createEntry({
+			id: '11111111-1111-4111-8111-111111111111',
 			email: 'approved@driver.test',
-			kind: 'approval'
+			kind: 'invite'
 		});
-		const consumedApproval = createEntry({
-			...approval,
+		const reservedInvite = createEntry({
+			...pendingInvite,
+			status: 'reserved'
+		});
+		const consumedInvite = createEntry({
+			...pendingInvite,
 			status: 'consumed',
 			consumedAt: new Date('2026-02-10T00:00:00.000Z'),
 			consumedByUserId: 'driver-1'
 		});
 
-		const { dbClient } = createDbClientMock([[approval], [approval]], [[consumedApproval]]);
+		const { dbClient } = createDbClientMock(
+			[[], [pendingInvite]],
+			[[reservedInvite], [consumedInvite]]
+		);
 
-		const authorization = await resolveProductionSignupAuthorization(
+		const reservation = await reserveProductionSignupAuthorization(
 			{
 				email: 'approved@driver.test',
+				inviteCodeHeader: 'invite-token',
+				now: new Date('2026-02-10T00:00:00.000Z')
+			},
+			dbClient
+		);
+
+		expect(reservation).toMatchObject({
+			allowed: true,
+			reservationId: pendingInvite.id,
+			matchedEntryId: pendingInvite.id,
+			matchedKind: 'invite'
+		});
+
+		const finalized = await finalizeProductionSignupAuthorizationReservation(
+			{
+				reservationId: pendingInvite.id,
+				userId: 'driver-1',
+				now: new Date('2026-02-10T00:00:00.000Z')
+			},
+			dbClient
+		);
+
+		expect(finalized?.status).toBe('consumed');
+		expect(finalized?.consumedByUserId).toBe('driver-1');
+	});
+
+	it('allows only one reservation winner under contention', async () => {
+		const pendingApproval = createEntry({
+			id: '22222222-2222-4222-8222-222222222222',
+			email: 'race@driver.test',
+			kind: 'approval'
+		});
+		const reservedApproval = createEntry({
+			...pendingApproval,
+			status: 'reserved'
+		});
+
+		const { dbClient } = createDbClientMock(
+			[[pendingApproval], [pendingApproval]],
+			[[], [reservedApproval], [], []]
+		);
+
+		const winner = await reserveProductionSignupAuthorization(
+			{
+				email: 'race@driver.test',
 				inviteCodeHeader: null,
 				now: new Date('2026-02-10T00:00:00.000Z')
 			},
 			dbClient
 		);
 
-		expect(authorization).toMatchObject({
+		const loser = await reserveProductionSignupAuthorization(
+			{
+				email: 'race@driver.test',
+				inviteCodeHeader: null,
+				now: new Date('2026-02-10T00:00:01.000Z')
+			},
+			dbClient
+		);
+
+		expect(winner.allowed).toBe(true);
+		expect(loser.allowed).toBe(false);
+	});
+
+	it('releases stale reservations before reserving a pending entry', async () => {
+		const staleReservedApproval = createEntry({
+			id: '99999999-9999-4999-8999-999999999999',
+			email: 'stale@driver.test',
+			kind: 'approval',
+			status: 'reserved',
+			updatedAt: new Date('2026-02-09T00:00:00.000Z')
+		});
+		const pendingApproval = createEntry({
+			id: '33333333-3333-4333-8333-333333333333',
+			email: 'stale@driver.test',
+			kind: 'approval'
+		});
+		const reservedApproval = createEntry({
+			...pendingApproval,
+			status: 'reserved'
+		});
+
+		const { dbClient, mocks } = createDbClientMock(
+			[[staleReservedApproval], [pendingApproval]],
+			[[pendingApproval], [reservedApproval]]
+		);
+
+		const reservation = await reserveProductionSignupAuthorization(
+			{
+				email: 'stale@driver.test',
+				inviteCodeHeader: null,
+				now: new Date('2026-02-10T00:00:00.000Z')
+			},
+			dbClient
+		);
+
+		expect(reservation.allowed).toBe(true);
+		expect(mocks.updateReturningMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('revokes stale reservation when releasing would violate pending uniqueness', async () => {
+		const staleReservedApproval = createEntry({
+			id: '12121212-1212-4212-8212-121212121212',
+			email: 'collision@driver.test',
+			kind: 'approval',
+			status: 'reserved'
+		});
+		const pendingApproval = createEntry({
+			id: '34343434-3434-4434-8434-343434343434',
+			email: 'collision@driver.test',
+			kind: 'approval',
+			status: 'pending'
+		});
+		const revokedStaleApproval = createEntry({
+			...staleReservedApproval,
+			status: 'revoked',
+			revokedAt: new Date('2026-02-10T00:00:00.000Z')
+		});
+		const reservedApproval = createEntry({
+			...pendingApproval,
+			status: 'reserved'
+		});
+		const uniqueCollision = Object.assign(new Error('pending duplicate'), {
+			code: '23505',
+			constraint: 'uq_signup_onboarding_pending_email_kind'
+		});
+
+		const { dbClient, mocks } = createDbClientMock(
+			[[staleReservedApproval], [pendingApproval]],
+			[uniqueCollision, [revokedStaleApproval], [reservedApproval]]
+		);
+
+		const reservation = await reserveProductionSignupAuthorization(
+			{
+				email: 'collision@driver.test',
+				inviteCodeHeader: null,
+				now: new Date('2026-02-10T00:00:00.000Z')
+			},
+			dbClient
+		);
+
+		expect(reservation).toMatchObject({
 			allowed: true,
-			matchedEntryId: 'approval-1',
+			reservationId: pendingApproval.id,
 			matchedKind: 'approval'
 		});
-
-		const consumed = await consumeProductionSignupAuthorization(
-			{
-				email: 'approved@driver.test',
-				userId: 'driver-1',
-				inviteCodeHeader: null,
-				now: new Date('2026-02-10T00:00:00.000Z')
-			},
-			dbClient
-		);
-
-		expect(consumed?.status).toBe('consumed');
-		expect(consumed?.consumedByUserId).toBe('driver-1');
+		expect(mocks.updateReturningMock).toHaveBeenCalledTimes(3);
 	});
 
-	it('revoked or expired invite rejection', async () => {
-		const expiredInvite = createEntry({
-			id: 'invite-1',
-			email: 'driver@invite.test',
-			kind: 'invite',
-			tokenHash: 'invite-hash',
-			expiresAt: new Date('2026-02-01T00:00:00.000Z')
+	it('releases reservation back to pending when signup fails before user creation', async () => {
+		const releasedReservation = createEntry({
+			id: '44444444-4444-4444-8444-444444444444',
+			status: 'pending'
 		});
 
-		const { dbClient } = createDbClientMock([[expiredInvite]], []);
-		const result = await resolveProductionSignupAuthorization(
+		const { dbClient } = createDbClientMock([], [[releasedReservation]]);
+
+		const released = await releaseProductionSignupAuthorizationReservation(
 			{
-				email: 'driver@invite.test',
-				inviteCodeHeader: 'invite-code',
+				reservationId: releasedReservation.id,
 				now: new Date('2026-02-10T00:00:00.000Z')
 			},
 			dbClient
 		);
 
-		expect(result.allowed).toBe(false);
+		expect(released?.status).toBe('pending');
+	});
+});
+
+describe('onboarding service duplicate race handling', () => {
+	it('returns alreadyExists when a non-stale reserved approval already exists', async () => {
+		const reservedApproval = createEntry({
+			id: '78787878-7878-4787-8787-787878787878',
+			email: 'reserved@driver.test',
+			kind: 'approval',
+			status: 'reserved'
+		});
+
+		const { dbClient } = createDbClientMock([[], [reservedApproval]], [[]]);
+
+		const result = await createOnboardingApproval(
+			{
+				email: 'reserved@driver.test',
+				createdBy: 'manager-1'
+			},
+			dbClient
+		);
+
+		expect(result.alreadyExists).toBe(true);
+		expect(result.entry.status).toBe('reserved');
 	});
 
-	it('one-time consume behavior', async () => {
+	it('returns alreadyExists when pending approval insert hits expected unique constraint', async () => {
+		const pendingApproval = createEntry({
+			id: '55555555-5555-4555-8555-555555555555',
+			email: 'duplicate@driver.test',
+			kind: 'approval'
+		});
+		const uniqueError = Object.assign(new Error('duplicate key value'), {
+			code: '23505',
+			constraint: 'uq_signup_onboarding_pending_email_kind'
+		});
+
+		const { dbClient } = createDbClientMock([[], [pendingApproval]], [[]], [uniqueError]);
+
+		const result = await createOnboardingApproval(
+			{
+				email: 'duplicate@driver.test',
+				createdBy: 'manager-1'
+			},
+			dbClient
+		);
+
+		expect(result.alreadyExists).toBe(true);
+		expect(result.entry.id).toBe(pendingApproval.id);
+	});
+
+	it('downgrades unique violation only when error message matches pending email kind index', async () => {
 		const pendingInvite = createEntry({
-			id: 'invite-2',
-			email: 'one-time@driver.test',
-			kind: 'invite',
-			tokenHash: 'one-time-hash',
-			expiresAt: new Date('2026-02-20T00:00:00.000Z')
+			id: '66666666-6666-4666-8666-666666666666',
+			email: 'invite-duplicate@driver.test',
+			kind: 'invite'
 		});
-		const consumedInvite = createEntry({
-			...pendingInvite,
-			status: 'consumed',
-			consumedAt: new Date('2026-02-10T00:00:00.000Z'),
-			consumedByUserId: 'driver-2'
-		});
-
-		const { dbClient } = createDbClientMock(
-			[[pendingInvite], [pendingInvite], []],
-			[[consumedInvite], []]
+		const uniqueError = Object.assign(
+			new Error('duplicate key uq_signup_onboarding_pending_email_kind'),
+			{
+				code: '23505'
+			}
 		);
 
-		const firstConsume = await consumeProductionSignupAuthorization(
+		const { dbClient } = createDbClientMock([[], [pendingInvite]], [[]], [uniqueError]);
+
+		const result = await createOnboardingInvite(
 			{
-				email: 'one-time@driver.test',
-				userId: 'driver-2',
-				inviteCodeHeader: 'one-time-token',
-				now: new Date('2026-02-10T00:00:00.000Z')
+				email: 'invite-duplicate@driver.test',
+				createdBy: 'manager-1',
+				expiresAt: new Date('2026-02-20T00:00:00.000Z')
 			},
 			dbClient
 		);
 
-		const secondConsume = await consumeProductionSignupAuthorization(
-			{
-				email: 'one-time@driver.test',
-				userId: 'driver-3',
-				inviteCodeHeader: 'one-time-token',
-				now: new Date('2026-02-10T00:00:00.000Z')
-			},
-			dbClient
-		);
-
-		expect(firstConsume?.status).toBe('consumed');
-		expect(secondConsume).toBeNull();
+		expect(result.alreadyExists).toBe(true);
+		expect(result.entry.id).toBe(pendingInvite.id);
 	});
 
-	it('concurrent signup race on same invite/email', async () => {
-		const pendingInvite = createEntry({
-			id: 'invite-3',
-			email: 'race@driver.test',
-			kind: 'invite',
-			tokenHash: 'race-hash',
-			expiresAt: new Date('2026-02-20T00:00:00.000Z')
-		});
-		const consumedInvite = createEntry({
-			...pendingInvite,
-			status: 'consumed',
-			consumedAt: new Date('2026-02-10T00:00:00.000Z'),
-			consumedByUserId: 'driver-race-1'
+	it('rethrows unrelated unique violations instead of masking as alreadyExists', async () => {
+		const unrelatedError = Object.assign(new Error('duplicate other constraint'), {
+			code: '23505',
+			constraint: 'uq_signup_onboarding_token_hash'
 		});
 
-		const { dbClient } = createDbClientMock(
-			[[pendingInvite], [pendingInvite], []],
-			[[consumedInvite], []]
-		);
+		const { dbClient } = createDbClientMock([[]], [[]], [unrelatedError]);
 
-		const [consumeA, consumeB] = await Promise.all([
-			consumeProductionSignupAuthorization(
+		await expect(
+			createOnboardingInvite(
 				{
-					email: 'race@driver.test',
-					userId: 'driver-race-1',
-					inviteCodeHeader: 'race-token',
-					now: new Date('2026-02-10T00:00:00.000Z')
-				},
-				dbClient
-			),
-			consumeProductionSignupAuthorization(
-				{
-					email: 'race@driver.test',
-					userId: 'driver-race-2',
-					inviteCodeHeader: 'race-token',
-					now: new Date('2026-02-10T00:00:00.000Z')
+					email: 'other@driver.test',
+					createdBy: 'manager-1',
+					expiresAt: new Date('2026-02-20T00:00:00.000Z')
 				},
 				dbClient
 			)
-		]);
+		).rejects.toBe(unrelatedError);
+	});
+});
 
-		const successfulConsumes = [consumeA, consumeB].filter((entry) => entry !== null);
-		expect(successfulConsumes).toHaveLength(1);
-		expect(consumeA === null || consumeB === null).toBe(true);
+describe('onboarding revocation behavior', () => {
+	it('allows managers to revoke reserved entries for manual recovery', async () => {
+		const reservedApproval = createEntry({
+			id: '56565656-5656-4656-8656-565656565656',
+			status: 'reserved'
+		});
+		const revokedApproval = createEntry({
+			...reservedApproval,
+			status: 'revoked',
+			revokedAt: new Date('2026-02-10T00:00:00.000Z'),
+			revokedByUserId: 'manager-1'
+		});
+
+		const { dbClient } = createDbClientMock([], [[revokedApproval]]);
+
+		const revoked = await revokeOnboardingEntry(reservedApproval.id, 'manager-1', dbClient);
+
+		expect(revoked?.status).toBe('revoked');
+		expect(revoked?.revokedByUserId).toBe('manager-1');
 	});
 });

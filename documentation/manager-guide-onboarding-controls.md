@@ -1,6 +1,6 @@
 # Manager Guide: Driver Onboarding Controls
 
-Last updated: 2026-02-09
+Last updated: 2026-02-10
 
 ## Why this exists
 
@@ -52,6 +52,7 @@ Use this when you want tighter control.
 ## Status meanings (plain language)
 
 - **Pending**: Still valid and not used yet.
+- **Reserved**: Temporarily held during an in-progress signup attempt.
 - **Consumed**: Successfully used in signup.
 - **Revoked**: Manually cancelled by a manager.
 - **Expired**: Invite reached expiry time before being used.
@@ -65,7 +66,9 @@ Use this when you want tighter control.
 3. Share invite code privately (if invite flow is used).
 4. Driver signs up.
 5. Check status in Onboarding list:
-   - should move from **Pending** to **Consumed** after success.
+   - should move from **Pending** to **Reserved** while signup is processing,
+   - then to **Consumed** after success,
+   - or back to **Pending** if signup fails before account creation.
 
 If the wrong person was approved, use **Revoke** immediately.
 
@@ -95,7 +98,7 @@ If needed, use normal user management actions for the account itself.
 
 ### "What if I approved the wrong email?"
 
-Revoke it while status is Pending.
+Revoke it while status is **Pending** or **Reserved**.
 
 ### "Do I still need deploys for onboarding list changes?"
 

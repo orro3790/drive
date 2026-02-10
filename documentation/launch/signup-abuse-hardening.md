@@ -1,6 +1,6 @@
 # LC-06: Production Signup Abuse Hardening
 
-Last updated: 2026-02-09  
+Last updated: 2026-02-10  
 Capability: `LC-06`  
 Bead: `DRV-17l.4`
 
@@ -27,8 +27,10 @@ Reduce signup and sign-in abuse risk at launch by enforcing:
    - approves an email directly, or
    - issues a one-time invite code tied to an email with an expiry.
 3. Driver signs up with that approved email (and invite code if invite flow is used).
-4. On successful signup, the matching onboarding record is consumed exactly once.
-5. Managers can review status transitions (pending, consumed, revoked, expired) in the same screen.
+4. Signup first reserves the matching onboarding record before account creation.
+5. After successful signup, the reservation is finalized to consumed exactly once.
+6. If signup fails before account creation, reservation is released back to pending.
+7. Managers can review status transitions (pending, reserved, consumed, revoked, expired) in the same screen.
 
 ## Auth rate limits (persistent)
 
@@ -45,20 +47,22 @@ Storage mode is set to `database`, so counters survive across instances and cold
 
 ## Abuse scenarios, mitigations, and monitoring signals
 
-| Threat scenario                    | Mitigation                                                | Monitoring signal                                                                             |
-| ---------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Bot-driven signup bursts           | Strict `/sign-up/*` limits + DB onboarding policy         | `auth_rate_limit_exceeded` logs with `/api/auth/sign-up` paths and HTTP `429` response spikes |
-| Credential stuffing                | Tight `/sign-in/*` limits with persistent counters        | `auth_rate_limit_exceeded` logs with `/api/auth/sign-in` paths and repeated source IPs        |
-| Shared invite leakage              | One-time invite consumption + revoke + expiry             | `auth_signup_blocked` logs with `reason=allowlist_denied`                                     |
-| Invite header brute forcing in dev | `BETTER_AUTH_INVITE_CODE` check rejects invalid headers   | `auth_signup_blocked` logs with `reason=invalid_invite_code`                                  |
-| Replay of previously used invite   | Atomic consume-on-signup prevents second successful usage | `auth_signup_onboarding_not_consumed` warnings if signup succeeds but consume did not occur   |
+| Threat scenario                    | Mitigation                                               | Monitoring signal                                                                             |
+| ---------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Bot-driven signup bursts           | Strict `/sign-up/*` limits + DB onboarding policy        | `auth_rate_limit_exceeded` logs with `/api/auth/sign-up` paths and HTTP `429` response spikes |
+| Credential stuffing                | Tight `/sign-in/*` limits with persistent counters       | `auth_rate_limit_exceeded` logs with `/api/auth/sign-in` paths and repeated source IPs        |
+| Shared invite leakage              | One-time invite consumption + revoke + expiry            | `auth_signup_blocked` logs with `reason=allowlist_denied`                                     |
+| Invite header brute forcing in dev | `BETTER_AUTH_INVITE_CODE` check rejects invalid headers  | `auth_signup_blocked` logs with `reason=invalid_invite_code`                                  |
+| Replay of previously used invite   | Reserve-first + finalize flow prevents unreserved signup | `auth_signup_onboarding_finalize_needs_reconciliation` and reserve/release failure logs       |
 
 ## Verification evidence
 
 - Automated tests:
   - `tests/server/authAbuseHardening.test.ts`
   - `tests/server/authSignupOnboardingHook.test.ts`
+  - `tests/server/authSignupReservationFlow.test.ts`
   - `tests/server/onboardingService.test.ts`
+  - `tests/server/onboardingApi.test.ts`
 - Configuration and policy implementation:
   - `src/lib/server/auth-abuse-hardening.ts`
   - `src/lib/server/auth.ts`
@@ -68,3 +72,4 @@ Storage mode is set to `database`, so counters survive across instances and cold
 - Persistent storage schema:
   - `src/lib/server/db/schema.ts`
   - `drizzle/0009_aromatic_thunderbolt_ross.sql`
+  - `drizzle/0013_close_onboarding_toctou_and_pending_uniqueness.sql`
