@@ -24,9 +24,10 @@ export async function updateDriverMetrics(userId: string): Promise<void> {
 
 	const completedShifts = completedResult?.count ?? 0;
 
+	// Adjusted completion rate: (parcelsStart - parcelsReturned + exceptedReturns) / parcelsStart
 	const [completionResult] = await db
 		.select({
-			average: sql<number>`avg(${shifts.parcelsDelivered}::float / ${shifts.parcelsStart})`
+			average: sql<number>`avg((${shifts.parcelsStart} - coalesce(${shifts.parcelsReturned}, 0) + coalesce(${shifts.exceptedReturns}, 0))::float / ${shifts.parcelsStart})`
 		})
 		.from(shifts)
 		.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))

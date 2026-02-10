@@ -48,12 +48,17 @@ export type NotificationType =
 	| 'streak_advanced'
 	| 'streak_reset'
 	| 'bonus_eligible'
-	| 'corrective_warning';
+	| 'corrective_warning'
+	| 'return_exception';
 
 /**
  * Subset of notification types used for manager alerts.
  */
-export type ManagerAlertType = 'route_unfilled' | 'route_cancelled' | 'driver_no_show';
+export type ManagerAlertType =
+	| 'route_unfilled'
+	| 'route_cancelled'
+	| 'driver_no_show'
+	| 'return_exception';
 
 /**
  * Title and body templates for each notification type.
@@ -134,6 +139,10 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	corrective_warning: {
 		title: 'Completion Rate Warning',
 		body: 'Your completion rate has dropped below 80%. Improve within 7 days to avoid further impact.'
+	},
+	return_exception: {
+		title: 'Return Exception Filed',
+		body: 'A driver filed return exceptions on a completed shift.'
 	}
 };
 
