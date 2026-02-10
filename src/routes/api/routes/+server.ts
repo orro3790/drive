@@ -10,11 +10,13 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, bidWindows, routes, user, warehouses } from '$lib/server/db/schema';
 import { routeCreateSchema, type RouteStatus } from '$lib/schemas/route';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getManagerWarehouseIds, canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { createAuditLog } from '$lib/server/services/audit';
+import { z } from 'zod';
 
 const VALID_STATUSES: RouteStatus[] = ['assigned', 'unfilled', 'bidding'];
+const warehouseIdQuerySchema = z.string().uuid();
 
 function toLocalYmd(date = new Date()): string {
 	const year = date.getFullYear();
@@ -32,14 +34,13 @@ type AssignmentInfo = {
 	status: string;
 	userId: string | null;
 	driverName: string | null;
-	bidWindowStatus: string | null;
 	bidWindowClosesAt: Date | null;
 };
 
 function resolveStatus(assignment?: AssignmentInfo): RouteStatus {
 	if (!assignment) return 'unfilled';
 	if (assignment.status === 'unfilled') {
-		return assignment.bidWindowStatus === 'open' ? 'bidding' : 'unfilled';
+		return assignment.bidWindowClosesAt ? 'bidding' : 'unfilled';
 	}
 	return 'assigned';
 }
@@ -65,6 +66,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 	if (statusFilter && !VALID_STATUSES.includes(statusFilter as RouteStatus)) {
 		throw error(400, 'Invalid status');
+	}
+
+	if (warehouseId && !warehouseIdQuerySchema.safeParse(warehouseId).success) {
+		throw error(400, 'Invalid warehouse ID');
 	}
 
 	// Get warehouses this manager can access
@@ -94,7 +99,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		.orderBy(routes.name);
 	const routeIds = routeRows.map((route) => route.id);
 
-	// Fetch assignments with driver info and bid window details
+	// Fetch assignments with driver info
 	const assignmentRows = routeIds.length
 		? await db
 				.select({
@@ -102,15 +107,31 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 					assignmentId: assignments.id,
 					status: assignments.status,
 					userId: assignments.userId,
-					driverName: user.name,
-					bidWindowStatus: bidWindows.status,
-					bidWindowClosesAt: bidWindows.closesAt
+					driverName: user.name
 				})
 				.from(assignments)
 				.leftJoin(user, eq(user.id, assignments.userId))
-				.leftJoin(bidWindows, eq(bidWindows.assignmentId, assignments.id))
 				.where(and(eq(assignments.date, date), inArray(assignments.routeId, routeIds)))
 		: [];
+
+	const assignmentIds = assignmentRows.map((row) => row.assignmentId);
+	const openBidWindowRows = assignmentIds.length
+		? await db
+				.select({
+					assignmentId: bidWindows.assignmentId,
+					closesAt: bidWindows.closesAt
+				})
+				.from(bidWindows)
+				.where(and(eq(bidWindows.status, 'open'), inArray(bidWindows.assignmentId, assignmentIds)))
+				.orderBy(desc(bidWindows.opensAt), desc(bidWindows.id))
+		: [];
+
+	const openBidWindowMap = new Map<string, Date>();
+	for (const row of openBidWindowRows) {
+		if (!openBidWindowMap.has(row.assignmentId)) {
+			openBidWindowMap.set(row.assignmentId, row.closesAt);
+		}
+	}
 
 	const assignmentMap = new Map(
 		assignmentRows.map((row) => [
@@ -120,8 +141,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 				status: row.status,
 				userId: row.userId,
 				driverName: row.driverName,
-				bidWindowStatus: row.bidWindowStatus,
-				bidWindowClosesAt: row.bidWindowClosesAt
+				bidWindowClosesAt: openBidWindowMap.get(row.assignmentId) ?? null
 			}
 		])
 	);
@@ -154,7 +174,13 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
 	const result = routeCreateSchema.safeParse(body);
 
 	if (!result.success) {

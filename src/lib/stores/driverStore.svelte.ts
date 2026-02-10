@@ -8,6 +8,7 @@
 import type { Driver, DriverUpdate } from '$lib/schemas/driver';
 import { driverSchema } from '$lib/schemas/driver';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
+import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
 import {
 	dispatchPolicy,
@@ -76,6 +77,18 @@ function mergeDriver(existing: Driver, patch: Partial<Driver>): Driver {
 	};
 }
 
+const mutationVersions = new Map<string, number>();
+
+function nextMutationVersion(mutationKey: string): number {
+	const version = (mutationVersions.get(mutationKey) ?? 0) + 1;
+	mutationVersions.set(mutationKey, version);
+	return version;
+}
+
+function isLatestMutationVersion(mutationKey: string, version: number): boolean {
+	return (mutationVersions.get(mutationKey) ?? 0) === version;
+}
+
 export const driverStore = {
 	get drivers() {
 		return state.drivers;
@@ -117,46 +130,70 @@ export const driverStore = {
 	 * Update a driver's weekly cap (optimistic)
 	 */
 	updateCap(id: string, weeklyCap: number) {
+		if (!ensureOnlineForWrite()) {
+			return;
+		}
+
 		const original = state.drivers.find((d) => d.id === id);
 		if (!original) return;
+		const mutationKey = `driver:${id}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		// Optimistic update
 		state.drivers = state.drivers.map((d) => (d.id === id ? { ...d, weeklyCap } : d));
 
-		this._updateInDb(id, { weeklyCap }, original);
+		this._updateInDb(id, { weeklyCap }, original, mutationKey, mutationVersion);
 	},
 
 	/**
 	 * Unflag a driver (optimistic)
 	 */
 	unflag(id: string) {
+		if (!ensureOnlineForWrite()) {
+			return;
+		}
+
 		const original = state.drivers.find((d) => d.id === id);
 		if (!original) return;
+		const mutationKey = `driver:${id}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		// Optimistic update
 		state.drivers = state.drivers.map((d) =>
 			d.id === id ? { ...d, isFlagged: false, flagWarningDate: null } : d
 		);
 
-		this._unflagInDb(id, original);
+		this._unflagInDb(id, original, mutationKey, mutationVersion);
 	},
 
 	/**
 	 * Reinstate a driver into the assignment pool (optimistic)
 	 */
 	reinstate(id: string) {
+		if (!ensureOnlineForWrite()) {
+			return;
+		}
+
 		const original = state.drivers.find((d) => d.id === id);
 		if (!original) return;
+		const mutationKey = `driver:${id}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		// Optimistic update
 		state.drivers = state.drivers.map((d) =>
 			d.id === id ? { ...d, assignmentPoolEligible: true } : d
 		);
 
-		this._reinstateInDb(id, original);
+		this._reinstateInDb(id, original, mutationKey, mutationVersion);
 	},
 
-	async _updateInDb(id: string, data: DriverUpdate, original: Driver) {
+	async _updateInDb(
+		id: string,
+		data: DriverUpdate,
+		original: Driver,
+		mutationKey: string,
+		mutationVersion: number
+	) {
 		try {
 			const res = await fetch(`/api/drivers/${id}`, {
 				method: 'PATCH',
@@ -170,16 +207,23 @@ export const driverStore = {
 
 			const { driver } = await res.json();
 			const parsedDriver = parseDriverPatch(driver);
+
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
 			state.drivers = state.drivers.map((d) => (d.id === id ? mergeDriver(d, parsedDriver) : d));
 			toastStore.success(m.drivers_updated_success());
 		} catch {
-			// Rollback
-			state.drivers = state.drivers.map((d) => (d.id === id ? original : d));
-			toastStore.error(m.drivers_update_error());
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				// Rollback
+				state.drivers = state.drivers.map((d) => (d.id === id ? original : d));
+				toastStore.error(m.drivers_update_error());
+			}
 		}
 	},
 
-	async _unflagInDb(id: string, original: Driver) {
+	async _unflagInDb(id: string, original: Driver, mutationKey: string, mutationVersion: number) {
 		try {
 			const res = await fetch(`/api/drivers/${id}`, {
 				method: 'PATCH',
@@ -193,16 +237,23 @@ export const driverStore = {
 
 			const { driver } = await res.json();
 			const parsedDriver = parseDriverPatch(driver);
+
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
 			state.drivers = state.drivers.map((d) => (d.id === id ? mergeDriver(d, parsedDriver) : d));
 			toastStore.success(m.drivers_unflagged_success());
 		} catch {
-			// Rollback
-			state.drivers = state.drivers.map((d) => (d.id === id ? original : d));
-			toastStore.error(m.drivers_unflag_error());
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				// Rollback
+				state.drivers = state.drivers.map((d) => (d.id === id ? original : d));
+				toastStore.error(m.drivers_unflag_error());
+			}
 		}
 	},
 
-	async _reinstateInDb(id: string, original: Driver) {
+	async _reinstateInDb(id: string, original: Driver, mutationKey: string, mutationVersion: number) {
 		try {
 			const res = await fetch(`/api/drivers/${id}`, {
 				method: 'PATCH',
@@ -216,12 +267,19 @@ export const driverStore = {
 
 			const { driver } = await res.json();
 			const parsedDriver = parseDriverPatch(driver);
+
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
 			state.drivers = state.drivers.map((d) => (d.id === id ? mergeDriver(d, parsedDriver) : d));
 			toastStore.success(m.drivers_reinstated_success());
 		} catch {
-			// Rollback
-			state.drivers = state.drivers.map((d) => (d.id === id ? original : d));
-			toastStore.error(m.drivers_reinstate_error());
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				// Rollback
+				state.drivers = state.drivers.map((d) => (d.id === id ? original : d));
+				toastStore.error(m.drivers_reinstate_error());
+			}
 		}
 	}
 };

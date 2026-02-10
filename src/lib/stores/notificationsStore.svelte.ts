@@ -5,6 +5,7 @@
  */
 
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
+import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 import * as m from '$lib/paraglide/messages.js';
 import {
 	notificationListResponseSchema,
@@ -44,6 +45,18 @@ const state = $state<{
 	isMarkingAll: false,
 	error: null
 });
+
+const mutationVersions = new Map<string, number>();
+
+function nextMutationVersion(mutationKey: string): number {
+	const version = (mutationVersions.get(mutationKey) ?? 0) + 1;
+	mutationVersions.set(mutationKey, version);
+	return version;
+}
+
+function isLatestMutationVersion(mutationKey: string, version: number): boolean {
+	return (mutationVersions.get(mutationKey) ?? 0) === version;
+}
 
 export const notificationsStore = {
 	get notifications() {
@@ -116,6 +129,10 @@ export const notificationsStore = {
 	async markRead(notificationId: string) {
 		const target = state.notifications.find((item) => item.id === notificationId);
 		if (!target || target.read) return;
+		if (!ensureOnlineForWrite()) return;
+
+		const mutationKey = `markRead:${notificationId}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		const previousNotifications = state.notifications;
 		const previousUnreadCount = state.unreadCount;
@@ -139,14 +156,20 @@ export const notificationsStore = {
 				throw new Error('Failed to mark notification as read');
 			}
 		} catch (err) {
-			state.notifications = previousNotifications;
-			state.unreadCount = previousUnreadCount;
-			toastStore.error(m.notifications_mark_read_error());
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				state.notifications = previousNotifications;
+				state.unreadCount = previousUnreadCount;
+				toastStore.error(m.notifications_mark_read_error());
+			}
 		}
 	},
 
 	async markAllRead() {
 		if (state.isMarkingAll || state.unreadCount === 0) return;
+		if (!ensureOnlineForWrite()) return;
+
+		const mutationKey = 'markAllRead';
+		const mutationVersion = nextMutationVersion(mutationKey);
 		state.isMarkingAll = true;
 
 		const previousNotifications = state.notifications;
@@ -168,11 +191,15 @@ export const notificationsStore = {
 				throw new Error('Failed to mark all notifications as read');
 			}
 		} catch (err) {
-			state.notifications = previousNotifications;
-			state.unreadCount = previousUnreadCount;
-			toastStore.error(m.notifications_mark_all_error());
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				state.notifications = previousNotifications;
+				state.unreadCount = previousUnreadCount;
+				toastStore.error(m.notifications_mark_all_error());
+			}
 		} finally {
-			state.isMarkingAll = false;
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				state.isMarkingAll = false;
+			}
 		}
 	},
 

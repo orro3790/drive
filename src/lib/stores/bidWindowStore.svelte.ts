@@ -8,6 +8,8 @@
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import * as m from '$lib/paraglide/messages.js';
 import { routeStore, type RouteWithWarehouse } from '$lib/stores/routeStore.svelte';
+import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
+import { z } from 'zod';
 
 export type BidWindowStatus = 'open' | 'resolved';
 
@@ -58,6 +60,51 @@ function buildQuery(filters: BidWindowFilters) {
 	if (filters.warehouseId) params.set('warehouseId', filters.warehouseId);
 	const query = params.toString();
 	return query ? `?${query}` : '';
+}
+
+const bidWindowSchema = z.object({
+	id: z.string().min(1),
+	assignmentId: z.string().min(1),
+	assignmentDate: z.string().min(1),
+	routeName: z.string().min(1),
+	warehouseName: z.string().min(1),
+	opensAt: z.string().min(1),
+	closesAt: z.string().min(1),
+	status: z.enum(['open', 'resolved']),
+	winnerId: z.string().min(1).nullable(),
+	winnerName: z.string().nullable(),
+	bidCount: z.number().int().nonnegative()
+});
+
+const bidWindowListResponseSchema = z.object({
+	bidWindows: z.array(bidWindowSchema),
+	lastUpdated: z.string().min(1).nullable().optional()
+});
+
+const bidWindowMutationResponseSchema = z.object({
+	bidWindow: bidWindowSchema
+});
+
+const loadRequestVersions = { current: 0 };
+const mutationVersions = new Map<string, number>();
+
+function nextLoadRequestVersion(): number {
+	loadRequestVersions.current += 1;
+	return loadRequestVersions.current;
+}
+
+function isLatestLoadRequestVersion(version: number): boolean {
+	return loadRequestVersions.current === version;
+}
+
+function nextMutationVersion(mutationKey: string): number {
+	const version = (mutationVersions.get(mutationKey) ?? 0) + 1;
+	mutationVersions.set(mutationKey, version);
+	return version;
+}
+
+function isLatestMutationVersion(mutationKey: string, version: number): boolean {
+	return (mutationVersions.get(mutationKey) ?? 0) === version;
 }
 
 export const bidWindowStore = {
@@ -112,6 +159,7 @@ export const bidWindowStore = {
 	 * Load bid windows from the API
 	 */
 	async load(filters?: BidWindowFilters) {
+		const requestVersion = nextLoadRequestVersion();
 		state.isLoading = true;
 		state.error = null;
 		if (filters) {
@@ -124,20 +172,40 @@ export const bidWindowStore = {
 			if (!res.ok) {
 				throw new Error('Failed to load bid windows');
 			}
-			const data = await res.json();
-			state.bidWindows = data.bidWindows;
-			state.lastUpdated = data.lastUpdated;
+			const parsed = bidWindowListResponseSchema.safeParse(await res.json());
+			if (!parsed.success) {
+				throw new Error('Invalid bid windows response');
+			}
+
+			if (!isLatestLoadRequestVersion(requestVersion)) {
+				return;
+			}
+
+			state.bidWindows = parsed.data.bidWindows;
+			state.lastUpdated = parsed.data.lastUpdated ?? null;
 		} catch (err) {
+			if (!isLatestLoadRequestVersion(requestVersion)) {
+				return;
+			}
+
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.bid_windows_load_error());
 		} finally {
-			state.isLoading = false;
+			if (isLatestLoadRequestVersion(requestVersion)) {
+				state.isLoading = false;
+			}
 		}
 	},
 
 	manualAssign(window: BidWindow, driver: { id: string; name: string }) {
+		if (!ensureOnlineForWrite()) {
+			return;
+		}
+
 		const original = state.bidWindows.find((w) => w.id === window.id);
 		if (!original) return;
+		const mutationKey = `assign:${window.id}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		const optimisticWindow: BidWindow = {
 			...original,
@@ -154,14 +222,16 @@ export const bidWindowStore = {
 			bidWindowClosesAt: null
 		});
 
-		this._assignInDb(window, driver, original, originalRoute);
+		this._assignInDb(window, driver, original, originalRoute, mutationKey, mutationVersion);
 	},
 
 	async _assignInDb(
 		window: BidWindow,
 		driver: { id: string; name: string },
 		original: BidWindow,
-		originalRoute: RouteWithWarehouse | null
+		originalRoute: RouteWithWarehouse | null,
+		mutationKey: string,
+		mutationVersion: number
 	) {
 		state.assigningWindowId = window.id;
 		try {
@@ -175,30 +245,47 @@ export const bidWindowStore = {
 				throw new Error('Failed to assign driver');
 			}
 
-			const data = await res.json();
-			if (data?.bidWindow) {
-				state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? data.bidWindow : w));
+			const parsed = bidWindowMutationResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid bid window response');
+			}
+
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				state.bidWindows = state.bidWindows.map((w) =>
+					w.id === window.id ? parsed.data.bidWindow : w
+				);
 				routeStore.applyAssignmentUpdate(window.assignmentId, {
-					status: data.bidWindow.winnerName ? 'assigned' : 'unfilled',
-					driverName: data.bidWindow.winnerName ?? null,
+					status: parsed.data.bidWindow.winnerName ? 'assigned' : 'unfilled',
+					driverName: parsed.data.bidWindow.winnerName ?? null,
 					bidWindowClosesAt: null
 				});
+				toastStore.success(m.bid_windows_assign_success());
 			}
-			toastStore.success(m.bid_windows_assign_success());
 		} catch {
-			state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? original : w));
-			routeStore.rollbackAssignmentUpdate(originalRoute);
-			toastStore.error(m.bid_windows_assign_error());
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? original : w));
+				routeStore.rollbackAssignmentUpdate(originalRoute);
+				toastStore.error(m.bid_windows_assign_error());
+			}
 		} finally {
-			if (state.assigningWindowId === window.id) {
+			if (
+				state.assigningWindowId === window.id &&
+				isLatestMutationVersion(mutationKey, mutationVersion)
+			) {
 				state.assigningWindowId = null;
 			}
 		}
 	},
 
 	closeWindow(window: BidWindow) {
+		if (!ensureOnlineForWrite()) {
+			return;
+		}
+
 		const original = state.bidWindows.find((w) => w.id === window.id);
 		if (!original) return;
+		const mutationKey = `close:${window.id}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		const optimisticWindow: BidWindow = {
 			...original,
@@ -215,13 +302,15 @@ export const bidWindowStore = {
 			bidWindowClosesAt: null
 		});
 
-		this._closeInDb(window, original, originalRoute);
+		this._closeInDb(window, original, originalRoute, mutationKey, mutationVersion);
 	},
 
 	async _closeInDb(
 		window: BidWindow,
 		original: BidWindow,
-		originalRoute: RouteWithWarehouse | null
+		originalRoute: RouteWithWarehouse | null,
+		mutationKey: string,
+		mutationVersion: number
 	) {
 		state.closingWindowId = window.id;
 		try {
@@ -233,22 +322,33 @@ export const bidWindowStore = {
 				throw new Error('Failed to close bid window');
 			}
 
-			const data = await res.json();
-			if (data?.bidWindow) {
-				state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? data.bidWindow : w));
+			const parsed = bidWindowMutationResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid bid window response');
+			}
+
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				state.bidWindows = state.bidWindows.map((w) =>
+					w.id === window.id ? parsed.data.bidWindow : w
+				);
 				routeStore.applyAssignmentUpdate(window.assignmentId, {
-					status: data.bidWindow.winnerName ? 'assigned' : 'unfilled',
-					driverName: data.bidWindow.winnerName ?? null,
+					status: parsed.data.bidWindow.winnerName ? 'assigned' : 'unfilled',
+					driverName: parsed.data.bidWindow.winnerName ?? null,
 					bidWindowClosesAt: null
 				});
+				toastStore.success(m.bid_windows_close_success());
 			}
-			toastStore.success(m.bid_windows_close_success());
 		} catch {
-			state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? original : w));
-			routeStore.rollbackAssignmentUpdate(originalRoute);
-			toastStore.error(m.bid_windows_close_error());
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				state.bidWindows = state.bidWindows.map((w) => (w.id === window.id ? original : w));
+				routeStore.rollbackAssignmentUpdate(originalRoute);
+				toastStore.error(m.bid_windows_close_error());
+			}
 		} finally {
-			if (state.closingWindowId === window.id) {
+			if (
+				state.closingWindowId === window.id &&
+				isLatestMutationVersion(mutationKey, mutationVersion)
+			) {
 				state.closingWindowId = null;
 			}
 		}

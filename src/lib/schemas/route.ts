@@ -46,4 +46,8 @@ export const routeUpdateSchema = z
 	})
 	.strict();
 
+export const routeIdParamsSchema = z.object({
+	id: z.string().uuid()
+});
+
 export type RouteUpdate = z.infer<typeof routeUpdateSchema>;
