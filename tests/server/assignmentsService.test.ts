@@ -5,9 +5,14 @@ type AssignmentsModule = typeof import('../../src/lib/server/services/assignment
 type SelectResult = unknown;
 
 let selectQueue: SelectResult[] = [];
+let updateReturningQueue: SelectResult[] = [];
 
 function setSelectResults(results: SelectResult[]) {
 	selectQueue = [...results];
+}
+
+function setUpdateReturningResults(results: SelectResult[]) {
+	updateReturningQueue = [...results];
 }
 
 function nextSelectResult() {
@@ -18,22 +23,54 @@ function nextSelectResult() {
 	return selectQueue.shift();
 }
 
-const selectMock = vi.fn((_shape?: unknown) => {
+function nextUpdateReturningResult() {
+	if (updateReturningQueue.length === 0) {
+		return [];
+	}
+
+	return updateReturningQueue.shift();
+}
+
+function createSelectChain() {
+	let whereResult: SelectResult | undefined;
+
 	const chain = {
 		from: vi.fn(() => chain),
 		innerJoin: vi.fn((_table: unknown, _on: unknown) => chain),
-		where: vi.fn(async (_condition: unknown) => nextSelectResult())
+		leftJoin: vi.fn((_table: unknown, _on: unknown) => chain),
+		where: vi.fn((_condition: unknown) => {
+			whereResult = nextSelectResult();
+			return chain;
+		}),
+		orderBy: vi.fn((_order: unknown) => chain),
+		limit: vi.fn(async (_count: number) => whereResult ?? nextSelectResult()),
+		then: (
+			onFulfilled?: (value: SelectResult) => unknown,
+			onRejected?: (reason: unknown) => unknown
+		) => Promise.resolve(whereResult ?? nextSelectResult()).then(onFulfilled, onRejected)
 	};
 
 	return chain;
+}
+
+const selectMock = vi.fn((_shape?: unknown) => {
+	return createSelectChain();
 });
 
-const txWhereMock = vi.fn(async (_condition: unknown) => [] as unknown[]);
+const txReturningMock = vi.fn(async (_shape?: unknown) => nextUpdateReturningResult());
+const txWhereMock = vi.fn((_condition: unknown) => ({
+	returning: txReturningMock,
+	then: (onFulfilled?: (value: undefined) => unknown, onRejected?: (reason: unknown) => unknown) =>
+		Promise.resolve(undefined).then(onFulfilled, onRejected)
+}));
 const txSetMock = vi.fn((_values: Record<string, unknown>) => ({ where: txWhereMock }));
 const txUpdateMock = vi.fn((_table: unknown) => ({ set: txSetMock }));
+const txSelectMock = vi.fn((_shape?: unknown) => createSelectChain());
 
-const transactionMock = vi.fn(async (run: (tx: { update: typeof txUpdateMock }) => Promise<void>) =>
-	run({ update: txUpdateMock })
+const transactionMock = vi.fn(
+	async (
+		run: (tx: { update: typeof txUpdateMock; select: typeof txSelectMock }) => Promise<unknown>
+	) => run({ update: txUpdateMock, select: txSelectMock })
 );
 
 const createAuditLogMock = vi.fn(
@@ -81,8 +118,11 @@ beforeAll(async () => {
 
 beforeEach(() => {
 	setSelectResults([]);
+	setUpdateReturningResults([]);
 	selectMock.mockClear();
+	txSelectMock.mockClear();
 	txWhereMock.mockClear();
+	txReturningMock.mockClear();
 	txSetMock.mockClear();
 	txUpdateMock.mockClear();
 	transactionMock.mockClear();
@@ -95,6 +135,7 @@ beforeEach(() => {
 
 	canManagerAccessWarehouseMock.mockResolvedValue(true);
 	getDriverWeeklyAssignmentCountMock.mockResolvedValue(0);
+	setUpdateReturningResults([[{ id: 'assignment-updated' }], [{ id: 'window-updated' }]]);
 });
 
 afterAll(() => {
@@ -234,6 +275,7 @@ describe('manual assignment service boundaries', () => {
 				{ id: 'bid-2', userId: 'driver-loser' }
 			]
 		]);
+		setUpdateReturningResults([[{ id: 'assignment-4' }], [{ id: 'window-4' }]]);
 
 		const result = await manualAssignDriverToAssignment({
 			assignmentId: 'assignment-4',

@@ -42,4 +42,8 @@ export const assignmentManualAssignSchema = z
 	})
 	.strict();
 
+export const assignmentIdParamsSchema = z.object({
+	id: z.string().uuid()
+});
+
 export type AssignmentManualAssignInput = z.infer<typeof assignmentManualAssignSchema>;

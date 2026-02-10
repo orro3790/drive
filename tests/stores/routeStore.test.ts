@@ -327,4 +327,54 @@ describe('routeStore', () => {
 		expect(store.emergencyReopenAssignmentId).toBeNull();
 		expect(mocked.toastError).toHaveBeenCalledWith('window already open');
 	});
+
+	it('shows generic error when emergency reopen response payload is invalid', async () => {
+		const store = await importRouteStore();
+		const route = makeRoute({
+			id: 'route-emergency-invalid-payload',
+			assignmentId: 'assignment-emergency-invalid-payload'
+		});
+
+		await seedRoutes(store, [route]);
+		fetchMock.mockResolvedValueOnce(
+			jsonResponse({
+				notifiedCount: 'not-a-number'
+			})
+		);
+
+		await expect(store.emergencyReopen('assignment-emergency-invalid-payload')).resolves.toEqual({
+			ok: false
+		});
+
+		expect(store.emergencyReopenAssignmentId).toBeNull();
+		expect(mocked.toastError).toHaveBeenCalledWith('manager_emergency_reopen_error');
+	});
+
+	it('ignores stale emergency reopen completion from older mutation versions', async () => {
+		const store = await importRouteStore();
+		const route = makeRoute({
+			id: 'route-emergency-stale',
+			status: 'assigned',
+			driverName: 'Driver Active',
+			assignmentId: 'assignment-emergency-stale'
+		});
+		const firstPending = deferred<Response>();
+
+		await seedRoutes(store, [route]);
+		fetchMock.mockReturnValueOnce(firstPending.promise);
+		fetchMock.mockResolvedValueOnce(jsonResponse({ notifiedCount: 2 }));
+
+		const firstPromise = store.emergencyReopen('assignment-emergency-stale');
+		const secondResult = await store.emergencyReopen('assignment-emergency-stale');
+
+		expect(secondResult).toEqual({ ok: true, notifiedCount: 2 });
+		expect(store.routes[0]?.status).toBe('bidding');
+		expect(store.emergencyReopenAssignmentId).toBeNull();
+
+		firstPending.resolve(jsonResponse({ notifiedCount: 9 }));
+		await expect(firstPromise).resolves.toEqual({ ok: true, notifiedCount: 9 });
+
+		expect(mocked.toastSuccess).toHaveBeenCalledTimes(1);
+		expect(mocked.toastSuccess).toHaveBeenCalledWith('manager_emergency_reopen_success_2');
+	});
 });

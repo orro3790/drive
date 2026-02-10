@@ -13,7 +13,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { bids, bidWindows, assignments, user } from '$lib/server/db/schema';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { parseISO, set, startOfDay } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { getWeekStart, canDriverTakeAssignment } from '$lib/server/services/scheduling';
@@ -93,7 +93,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		})
 		.from(bidWindows)
 		.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
-		.where(and(eq(bidWindows.assignmentId, assignmentId), eq(bidWindows.status, 'open')));
+		.where(and(eq(bidWindows.assignmentId, assignmentId), eq(bidWindows.status, 'open')))
+		.orderBy(desc(bidWindows.opensAt), desc(bidWindows.id))
+		.limit(1);
 
 	if (!window) {
 		throw error(404, 'No open bid window found for this assignment');

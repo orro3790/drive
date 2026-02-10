@@ -9,8 +9,8 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, bidWindows, routes, user, warehouses } from '$lib/server/db/schema';
-import { routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
-import { and, eq, ne, gt, count } from 'drizzle-orm';
+import { routeIdParamsSchema, routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
+import { and, count, desc, eq, gt, ne } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { createAuditLog } from '$lib/server/services/audit';
 
@@ -29,7 +29,7 @@ type AssignmentDetails = {
 	assignmentId: string;
 	status: string;
 	driverName: string | null;
-	bidWindowStatus: string | null;
+	bidWindowStatus: 'open' | null;
 	bidWindowClosesAt: Date | null;
 };
 
@@ -49,16 +49,28 @@ async function getRouteAssignmentDetails(
 		.select({
 			assignmentId: assignments.id,
 			status: assignments.status,
-			driverName: user.name,
-			bidWindowStatus: bidWindows.status,
-			bidWindowClosesAt: bidWindows.closesAt
+			driverName: user.name
 		})
 		.from(assignments)
 		.leftJoin(user, eq(user.id, assignments.userId))
-		.leftJoin(bidWindows, eq(bidWindows.assignmentId, assignments.id))
 		.where(and(eq(assignments.routeId, routeId), eq(assignments.date, date)));
 
-	return assignment ?? null;
+	if (!assignment) {
+		return null;
+	}
+
+	const [openWindow] = await db
+		.select({ closesAt: bidWindows.closesAt })
+		.from(bidWindows)
+		.where(and(eq(bidWindows.assignmentId, assignment.assignmentId), eq(bidWindows.status, 'open')))
+		.orderBy(desc(bidWindows.opensAt), desc(bidWindows.id))
+		.limit(1);
+
+	return {
+		...assignment,
+		bidWindowStatus: openWindow ? 'open' : null,
+		bidWindowClosesAt: openWindow?.closesAt ?? null
+	};
 }
 
 export const PATCH: RequestHandler = async ({ locals, params, request, url }) => {
@@ -70,8 +82,20 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 		throw error(403, 'Forbidden');
 	}
 
-	const { id } = params;
-	const body = await request.json();
+	const paramsResult = routeIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid route ID');
+	}
+
+	const { id } = paramsResult.data;
+
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
 	const result = routeUpdateSchema.safeParse(body);
 
 	if (!result.success) {
@@ -130,6 +154,14 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 
 	let nextWarehouseName = existing.warehouseName;
 	if (updates.warehouseId && updates.warehouseId !== existing.warehouseId) {
+		const canAccessTargetWarehouse = await canManagerAccessWarehouse(
+			locals.user.id,
+			updates.warehouseId
+		);
+		if (!canAccessTargetWarehouse) {
+			throw error(403, 'No access to target warehouse');
+		}
+
 		const [warehouse] = await db
 			.select({ id: warehouses.id, name: warehouses.name })
 			.from(warehouses)
@@ -208,7 +240,12 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	const { id } = params;
+	const paramsResult = routeIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid route ID');
+	}
+
+	const { id } = paramsResult.data;
 
 	const [existing] = await db
 		.select({

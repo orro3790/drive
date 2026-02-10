@@ -5,12 +5,26 @@
  * All API calls are owned by this store.
  */
 
-import type { Route, RouteCreate, RouteStatus, RouteUpdate } from '$lib/schemas/route';
+import {
+	routeStatusSchema,
+	type RouteCreate,
+	type RouteStatus,
+	type RouteUpdate
+} from '$lib/schemas/route';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import * as m from '$lib/paraglide/messages.js';
+import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
+import { z } from 'zod';
 
-export type RouteWithWarehouse = Route & {
+export type RouteWithWarehouse = {
+	id: string;
+	name: string;
+	warehouseId: string;
 	warehouseName: string;
+	managerId?: string | null;
+	createdBy?: string | null;
+	createdAt: Date;
+	updatedAt: Date;
 	status: RouteStatus;
 	assignmentId: string | null;
 	driverName: string | null;
@@ -54,6 +68,54 @@ function buildQuery(filters: RouteFilters) {
 	return query ? `?${query}` : '';
 }
 
+const routeWithWarehouseSchema = z.object({
+	id: z.string().min(1),
+	name: z.string().min(1),
+	warehouseId: z.string().min(1),
+	warehouseName: z.string().min(1),
+	managerId: z.string().min(1).nullable().optional(),
+	createdBy: z.string().min(1).nullable().optional(),
+	createdAt: z.coerce.date(),
+	updatedAt: z.coerce.date(),
+	status: routeStatusSchema,
+	assignmentId: z.string().min(1).nullable(),
+	driverName: z.string().nullable(),
+	bidWindowClosesAt: z.string().min(1).nullable()
+});
+
+const routeListResponseSchema = z.object({
+	routes: z.array(routeWithWarehouseSchema)
+});
+
+const routeMutationResponseSchema = z.object({
+	route: routeWithWarehouseSchema
+});
+
+const manualAssignResponseSchema = z.object({
+	assignment: z
+		.object({
+			id: z.string().min(1),
+			driverName: z.string().nullable().optional()
+		})
+		.optional()
+});
+
+const emergencyReopenResponseSchema = z.object({
+	notifiedCount: z.number().int().nonnegative().optional()
+});
+
+const mutationVersions = new Map<string, number>();
+
+function nextMutationVersion(mutationKey: string): number {
+	const version = (mutationVersions.get(mutationKey) ?? 0) + 1;
+	mutationVersions.set(mutationKey, version);
+	return version;
+}
+
+function isLatestMutationVersion(mutationKey: string, version: number): boolean {
+	return (mutationVersions.get(mutationKey) ?? 0) === version;
+}
+
 export const routeStore = {
 	get routes() {
 		return state.routes;
@@ -95,8 +157,11 @@ export const routeStore = {
 			if (!res.ok) {
 				throw new Error('Failed to load routes');
 			}
-			const data = await res.json();
-			state.routes = data.routes;
+			const parsed = routeListResponseSchema.safeParse(await res.json());
+			if (!parsed.success) {
+				throw new Error('Invalid routes response');
+			}
+			state.routes = parsed.data.routes;
 		} catch (err) {
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.route_load_error());
@@ -109,8 +174,14 @@ export const routeStore = {
 	 * Create a new route (optimistic)
 	 */
 	create(data: RouteCreate, warehouseName = '') {
+		if (!ensureOnlineForWrite()) {
+			return;
+		}
+
 		const tempId = `optimistic-${crypto.randomUUID()}`;
 		const now = new Date();
+		const mutationKey = `create:${tempId}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		const optimisticRoute: RouteWithWarehouse = {
 			id: tempId,
@@ -130,10 +201,15 @@ export const routeStore = {
 			state.routes = [...state.routes, optimisticRoute];
 		}
 
-		this._createInDb(data, tempId);
+		this._createInDb(data, tempId, mutationKey, mutationVersion);
 	},
 
-	async _createInDb(data: RouteCreate, tempId: string) {
+	async _createInDb(
+		data: RouteCreate,
+		tempId: string,
+		mutationKey: string,
+		mutationVersion: number
+	) {
 		try {
 			const res = await fetch('/api/routes', {
 				method: 'POST',
@@ -149,7 +225,16 @@ export const routeStore = {
 				throw new Error('Failed to create route');
 			}
 
-			const { route } = await res.json();
+			const parsed = routeMutationResponseSchema.safeParse(await res.json());
+			if (!parsed.success) {
+				throw new Error('Failed to create route');
+			}
+
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
+			const { route } = parsed.data;
 
 			const exists = state.routes.some((item) => item.id === tempId);
 			if (exists) {
@@ -159,6 +244,10 @@ export const routeStore = {
 			}
 			toastStore.success(m.route_created_success());
 		} catch (err) {
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
 			state.routes = state.routes.filter((item) => item.id !== tempId);
 			if (err instanceof Error && err.message === 'duplicate') {
 				toastStore.error(m.route_name_unique_error());
@@ -172,8 +261,14 @@ export const routeStore = {
 	 * Update a route (optimistic)
 	 */
 	update(id: string, data: RouteUpdate, warehouseName?: string) {
+		if (!ensureOnlineForWrite()) {
+			return;
+		}
+
 		const original = state.routes.find((route) => route.id === id);
 		if (!original) return;
+		const mutationKey = `update:${id}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		const nextRoute: RouteWithWarehouse = {
 			...original,
@@ -188,10 +283,16 @@ export const routeStore = {
 			state.routes = state.routes.filter((route) => route.id !== id);
 		}
 
-		this._updateInDb(id, data, original);
+		this._updateInDb(id, data, original, mutationKey, mutationVersion);
 	},
 
-	async _updateInDb(id: string, data: RouteUpdate, original: RouteWithWarehouse) {
+	async _updateInDb(
+		id: string,
+		data: RouteUpdate,
+		original: RouteWithWarehouse,
+		mutationKey: string,
+		mutationVersion: number
+	) {
 		try {
 			const query = state.filters.date ? `?date=${encodeURIComponent(state.filters.date)}` : '';
 			const res = await fetch(`/api/routes/${id}${query}`, {
@@ -208,7 +309,16 @@ export const routeStore = {
 				throw new Error('Failed to update route');
 			}
 
-			const { route } = await res.json();
+			const parsed = routeMutationResponseSchema.safeParse(await res.json());
+			if (!parsed.success) {
+				throw new Error('Failed to update route');
+			}
+
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
+			const { route } = parsed.data;
 			if (matchesFilters(route, state.filters)) {
 				state.routes = state.routes.map((item) => (item.id === id ? route : item));
 			} else {
@@ -216,6 +326,10 @@ export const routeStore = {
 			}
 			toastStore.success(m.route_updated_success());
 		} catch (err) {
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
 			if (matchesFilters(original, state.filters)) {
 				const exists = state.routes.some((route) => route.id === original.id);
 				state.routes = exists
@@ -234,14 +348,25 @@ export const routeStore = {
 	 * Delete a route (optimistic)
 	 */
 	delete(id: string) {
+		if (!ensureOnlineForWrite()) {
+			return;
+		}
+
 		const original = state.routes.find((route) => route.id === id);
 		if (!original) return;
+		const mutationKey = `delete:${id}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		state.routes = state.routes.filter((route) => route.id !== id);
-		this._deleteInDb(id, original);
+		this._deleteInDb(id, original, mutationKey, mutationVersion);
 	},
 
-	async _deleteInDb(id: string, original: RouteWithWarehouse) {
+	async _deleteInDb(
+		id: string,
+		original: RouteWithWarehouse,
+		mutationKey: string,
+		mutationVersion: number
+	) {
 		try {
 			const res = await fetch(`/api/routes/${id}`, {
 				method: 'DELETE'
@@ -255,8 +380,16 @@ export const routeStore = {
 				throw new Error('Failed to delete route');
 			}
 
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
 			toastStore.success(m.route_deleted_success());
 		} catch (err) {
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return;
+			}
+
 			state.routes = [...state.routes, original];
 			if (err instanceof Error && err.message === 'future_assignments') {
 				toastStore.error(m.route_delete_has_assignments());
@@ -288,6 +421,10 @@ export const routeStore = {
 	},
 
 	manualAssign(assignmentId: string, driver: { id: string; name: string }) {
+		if (!ensureOnlineForWrite()) {
+			return Promise.resolve({ ok: false, message: m.offline_requires_connectivity() });
+		}
+
 		const originalRoute = this.applyAssignmentUpdate(assignmentId, {
 			status: 'assigned',
 			driverName: driver.name,
@@ -298,13 +435,18 @@ export const routeStore = {
 			return Promise.resolve({ ok: false, message: m.manager_dashboard_detail_no_assignment() });
 		}
 
-		return this._assignInDb(assignmentId, driver, originalRoute);
+		const mutationKey = `assign:${assignmentId}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
+
+		return this._assignInDb(assignmentId, driver, originalRoute, mutationKey, mutationVersion);
 	},
 
 	async _assignInDb(
 		assignmentId: string,
 		driver: { id: string; name: string },
-		originalRoute: RouteWithWarehouse
+		originalRoute: RouteWithWarehouse,
+		mutationKey: string,
+		mutationVersion: number
 	) {
 		state.assigningAssignmentId = assignmentId;
 		try {
@@ -317,32 +459,46 @@ export const routeStore = {
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				const message = typeof payload?.message === 'string' ? payload.message : null;
-				this.rollbackAssignmentUpdate(originalRoute);
 
-				if (!message) {
+				if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+					this.rollbackAssignmentUpdate(originalRoute);
+				}
+
+				if (!message && isLatestMutationVersion(mutationKey, mutationVersion)) {
 					toastStore.error(m.bid_windows_assign_error());
 				}
 
 				return { ok: false, message: message ?? undefined };
 			}
 
-			const data = await res.json().catch(() => ({}));
-			if (data?.assignment?.id) {
+			const parsed = manualAssignResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (
+				parsed.success &&
+				parsed.data.assignment?.id &&
+				isLatestMutationVersion(mutationKey, mutationVersion)
+			) {
 				this.applyAssignmentUpdate(assignmentId, {
 					status: 'assigned',
-					driverName: data.assignment.driverName ?? driver.name,
+					driverName: parsed.data.assignment.driverName ?? driver.name,
 					bidWindowClosesAt: null
 				});
 			}
 
-			toastStore.success(m.bid_windows_assign_success());
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				toastStore.success(m.bid_windows_assign_success());
+			}
 			return { ok: true };
 		} catch {
-			this.rollbackAssignmentUpdate(originalRoute);
-			toastStore.error(m.bid_windows_assign_error());
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				this.rollbackAssignmentUpdate(originalRoute);
+				toastStore.error(m.bid_windows_assign_error());
+			}
 			return { ok: false };
 		} finally {
-			if (state.assigningAssignmentId === assignmentId) {
+			if (
+				state.assigningAssignmentId === assignmentId &&
+				isLatestMutationVersion(mutationKey, mutationVersion)
+			) {
 				state.assigningAssignmentId = null;
 			}
 		}
@@ -364,6 +520,12 @@ export const routeStore = {
 	 * Emergency reopen: create emergency bid window for today's assignment
 	 */
 	async emergencyReopen(assignmentId: string): Promise<{ ok: boolean; notifiedCount?: number }> {
+		if (!ensureOnlineForWrite()) {
+			return { ok: false };
+		}
+
+		const mutationKey = `emergencyReopen:${assignmentId}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 		state.emergencyReopenAssignmentId = assignmentId;
 
 		try {
@@ -374,11 +536,20 @@ export const routeStore = {
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				const message = typeof payload?.message === 'string' ? payload.message : null;
-				toastStore.error(message ?? m.manager_emergency_reopen_error());
+				if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+					toastStore.error(message ?? m.manager_emergency_reopen_error());
+				}
 				return { ok: false };
 			}
 
-			const data = await res.json();
+			const parsed = emergencyReopenResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid emergency reopen response');
+			}
+
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return { ok: true, notifiedCount: parsed.data.notifiedCount };
+			}
 
 			// Update route status to show bidding active
 			this.applyAssignmentUpdate(assignmentId, {
@@ -386,13 +557,20 @@ export const routeStore = {
 				driverName: null
 			});
 
-			toastStore.success(m.manager_emergency_reopen_success({ count: data.notifiedCount ?? 0 }));
-			return { ok: true, notifiedCount: data.notifiedCount };
+			toastStore.success(
+				m.manager_emergency_reopen_success({ count: parsed.data.notifiedCount ?? 0 })
+			);
+			return { ok: true, notifiedCount: parsed.data.notifiedCount };
 		} catch {
-			toastStore.error(m.manager_emergency_reopen_error());
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				toastStore.error(m.manager_emergency_reopen_error());
+			}
 			return { ok: false };
 		} finally {
-			if (state.emergencyReopenAssignmentId === assignmentId) {
+			if (
+				state.emergencyReopenAssignmentId === assignmentId &&
+				isLatestMutationVersion(mutationKey, mutationVersion)
+			) {
 				state.emergencyReopenAssignmentId = null;
 			}
 		}

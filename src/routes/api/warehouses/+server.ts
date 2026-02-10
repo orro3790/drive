@@ -146,7 +146,13 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(403, 'Forbidden');
 	}
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
 	const result = warehouseCreateSchema.safeParse(body);
 
 	if (!result.success) {

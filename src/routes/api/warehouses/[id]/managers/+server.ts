@@ -22,11 +22,18 @@ const removeManagerSchema = z.object({
 	userId: z.string().min(1)
 });
 
+const warehouseIdParamsSchema = z.object({
+	id: z.string().uuid()
+});
+
 export const GET: RequestHandler = async ({ locals, params }) => {
 	if (!locals.user) throw error(401, 'Unauthorized');
 	if (locals.user.role !== 'manager') throw error(403, 'Forbidden');
 
-	const { id: warehouseId } = params;
+	const paramsResult = warehouseIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) throw error(400, 'Invalid warehouse ID');
+
+	const { id: warehouseId } = paramsResult.data;
 
 	// Verify caller has access to this warehouse
 	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
@@ -51,7 +58,10 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (!locals.user) throw error(401, 'Unauthorized');
 	if (locals.user.role !== 'manager') throw error(403, 'Forbidden');
 
-	const { id: warehouseId } = params;
+	const paramsResult = warehouseIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) throw error(400, 'Invalid warehouse ID');
+
+	const { id: warehouseId } = paramsResult.data;
 
 	// Verify caller has access
 	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
@@ -64,7 +74,13 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		.where(eq(warehouses.id, warehouseId));
 	if (!warehouse) throw error(404, 'Warehouse not found');
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
 	const result = addManagerSchema.safeParse(body);
 	if (!result.success) throw error(400, 'Validation failed');
 
@@ -98,13 +114,22 @@ export const DELETE: RequestHandler = async ({ locals, params, request }) => {
 	if (!locals.user) throw error(401, 'Unauthorized');
 	if (locals.user.role !== 'manager') throw error(403, 'Forbidden');
 
-	const { id: warehouseId } = params;
+	const paramsResult = warehouseIdParamsSchema.safeParse(params);
+	if (!paramsResult.success) throw error(400, 'Invalid warehouse ID');
+
+	const { id: warehouseId } = paramsResult.data;
 
 	// Verify caller has access
 	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
 	if (!canAccess) throw error(403, 'No access to this warehouse');
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
 	const result = removeManagerSchema.safeParse(body);
 	if (!result.success) throw error(400, 'Validation failed');
 

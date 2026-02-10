@@ -55,6 +55,28 @@ const sendManagerAlertMock = vi.fn(async () => true);
 let createBidWindow: BiddingModule['createBidWindow'];
 let getExpiredBidWindows: BiddingModule['getExpiredBidWindows'];
 let instantAssign: BiddingModule['instantAssign'];
+let resolveBidWindow: BiddingModule['resolveBidWindow'];
+
+function createResolveTransactionContext() {
+	const txReturningQueue: SelectResult[] = [[{ id: 'window-1' }]];
+
+	const txWhereMock = vi.fn((_condition: unknown) => ({
+		returning: vi.fn(async (_shape?: unknown) => txReturningQueue.shift() ?? []),
+		then: (
+			onFulfilled?: (value: undefined) => unknown,
+			onRejected?: (reason: unknown) => unknown
+		) => Promise.resolve(undefined).then(onFulfilled, onRejected)
+	}));
+
+	const txSetMock = vi.fn((_values: Record<string, unknown>) => ({ where: txWhereMock }));
+	const txUpdateMock = vi.fn((_table: unknown) => ({ set: txSetMock }));
+	const txExecuteMock = vi.fn(async () => ({ rows: [{ id: 'window-1', status: 'open' }] }));
+
+	return {
+		txExecuteMock,
+		txUpdateMock
+	};
+}
 
 beforeAll(async () => {
 	vi.doMock('$lib/server/db', () => ({
@@ -99,7 +121,7 @@ beforeAll(async () => {
 		toSafeErrorMessage: vi.fn((_error: unknown) => 'Error')
 	}));
 
-	({ createBidWindow, getExpiredBidWindows, instantAssign } =
+	({ createBidWindow, getExpiredBidWindows, instantAssign, resolveBidWindow } =
 		(await import('../../src/lib/server/services/bidding')) as BiddingModule);
 }, 20_000);
 
@@ -269,5 +291,175 @@ describe('bidding service boundaries', () => {
 			bidId: 'bid-3',
 			assignmentId: 'assignment-3'
 		});
+	});
+
+	it('resolves competitive windows with pending bids', async () => {
+		setSelectResults([
+			[
+				{
+					id: 'window-1',
+					assignmentId: 'assignment-1',
+					status: 'open',
+					mode: 'competitive'
+				}
+			],
+			[
+				{
+					id: 'assignment-1',
+					date: '2026-02-20',
+					routeId: 'route-1',
+					routeName: 'Route One',
+					status: 'unfilled',
+					userId: null
+				}
+			],
+			[{ id: 'bid-only', userId: 'driver-only', bidAt: new Date('2026-02-10T10:01:00.000Z') }],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[]
+		]);
+
+		transactionMock.mockImplementationOnce(async (runner: unknown) => {
+			if (typeof runner !== 'function') {
+				throw new Error('runner_missing');
+			}
+
+			const { txExecuteMock, txUpdateMock } = createResolveTransactionContext();
+			return runner({ execute: txExecuteMock, update: txUpdateMock });
+		});
+
+		await expect(resolveBidWindow('window-1')).resolves.toMatchObject({
+			resolved: true,
+			bidCount: 1,
+			winnerId: 'driver-only'
+		});
+		expect(sendNotificationMock).toHaveBeenCalledWith(
+			'driver-only',
+			'bid_won',
+			expect.objectContaining({ data: expect.objectContaining({ bidWindowId: 'window-1' }) })
+		);
+	});
+
+	it('breaks equal-score ties deterministically by bid id when bid times match', async () => {
+		const sharedBidTime = new Date('2026-02-10T10:00:00.000Z');
+
+		setSelectResults([
+			[
+				{
+					id: 'window-1',
+					assignmentId: 'assignment-1',
+					status: 'open',
+					mode: 'competitive'
+				}
+			],
+			[
+				{
+					id: 'assignment-1',
+					date: '2026-02-20',
+					routeId: 'route-1',
+					routeName: 'Route One',
+					status: 'unfilled',
+					userId: null
+				}
+			],
+			[
+				{ id: 'bid-b', userId: 'driver-b', bidAt: sharedBidTime },
+				{ id: 'bid-a', userId: 'driver-a', bidAt: sharedBidTime }
+			],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[]
+		]);
+
+		transactionMock.mockImplementationOnce(async (runner: unknown) => {
+			if (typeof runner !== 'function') {
+				throw new Error('runner_missing');
+			}
+
+			const { txExecuteMock, txUpdateMock } = createResolveTransactionContext();
+			return runner({ execute: txExecuteMock, update: txUpdateMock });
+		});
+
+		await expect(resolveBidWindow('window-1')).resolves.toMatchObject({
+			resolved: true,
+			bidCount: 2,
+			winnerId: 'driver-a'
+		});
+	});
+
+	it('retries with the next bidder when first winner conflicts concurrently', async () => {
+		setSelectResults([
+			[
+				{
+					id: 'window-1',
+					assignmentId: 'assignment-1',
+					status: 'open',
+					mode: 'competitive'
+				}
+			],
+			[
+				{
+					id: 'assignment-1',
+					date: '2026-02-20',
+					routeId: 'route-1',
+					routeName: 'Route One',
+					status: 'unfilled',
+					userId: null
+				}
+			],
+			[
+				{ id: 'bid-first', userId: 'driver-first', bidAt: new Date('2026-02-10T10:00:00.000Z') },
+				{ id: 'bid-second', userId: 'driver-second', bidAt: new Date('2026-02-10T10:01:00.000Z') }
+			],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[]
+		]);
+
+		const uniqueConflict = Object.assign(new Error('active assignment conflict'), {
+			code: '23505',
+			constraint: 'uq_assignments_active_user_date'
+		});
+
+		transactionMock
+			.mockRejectedValueOnce(uniqueConflict)
+			.mockImplementationOnce(async (runner: unknown) => {
+				if (typeof runner !== 'function') {
+					throw new Error('runner_missing');
+				}
+
+				const { txExecuteMock, txUpdateMock } = createResolveTransactionContext();
+				return runner({ execute: txExecuteMock, update: txUpdateMock });
+			});
+
+		await expect(resolveBidWindow('window-1')).resolves.toMatchObject({
+			resolved: true,
+			bidCount: 2,
+			winnerId: 'driver-second'
+		});
+		expect(transactionMock).toHaveBeenCalledTimes(2);
+		expect(sendNotificationMock).toHaveBeenCalledWith(
+			'driver-second',
+			'bid_won',
+			expect.objectContaining({ data: expect.objectContaining({ bidWindowId: 'window-1' }) })
+		);
 	});
 });
