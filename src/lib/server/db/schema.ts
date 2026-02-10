@@ -70,7 +70,8 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 	'streak_advanced',
 	'streak_reset',
 	'bonus_eligible',
-	'corrective_warning'
+	'corrective_warning',
+	'return_exception'
 ]);
 export const actorTypeEnum = pgEnum('actor_type', ['user', 'system']);
 export const signupOnboardingKindEnum = pgEnum('signup_onboarding_kind', ['approval', 'invite']);
@@ -101,6 +102,7 @@ export const routes = pgTable(
 			.notNull()
 			.references(() => warehouses.id),
 		managerId: text('manager_id').references(() => user.id, { onDelete: 'set null' }),
+		startTime: text('start_time').notNull().default('09:00'),
 		createdBy: text('created_by').references(() => user.id),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
@@ -188,6 +190,8 @@ export const shifts = pgTable('shifts', {
 	startedAt: timestamp('started_at', { withTimezone: true }),
 	completedAt: timestamp('completed_at', { withTimezone: true }),
 	editableUntil: timestamp('editable_until', { withTimezone: true }),
+	exceptedReturns: integer('excepted_returns').notNull().default(0),
+	exceptionNotes: text('exception_notes'),
 	cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
 	cancelReason: cancelReasonEnum('cancel_reason'),
 	cancelNotes: text('cancel_notes'),
