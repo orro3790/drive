@@ -99,12 +99,14 @@ export async function manualAssignDriverToAssignment(params: {
 	const [window] = await db
 		.select({ id: bidWindows.id })
 		.from(bidWindows)
-		.where(eq(bidWindows.assignmentId, assignment.id));
+		.where(and(eq(bidWindows.assignmentId, assignment.id), eq(bidWindows.status, 'open')));
 
-	const pendingBids = await db
-		.select({ id: bids.id, userId: bids.userId })
-		.from(bids)
-		.where(and(eq(bids.assignmentId, assignment.id), eq(bids.status, 'pending')));
+	const pendingBids = window
+		? await db
+				.select({ id: bids.id, userId: bids.userId })
+				.from(bids)
+				.where(and(eq(bids.bidWindowId, window.id), eq(bids.status, 'pending')))
+		: [];
 
 	const assignedAt = new Date();
 
@@ -130,14 +132,14 @@ export async function manualAssignDriverToAssignment(params: {
 				.where(eq(bidWindows.id, window.id));
 		}
 
-		if (pendingBids.length > 0) {
+		if (window && pendingBids.length > 0) {
 			await tx
 				.update(bids)
 				.set({
 					status: 'lost',
 					resolvedAt: assignedAt
 				})
-				.where(and(eq(bids.assignmentId, assignment.id), eq(bids.status, 'pending')));
+				.where(and(eq(bids.bidWindowId, window.id), eq(bids.status, 'pending')));
 		}
 
 		await createAuditLog(

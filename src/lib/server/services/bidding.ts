@@ -39,6 +39,10 @@ import {
 import { calculateBidScoreParts, dispatchPolicy } from '$lib/config/dispatchPolicy';
 
 const INSTANT_MODE_CUTOFF_MS = dispatchPolicy.bidding.instantModeCutoffHours * 60 * 60 * 1000;
+const PG_UNIQUE_VIOLATION = '23505';
+const PG_SERIALIZATION_FAILURE = '40001';
+const OPEN_WINDOW_CONSTRAINT = 'uq_bid_windows_open_assignment';
+const ACTIVE_ASSIGNMENT_CONSTRAINT = 'uq_assignments_active_user_date';
 
 export type BidWindowMode = 'competitive' | 'instant' | 'emergency';
 export type BidWindowTrigger = 'cancellation' | 'auto_drop' | 'no_show' | 'manager';
@@ -113,6 +117,36 @@ function getErrorLogContext(error: unknown): {
 	return { errorName, errorMessage, errorCode };
 }
 
+function getPgConstraintName(error: unknown): string | undefined {
+	if (
+		typeof error === 'object' &&
+		error !== null &&
+		'constraint' in error &&
+		typeof (error as { constraint?: unknown }).constraint === 'string'
+	) {
+		return (error as { constraint: string }).constraint;
+	}
+
+	return undefined;
+}
+
+function isPgUniqueViolation(error: unknown, constraint?: string): boolean {
+	const errorCode =
+		typeof error === 'object' && error !== null && 'code' in error
+			? (error as { code?: unknown }).code
+			: undefined;
+
+	if (errorCode !== PG_UNIQUE_VIOLATION) {
+		return false;
+	}
+
+	if (!constraint) {
+		return true;
+	}
+
+	return getPgConstraintName(error) === constraint;
+}
+
 /**
  * Determine the appropriate bid window mode based on time until shift.
  *
@@ -172,7 +206,8 @@ export async function createBidWindow(
 			id: assignments.id,
 			routeId: assignments.routeId,
 			date: assignments.date,
-			status: assignments.status
+			status: assignments.status,
+			userId: assignments.userId
 		})
 		.from(assignments)
 		.where(eq(assignments.id, assignmentId));
@@ -207,11 +242,11 @@ export async function createBidWindow(
 		.where(eq(routes.id, assignment.routeId));
 	const routeName = route?.name ?? 'Unknown Route';
 
-	if (assignment.status !== 'unfilled') {
+	if (assignment.status !== 'unfilled' || assignment.userId !== null) {
 		const updatedAt = new Date();
 		await db
 			.update(assignments)
-			.set({ status: 'unfilled', updatedAt })
+			.set({ status: 'unfilled', userId: null, updatedAt })
 			.where(eq(assignments.id, assignmentId));
 
 		await createAuditLog({
@@ -221,26 +256,45 @@ export async function createBidWindow(
 			actorType: 'system',
 			actorId: null,
 			changes: {
-				before: { status: assignment.status },
-				after: { status: 'unfilled' },
+				before: { status: assignment.status, userId: assignment.userId },
+				after: { status: 'unfilled', userId: null },
 				reason: 'bid_window_opened',
 				trigger: options.trigger
 			}
 		});
 	}
 
-	const [bidWindow] = await db
-		.insert(bidWindows)
-		.values({
-			assignmentId,
-			mode,
-			trigger: options.trigger ?? null,
-			payBonusPercent: options.payBonusPercent ?? 0,
-			opensAt: new Date(),
-			closesAt,
-			status: 'open'
-		})
-		.returning({ id: bidWindows.id });
+	let bidWindowId: string;
+
+	try {
+		const [bidWindow] = await db
+			.insert(bidWindows)
+			.values({
+				assignmentId,
+				mode,
+				trigger: options.trigger ?? null,
+				payBonusPercent: options.payBonusPercent ?? 0,
+				opensAt: new Date(),
+				closesAt,
+				status: 'open'
+			})
+			.returning({ id: bidWindows.id });
+
+		if (!bidWindow) {
+			log.info('Open bid window already exists');
+			return { success: false, reason: 'Open bid window already exists for this assignment' };
+		}
+
+		bidWindowId = bidWindow.id;
+	} catch (err) {
+		if (isPgUniqueViolation(err, OPEN_WINDOW_CONSTRAINT)) {
+			log.info('Open bid window already exists');
+			return { success: false, reason: 'Open bid window already exists for this assignment' };
+		}
+
+		log.error(getErrorLogContext(err), 'Failed to create bid window');
+		return { success: false, reason: 'Failed to create bid window' };
+	}
 
 	log.info({ mode, closesAt }, 'Bid window created');
 
@@ -272,7 +326,7 @@ export async function createBidWindow(
 
 	return {
 		success: true,
-		bidWindowId: bidWindow.id,
+		bidWindowId,
 		notifiedCount
 	};
 }
@@ -444,6 +498,46 @@ export async function resolveBidWindow(
 		return { resolved: false, bidCount: 0, reason: 'assignment_not_found' };
 	}
 
+	const finalizeWithoutWinner = async (
+		reason: 'no_bids' | 'all_bidders_conflicted',
+		bidCount: number
+	): Promise<ResolveBidWindowResult> => {
+		if (window.mode === 'competitive') {
+			const transitioned = await transitionToInstantMode(bidWindowId);
+			if (transitioned) {
+				return {
+					resolved: false,
+					bidCount,
+					reason: 'transitioned_to_instant',
+					transitioned: true
+				};
+			}
+
+			return { resolved: false, bidCount, reason: 'not_open' };
+		}
+
+		const [closedWindow] = await db
+			.update(bidWindows)
+			.set({ status: 'closed' })
+			.where(and(eq(bidWindows.id, bidWindowId), eq(bidWindows.status, 'open')))
+			.returning({ id: bidWindows.id });
+
+		if (!closedWindow) {
+			return { resolved: false, bidCount, reason: 'not_open' };
+		}
+
+		try {
+			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
+				routeName: assignment.routeName,
+				date: assignment.date
+			});
+		} catch (err) {
+			log.warn(getErrorLogContext(err), 'Manager alert failed after closing bid window');
+		}
+
+		return { resolved: false, bidCount, reason };
+	};
+
 	const pendingBids = await db
 		.select({
 			id: bids.id,
@@ -451,36 +545,11 @@ export async function resolveBidWindow(
 			bidAt: bids.bidAt
 		})
 		.from(bids)
-		.where(and(eq(bids.assignmentId, assignment.id), eq(bids.status, 'pending')));
+		.where(and(eq(bids.bidWindowId, bidWindowId), eq(bids.status, 'pending')));
 
 	if (pendingBids.length === 0) {
 		log.info('No bids to resolve');
-
-		// For competitive windows with no bids, transition to instant mode
-		if (window.mode === 'competitive') {
-			await transitionToInstantMode(bidWindowId);
-			return {
-				resolved: false,
-				bidCount: 0,
-				reason: 'transitioned_to_instant',
-				transitioned: true
-			};
-		}
-
-		// For instant/emergency windows with no bids, close the window
-		await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, bidWindowId));
-
-		try {
-			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
-				routeName: assignment.routeName,
-				date: assignment.date
-			});
-			log.info('Manager alerted about unfilled route');
-		} catch {
-			// Best-effort alert, don't fail resolution
-		}
-
-		return { resolved: false, bidCount: 0, reason: 'no_bids' };
+		return finalizeWithoutWinner('no_bids', 0);
 	}
 
 	const scoredBids = await Promise.all(
@@ -494,7 +563,13 @@ export async function resolveBidWindow(
 		if (b.score !== a.score) {
 			return b.score - a.score;
 		}
-		return a.bidAt.getTime() - b.bidAt.getTime();
+
+		const bidAtDiff = a.bidAt.getTime() - b.bidAt.getTime();
+		if (bidAtDiff !== 0) {
+			return bidAtDiff;
+		}
+
+		return a.id.localeCompare(b.id);
 	});
 
 	// Same-day conflict guard: check which bidders already have an assignment for this date
@@ -512,130 +587,164 @@ export async function resolveBidWindow(
 		);
 	const conflictSet = new Set(conflicts.map((c) => c.userId));
 
-	const winner = scoredBids.find((b) => !conflictSet.has(b.userId));
+	while (true) {
+		const winner = scoredBids.find((bid) => !conflictSet.has(bid.userId));
 
-	if (!winner) {
-		log.info('All bidders have same-day conflicts');
-
-		if (window.mode === 'competitive') {
-			await transitionToInstantMode(bidWindowId);
-			return {
-				resolved: false,
-				bidCount: scoredBids.length,
-				reason: 'transitioned_to_instant',
-				transitioned: true
-			};
+		if (!winner) {
+			log.info('All bidders have same-day conflicts');
+			return finalizeWithoutWinner('all_bidders_conflicted', scoredBids.length);
 		}
 
-		// Close the window so it's not re-picked up
-		await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, bidWindowId));
+		const resolvedAt = new Date();
+		const transactionResult = await db
+			.transaction(async (tx) => {
+				const lockResult = await tx.execute(
+					sql`SELECT id, status FROM bid_windows WHERE id = ${bidWindowId} FOR UPDATE`
+				);
+				const lockedWindow = (lockResult as { rows?: Array<Record<string, unknown>> }).rows?.[0];
+
+				if (!lockedWindow || lockedWindow.status !== 'open') {
+					return { outcome: 'not_open' as const };
+				}
+
+				const [updatedWindow] = await tx
+					.update(bidWindows)
+					.set({ status: 'resolved', winnerId: winner.userId })
+					.where(and(eq(bidWindows.id, bidWindowId), eq(bidWindows.status, 'open')))
+					.returning({ id: bidWindows.id });
+
+				if (!updatedWindow) {
+					return { outcome: 'not_open' as const };
+				}
+
+				await tx
+					.update(assignments)
+					.set({
+						userId: winner.userId,
+						status: 'scheduled',
+						assignedBy: 'bid',
+						assignedAt: resolvedAt,
+						updatedAt: resolvedAt
+					})
+					.where(eq(assignments.id, assignment.id));
+
+				for (const bid of scoredBids) {
+					await tx
+						.update(bids)
+						.set({
+							score: bid.score,
+							status: bid.id === winner.id ? 'won' : 'lost',
+							resolvedAt
+						})
+						.where(eq(bids.id, bid.id));
+				}
+
+				await createAuditLog(
+					{
+						entityType: 'assignment',
+						entityId: assignment.id,
+						action: 'assign',
+						actorType: actor.actorType,
+						actorId: actor.actorId ?? null,
+						changes: {
+							before: {
+								status: assignment.status,
+								userId: assignment.userId
+							},
+							after: {
+								status: 'scheduled',
+								userId: winner.userId,
+								assignedBy: 'bid',
+								assignedAt: resolvedAt
+							},
+							bidWindowId
+						}
+					},
+					tx
+				);
+
+				return {
+					outcome: 'resolved' as const,
+					winnerId: winner.userId
+				};
+			})
+			.catch((err) => {
+				if (isPgUniqueViolation(err, ACTIVE_ASSIGNMENT_CONSTRAINT)) {
+					return { outcome: 'winner_conflict' as const };
+				}
+
+				throw err;
+			});
+
+		if (transactionResult.outcome === 'not_open') {
+			return { resolved: false, bidCount: 0, reason: 'not_open' };
+		}
+
+		if (transactionResult.outcome === 'winner_conflict') {
+			conflictSet.add(winner.userId);
+			continue;
+		}
+
+		const formattedDate = assignment.date;
+		const winnerBody = `You won ${assignment.routeName} for ${formattedDate}`;
+		const loserBody = `${assignment.routeName} assigned to another driver`;
+		const notificationData = {
+			assignmentId: assignment.id,
+			bidWindowId,
+			routeName: assignment.routeName,
+			assignmentDate: formattedDate
+		};
 
 		try {
-			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
-				routeName: assignment.routeName,
-				date: assignment.date
+			await sendNotification(transactionResult.winnerId, 'bid_won', {
+				customBody: winnerBody,
+				data: notificationData
 			});
-		} catch {
-			// Best-effort alert
+		} catch (err) {
+			log.warn(getErrorLogContext(err), 'Winner notification failed');
 		}
 
-		return { resolved: false, bidCount: scoredBids.length, reason: 'all_bidders_conflicted' };
-	}
+		const loserIds = scoredBids.filter((bid) => bid.id !== winner.id).map((bid) => bid.userId);
+		if (loserIds.length > 0) {
+			try {
+				await sendBulkNotifications(loserIds, 'bid_lost', {
+					customBody: loserBody,
+					data: notificationData
+				});
+			} catch (err) {
+				log.warn(getErrorLogContext(err), 'Loser notifications failed');
+			}
+		}
 
-	const resolvedAt = new Date();
+		try {
+			broadcastBidWindowClosed({
+				assignmentId: assignment.id,
+				bidWindowId,
+				winnerId: transactionResult.winnerId
+			});
+		} catch (err) {
+			log.warn(getErrorLogContext(err), 'Bid window close broadcast failed');
+		}
 
-	await db.transaction(async (tx) => {
-		await tx
-			.update(bidWindows)
-			.set({ status: 'resolved', winnerId: winner.userId })
-			.where(eq(bidWindows.id, bidWindowId));
-
-		await tx
-			.update(assignments)
-			.set({
-				userId: winner.userId,
+		try {
+			broadcastAssignmentUpdated({
+				assignmentId: assignment.id,
 				status: 'scheduled',
-				assignedBy: 'bid',
-				assignedAt: resolvedAt,
-				updatedAt: resolvedAt
-			})
-			.where(eq(assignments.id, assignment.id));
-
-		for (const bid of scoredBids) {
-			await tx
-				.update(bids)
-				.set({
-					score: bid.score,
-					status: bid.id === winner.id ? 'won' : 'lost',
-					resolvedAt
-				})
-				.where(eq(bids.id, bid.id));
+				driverId: transactionResult.winnerId,
+				routeId: assignment.routeId
+			});
+		} catch (err) {
+			log.warn(getErrorLogContext(err), 'Assignment update broadcast failed');
 		}
 
-		await createAuditLog(
-			{
-				entityType: 'assignment',
-				entityId: assignment.id,
-				action: 'assign',
-				actorType: actor.actorType,
-				actorId: actor.actorId ?? null,
-				changes: {
-					before: {
-						status: assignment.status,
-						userId: assignment.userId
-					},
-					after: {
-						status: 'scheduled',
-						userId: winner.userId,
-						assignedBy: 'bid',
-						assignedAt: resolvedAt
-					},
-					bidWindowId
-				}
-			},
-			tx
-		);
-	});
+		log.info({ bidCount: scoredBids.length }, 'Bid window resolved');
 
-	const formattedDate = assignment.date;
-	const winnerBody = `You won ${assignment.routeName} for ${formattedDate}`;
-	const loserBody = `${assignment.routeName} assigned to another driver`;
-	const notificationData = {
-		assignmentId: assignment.id,
-		bidWindowId,
-		routeName: assignment.routeName,
-		assignmentDate: formattedDate
-	};
-
-	await sendNotification(winner.userId, 'bid_won', {
-		customBody: winnerBody,
-		data: notificationData
-	});
-
-	if (scoredBids.length > 1) {
-		const loserIds = scoredBids.slice(1).map((bid) => bid.userId);
-		await sendBulkNotifications(loserIds, 'bid_lost', {
-			customBody: loserBody,
-			data: notificationData
-		});
+		return {
+			resolved: true,
+			bidCount: scoredBids.length,
+			winnerId: transactionResult.winnerId
+		};
 	}
-
-	broadcastBidWindowClosed({
-		assignmentId: assignment.id,
-		bidWindowId,
-		winnerId: winner.userId
-	});
-
-	broadcastAssignmentUpdated({
-		assignmentId: assignment.id,
-		status: 'scheduled',
-		driverId: winner.userId,
-		routeId: assignment.routeId
-	});
-
-	log.info({ bidCount: scoredBids.length }, 'Bid window resolved');
-
-	return { resolved: true, bidCount: scoredBids.length, winnerId: winner.userId };
 }
 
 /**
@@ -679,67 +788,118 @@ export async function getExpiredBidWindows(
  * Transition a competitive bid window to instant mode.
  * Called when a competitive window expires with no bids.
  */
-export async function transitionToInstantMode(bidWindowId: string): Promise<void> {
+export async function transitionToInstantMode(bidWindowId: string): Promise<boolean> {
 	const log = logger.child({ operation: 'transitionToInstantMode' });
 
-	const [window] = await db
-		.select({
-			id: bidWindows.id,
-			assignmentId: bidWindows.assignmentId,
-			mode: bidWindows.mode
-		})
-		.from(bidWindows)
-		.where(eq(bidWindows.id, bidWindowId));
+	const transitionResult = await db.transaction(async (tx) => {
+		const lockResult = await tx.execute(
+			sql`SELECT id, assignment_id, status, mode FROM bid_windows WHERE id = ${bidWindowId} FOR UPDATE`
+		);
+		const windowRow = (lockResult as { rows?: Array<Record<string, unknown>> }).rows?.[0];
 
-	if (!window) {
+		if (!windowRow) {
+			return { outcome: 'not_found' as const };
+		}
+
+		if (windowRow.status !== 'open') {
+			return { outcome: 'not_open' as const };
+		}
+
+		if (windowRow.mode !== 'competitive') {
+			return { outcome: 'not_competitive' as const };
+		}
+
+		const assignmentId = String(windowRow.assignment_id);
+
+		const [assignment] = await tx
+			.select({
+				date: assignments.date,
+				routeId: assignments.routeId
+			})
+			.from(assignments)
+			.where(eq(assignments.id, assignmentId));
+
+		if (!assignment) {
+			return { outcome: 'assignment_not_found' as const };
+		}
+
+		const shiftStart = getShiftStartTime(assignment.date);
+
+		if (shiftStart <= new Date()) {
+			const [closedWindow] = await tx
+				.update(bidWindows)
+				.set({ status: 'closed' })
+				.where(and(eq(bidWindows.id, bidWindowId), eq(bidWindows.status, 'open')))
+				.returning({ id: bidWindows.id });
+
+			if (!closedWindow) {
+				return { outcome: 'not_open' as const };
+			}
+
+			return { outcome: 'closed' as const };
+		}
+
+		const [updatedWindow] = await tx
+			.update(bidWindows)
+			.set({ mode: 'instant', closesAt: shiftStart })
+			.where(
+				and(
+					eq(bidWindows.id, bidWindowId),
+					eq(bidWindows.status, 'open'),
+					eq(bidWindows.mode, 'competitive')
+				)
+			)
+			.returning({ id: bidWindows.id });
+
+		if (!updatedWindow) {
+			return { outcome: 'not_open' as const };
+		}
+
+		return {
+			outcome: 'transitioned' as const,
+			assignmentId,
+			assignmentDate: assignment.date,
+			routeId: assignment.routeId,
+			shiftStart
+		};
+	});
+
+	if (transitionResult.outcome === 'not_found') {
 		log.warn('Bid window not found');
-		return;
+		return false;
 	}
 
-	const [assignment] = await db
-		.select({
-			date: assignments.date,
-			routeId: assignments.routeId
-		})
-		.from(assignments)
-		.where(eq(assignments.id, window.assignmentId));
-
-	if (!assignment) {
+	if (transitionResult.outcome === 'assignment_not_found') {
 		log.warn('Assignment not found for transition');
-		return;
+		return false;
 	}
 
-	const shiftStart = getShiftStartTime(assignment.date);
-
-	// If the shift has already started, close the window — transitioning would
-	// just create another immediately-expired window causing an infinite loop.
-	if (shiftStart <= new Date()) {
-		await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, bidWindowId));
+	if (transitionResult.outcome === 'closed') {
 		log.info('Shift already started, closed window');
-		return;
+		return false;
 	}
 
-	await db
-		.update(bidWindows)
-		.set({ mode: 'instant', closesAt: shiftStart })
-		.where(eq(bidWindows.id, bidWindowId));
+	if (transitionResult.outcome !== 'transitioned') {
+		return false;
+	}
 
 	const [route] = await db
 		.select({ name: routes.name })
 		.from(routes)
-		.where(eq(routes.id, assignment.routeId));
+		.where(eq(routes.id, transitionResult.routeId));
 	const routeName = route?.name ?? 'Unknown Route';
 
 	await notifyEligibleDrivers({
-		assignmentId: window.assignmentId,
-		assignmentDate: assignment.date,
+		assignmentId: transitionResult.assignmentId,
+		assignmentDate: transitionResult.assignmentDate,
 		routeName,
-		closesAt: shiftStart,
+		closesAt: transitionResult.shiftStart,
 		mode: 'instant',
 		payBonusPercent: 0
 	});
 
 	log.info('Transitioned to instant mode');
+	return true;
 }
 
 /**
@@ -799,6 +959,7 @@ export async function instantAssign(
 				.insert(bids)
 				.values({
 					assignmentId,
+					bidWindowId,
 					userId,
 					score: null,
 					status: 'won',
@@ -824,7 +985,7 @@ export async function instantAssign(
 			await tx
 				.update(bidWindows)
 				.set({ status: 'resolved', winnerId: userId })
-				.where(eq(bidWindows.id, bidWindowId));
+				.where(and(eq(bidWindows.id, bidWindowId), eq(bidWindows.status, 'open')));
 
 			// Delete any incomplete shift record (reassignment case)
 			await tx.delete(shifts).where(eq(shifts.assignmentId, assignmentId));
@@ -834,7 +995,7 @@ export async function instantAssign(
 				.update(bids)
 				.set({ status: 'lost', resolvedAt })
 				.where(
-					and(eq(bids.assignmentId, assignmentId), eq(bids.status, 'pending'), ne(bids.id, bid.id))
+					and(eq(bids.bidWindowId, bidWindowId), eq(bids.status, 'pending'), ne(bids.id, bid.id))
 				);
 
 			// Increment bidPickups metric
@@ -905,14 +1066,19 @@ export async function instantAssign(
 		const errorContext = getErrorLogContext(err);
 		const errorMessageLower = errorContext.errorMessage.toLowerCase();
 		const isLikelyRaceCondition =
-			errorContext.errorCode === '40001' ||
+			errorContext.errorCode === PG_SERIALIZATION_FAILURE ||
 			errorMessageLower.includes('serialization') ||
 			errorMessageLower.includes('deadlock');
+		const hasActiveShiftConflict = isPgUniqueViolation(err, ACTIVE_ASSIGNMENT_CONSTRAINT);
 
 		log.error(errorContext, 'Instant assign failed');
 		return {
 			instantlyAssigned: false,
-			error: isLikelyRaceCondition ? 'Route already assigned' : 'Unable to accept shift right now'
+			error: hasActiveShiftConflict
+				? 'You already have a shift on this date'
+				: isLikelyRaceCondition
+					? 'Route already assigned'
+					: 'Unable to accept shift right now'
 		};
 	}
 }
@@ -920,11 +1086,11 @@ export async function instantAssign(
 export async function getBidWindowDetail(windowId: string) {
 	const bidCountSubquery = db
 		.select({
-			assignmentId: bids.assignmentId,
+			bidWindowId: bids.bidWindowId,
 			count: sql<number>`count(*)`.as('count')
 		})
 		.from(bids)
-		.groupBy(bids.assignmentId)
+		.groupBy(bids.bidWindowId)
 		.as('bid_counts');
 
 	const [row] = await db
@@ -946,7 +1112,7 @@ export async function getBidWindowDetail(windowId: string) {
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.leftJoin(user, eq(bidWindows.winnerId, user.id))
-		.leftJoin(bidCountSubquery, eq(bidCountSubquery.assignmentId, bidWindows.assignmentId))
+		.leftJoin(bidCountSubquery, eq(bidCountSubquery.bidWindowId, bidWindows.id))
 		.where(eq(bidWindows.id, windowId));
 
 	if (!row) return null;

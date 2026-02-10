@@ -9,7 +9,7 @@ import type { RequestHandler } from './$types';
 import { z } from 'zod';
 import { db } from '$lib/server/db';
 import { assignments, bidWindows, bids, routes, user, warehouses } from '$lib/server/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
 import { getBidWindowDetail } from '$lib/server/services/bidding';
@@ -30,6 +30,20 @@ const assignSchema = z
 			.regex(/^[A-Za-z0-9:_-]+$/)
 	})
 	.strict();
+
+const PG_UNIQUE_VIOLATION = '23505';
+const ACTIVE_ASSIGNMENT_CONSTRAINT = 'uq_assignments_active_user_date';
+
+function isActiveAssignmentConflict(err: unknown): boolean {
+	if (typeof err !== 'object' || err === null) {
+		return false;
+	}
+
+	const code = 'code' in err ? (err as { code?: unknown }).code : undefined;
+	const constraint = 'constraint' in err ? (err as { constraint?: unknown }).constraint : undefined;
+
+	return code === PG_UNIQUE_VIOLATION && constraint === ACTIVE_ASSIGNMENT_CONSTRAINT;
+}
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (!locals.user) {
@@ -89,7 +103,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(403, 'No access to this warehouse');
 	}
 
-	if (window.status === 'resolved') {
+	if (window.status !== 'open') {
 		throw error(409, 'Bid window already resolved');
 	}
 
@@ -109,63 +123,100 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const pendingBids = await db
 		.select({ id: bids.id, userId: bids.userId })
 		.from(bids)
-		.where(and(eq(bids.assignmentId, window.assignmentId), eq(bids.status, 'pending')));
+		.where(and(eq(bids.bidWindowId, window.id), eq(bids.status, 'pending')));
 
 	const resolvedAt = new Date();
 
-	await db.transaction(async (tx) => {
-		await tx
-			.update(bidWindows)
-			.set({ status: 'resolved', winnerId: driver.id })
-			.where(eq(bidWindows.id, window.id));
+	const transactionResult = await db
+		.transaction(async (tx) => {
+			const [updatedWindow] = await tx
+				.update(bidWindows)
+				.set({ status: 'resolved', winnerId: driver.id })
+				.where(and(eq(bidWindows.id, window.id), eq(bidWindows.status, 'open')))
+				.returning({ id: bidWindows.id });
 
-		await tx
-			.update(assignments)
-			.set({
-				userId: driver.id,
-				status: 'scheduled',
-				assignedBy: 'manager',
-				assignedAt: resolvedAt,
-				updatedAt: resolvedAt
-			})
-			.where(eq(assignments.id, window.assignmentId));
-
-		if (pendingBids.length > 0) {
-			await tx
-				.update(bids)
-				.set({ status: 'lost', resolvedAt })
-				.where(and(eq(bids.assignmentId, window.assignmentId), eq(bids.status, 'pending')));
-
-			const winnerBid = pendingBids.find((bid) => bid.userId === driver.id);
-			if (winnerBid) {
-				await tx.update(bids).set({ status: 'won', resolvedAt }).where(eq(bids.id, winnerBid.id));
+			if (!updatedWindow) {
+				return { outcome: 'not_open' as const };
 			}
-		}
 
-		await createAuditLog(
-			{
-				entityType: 'assignment',
-				entityId: window.assignmentId,
-				action: 'manual_assign',
-				actorType: 'user',
-				actorId,
-				changes: {
-					before: {
-						status: window.assignmentStatus,
-						userId: window.assignmentUserId
-					},
-					after: {
-						status: 'scheduled',
-						userId: driver.id,
-						assignedBy: 'manager',
-						assignedAt: resolvedAt
-					},
-					bidWindowId: window.id
+			const [updatedAssignment] = await tx
+				.update(assignments)
+				.set({
+					userId: driver.id,
+					status: 'scheduled',
+					assignedBy: 'manager',
+					assignedAt: resolvedAt,
+					updatedAt: resolvedAt
+				})
+				.where(
+					and(
+						eq(assignments.id, window.assignmentId),
+						inArray(assignments.status, ['unfilled', 'cancelled'])
+					)
+				)
+				.returning({ id: assignments.id });
+
+			if (!updatedAssignment) {
+				return { outcome: 'assignment_filled' as const };
+			}
+
+			if (pendingBids.length > 0) {
+				await tx
+					.update(bids)
+					.set({ status: 'lost', resolvedAt })
+					.where(and(eq(bids.bidWindowId, window.id), eq(bids.status, 'pending')));
+
+				const winnerBid = pendingBids.find((bid) => bid.userId === driver.id);
+				if (winnerBid) {
+					await tx.update(bids).set({ status: 'won', resolvedAt }).where(eq(bids.id, winnerBid.id));
 				}
-			},
-			tx
-		);
-	});
+			}
+
+			await createAuditLog(
+				{
+					entityType: 'assignment',
+					entityId: window.assignmentId,
+					action: 'manual_assign',
+					actorType: 'user',
+					actorId,
+					changes: {
+						before: {
+							status: window.assignmentStatus,
+							userId: window.assignmentUserId
+						},
+						after: {
+							status: 'scheduled',
+							userId: driver.id,
+							assignedBy: 'manager',
+							assignedAt: resolvedAt
+						},
+						bidWindowId: window.id
+					}
+				},
+				tx
+			);
+
+			return { outcome: 'ok' as const };
+		})
+		.catch((err) => {
+			if (isActiveAssignmentConflict(err)) {
+				return { outcome: 'driver_conflict' as const };
+			}
+
+			throw err;
+		});
+
+	if (transactionResult.outcome === 'not_open') {
+		throw error(409, 'Bid window already resolved');
+	}
+
+	if (transactionResult.outcome === 'assignment_filled') {
+		throw error(409, 'Assignment already filled');
+	}
+
+	if (transactionResult.outcome === 'driver_conflict') {
+		throw error(409, 'Driver already has a non-cancelled shift on this date');
+	}
 
 	const notificationData = {
 		assignmentId: window.assignmentId,

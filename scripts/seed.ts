@@ -410,30 +410,50 @@ async function seed(seedConfig: SeedConfig) {
 	// 9. Generate bidding
 	console.log('\n9. Creating bid windows and bids...');
 	const biddingData = generateBidding(assignmentData.assignments, drivers);
+	const bidWindowIdsByAssignmentId = new Map<string, string>();
 
 	if (biddingData.bidWindows.length > 0) {
-		await db.insert(bidWindows).values(
-			biddingData.bidWindows.map((w) => ({
-				assignmentId: insertedAssignments[w.assignmentIndex].id,
-				opensAt: w.opensAt,
-				closesAt: w.closesAt,
-				status: w.status,
-				winnerId: w.winnerId
-			}))
-		);
+		const bidWindowRows = biddingData.bidWindows.map((w) => ({
+			assignmentId: insertedAssignments[w.assignmentIndex].id,
+			opensAt: w.opensAt,
+			closesAt: w.closesAt,
+			status: w.status,
+			winnerId: w.winnerId
+		}));
+
+		const insertedBidWindows = await db
+			.insert(bidWindows)
+			.values(bidWindowRows)
+			.returning({ id: bidWindows.id, assignmentId: bidWindows.assignmentId });
+
+		for (const row of insertedBidWindows) {
+			bidWindowIdsByAssignmentId.set(row.assignmentId, row.id);
+		}
 	}
 
 	if (biddingData.bids.length > 0) {
 		await db.insert(bids).values(
-			biddingData.bids.map((b) => ({
-				assignmentId: insertedAssignments[b.assignmentIndex].id,
-				userId: b.userId,
-				score: b.score,
-				status: b.status,
-				bidAt: b.bidAt,
-				windowClosesAt: b.windowClosesAt,
-				resolvedAt: b.resolvedAt
-			}))
+			biddingData.bids
+				.map((b) => {
+					const assignmentId = insertedAssignments[b.assignmentIndex].id;
+					const bidWindowId = bidWindowIdsByAssignmentId.get(assignmentId);
+
+					if (!bidWindowId) {
+						return null;
+					}
+
+					return {
+						assignmentId,
+						bidWindowId,
+						userId: b.userId,
+						score: b.score,
+						status: b.status,
+						bidAt: b.bidAt,
+						windowClosesAt: b.windowClosesAt,
+						resolvedAt: b.resolvedAt
+					};
+				})
+				.filter((row): row is NonNullable<typeof row> => row !== null)
 		);
 	}
 

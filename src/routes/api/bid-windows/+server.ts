@@ -94,11 +94,11 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	// Get bid count subquery
 	const bidCountSubquery = db
 		.select({
-			assignmentId: bids.assignmentId,
+			bidWindowId: bids.bidWindowId,
 			count: sql<number>`count(*)`.as('count')
 		})
 		.from(bids)
-		.groupBy(bids.assignmentId)
+		.groupBy(bids.bidWindowId)
 		.as('bid_counts');
 
 	// Query bid windows with joins
@@ -122,7 +122,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.leftJoin(user, eq(bidWindows.winnerId, user.id))
-		.leftJoin(bidCountSubquery, eq(bidCountSubquery.assignmentId, bidWindows.assignmentId))
+		.leftJoin(bidCountSubquery, eq(bidCountSubquery.bidWindowId, bidWindows.id))
 		.where(and(inArray(warehouses.id, warehouseIds), statusConditions))
 		.orderBy(bidWindows.closesAt);
 

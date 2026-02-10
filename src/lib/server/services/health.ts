@@ -256,7 +256,7 @@ export async function computeContributions(userId: string): Promise<{
 		db
 			.select({ count: sql<number>`count(*)::int` })
 			.from(bids)
-			.innerJoin(bidWindows, eq(bidWindows.assignmentId, bids.assignmentId))
+			.innerJoin(bidWindows, eq(bidWindows.id, bids.bidWindowId))
 			.where(
 				and(
 					eq(bids.userId, userId),
@@ -270,7 +270,7 @@ export async function computeContributions(userId: string): Promise<{
 		db
 			.select({ count: sql<number>`count(*)::int` })
 			.from(bids)
-			.innerJoin(bidWindows, eq(bidWindows.assignmentId, bids.assignmentId))
+			.innerJoin(bidWindows, eq(bidWindows.id, bids.bidWindowId))
 			.where(
 				and(
 					eq(bids.userId, userId),

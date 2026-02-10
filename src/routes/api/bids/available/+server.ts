@@ -12,7 +12,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, bidWindows, bids, routes, warehouses, user } from '$lib/server/db/schema';
-import { and, eq, gt } from 'drizzle-orm';
+import { and, eq, gt, inArray } from 'drizzle-orm';
 import { parseISO } from 'date-fns';
 import { getWeekStart, canDriverTakeAssignment } from '$lib/server/services/scheduling';
 import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
@@ -78,20 +78,22 @@ export const GET: RequestHandler = async ({ locals }) => {
 		return json({ bidWindows: [] });
 	}
 
+	const openWindowIds = openWindows.map((window) => window.id);
+
 	// Get bids the driver has already made
 	const existingBids = await db
-		.select({ assignmentId: bids.assignmentId })
+		.select({ bidWindowId: bids.bidWindowId })
 		.from(bids)
-		.where(eq(bids.userId, locals.user.id));
+		.where(and(eq(bids.userId, locals.user.id), inArray(bids.bidWindowId, openWindowIds)));
 
-	const alreadyBidAssignments = new Set(existingBids.map((b) => b.assignmentId));
+	const alreadyBidWindows = new Set(existingBids.map((bid) => bid.bidWindowId));
 
 	// Filter windows by eligibility
 	const eligibleWindows = [];
 
 	for (const window of openWindows) {
-		// Skip if driver already bid on this assignment
-		if (alreadyBidAssignments.has(window.assignmentId)) {
+		// Skip if driver already bid in this active window
+		if (alreadyBidWindows.has(window.id)) {
 			continue;
 		}
 
