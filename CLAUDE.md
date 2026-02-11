@@ -82,6 +82,12 @@ Driver-facing endpoints in `src/routes/api/`:
 - `POST /api/shifts/complete` - Complete shift (takes parcelsReturned + optional exceptedReturns/exceptionNotes, server calculates delivered, sets 1-hour edit window)
 - `PATCH /api/shifts/[assignmentId]/edit` - Edit parcel counts and exception fields within 1-hour window after completion
 
+## Manager API Endpoints
+
+Manager-facing endpoints in `src/routes/api/`:
+
+- `GET /api/drivers/[id]/shifts` - Get all completed and cancelled shift records for a specific driver (includes parcel counts, timestamps, exception notes)
+
 ## UI Components
 
 Available in `src/lib/components/`:
@@ -91,11 +97,13 @@ Available in `src/lib/components/`:
 - `data-table/` - Full TanStack table system with filtering, pagination
 - `icons/` - Icon components
 - `driver/` - HealthCard (health score, stars, streak, simulation preview), CancelShiftModal
+- `DriverShiftHistoryTable.svelte` - Driver shift history table (used on manager drivers page, fetches from `/api/drivers/[id]/shifts`)
 - Combobox, Select, DatePicker, ConfirmationDialog, ToastContainer
 
 **Shared Types** (`src/lib/schemas/`):
 
 - `health.ts` - `HealthResponse` type for `/api/driver-health` endpoint and HealthCard component
+- `driverShiftHistory.ts` - `DriverShiftRecord` and `DriverShiftHistoryResponse` types for `/api/drivers/[id]/shifts` endpoint and DriverShiftHistoryTable component
 
 ### Theme System
 
