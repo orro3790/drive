@@ -34,6 +34,15 @@ vi.mock('$lib/paraglide/messages.js', () => ({
 
 type RouteStatus = 'assigned' | 'unfilled' | 'bidding';
 
+type ShiftProgress =
+	| 'unconfirmed'
+	| 'confirmed'
+	| 'arrived'
+	| 'started'
+	| 'completed'
+	| 'no_show'
+	| 'cancelled';
+
 type RouteWithWarehouse = {
 	id: string;
 	name: string;
@@ -49,6 +58,11 @@ type RouteWithWarehouse = {
 	assignmentId: string | null;
 	driverName: string | null;
 	bidWindowClosesAt: string | null;
+	shiftProgress: ShiftProgress | null;
+	confirmedAt: string | null;
+	arrivedAt: string | null;
+	startedAt: string | null;
+	completedAt: string | null;
 };
 
 type RouteFilters = {
@@ -95,6 +109,11 @@ function makeRoute(overrides: Partial<RouteWithWarehouse> = {}): RouteWithWareho
 		assignmentId: 'assignment-1',
 		driverName: null,
 		bidWindowClosesAt: null,
+		shiftProgress: null,
+		confirmedAt: null,
+		arrivedAt: null,
+		startedAt: null,
+		completedAt: null,
 		...overrides
 	};
 }
