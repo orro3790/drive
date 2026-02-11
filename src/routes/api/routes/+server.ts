@@ -8,28 +8,21 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, bidWindows, routes, user, warehouses } from '$lib/server/db/schema';
-import { parseRouteStartTime } from '$lib/config/dispatchPolicy';
+import { assignments, bidWindows, routes, shifts, user, warehouses } from '$lib/server/db/schema';
 import { routeCreateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getManagerWarehouseIds, canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { createAuditLog } from '$lib/server/services/audit';
-import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
+import {
+	toLocalYmd,
+	isValidDate,
+	isShiftStarted,
+	deriveShiftProgress
+} from '$lib/server/services/routeHelpers';
 import { z } from 'zod';
 
 const VALID_STATUSES: RouteStatus[] = ['assigned', 'unfilled', 'bidding'];
 const warehouseIdQuerySchema = z.string().uuid();
-
-function toLocalYmd(date = new Date()): string {
-	const year = date.getFullYear();
-	const month = String(date.getMonth() + 1).padStart(2, '0');
-	const day = String(date.getDate()).padStart(2, '0');
-	return `${year}-${month}-${day}`;
-}
-
-function isValidDate(value: string) {
-	return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
 
 type AssignmentInfo = {
 	assignmentId: string;
@@ -37,13 +30,12 @@ type AssignmentInfo = {
 	userId: string | null;
 	driverName: string | null;
 	bidWindowClosesAt: Date | null;
+	confirmedAt: Date | null;
+	arrivedAt: Date | null;
+	startedAt: Date | null;
+	completedAt: Date | null;
+	cancelledAt: Date | null;
 };
-
-function isShiftStarted(date: string, routeStartTime: string): boolean {
-	const { hours, minutes } = parseRouteStartTime(routeStartTime);
-	const shiftStart = getTorontoDateTimeInstant(date, { hours, minutes });
-	return new Date() >= shiftStart;
-}
 
 function resolveStatus(assignment?: AssignmentInfo): RouteStatus {
 	if (!assignment) return 'unfilled';
@@ -108,7 +100,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		.orderBy(routes.name);
 	const routeIds = routeRows.map((route) => route.id);
 
-	// Fetch assignments with driver info
+	// Fetch assignments with driver info and shift lifecycle data
 	const assignmentRows = routeIds.length
 		? await db
 				.select({
@@ -116,10 +108,16 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 					assignmentId: assignments.id,
 					status: assignments.status,
 					userId: assignments.userId,
-					driverName: user.name
+					driverName: user.name,
+					confirmedAt: assignments.confirmedAt,
+					assignmentCancelledAt: assignments.cancelledAt,
+					shiftArrivedAt: shifts.arrivedAt,
+					shiftStartedAt: shifts.startedAt,
+					shiftCompletedAt: shifts.completedAt
 				})
 				.from(assignments)
 				.leftJoin(user, eq(user.id, assignments.userId))
+				.leftJoin(shifts, eq(shifts.assignmentId, assignments.id))
 				.where(and(eq(assignments.date, date), inArray(assignments.routeId, routeIds)))
 		: [];
 
@@ -150,7 +148,12 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 				status: row.status,
 				userId: row.userId,
 				driverName: row.driverName,
-				bidWindowClosesAt: openBidWindowMap.get(row.assignmentId) ?? null
+				bidWindowClosesAt: openBidWindowMap.get(row.assignmentId) ?? null,
+				confirmedAt: row.confirmedAt,
+				arrivedAt: row.shiftArrivedAt,
+				startedAt: row.shiftStartedAt,
+				completedAt: row.shiftCompletedAt,
+				cancelledAt: row.assignmentCancelledAt
 			}
 		])
 	);
@@ -159,6 +162,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		.map((route) => {
 			const assignment = assignmentMap.get(route.id);
 			const status = resolveStatus(assignment);
+			const shiftProgress = assignment
+				? deriveShiftProgress(assignment, status, date, route.startTime)
+				: null;
 			return {
 				...route,
 				status,
@@ -168,7 +174,12 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 				assignmentId: assignment?.assignmentId ?? null,
 				driverName: status === 'assigned' ? (assignment?.driverName ?? null) : null,
 				bidWindowClosesAt:
-					status === 'bidding' ? (assignment?.bidWindowClosesAt?.toISOString() ?? null) : null
+					status === 'bidding' ? (assignment?.bidWindowClosesAt?.toISOString() ?? null) : null,
+				shiftProgress,
+				confirmedAt: assignment?.confirmedAt?.toISOString() ?? null,
+				arrivedAt: assignment?.arrivedAt?.toISOString() ?? null,
+				startedAt: assignment?.startedAt?.toISOString() ?? null,
+				completedAt: assignment?.completedAt?.toISOString() ?? null
 			};
 		})
 		.filter((route) => (statusFilter ? route.status === statusFilter : true));
@@ -255,7 +266,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 				isShiftStarted: isShiftStarted(toLocalYmd(), created.startTime),
 				assignmentId: null,
 				driverName: null,
-				bidWindowClosesAt: null
+				bidWindowClosesAt: null,
+				shiftProgress: null,
+				confirmedAt: null,
+				arrivedAt: null,
+				startedAt: null,
+				completedAt: null
 			}
 		},
 		{ status: 201 }

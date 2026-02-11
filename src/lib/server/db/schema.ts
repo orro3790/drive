@@ -71,7 +71,8 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 	'streak_reset',
 	'bonus_eligible',
 	'corrective_warning',
-	'return_exception'
+	'return_exception',
+	'stale_shift_reminder'
 ]);
 export const actorTypeEnum = pgEnum('actor_type', ['user', 'system']);
 export const signupOnboardingKindEnum = pgEnum('signup_onboarding_kind', ['approval', 'invite']);

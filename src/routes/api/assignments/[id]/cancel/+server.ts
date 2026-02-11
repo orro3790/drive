@@ -13,7 +13,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, driverMetrics } from '$lib/server/db/schema';
 import { assignmentCancelSchema } from '$lib/schemas/assignment';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { sendManagerAlert } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
 import { createBidWindow } from '$lib/server/services/bidding';
@@ -22,6 +22,7 @@ import {
 	createAssignmentLifecycleContext,
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
+import logger from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (!locals.user) {
@@ -85,46 +86,69 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const isLateCancellation = existing.confirmedAt !== null && lifecycle.isLateCancel;
 	const cancelledAt = new Date();
 
-	// Cancel the assignment
-	const [updated] = await db
-		.update(assignments)
-		.set({
-			status: 'cancelled',
-			cancelType: isLateCancellation ? 'late' : 'driver',
-			cancelledAt,
-			updatedAt: cancelledAt
-		})
-		.where(and(eq(assignments.id, id), eq(assignments.userId, locals.user.id)))
-		.returning({
-			id: assignments.id,
-			status: assignments.status
-		});
+	const userId = locals.user.id;
+	const log = logger.child({ operation: 'assignmentCancel', assignmentId: id, userId });
+	log.info({ isLateCancellation }, 'Starting assignment cancellation');
 
-	// Increment late cancellation metric if applicable
-	if (isLateCancellation) {
-		await db
-			.update(driverMetrics)
+	const updated = await db.transaction(async (tx) => {
+		// Cancel the assignment — WHERE guard prevents double-cancel
+		const [row] = await tx
+			.update(assignments)
 			.set({
-				lateCancellations: sql`${driverMetrics.lateCancellations} + 1`,
-				updatedAt: new Date()
+				status: 'cancelled',
+				cancelType: isLateCancellation ? 'late' : 'driver',
+				cancelledAt,
+				updatedAt: cancelledAt
 			})
-			.where(eq(driverMetrics.userId, locals.user.id));
-	}
+			.where(
+				and(
+					eq(assignments.id, id),
+					eq(assignments.userId, userId),
+					ne(assignments.status, 'cancelled')
+				)
+			)
+			.returning({
+				id: assignments.id,
+				status: assignments.status
+			});
 
-	await createAuditLog({
-		entityType: 'assignment',
-		entityId: existing.id,
-		action: 'cancel',
-		actorType: 'user',
-		actorId: locals.user.id,
-		changes: {
-			before: { status: existing.status },
-			after: { status: updated.status },
-			reason: result.data.reason,
-			lateCancel: isLateCancellation,
-			trigger: 'cancellation'
+		if (!row) {
+			throw error(409, 'Assignment already cancelled');
 		}
+
+		// Increment late cancellation metric if applicable
+		if (isLateCancellation) {
+			await tx
+				.update(driverMetrics)
+				.set({
+					lateCancellations: sql`${driverMetrics.lateCancellations} + 1`,
+					updatedAt: new Date()
+				})
+				.where(eq(driverMetrics.userId, userId));
+		}
+
+		await createAuditLog(
+			{
+				entityType: 'assignment',
+				entityId: existing.id,
+				action: 'cancel',
+				actorType: 'user',
+				actorId: userId,
+				changes: {
+					before: { status: existing.status },
+					after: { status: row.status },
+					reason: result.data.reason,
+					lateCancel: isLateCancellation,
+					trigger: 'cancellation'
+				}
+			},
+			tx
+		);
+
+		return row;
 	});
+
+	log.info({ assignmentId: updated.id }, 'Assignment cancelled');
 
 	// Send alert to route manager (best-effort)
 	try {

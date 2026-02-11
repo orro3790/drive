@@ -82,6 +82,17 @@ Driver-facing endpoints in `src/routes/api/`:
 - `POST /api/shifts/complete` - Complete shift (takes parcelsReturned + optional exceptedReturns/exceptionNotes, server calculates delivered, sets 1-hour edit window)
 - `PATCH /api/shifts/[assignmentId]/edit` - Edit parcel counts and exception fields within 1-hour window after completion
 
+## Manager API Endpoints
+
+Manager-facing endpoints in `src/routes/api/`:
+
+- `GET /api/drivers/[id]/shifts` - Get all completed and cancelled shift records for a specific driver (includes parcel counts, timestamps, exception notes)
+- `GET /api/onboarding` - List all signup onboarding entries with createdByName (manager whitelist)
+- `POST /api/onboarding` - Create email approval for driver signup (kind: 'approval', email)
+- `PATCH /api/onboarding/[id]/revoke` - Revoke a pending/reserved onboarding entry
+- `GET /api/weekly-reports` - Aggregated parcel delivery totals per operational week (billing summary)
+- `GET /api/weekly-reports/[weekStart]` - Individual shift records for a specific week (weekStart must be a Monday)
+
 ## UI Components
 
 Available in `src/lib/components/`:
@@ -91,11 +102,15 @@ Available in `src/lib/components/`:
 - `data-table/` - Full TanStack table system with filtering, pagination
 - `icons/` - Icon components
 - `driver/` - HealthCard (health score, stars, streak, simulation preview), CancelShiftModal
+- `DriverShiftHistoryTable.svelte` - Driver shift history table (used on manager drivers page, fetches from `/api/drivers/[id]/shifts`)
+- `WeeklyReportDetailTable.svelte` - Weekly report detail table (used on manager weekly reports page, fetches from `/api/weekly-reports/[weekStart]`)
 - Combobox, Select, DatePicker, ConfirmationDialog, ToastContainer
 
 **Shared Types** (`src/lib/schemas/`):
 
 - `health.ts` - `HealthResponse` type for `/api/driver-health` endpoint and HealthCard component
+- `driverShiftHistory.ts` - `DriverShiftRecord` and `DriverShiftHistoryResponse` types for `/api/drivers/[id]/shifts` endpoint and DriverShiftHistoryTable component
+- `weeklyReports.ts` - `WeekSummary`, `WeekShiftRecord`, `WeeklyReportsResponse`, `WeekDetailResponse` types for weekly reports endpoints and components
 
 ### Theme System
 
@@ -129,6 +144,7 @@ Svelte 5 stores in `src/lib/stores/`:
 
 - `dashboardStore.svelte.ts` - Driver dashboard state (shift data, metrics, pending bids)
 - `notificationsStore.svelte.ts` - Notification inbox state (list, unread count)
+- `whitelistStore.svelte.ts` - Manager whitelist/onboarding entries (load, create approval, revoke)
 
 ## Assets
 

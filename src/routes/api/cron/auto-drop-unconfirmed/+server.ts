@@ -8,8 +8,6 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { CRON_SECRET } from '$env/static/private';
-import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { and, eq, gte, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
@@ -20,13 +18,11 @@ import { sendNotification } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
+import { verifyCronAuth } from '$lib/server/cron/auth';
 
 export const GET: RequestHandler = async ({ request }) => {
-	const authHeader = request.headers.get('authorization')?.trim();
-	const expectedToken = (CRON_SECRET || env.CRON_SECRET)?.trim();
-	if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
-		return json({ error: 'Unauthorized' }, { status: 401 });
-	}
+	const authError = verifyCronAuth(request);
+	if (authError) return authError;
 
 	const log = logger.child({ cron: 'auto-drop-unconfirmed' });
 	const startedAt = Date.now();

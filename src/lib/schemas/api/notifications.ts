@@ -23,7 +23,9 @@ export const notificationTypeValues = [
 	'corrective_warning',
 	'route_unfilled',
 	'route_cancelled',
-	'driver_no_show'
+	'driver_no_show',
+	'return_exception',
+	'stale_shift_reminder'
 ] as const;
 
 export const notificationTypeSchema = z.enum(notificationTypeValues);

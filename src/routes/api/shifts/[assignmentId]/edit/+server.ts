@@ -11,8 +11,9 @@ import { assignments, routes, shifts } from '$lib/server/db/schema';
 import { shiftEditSchema } from '$lib/schemas/shift';
 import { updateDriverMetrics } from '$lib/server/services/metrics';
 import { sendManagerAlert } from '$lib/server/services/notifications';
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, isNotNull } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
+import logger from '$lib/server/logger';
 
 export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 	if (!locals.user) {
@@ -130,48 +131,75 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 		exceptionNotes: shift.exceptionNotes
 	};
 
-	// Update shift
-	const [updatedShift] = await db
-		.update(shifts)
-		.set({
-			parcelsStart: finalParcelsStart,
-			parcelsReturned: finalParcelsReturned,
-			parcelsDelivered,
-			exceptedReturns: finalExceptedReturns,
-			exceptionNotes: finalExceptionNotes ?? null
-		})
-		.where(eq(shifts.id, shift.id))
-		.returning({
-			id: shifts.id,
-			parcelsStart: shifts.parcelsStart,
-			parcelsDelivered: shifts.parcelsDelivered,
-			parcelsReturned: shifts.parcelsReturned,
-			exceptedReturns: shifts.exceptedReturns,
-			exceptionNotes: shifts.exceptionNotes,
-			startedAt: shifts.startedAt,
-			completedAt: shifts.completedAt,
-			editableUntil: shifts.editableUntil
-		});
+	const userId = locals.user.id;
+	const log = logger.child({
+		operation: 'shiftEdit',
+		assignmentId: params.assignmentId,
+		userId
+	});
+	log.info('Starting shift edit');
 
-	await createAuditLog({
-		entityType: 'shift',
-		entityId: shift.id,
-		action: 'edit',
-		actorType: 'user',
-		actorId: locals.user.id,
-		changes: {
-			before,
-			after: {
+	const updatedShift = await db.transaction(async (tx) => {
+		// Update shift — WHERE guards re-verify edit window (TOCTOU fix)
+		const [updated] = await tx
+			.update(shifts)
+			.set({
 				parcelsStart: finalParcelsStart,
 				parcelsReturned: finalParcelsReturned,
 				parcelsDelivered,
 				exceptedReturns: finalExceptedReturns,
-				exceptionNotes: finalExceptionNotes
-			}
+				exceptionNotes: finalExceptionNotes ?? null
+			})
+			.where(
+				and(
+					eq(shifts.id, shift.id),
+					gt(shifts.editableUntil, new Date()),
+					isNotNull(shifts.completedAt)
+				)
+			)
+			.returning({
+				id: shifts.id,
+				parcelsStart: shifts.parcelsStart,
+				parcelsDelivered: shifts.parcelsDelivered,
+				parcelsReturned: shifts.parcelsReturned,
+				exceptedReturns: shifts.exceptedReturns,
+				exceptionNotes: shifts.exceptionNotes,
+				startedAt: shifts.startedAt,
+				completedAt: shifts.completedAt,
+				editableUntil: shifts.editableUntil
+			});
+
+		if (!updated) {
+			throw error(400, 'Edit window has expired');
 		}
+
+		await createAuditLog(
+			{
+				entityType: 'shift',
+				entityId: shift.id,
+				action: 'edit',
+				actorType: 'user',
+				actorId: userId,
+				changes: {
+					before,
+					after: {
+						parcelsStart: finalParcelsStart,
+						parcelsReturned: finalParcelsReturned,
+						parcelsDelivered,
+						exceptedReturns: finalExceptedReturns,
+						exceptionNotes: finalExceptionNotes
+					}
+				}
+			},
+			tx
+		);
+
+		return updated;
 	});
 
-	// Notify manager on 0→>0 exception transition
+	log.info({ shiftId: updatedShift.id }, 'Shift edit recorded');
+
+	// Best-effort: notify manager on 0→>0 exception transition
 	if (previousExceptedReturns === 0 && finalExceptedReturns > 0) {
 		await sendManagerAlert(assignment.routeId, 'return_exception', {
 			routeName: assignment.routeName ?? 'Unknown Route',

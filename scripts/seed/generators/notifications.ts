@@ -115,6 +115,14 @@ const TYPE_COPY: Record<
 	driver_no_show: ({ routeName, driverName }) => ({
 		title: 'Driver No-Show',
 		body: `${driverName} did not show up for ${routeName}.`
+	}),
+	return_exception: ({ routeName, driverName }) => ({
+		title: 'Return Exception Filed',
+		body: `${driverName} filed return exceptions on ${routeName}.`
+	}),
+	stale_shift_reminder: ({ dateLabel }) => ({
+		title: 'Incomplete Shift',
+		body: `You have an incomplete shift from ${dateLabel}. Please close it out to start new shifts.`
 	})
 };
 

@@ -49,7 +49,8 @@ export type NotificationType =
 	| 'streak_reset'
 	| 'bonus_eligible'
 	| 'corrective_warning'
-	| 'return_exception';
+	| 'return_exception'
+	| 'stale_shift_reminder';
 
 /**
  * Subset of notification types used for manager alerts.
@@ -143,6 +144,10 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	return_exception: {
 		title: 'Return Exception Filed',
 		body: 'A driver filed return exceptions on A route.'
+	},
+	stale_shift_reminder: {
+		title: 'Incomplete Shift',
+		body: 'You have an incomplete shift. Please close it out to start new shifts.'
 	}
 };
 

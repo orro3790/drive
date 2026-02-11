@@ -290,13 +290,9 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 	}
 
 	/**
-	 * Balanced resize: dragging the handle between column A and B
-	 * grows A and shrinks B (or vice versa), keeping everything else stationary.
+	 * Independent resize: dragging the handle resizes only the column it belongs to.
 	 */
-	function balancedResizeHandler(
-		header: Header<RowType, unknown>,
-		headerGroup: (typeof headerGroups)[number]
-	) {
+	function columnResizeHandler(header: Header<RowType, unknown>) {
 		return (event: MouseEvent | TouchEvent) => {
 			event.preventDefault();
 			const startX = 'touches' in event ? event.touches[0].clientX : event.clientX;
@@ -304,27 +300,13 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 			const initialSize = column.getSize();
 			const minSize = column.columnDef.minSize ?? 50;
 
-			// Find the next visible column in this header group
-			const idx = headerGroup.headers.indexOf(header);
-			const nextHeader = idx >= 0 ? headerGroup.headers[idx + 1] : undefined;
-			const nextColumn = nextHeader?.column;
-			const nextInitialSize = nextColumn?.getSize() ?? 0;
-			const nextMinSize = nextColumn?.columnDef.minSize ?? 50;
-
 			const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
 				const currentX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX;
-				let delta = currentX - startX;
-
-				// Clamp: don't let either column go below its minSize
-				delta = Math.max(-(initialSize - minSize), delta);
-				if (nextColumn) {
-					delta = Math.min(nextInitialSize - nextMinSize, delta);
-				}
+				const delta = Math.max(-(initialSize - minSize), currentX - startX);
 
 				table.setColumnSizing((old) => ({
 					...old,
-					[column.id]: initialSize + delta,
-					...(nextColumn ? { [nextColumn.id]: nextInitialSize - delta } : {})
+					[column.id]: initialSize + delta
 				}));
 			};
 
@@ -510,8 +492,8 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 								event.stopPropagation();
 								resetColumnSize(header);
 							}}
-							onmousedown={balancedResizeHandler(header, headerGroup)}
-							ontouchstart={balancedResizeHandler(header, headerGroup)}
+							onmousedown={columnResizeHandler(header)}
+							ontouchstart={columnResizeHandler(header)}
 							onkeydown={(event) => handleResizeKey(event, header)}
 						>
 							<span class="resize-icon"><GripVertical /></span>

@@ -21,7 +21,7 @@ import {
 	driverMetrics,
 	bids
 } from '$lib/server/db/schema';
-import { and, asc, eq, gte, lt } from 'drizzle-orm';
+import { and, asc, eq, gte, isNotNull, isNull, lt } from 'drizzle-orm';
 import { addDays } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
 import { getWeekStart } from '$lib/server/services/scheduling';
@@ -229,6 +229,58 @@ export const GET: RequestHandler = async ({ locals }) => {
 	// Get unconfirmed shifts within confirmation window
 	const unconfirmedShifts = await getUnconfirmedAssignments(locals.user.id);
 
+	// Check for any incomplete shift (arrived but not completed, from a previous day)
+	const [incompleteShiftRow] = await db
+		.select({
+			assignmentId: assignments.id,
+			date: assignments.date,
+			routeName: routes.name,
+			warehouseName: warehouses.name,
+			arrivedAt: shifts.arrivedAt,
+			parcelsStart: shifts.parcelsStart,
+			parcelsDelivered: shifts.parcelsDelivered,
+			parcelsReturned: shifts.parcelsReturned,
+			exceptedReturns: shifts.exceptedReturns,
+			exceptionNotes: shifts.exceptionNotes,
+			shiftId: shifts.id,
+			shiftStartedAt: shifts.startedAt,
+			shiftEditableUntil: shifts.editableUntil
+		})
+		.from(shifts)
+		.innerJoin(assignments, eq(shifts.assignmentId, assignments.id))
+		.innerJoin(routes, eq(assignments.routeId, routes.id))
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.where(
+			and(
+				eq(assignments.userId, locals.user.id),
+				isNotNull(shifts.arrivedAt),
+				isNull(shifts.completedAt),
+				isNull(shifts.cancelledAt),
+				lt(assignments.date, torontoToday)
+			)
+		)
+		.limit(1);
+
+	const incompleteShift = incompleteShiftRow
+		? {
+				assignmentId: incompleteShiftRow.assignmentId,
+				date: incompleteShiftRow.date,
+				routeName: incompleteShiftRow.routeName,
+				warehouseName: incompleteShiftRow.warehouseName,
+				shift: {
+					id: incompleteShiftRow.shiftId,
+					arrivedAt: incompleteShiftRow.arrivedAt,
+					parcelsStart: incompleteShiftRow.parcelsStart,
+					parcelsDelivered: incompleteShiftRow.parcelsDelivered,
+					parcelsReturned: incompleteShiftRow.parcelsReturned,
+					exceptedReturns: incompleteShiftRow.exceptedReturns,
+					exceptionNotes: incompleteShiftRow.exceptionNotes,
+					startedAt: incompleteShiftRow.shiftStartedAt,
+					editableUntil: incompleteShiftRow.shiftEditableUntil
+				}
+			}
+		: null;
+
 	// Determine if user is a new driver (no scheduled shifts ever)
 	const isNewDriver = metrics.totalShifts === 0 && processedAssignments.length === 0;
 
@@ -247,6 +299,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		metrics,
 		pendingBids,
 		unconfirmedShifts,
-		isNewDriver
+		isNewDriver,
+		incompleteShift
 	});
 };

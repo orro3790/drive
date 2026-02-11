@@ -9,6 +9,7 @@
 import { db } from '$lib/server/db';
 import { assignments, driverMetrics, routes, warehouses } from '$lib/server/db/schema';
 import { createAuditLog } from '$lib/server/services/audit';
+import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
@@ -117,32 +118,62 @@ export async function confirmShift(
 
 	const confirmedAt = new Date();
 
-	await db
-		.update(assignments)
-		.set({ confirmedAt, updatedAt: confirmedAt })
-		.where(eq(assignments.id, assignmentId));
+	const result = await db.transaction(async (tx) => {
+		// WHERE guards close TOCTOU gap: confirmedAt IS NULL + status = scheduled
+		const [updated] = await tx
+			.update(assignments)
+			.set({ confirmedAt, updatedAt: confirmedAt })
+			.where(
+				and(
+					eq(assignments.id, assignmentId),
+					isNull(assignments.confirmedAt),
+					eq(assignments.status, 'scheduled')
+				)
+			)
+			.returning({ id: assignments.id });
 
-	await db
-		.update(driverMetrics)
-		.set({
-			confirmedShifts: sql`${driverMetrics.confirmedShifts} + 1`,
-			updatedAt: confirmedAt
-		})
-		.where(eq(driverMetrics.userId, userId));
-
-	await createAuditLog({
-		entityType: 'assignment',
-		entityId: assignmentId,
-		action: 'confirm',
-		actorType: 'user',
-		actorId: userId,
-		changes: {
-			before: { confirmedAt: null },
-			after: { confirmedAt: confirmedAt.toISOString() }
+		if (!updated) {
+			return { success: false as const, error: 'state_changed' };
 		}
+
+		await tx
+			.update(driverMetrics)
+			.set({
+				confirmedShifts: sql`${driverMetrics.confirmedShifts} + 1`,
+				updatedAt: confirmedAt
+			})
+			.where(eq(driverMetrics.userId, userId));
+
+		await createAuditLog(
+			{
+				entityType: 'assignment',
+				entityId: assignmentId,
+				action: 'confirm',
+				actorType: 'user',
+				actorId: userId,
+				changes: {
+					before: { confirmedAt: null },
+					after: { confirmedAt: confirmedAt.toISOString() }
+				}
+			},
+			tx
+		);
+
+		return { success: true as const, confirmedAt };
 	});
 
+	if (!result.success) {
+		return { success: false, error: result.error };
+	}
+
 	log.info({ confirmedAt }, 'Shift confirmed');
+
+	broadcastAssignmentUpdated({
+		assignmentId,
+		status: 'scheduled',
+		driverId: userId,
+		shiftProgress: 'confirmed'
+	});
 
 	return { success: true, confirmedAt };
 }

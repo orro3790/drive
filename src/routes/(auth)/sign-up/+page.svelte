@@ -8,7 +8,6 @@
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
 	import Eye from '$lib/components/icons/Eye.svelte';
 	import EyeOff from '$lib/components/icons/EyeOff.svelte';
-	import Key from '$lib/components/icons/Key.svelte';
 	import Mail from '$lib/components/icons/Mail.svelte';
 	import User from '$lib/components/icons/User.svelte';
 	import * as m from '$lib/paraglide/messages.js';
@@ -19,7 +18,6 @@
 	let email = $state('');
 	let password = $state('');
 	let confirmPassword = $state('');
-	let inviteCode = $state('');
 	let showPassword = $state(false);
 	let showConfirmPassword = $state(false);
 	let errorMessage = $state<string | null>(null);
@@ -40,7 +38,6 @@
 		}
 
 		isSubmitting = true;
-		const headers = inviteCode ? { 'x-invite-code': inviteCode } : undefined;
 
 		const { error } = await authClient.signUp.email(
 			{
@@ -50,7 +47,6 @@
 				callbackURL: redirectTo
 			},
 			{
-				headers,
 				onSuccess: () => {
 					goto(redirectTo);
 				}
@@ -66,11 +62,6 @@
 </script>
 
 <div class="auth-card">
-	<header class="auth-header">
-		<h2>{m.auth_sign_up_title()}</h2>
-		<p class="subtitle">{m.auth_sign_up_subtitle()}</p>
-	</header>
-
 	{#if errorMessage}
 		<NoticeBanner variant="warning">{errorMessage}</NoticeBanner>
 	{/if}
@@ -197,32 +188,6 @@
 			{/snippet}
 		</InlineEditor>
 
-		<div>
-			<InlineEditor
-				id="invite-code"
-				name="inviteCode"
-				inputType="text"
-				autocomplete="one-time-code"
-				placeholder={m.auth_invite_code_placeholder()}
-				ariaLabel={m.auth_invite_code_label()}
-				mode="form"
-				variant="bordered"
-				size="base"
-				value={inviteCode}
-				onInput={(v) => {
-					inviteCode = v;
-				}}
-				onSave={async (v) => {
-					inviteCode = v;
-				}}
-			>
-				{#snippet leadingIcon()}
-					<Icon><Key /></Icon>
-				{/snippet}
-			</InlineEditor>
-			<p class="hint">{m.auth_invite_code_hint()}</p>
-		</div>
-
 		<Button
 			variant="primary"
 			size="standard"
@@ -256,34 +221,10 @@
 		color: var(--text-normal);
 	}
 
-	.auth-header {
-		text-align: center;
-	}
-
-	h2 {
-		margin: 0;
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-medium);
-		letter-spacing: -0.01em;
-		color: var(--text-normal);
-	}
-
-	.subtitle {
-		margin: var(--spacing-2) 0 0;
-		color: var(--text-muted);
-		font-size: var(--font-size-sm);
-	}
-
 	.auth-form {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-3);
-	}
-
-	.hint {
-		margin: var(--spacing-1) 0 0;
-		font-size: var(--font-size-sm);
-		color: var(--text-faint);
 	}
 
 	.auth-footer {

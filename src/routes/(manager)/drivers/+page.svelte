@@ -30,23 +30,45 @@
 	import Tooltip from '$lib/components/primitives/Tooltip.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import ConfirmationDialog from '$lib/components/ConfirmationDialog.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
+	import Icon from '$lib/components/primitives/Icon.svelte';
+	import Drawer from '$lib/components/primitives/Drawer.svelte';
+	import InlineEditor from '$lib/components/InlineEditor.svelte';
+	import Filter from '$lib/components/icons/Filter.svelte';
+	import Reset from '$lib/components/icons/Reset.svelte';
 	import { driverStore } from '$lib/stores/driverStore.svelte';
 	import type { Driver } from '$lib/schemas/driver';
 	import type { SelectOption } from '$lib/schemas/ui/select';
 	import HealthCard from '$lib/components/driver/HealthCard.svelte';
+	import DriverShiftHistoryTable from '$lib/components/DriverShiftHistoryTable.svelte';
 
 	// State
 	let selectedDriverId = $state<string | null>(null);
 	let isEditing = $state(false);
 	let unflagConfirm = $state<{ driver: Driver; x: number; y: number } | null>(null);
 	let reinstateConfirm = $state<{ driver: Driver; x: number; y: number } | null>(null);
+	let showFilterDrawer = $state(false);
 
 	// Form state
 	let formWeeklyCap = $state(4);
 
+	// Filter state
+	let nameFilter = $state('');
+	let emailFilter = $state('');
+	let healthStateFilter = $state<string>('');
+	let flaggedFilter = $state<string>('');
+	let poolEligibleFilter = $state<string>('');
+
 	// Table state
 	let sorting = $state<SortingState>([]);
 	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
+
+	// Tab state
+	type DriverTab = { driverId: string; driverName: string };
+	let openDriverTabs = $state<DriverTab[]>([]);
+	let activeTabId = $state<string>('drivers');
+	let tabsInitialized = $state(false);
+	const TABS_STORAGE_KEY = 'drivers-page-open-tabs';
 
 	const globalAttendanceAverage = $derived.by(() => {
 		if (driverStore.drivers.length === 0) return 0;
@@ -65,6 +87,53 @@
 		const total = driverStore.drivers.reduce((sum, driver) => sum + driver.avgParcelsDelivered, 0);
 		return total / driverStore.drivers.length;
 	});
+
+	const healthStateOptions: SelectOption[] = [
+		{ value: '', label: m.drivers_filter_health_state_all() },
+		{ value: 'flagged', label: m.drivers_health_flagged() },
+		{ value: 'at_risk', label: m.drivers_health_at_risk() },
+		{ value: 'watch', label: m.drivers_health_watch() },
+		{ value: 'healthy', label: m.drivers_health_healthy() },
+		{ value: 'high_performer', label: m.drivers_health_high_performer() }
+	];
+
+	const booleanFilterOptions: (label: string) => SelectOption[] = (allLabel) => [
+		{ value: '', label: allLabel },
+		{ value: 'true', label: m.common_yes() },
+		{ value: 'false', label: m.common_no() }
+	];
+
+	const filteredDrivers = $derived.by(() => {
+		let data = driverStore.drivers;
+		if (nameFilter) {
+			const lower = nameFilter.toLowerCase();
+			data = data.filter((d) => d.name.toLowerCase().includes(lower));
+		}
+		if (emailFilter) {
+			const lower = emailFilter.toLowerCase();
+			data = data.filter((d) => d.email.toLowerCase().includes(lower));
+		}
+		if (healthStateFilter) {
+			data = data.filter((d) => d.healthState === healthStateFilter);
+		}
+		if (flaggedFilter) {
+			const flagged = flaggedFilter === 'true';
+			data = data.filter((d) => d.isFlagged === flagged);
+		}
+		if (poolEligibleFilter) {
+			const eligible = poolEligibleFilter === 'true';
+			data = data.filter((d) => d.assignmentPoolEligible === eligible);
+		}
+		return data;
+	});
+
+	function resetFilters() {
+		nameFilter = '';
+		emailFilter = '';
+		healthStateFilter = '';
+		flaggedFilter = '';
+		poolEligibleFilter = '';
+	}
 
 	const helper = createColumnHelper<Driver>();
 
@@ -131,7 +200,7 @@
 	];
 
 	const table = createSvelteTable<Driver>(() => ({
-		data: driverStore.drivers,
+		data: filteredDrivers,
 		columns,
 		getRowId: (row) => row.id,
 		state: {
@@ -325,9 +394,57 @@
 		reinstateConfirm = null;
 	}
 
-	// Load data on mount
+	// Tab management
+	function openDriverTab(driver: Driver) {
+		if (!openDriverTabs.some((t) => t.driverId === driver.id)) {
+			openDriverTabs = [...openDriverTabs, { driverId: driver.id, driverName: driver.name }];
+		}
+		activeTabId = driver.id;
+		clearSelection();
+	}
+
+	function closeDriverTab(driverId: string, event: Event) {
+		event.stopPropagation();
+		openDriverTabs = openDriverTabs.filter((t) => t.driverId !== driverId);
+		if (activeTabId === driverId) {
+			activeTabId = 'drivers';
+		}
+	}
+
+	function switchToTab(tabId: string) {
+		if (tabId === activeTabId) return;
+		activeTabId = tabId;
+		if (tabId !== 'drivers') {
+			clearSelection();
+		}
+	}
+
+	// Load data on mount + restore persisted tabs
 	onMount(() => {
 		driverStore.load();
+		const stored = localStorage.getItem(TABS_STORAGE_KEY);
+		if (stored) {
+			try {
+				const parsed = JSON.parse(stored);
+				openDriverTabs = parsed.tabs ?? [];
+				activeTabId = parsed.activeTabId ?? 'drivers';
+			} catch {
+				/* ignore corrupt data */
+			}
+		}
+		tabsInitialized = true;
+	});
+
+	// Persist tab state (gated to avoid overwriting before onMount restores)
+	$effect(() => {
+		if (!tabsInitialized) return;
+		localStorage.setItem(
+			TABS_STORAGE_KEY,
+			JSON.stringify({
+				tabs: openDriverTabs,
+				activeTabId
+			})
+		);
 	});
 </script>
 
@@ -410,10 +527,51 @@
 
 {#snippet tabsSnippet()}
 	<div class="tab-bar" role="tablist">
-		<button type="button" class="tab active" role="tab" aria-selected="true" tabindex="0">
+		<button
+			type="button"
+			class="tab"
+			class:active={activeTabId === 'drivers'}
+			role="tab"
+			aria-selected={activeTabId === 'drivers'}
+			tabindex={activeTabId === 'drivers' ? 0 : -1}
+			onclick={() => switchToTab('drivers')}
+		>
 			{m.drivers_page_title()}
 		</button>
+		{#each openDriverTabs as driverTab (driverTab.driverId)}
+			<button
+				type="button"
+				class="tab"
+				class:active={activeTabId === driverTab.driverId}
+				role="tab"
+				aria-selected={activeTabId === driverTab.driverId}
+				tabindex={activeTabId === driverTab.driverId ? 0 : -1}
+				onclick={() => switchToTab(driverTab.driverId)}
+			>
+				<span class="tab-label">{driverTab.driverName}</span>
+				<span
+					role="button"
+					tabindex="-1"
+					class="tab-close"
+					aria-label={m.drivers_close_tab()}
+					onclick={(e) => closeDriverTab(driverTab.driverId, e)}
+					onkeydown={(e) => e.key === 'Enter' && closeDriverTab(driverTab.driverId, e)}
+				>
+					&times;
+				</span>
+			</button>
+		{/each}
 	</div>
+{/snippet}
+
+{#snippet toolbarSnippet()}
+	<IconButton tooltip={m.table_filter_label()} onclick={() => (showFilterDrawer = true)}>
+		<Icon><Filter /></Icon>
+	</IconButton>
+
+	<IconButton tooltip={m.table_filter_reset()} onclick={resetFilters}>
+		<Icon><Reset /></Icon>
+	</IconButton>
 {/snippet}
 
 {#snippet driverDetailList(driver: Driver)}
@@ -627,6 +785,9 @@
 {#snippet driverDetailView(driver: Driver)}
 	<div class="detail-content">
 		{@render driverDetailList(driver)}
+		<Button variant="secondary" size="small" fill onclick={() => openDriverTab(driver)}>
+			{m.drivers_view_route_history()}
+		</Button>
 	</div>
 {/snippet}
 
@@ -666,6 +827,9 @@
 					{m.common_save()}
 				</Button>
 			{:else}
+				<Button variant="secondary" fill onclick={() => openDriverTab(driver)}>
+					{m.drivers_view_route_history()}
+				</Button>
 				<Button fill onclick={() => startEditing(driver)}>
 					{m.common_edit()}
 				</Button>
@@ -689,41 +853,55 @@
 	onWideModeChange: (value: boolean) => void;
 	isMobile: boolean;
 })}
-	<DataTable
-		{table}
-		loading={driverStore.isLoading}
-		emptyTitle={m.drivers_empty_state()}
-		emptyMessage={m.drivers_empty_state_message()}
-		showPagination
-		showSelection={false}
-		showColumnVisibility
-		showExport
-		showWideModeToggle
-		headers={{
-			healthRank: headerWithTooltip,
-			attendancePercent: headerWithTooltip,
-			completionPercent: headerWithTooltip,
-			avgParcelsDelivered: headerWithTooltip
-		}}
-		cellComponents={{
-			phone: phoneCell,
-			healthRank: healthCell,
-			attendancePercent: attendanceCell,
-			completionPercent: completionCell,
-			avgParcelsDelivered: avgParcelsCell,
-			weeklyCap: weeklyCapCell
-		}}
-		isWideMode={ctx.isWideMode}
-		onWideModeChange={ctx.onWideModeChange}
-		onMobileDetailOpen={syncSelectedDriver}
-		stateStorageKey="drivers"
-		exportFilename="drivers"
-		tabs={tabsSnippet}
-		activeRowId={selectedDriverId ?? undefined}
-		onRowClick={handleRowClick}
-		mobileDetailContent={mobileDetail}
-		mobileDetailTitle={m.drivers_detail_title()}
-	/>
+	{#if activeTabId === 'drivers'}
+		<DataTable
+			{table}
+			loading={driverStore.isLoading}
+			emptyTitle={m.drivers_empty_state()}
+			emptyMessage={m.drivers_empty_state_message()}
+			showPagination
+			showSelection={false}
+			showColumnVisibility
+			showExport
+			showWideModeToggle
+			headers={{
+				healthRank: headerWithTooltip,
+				attendancePercent: headerWithTooltip,
+				completionPercent: headerWithTooltip,
+				avgParcelsDelivered: headerWithTooltip
+			}}
+			cellComponents={{
+				phone: phoneCell,
+				healthRank: healthCell,
+				attendancePercent: attendanceCell,
+				completionPercent: completionCell,
+				avgParcelsDelivered: avgParcelsCell,
+				weeklyCap: weeklyCapCell
+			}}
+			isWideMode={ctx.isWideMode}
+			onWideModeChange={ctx.onWideModeChange}
+			onMobileDetailOpen={syncSelectedDriver}
+			stateStorageKey="drivers"
+			exportFilename="drivers"
+			tabs={tabsSnippet}
+			toolbar={toolbarSnippet}
+			activeRowId={selectedDriverId ?? undefined}
+			onRowClick={handleRowClick}
+			mobileDetailContent={mobileDetail}
+			mobileDetailTitle={m.drivers_detail_title()}
+		/>
+	{:else}
+		{#each openDriverTabs as driverTab (driverTab.driverId)}
+			{#if activeTabId === driverTab.driverId}
+				<DriverShiftHistoryTable
+					driverId={driverTab.driverId}
+					tabs={tabsSnippet}
+					isWideMode={ctx.isWideMode}
+					onWideModeChange={ctx.onWideModeChange}
+				/>
+			{/if}
+		{/each}
+	{/if}
 {/snippet}
 
 <svelte:head>
@@ -732,9 +910,9 @@
 
 <div class="page-surface">
 	<PageWithDetailPanel
-		item={selectedDriver}
+		item={activeTabId === 'drivers' ? selectedDriver : null}
 		title={m.drivers_detail_title()}
-		open={!!selectedDriver}
+		open={activeTabId === 'drivers' && !!selectedDriver}
 		onClose={clearSelection}
 		{isEditing}
 		{hasChanges}
@@ -775,6 +953,64 @@
 		onConfirm={handleReinstate}
 		onCancel={() => (reinstateConfirm = null)}
 	/>
+{/if}
+
+<!-- Filter Drawer -->
+{#if showFilterDrawer}
+	<Drawer title={m.table_filter_title()} onClose={() => (showFilterDrawer = false)}>
+		<div class="filter-form">
+			<div class="filter-field">
+				<label for="drivers-name-filter">{m.drivers_filter_name_label()}</label>
+				<InlineEditor
+					id="drivers-name-filter"
+					value={nameFilter}
+					onInput={(v) => (nameFilter = v)}
+					placeholder={m.drivers_filter_name_placeholder()}
+				/>
+			</div>
+			<div class="filter-field">
+				<label for="drivers-email-filter">{m.drivers_filter_email_label()}</label>
+				<InlineEditor
+					id="drivers-email-filter"
+					value={emailFilter}
+					onInput={(v) => (emailFilter = v)}
+					placeholder={m.drivers_filter_email_placeholder()}
+				/>
+			</div>
+			<div class="filter-field">
+				<label>{m.drivers_filter_health_state_label()}</label>
+				<Select
+					options={healthStateOptions}
+					value={healthStateFilter}
+					onChange={(v) => (healthStateFilter = String(v))}
+				/>
+			</div>
+			<div class="filter-field">
+				<label>{m.drivers_filter_flagged_label()}</label>
+				<Select
+					options={booleanFilterOptions(m.drivers_filter_flagged_all())}
+					value={flaggedFilter}
+					onChange={(v) => (flaggedFilter = String(v))}
+				/>
+			</div>
+			<div class="filter-field">
+				<label>{m.drivers_filter_pool_eligible_label()}</label>
+				<Select
+					options={booleanFilterOptions(m.drivers_filter_pool_eligible_all())}
+					value={poolEligibleFilter}
+					onChange={(v) => (poolEligibleFilter = String(v))}
+				/>
+			</div>
+			<div class="filter-actions">
+				<Button variant="secondary" onclick={resetFilters} fill>
+					{m.table_filter_clear_all()}
+				</Button>
+				<Button onclick={() => (showFilterDrawer = false)} fill>
+					{m.common_confirm()}
+				</Button>
+			</div>
+		</div>
+	</Drawer>
 {/if}
 
 <style>
@@ -970,6 +1206,7 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		gap: var(--spacing-1);
 		padding: 0 var(--spacing-3);
 		height: 32px;
 		border: none;
@@ -1025,5 +1262,61 @@
 			transparent var(--radius-lg),
 			var(--surface-primary) calc(var(--radius-lg) + 0.5px)
 		);
+	}
+
+	.tab-label {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 140px;
+	}
+
+	.tab-close {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		margin-left: var(--spacing-1);
+		border: none;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--font-size-sm);
+		line-height: 1;
+		cursor: pointer;
+		flex-shrink: 0;
+		padding: 0;
+	}
+
+	.tab-close:hover {
+		background: var(--interactive-hover);
+		color: var(--text-normal);
+	}
+
+	/* Filter drawer form */
+	.filter-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
+		padding: var(--spacing-4);
+	}
+
+	.filter-field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-1);
+	}
+
+	.filter-field label {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-normal);
+	}
+
+	.filter-actions {
+		display: flex;
+		gap: var(--spacing-2);
+		margin-top: var(--spacing-2);
 	}
 </style>

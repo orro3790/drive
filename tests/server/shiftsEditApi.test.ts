@@ -181,7 +181,10 @@ beforeEach(async () => {
 	vi.doMock('$lib/server/db', () => ({
 		db: {
 			select: selectMock,
-			update: updateMock
+			update: updateMock,
+			transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+				callback({ select: selectMock, update: updateMock })
+			)
 		}
 	}));
 
@@ -192,7 +195,10 @@ beforeEach(async () => {
 	}));
 
 	vi.doMock('drizzle-orm', () => ({
-		eq: (left: unknown, right: unknown) => ({ left, right })
+		eq: (left: unknown, right: unknown) => ({ left, right }),
+		and: (...conditions: unknown[]) => ({ conditions }),
+		gt: (left: unknown, right: unknown) => ({ operator: 'gt', left, right }),
+		isNotNull: (field: unknown) => ({ operator: 'isNotNull', field })
 	}));
 
 	vi.doMock('$lib/server/services/audit', () => ({
@@ -207,6 +213,17 @@ beforeEach(async () => {
 		sendManagerAlert: sendManagerAlertMock
 	}));
 
+	vi.doMock('$lib/server/logger', () => ({
+		default: {
+			child: vi.fn(() => ({
+				info: vi.fn(),
+				debug: vi.fn(),
+				warn: vi.fn(),
+				error: vi.fn()
+			}))
+		}
+	}));
+
 	({ PATCH } = await import('../../src/routes/api/shifts/[assignmentId]/edit/+server'));
 });
 
@@ -219,6 +236,7 @@ afterEach(() => {
 	vi.doUnmock('$lib/server/services/audit');
 	vi.doUnmock('$lib/server/services/metrics');
 	vi.doUnmock('$lib/server/services/notifications');
+	vi.doUnmock('$lib/server/logger');
 });
 
 describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
@@ -585,7 +603,8 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 						exceptionNotes: 'Damaged parcel'
 					})
 				}
-			})
+			}),
+			expect.anything() // transaction context
 		);
 	});
 });
