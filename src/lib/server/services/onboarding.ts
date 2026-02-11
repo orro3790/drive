@@ -3,6 +3,7 @@ import { and, desc, eq, gt, isNull, lte, or } from 'drizzle-orm';
 
 import { db } from '$lib/server/db';
 import { signupOnboarding } from '$lib/server/db/schema';
+import { user } from '$lib/server/db/auth-schema';
 import {
 	signupOnboardingReservationIdSchema,
 	type SignupOnboardingKind,
@@ -41,6 +42,7 @@ export interface SignupOnboardingEntry {
 	status: SignupOnboardingStatus;
 	resolvedStatus: SignupOnboardingResolvedStatus;
 	createdBy: string | null;
+	createdByName: string | null;
 	createdAt: Date;
 	expiresAt: Date | null;
 	consumedAt: Date | null;
@@ -133,7 +135,8 @@ function isEntryUsable(
 
 function toOnboardingEntry(
 	entry: SignupOnboardingEntryRecord,
-	now = new Date()
+	now = new Date(),
+	createdByName: string | null = null
 ): SignupOnboardingEntry {
 	return {
 		id: entry.id,
@@ -142,6 +145,7 @@ function toOnboardingEntry(
 		status: entry.status,
 		resolvedStatus: resolveOnboardingStatus(entry, now),
 		createdBy: entry.createdBy,
+		createdByName,
 		createdAt: entry.createdAt,
 		expiresAt: entry.expiresAt,
 		consumedAt: entry.consumedAt,
@@ -470,13 +474,17 @@ export async function listSignupOnboardingEntries(
 	dbClient: DbClient = db
 ): Promise<SignupOnboardingEntry[]> {
 	const now = new Date();
-	const entries = await dbClient
-		.select()
+	const rows = await dbClient
+		.select({
+			entry: signupOnboarding,
+			createdByName: user.name
+		})
 		.from(signupOnboarding)
+		.leftJoin(user, eq(signupOnboarding.createdBy, user.id))
 		.orderBy(desc(signupOnboarding.createdAt))
 		.limit(limit);
 
-	return entries.map((entry) => toOnboardingEntry(entry, now));
+	return rows.map((row) => toOnboardingEntry(row.entry, now, row.createdByName));
 }
 
 export async function createOnboardingApproval(
