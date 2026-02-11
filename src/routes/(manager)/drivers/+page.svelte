@@ -34,6 +34,7 @@
 	import type { Driver } from '$lib/schemas/driver';
 	import type { SelectOption } from '$lib/schemas/ui/select';
 	import HealthCard from '$lib/components/driver/HealthCard.svelte';
+	import DriverShiftHistoryTable from '$lib/components/DriverShiftHistoryTable.svelte';
 
 	// State
 	let selectedDriverId = $state<string | null>(null);
@@ -47,6 +48,13 @@
 	// Table state
 	let sorting = $state<SortingState>([]);
 	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
+
+	// Tab state
+	type DriverTab = { driverId: string; driverName: string };
+	let openDriverTabs = $state<DriverTab[]>([]);
+	let activeTabId = $state<string>('drivers');
+	let tabsInitialized = $state(false);
+	const TABS_STORAGE_KEY = 'drivers-page-open-tabs';
 
 	const globalAttendanceAverage = $derived.by(() => {
 		if (driverStore.drivers.length === 0) return 0;
@@ -325,9 +333,57 @@
 		reinstateConfirm = null;
 	}
 
-	// Load data on mount
+	// Tab management
+	function openDriverTab(driver: Driver) {
+		if (!openDriverTabs.some((t) => t.driverId === driver.id)) {
+			openDriverTabs = [...openDriverTabs, { driverId: driver.id, driverName: driver.name }];
+		}
+		activeTabId = driver.id;
+		clearSelection();
+	}
+
+	function closeDriverTab(driverId: string, event: Event) {
+		event.stopPropagation();
+		openDriverTabs = openDriverTabs.filter((t) => t.driverId !== driverId);
+		if (activeTabId === driverId) {
+			activeTabId = 'drivers';
+		}
+	}
+
+	function switchToTab(tabId: string) {
+		if (tabId === activeTabId) return;
+		activeTabId = tabId;
+		if (tabId !== 'drivers') {
+			clearSelection();
+		}
+	}
+
+	// Load data on mount + restore persisted tabs
 	onMount(() => {
 		driverStore.load();
+		const stored = localStorage.getItem(TABS_STORAGE_KEY);
+		if (stored) {
+			try {
+				const parsed = JSON.parse(stored);
+				openDriverTabs = parsed.tabs ?? [];
+				activeTabId = parsed.activeTabId ?? 'drivers';
+			} catch {
+				/* ignore corrupt data */
+			}
+		}
+		tabsInitialized = true;
+	});
+
+	// Persist tab state (gated to avoid overwriting before onMount restores)
+	$effect(() => {
+		if (!tabsInitialized) return;
+		localStorage.setItem(
+			TABS_STORAGE_KEY,
+			JSON.stringify({
+				tabs: openDriverTabs,
+				activeTabId
+			})
+		);
 	});
 </script>
 
@@ -410,9 +466,40 @@
 
 {#snippet tabsSnippet()}
 	<div class="tab-bar" role="tablist">
-		<button type="button" class="tab active" role="tab" aria-selected="true" tabindex="0">
+		<button
+			type="button"
+			class="tab"
+			class:active={activeTabId === 'drivers'}
+			role="tab"
+			aria-selected={activeTabId === 'drivers'}
+			tabindex={activeTabId === 'drivers' ? 0 : -1}
+			onclick={() => switchToTab('drivers')}
+		>
 			{m.drivers_page_title()}
 		</button>
+		{#each openDriverTabs as driverTab (driverTab.driverId)}
+			<button
+				type="button"
+				class="tab"
+				class:active={activeTabId === driverTab.driverId}
+				role="tab"
+				aria-selected={activeTabId === driverTab.driverId}
+				tabindex={activeTabId === driverTab.driverId ? 0 : -1}
+				onclick={() => switchToTab(driverTab.driverId)}
+			>
+				<span class="tab-label">{driverTab.driverName}</span>
+				<span
+					role="button"
+					tabindex="-1"
+					class="tab-close"
+					aria-label={m.drivers_close_tab()}
+					onclick={(e) => closeDriverTab(driverTab.driverId, e)}
+					onkeydown={(e) => e.key === 'Enter' && closeDriverTab(driverTab.driverId, e)}
+				>
+					&times;
+				</span>
+			</button>
+		{/each}
 	</div>
 {/snippet}
 
@@ -627,6 +714,9 @@
 {#snippet driverDetailView(driver: Driver)}
 	<div class="detail-content">
 		{@render driverDetailList(driver)}
+		<Button variant="secondary" size="small" fill onclick={() => openDriverTab(driver)}>
+			{m.drivers_view_route_history()}
+		</Button>
 	</div>
 {/snippet}
 
@@ -666,6 +756,9 @@
 					{m.common_save()}
 				</Button>
 			{:else}
+				<Button variant="secondary" fill onclick={() => openDriverTab(driver)}>
+					{m.drivers_view_route_history()}
+				</Button>
 				<Button fill onclick={() => startEditing(driver)}>
 					{m.common_edit()}
 				</Button>
@@ -689,41 +782,54 @@
 	onWideModeChange: (value: boolean) => void;
 	isMobile: boolean;
 })}
-	<DataTable
-		{table}
-		loading={driverStore.isLoading}
-		emptyTitle={m.drivers_empty_state()}
-		emptyMessage={m.drivers_empty_state_message()}
-		showPagination
-		showSelection={false}
-		showColumnVisibility
-		showExport
-		showWideModeToggle
-		headers={{
-			healthRank: headerWithTooltip,
-			attendancePercent: headerWithTooltip,
-			completionPercent: headerWithTooltip,
-			avgParcelsDelivered: headerWithTooltip
-		}}
-		cellComponents={{
-			phone: phoneCell,
-			healthRank: healthCell,
-			attendancePercent: attendanceCell,
-			completionPercent: completionCell,
-			avgParcelsDelivered: avgParcelsCell,
-			weeklyCap: weeklyCapCell
-		}}
-		isWideMode={ctx.isWideMode}
-		onWideModeChange={ctx.onWideModeChange}
-		onMobileDetailOpen={syncSelectedDriver}
-		stateStorageKey="drivers"
-		exportFilename="drivers"
-		tabs={tabsSnippet}
-		activeRowId={selectedDriverId ?? undefined}
-		onRowClick={handleRowClick}
-		mobileDetailContent={mobileDetail}
-		mobileDetailTitle={m.drivers_detail_title()}
-	/>
+	{#if activeTabId === 'drivers'}
+		<DataTable
+			{table}
+			loading={driverStore.isLoading}
+			emptyTitle={m.drivers_empty_state()}
+			emptyMessage={m.drivers_empty_state_message()}
+			showPagination
+			showSelection={false}
+			showColumnVisibility
+			showExport
+			showWideModeToggle
+			headers={{
+				healthRank: headerWithTooltip,
+				attendancePercent: headerWithTooltip,
+				completionPercent: headerWithTooltip,
+				avgParcelsDelivered: headerWithTooltip
+			}}
+			cellComponents={{
+				phone: phoneCell,
+				healthRank: healthCell,
+				attendancePercent: attendanceCell,
+				completionPercent: completionCell,
+				avgParcelsDelivered: avgParcelsCell,
+				weeklyCap: weeklyCapCell
+			}}
+			isWideMode={ctx.isWideMode}
+			onWideModeChange={ctx.onWideModeChange}
+			onMobileDetailOpen={syncSelectedDriver}
+			stateStorageKey="drivers"
+			exportFilename="drivers"
+			tabs={tabsSnippet}
+			activeRowId={selectedDriverId ?? undefined}
+			onRowClick={handleRowClick}
+			mobileDetailContent={mobileDetail}
+			mobileDetailTitle={m.drivers_detail_title()}
+		/>
+	{:else}
+		{#each openDriverTabs as driverTab (driverTab.driverId)}
+			{#if activeTabId === driverTab.driverId}
+				<DriverShiftHistoryTable
+					driverId={driverTab.driverId}
+					tabs={tabsSnippet}
+					isWideMode={ctx.isWideMode}
+					onWideModeChange={ctx.onWideModeChange}
+				/>
+			{/if}
+		{/each}
+	{/if}
 {/snippet}
 
 <svelte:head>
@@ -732,9 +838,9 @@
 
 <div class="page-surface">
 	<PageWithDetailPanel
-		item={selectedDriver}
+		item={activeTabId === 'drivers' ? selectedDriver : null}
 		title={m.drivers_detail_title()}
-		open={!!selectedDriver}
+		open={activeTabId === 'drivers' && !!selectedDriver}
 		onClose={clearSelection}
 		{isEditing}
 		{hasChanges}
@@ -970,6 +1076,7 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		gap: var(--spacing-1);
 		padding: 0 var(--spacing-3);
 		height: 32px;
 		border: none;
@@ -1025,5 +1132,35 @@
 			transparent var(--radius-lg),
 			var(--surface-primary) calc(var(--radius-lg) + 0.5px)
 		);
+	}
+
+	.tab-label {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 140px;
+	}
+
+	.tab-close {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		margin-left: var(--spacing-1);
+		border: none;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: var(--font-size-sm);
+		line-height: 1;
+		cursor: pointer;
+		flex-shrink: 0;
+		padding: 0;
+	}
+
+	.tab-close:hover {
+		background: var(--interactive-hover);
+		color: var(--text-normal);
 	}
 </style>
