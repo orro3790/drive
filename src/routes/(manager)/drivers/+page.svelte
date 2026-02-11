@@ -30,6 +30,12 @@
 	import Tooltip from '$lib/components/primitives/Tooltip.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import ConfirmationDialog from '$lib/components/ConfirmationDialog.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
+	import Icon from '$lib/components/primitives/Icon.svelte';
+	import Drawer from '$lib/components/primitives/Drawer.svelte';
+	import InlineEditor from '$lib/components/InlineEditor.svelte';
+	import Filter from '$lib/components/icons/Filter.svelte';
+	import Reset from '$lib/components/icons/Reset.svelte';
 	import { driverStore } from '$lib/stores/driverStore.svelte';
 	import type { Driver } from '$lib/schemas/driver';
 	import type { SelectOption } from '$lib/schemas/ui/select';
@@ -41,9 +47,17 @@
 	let isEditing = $state(false);
 	let unflagConfirm = $state<{ driver: Driver; x: number; y: number } | null>(null);
 	let reinstateConfirm = $state<{ driver: Driver; x: number; y: number } | null>(null);
+	let showFilterDrawer = $state(false);
 
 	// Form state
 	let formWeeklyCap = $state(4);
+
+	// Filter state
+	let nameFilter = $state('');
+	let emailFilter = $state('');
+	let healthStateFilter = $state<string>('');
+	let flaggedFilter = $state<string>('');
+	let poolEligibleFilter = $state<string>('');
 
 	// Table state
 	let sorting = $state<SortingState>([]);
@@ -73,6 +87,53 @@
 		const total = driverStore.drivers.reduce((sum, driver) => sum + driver.avgParcelsDelivered, 0);
 		return total / driverStore.drivers.length;
 	});
+
+	const healthStateOptions: SelectOption[] = [
+		{ value: '', label: m.drivers_filter_health_state_all() },
+		{ value: 'flagged', label: m.drivers_health_flagged() },
+		{ value: 'at_risk', label: m.drivers_health_at_risk() },
+		{ value: 'watch', label: m.drivers_health_watch() },
+		{ value: 'healthy', label: m.drivers_health_healthy() },
+		{ value: 'high_performer', label: m.drivers_health_high_performer() }
+	];
+
+	const booleanFilterOptions: (label: string) => SelectOption[] = (allLabel) => [
+		{ value: '', label: allLabel },
+		{ value: 'true', label: m.common_yes() },
+		{ value: 'false', label: m.common_no() }
+	];
+
+	const filteredDrivers = $derived.by(() => {
+		let data = driverStore.drivers;
+		if (nameFilter) {
+			const lower = nameFilter.toLowerCase();
+			data = data.filter((d) => d.name.toLowerCase().includes(lower));
+		}
+		if (emailFilter) {
+			const lower = emailFilter.toLowerCase();
+			data = data.filter((d) => d.email.toLowerCase().includes(lower));
+		}
+		if (healthStateFilter) {
+			data = data.filter((d) => d.healthState === healthStateFilter);
+		}
+		if (flaggedFilter) {
+			const flagged = flaggedFilter === 'true';
+			data = data.filter((d) => d.isFlagged === flagged);
+		}
+		if (poolEligibleFilter) {
+			const eligible = poolEligibleFilter === 'true';
+			data = data.filter((d) => d.assignmentPoolEligible === eligible);
+		}
+		return data;
+	});
+
+	function resetFilters() {
+		nameFilter = '';
+		emailFilter = '';
+		healthStateFilter = '';
+		flaggedFilter = '';
+		poolEligibleFilter = '';
+	}
 
 	const helper = createColumnHelper<Driver>();
 
@@ -139,7 +200,7 @@
 	];
 
 	const table = createSvelteTable<Driver>(() => ({
-		data: driverStore.drivers,
+		data: filteredDrivers,
 		columns,
 		getRowId: (row) => row.id,
 		state: {
@@ -503,6 +564,16 @@
 	</div>
 {/snippet}
 
+{#snippet toolbarSnippet()}
+	<IconButton tooltip={m.table_filter_label()} onclick={() => (showFilterDrawer = true)}>
+		<Icon><Filter /></Icon>
+	</IconButton>
+
+	<IconButton tooltip={m.table_filter_reset()} onclick={resetFilters}>
+		<Icon><Reset /></Icon>
+	</IconButton>
+{/snippet}
+
 {#snippet driverDetailList(driver: Driver)}
 	<dl class="detail-list">
 		<div class="detail-row">
@@ -813,6 +884,7 @@
 			stateStorageKey="drivers"
 			exportFilename="drivers"
 			tabs={tabsSnippet}
+			toolbar={toolbarSnippet}
 			activeRowId={selectedDriverId ?? undefined}
 			onRowClick={handleRowClick}
 			mobileDetailContent={mobileDetail}
@@ -881,6 +953,64 @@
 		onConfirm={handleReinstate}
 		onCancel={() => (reinstateConfirm = null)}
 	/>
+{/if}
+
+<!-- Filter Drawer -->
+{#if showFilterDrawer}
+	<Drawer title={m.table_filter_title()} onClose={() => (showFilterDrawer = false)}>
+		<div class="filter-form">
+			<div class="filter-field">
+				<label for="drivers-name-filter">{m.drivers_filter_name_label()}</label>
+				<InlineEditor
+					id="drivers-name-filter"
+					value={nameFilter}
+					onInput={(v) => (nameFilter = v)}
+					placeholder={m.drivers_filter_name_placeholder()}
+				/>
+			</div>
+			<div class="filter-field">
+				<label for="drivers-email-filter">{m.drivers_filter_email_label()}</label>
+				<InlineEditor
+					id="drivers-email-filter"
+					value={emailFilter}
+					onInput={(v) => (emailFilter = v)}
+					placeholder={m.drivers_filter_email_placeholder()}
+				/>
+			</div>
+			<div class="filter-field">
+				<label>{m.drivers_filter_health_state_label()}</label>
+				<Select
+					options={healthStateOptions}
+					value={healthStateFilter}
+					onChange={(v) => (healthStateFilter = String(v))}
+				/>
+			</div>
+			<div class="filter-field">
+				<label>{m.drivers_filter_flagged_label()}</label>
+				<Select
+					options={booleanFilterOptions(m.drivers_filter_flagged_all())}
+					value={flaggedFilter}
+					onChange={(v) => (flaggedFilter = String(v))}
+				/>
+			</div>
+			<div class="filter-field">
+				<label>{m.drivers_filter_pool_eligible_label()}</label>
+				<Select
+					options={booleanFilterOptions(m.drivers_filter_pool_eligible_all())}
+					value={poolEligibleFilter}
+					onChange={(v) => (poolEligibleFilter = String(v))}
+				/>
+			</div>
+			<div class="filter-actions">
+				<Button variant="secondary" onclick={resetFilters} fill>
+					{m.table_filter_clear_all()}
+				</Button>
+				<Button onclick={() => (showFilterDrawer = false)} fill>
+					{m.common_confirm()}
+				</Button>
+			</div>
+		</div>
+	</Drawer>
 {/if}
 
 <style>
@@ -1162,5 +1292,31 @@
 	.tab-close:hover {
 		background: var(--interactive-hover);
 		color: var(--text-normal);
+	}
+
+	/* Filter drawer form */
+	.filter-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
+		padding: var(--spacing-4);
+	}
+
+	.filter-field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-1);
+	}
+
+	.filter-field label {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-normal);
+	}
+
+	.filter-actions {
+		display: flex;
+		gap: var(--spacing-2);
+		margin-top: var(--spacing-2);
 	}
 </style>

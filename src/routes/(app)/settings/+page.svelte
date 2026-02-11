@@ -12,7 +12,7 @@
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import AccountSection from '$lib/components/settings/AccountSection.svelte';
 	import ManagerDispatchSection from '$lib/components/settings/ManagerDispatchSection.svelte';
-	import ManagerOnboardingSection from '$lib/components/settings/ManagerOnboardingSection.svelte';
+
 	import type { PageData } from './$types';
 	import type { Breadcrumb } from '$lib/schemas/ui/breadcrumb';
 	import { asUser } from '$lib/types/user';
@@ -104,7 +104,6 @@
 				<AccountSection {user} />
 				{#if user?.role === 'manager'}
 					<ManagerDispatchSection />
-					<ManagerOnboardingSection />
 				{/if}
 			</section>
 		</div>

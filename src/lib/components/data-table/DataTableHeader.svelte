@@ -301,8 +301,7 @@ rich header content (tooltips, icons, etc.) while maintaining sort functionality
 			const minSize = column.columnDef.minSize ?? 50;
 
 			const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
-				const currentX =
-					'touches' in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX;
+				const currentX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX;
 				const delta = Math.max(-(initialSize - minSize), currentX - startX);
 
 				table.setColumnSizing((old) => ({
