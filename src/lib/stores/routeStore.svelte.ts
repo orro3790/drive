@@ -7,9 +7,11 @@
 
 import {
 	routeStatusSchema,
+	shiftProgressSchema,
 	type RouteCreate,
 	type RouteStatus,
-	type RouteUpdate
+	type RouteUpdate,
+	type ShiftProgress
 } from '$lib/schemas/route';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import * as m from '$lib/paraglide/messages.js';
@@ -32,6 +34,11 @@ export type RouteWithWarehouse = {
 	assignmentId: string | null;
 	driverName: string | null;
 	bidWindowClosesAt: string | null;
+	shiftProgress: ShiftProgress | null;
+	confirmedAt: string | null;
+	arrivedAt: string | null;
+	startedAt: string | null;
+	completedAt: string | null;
 };
 
 export type RouteFilters = {
@@ -88,7 +95,12 @@ const routeWithWarehouseSchema = z.object({
 	isShiftStarted: z.boolean(),
 	assignmentId: z.string().min(1).nullable(),
 	driverName: z.string().nullable(),
-	bidWindowClosesAt: z.string().min(1).nullable()
+	bidWindowClosesAt: z.string().min(1).nullable(),
+	shiftProgress: shiftProgressSchema.nullable(),
+	confirmedAt: z.string().min(1).nullable(),
+	arrivedAt: z.string().min(1).nullable(),
+	startedAt: z.string().min(1).nullable(),
+	completedAt: z.string().min(1).nullable()
 });
 
 const routeListResponseSchema = z.object({
@@ -243,7 +255,12 @@ export const routeStore = {
 			isShiftStarted: false,
 			assignmentId: null,
 			driverName: null,
-			bidWindowClosesAt: null
+			bidWindowClosesAt: null,
+			shiftProgress: null,
+			confirmedAt: null,
+			arrivedAt: null,
+			startedAt: null,
+			completedAt: null
 		};
 
 		if (matchesFilters(optimisticRoute, state.filters)) {

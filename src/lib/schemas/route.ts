@@ -10,6 +10,18 @@ export const routeStatusSchema = z.enum(['assigned', 'unfilled', 'bidding']);
 
 export type RouteStatus = z.infer<typeof routeStatusSchema>;
 
+export const shiftProgressValues = [
+	'unconfirmed',
+	'confirmed',
+	'arrived',
+	'started',
+	'completed',
+	'no_show',
+	'cancelled'
+] as const;
+export type ShiftProgress = (typeof shiftProgressValues)[number];
+export const shiftProgressSchema = z.enum(shiftProgressValues);
+
 const startTimeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /**

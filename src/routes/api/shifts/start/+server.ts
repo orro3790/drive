@@ -166,7 +166,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		assignmentId,
 		status: 'active',
 		driverId: locals.user.id,
-		driverName: locals.user.name ?? null
+		driverName: locals.user.name ?? null,
+		shiftProgress: 'started'
 	});
 
 	return json({

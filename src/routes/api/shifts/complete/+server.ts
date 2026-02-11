@@ -222,7 +222,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		assignmentId,
 		status: 'completed',
 		driverId: assignment.userId,
-		routeId: assignment.routeId
+		routeId: assignment.routeId,
+		shiftProgress: 'completed'
 	});
 
 	// Best-effort notifications and async metrics

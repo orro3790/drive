@@ -1,3 +1,5 @@
+import type { ShiftProgress } from '$lib/schemas/route';
+
 type ManagerEventName =
 	| 'assignment:updated'
 	| 'bid_window:opened'
@@ -11,6 +13,7 @@ type AssignmentUpdatedPayload = {
 	driverName?: string | null;
 	routeId?: string | null;
 	bidWindowClosesAt?: string | null;
+	shiftProgress?: ShiftProgress | null;
 };
 
 type BidWindowOpenedPayload = {
