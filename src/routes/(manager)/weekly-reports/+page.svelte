@@ -336,9 +336,7 @@
 	<Drawer title={m.table_filter_title()} onClose={() => (showFilterDrawer = false)}>
 		<div class="filter-form">
 			<div class="filter-field">
-				<label for="reports-date-from-filter"
-					>{m.weekly_reports_filter_date_from_label()}</label
-				>
+				<label for="reports-date-from-filter">{m.weekly_reports_filter_date_from_label()}</label>
 				<InlineEditor
 					id="reports-date-from-filter"
 					value={dateFromFilter}

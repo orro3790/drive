@@ -44,10 +44,16 @@
 	import { warehouseStore } from '$lib/stores/warehouseStore.svelte';
 	import { bidWindowStore, type BidWindow } from '$lib/stores/bidWindowStore.svelte';
 	import { driverStore } from '$lib/stores/driverStore.svelte';
-	import { routeCreateSchema, routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
+	import {
+		routeCreateSchema,
+		routeUpdateSchema,
+		type RouteStatus,
+		type ShiftProgress
+	} from '$lib/schemas/route';
 	import type { SelectOption } from '$lib/schemas/ui/select';
 	import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 	import { debounce } from '$lib/stores/helpers/debounce';
+	import AttentionBanner from '$lib/components/AttentionBanner.svelte';
 
 	// Tab state
 	type TabId = 'routes' | 'bidWindows';
@@ -89,6 +95,7 @@
 	let warehouseFilter = $state('');
 	let statusFilter = $state<RouteStatus | ''>('');
 	let dateFilter = $state(toLocalYmd());
+	let progressFilter = $state<string | null>(null);
 
 	// Table state
 	let sorting = $state<SortingState>([]);
@@ -140,7 +147,7 @@
 	];
 
 	const table = createSvelteTable<RouteWithWarehouse>(() => ({
-		data: routeStore.routes,
+		data: filteredRoutes,
 		columns,
 		getRowId: (row) => row.id,
 		state: {
@@ -172,12 +179,71 @@
 		bidding: 'info'
 	};
 
+	const progressLabels: Record<ShiftProgress, string> = {
+		unconfirmed: m.route_progress_unconfirmed(),
+		confirmed: m.route_progress_confirmed(),
+		arrived: m.route_progress_arrived(),
+		started: m.route_progress_started(),
+		completed: m.route_progress_completed(),
+		no_show: m.route_progress_no_show(),
+		cancelled: m.route_progress_cancelled()
+	};
+
+	const progressChip: Record<ShiftProgress, 'warning' | 'neutral' | 'info' | 'success' | 'error'> =
+		{
+			unconfirmed: 'warning',
+			confirmed: 'neutral',
+			arrived: 'info',
+			started: 'info',
+			completed: 'success',
+			no_show: 'error',
+			cancelled: 'error'
+		};
+
+	const progressFilterOptions: SelectOption[] = [
+		{ value: '', label: m.route_filter_progress_all() },
+		{ value: 'unconfirmed', label: m.route_progress_unconfirmed() },
+		{ value: 'confirmed', label: m.route_progress_confirmed() },
+		{ value: 'arrived', label: m.route_progress_arrived() },
+		{ value: 'in_progress', label: m.route_progress_started() },
+		{ value: 'completed', label: m.route_progress_completed() },
+		{ value: 'not_arrived', label: m.manager_attention_not_arrived() },
+		{ value: 'cancelled', label: m.route_progress_cancelled() },
+		{ value: 'unfilled', label: m.manager_attention_unfilled() }
+	];
+
 	const statusOptions: SelectOption[] = [
 		{ value: '', label: m.route_filter_status_all() },
 		{ value: 'assigned', label: statusLabels.assigned },
 		{ value: 'unfilled', label: statusLabels.unfilled },
 		{ value: 'bidding', label: statusLabels.bidding }
 	];
+
+	const filteredRoutes = $derived.by(() => {
+		if (!progressFilter) return routeStore.routes;
+		switch (progressFilter) {
+			case 'not_arrived':
+				return routeStore.routes.filter((r) => r.shiftProgress === 'no_show');
+			case 'unfilled':
+				return routeStore.routes.filter((r) => r.status === 'unfilled' || r.status === 'bidding');
+			case 'in_progress':
+				return routeStore.routes.filter(
+					(r) => r.shiftProgress === 'arrived' || r.shiftProgress === 'started'
+				);
+			default:
+				return routeStore.routes.filter((r) => r.shiftProgress === progressFilter);
+		}
+	});
+
+	const progressFilterSelectValue = $derived(progressFilter ?? '');
+
+	function setProgressFilter(key: string | null) {
+		progressFilter = key;
+	}
+
+	function clearProgressFilter() {
+		progressFilter = null;
+	}
 
 	function toLocalYmd(date = new Date()) {
 		const year = date.getFullYear();
@@ -198,6 +264,7 @@
 		warehouseFilter = '';
 		statusFilter = '';
 		dateFilter = toLocalYmd();
+		progressFilter = null;
 		applyFilters();
 	}
 
@@ -236,6 +303,15 @@
 			return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 		}
 		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+	}
+
+	function formatTimestamp(isoString: string): string {
+		const date = new Date(isoString);
+		return date.toLocaleTimeString(undefined, {
+			hour: '2-digit',
+			minute: '2-digit',
+			timeZone: 'America/Toronto'
+		});
 	}
 
 	function formatBidWindowLabel(isoString: string) {
@@ -744,12 +820,21 @@
 {/snippet}
 
 {#snippet statusCell(ctx: CellRendererContext<RouteWithWarehouse>)}
-	<Chip
-		variant="status"
-		status={statusChip[ctx.row.status]}
-		label={statusLabels[ctx.row.status]}
-		size="xs"
-	/>
+	{#if ctx.row.shiftProgress}
+		<Chip
+			variant="status"
+			status={progressChip[ctx.row.shiftProgress]}
+			label={progressLabels[ctx.row.shiftProgress]}
+			size="xs"
+		/>
+	{:else}
+		<Chip
+			variant="status"
+			status={statusChip[ctx.row.status]}
+			label={statusLabels[ctx.row.status]}
+			size="xs"
+		/>
+	{/if}
 {/snippet}
 
 {#snippet tabsSnippet()}
@@ -818,6 +903,17 @@
 			onDismiss={clearStatusFilter}
 		/>
 	{/if}
+	{#if progressFilter}
+		{@const filterLabel =
+			progressFilterOptions.find((o) => o.value === progressFilter)?.label ?? progressFilter}
+		<Chip
+			variant="status"
+			status="info"
+			label={filterLabel}
+			size="sm"
+			onDismiss={clearProgressFilter}
+		/>
+	{/if}
 {/snippet}
 
 {#snippet routeDetailInfo(route: RouteWithWarehouse)}
@@ -841,12 +937,21 @@
 		<div class="detail-row">
 			<dt>{m.manager_dashboard_detail_status()}</dt>
 			<dd>
-				<Chip
-					variant="status"
-					status={statusChip[route.status]}
-					label={statusLabels[route.status]}
-					size="xs"
-				/>
+				{#if route.shiftProgress}
+					<Chip
+						variant="status"
+						status={progressChip[route.shiftProgress]}
+						label={progressLabels[route.shiftProgress]}
+						size="xs"
+					/>
+				{:else}
+					<Chip
+						variant="status"
+						status={statusChip[route.status]}
+						label={statusLabels[route.status]}
+						size="xs"
+					/>
+				{/if}
 			</dd>
 		</div>
 		{#if route.status === 'assigned' && route.driverName}
@@ -859,6 +964,30 @@
 			<div class="detail-row">
 				<dt>{m.manager_dashboard_detail_bid_window()}</dt>
 				<dd>{formatBidWindowLabel(route.bidWindowClosesAt)}</dd>
+			</div>
+		{/if}
+		{#if route.confirmedAt}
+			<div class="detail-row">
+				<dt>{m.route_detail_confirmed_at()}</dt>
+				<dd>{formatTimestamp(route.confirmedAt)}</dd>
+			</div>
+		{/if}
+		{#if route.arrivedAt}
+			<div class="detail-row">
+				<dt>{m.route_detail_arrived_at()}</dt>
+				<dd>{formatTimestamp(route.arrivedAt)}</dd>
+			</div>
+		{/if}
+		{#if route.startedAt}
+			<div class="detail-row">
+				<dt>{m.route_detail_started_at()}</dt>
+				<dd>{formatTimestamp(route.startedAt)}</dd>
+			</div>
+		{/if}
+		{#if route.completedAt}
+			<div class="detail-row">
+				<dt>{m.route_detail_completed_at()}</dt>
+				<dd>{formatTimestamp(route.completedAt)}</dd>
 			</div>
 		{/if}
 	</dl>
@@ -1144,6 +1273,12 @@
 	isMobile: boolean;
 })}
 	{#if activeTab === 'routes'}
+		<AttentionBanner
+			routes={routeStore.routes}
+			date={dateFilter}
+			activeFilter={progressFilter}
+			onSelect={setProgressFilter}
+		/>
 		<DataTable
 			{table}
 			loading={routeStore.isLoading}
@@ -1239,6 +1374,17 @@
 			<div class="filter-field">
 				<label for="route-status-filter">{m.route_filter_status_label()}</label>
 				<Select id="route-status-filter" options={statusOptions} bind:value={statusFilter} />
+			</div>
+			<div class="filter-field">
+				<label for="route-progress-filter">{m.route_filter_progress_label()}</label>
+				<Select
+					id="route-progress-filter"
+					options={progressFilterOptions}
+					value={progressFilterSelectValue}
+					onChange={(val) => {
+						progressFilter = String(val) || null;
+					}}
+				/>
 			</div>
 			<div class="filter-field">
 				<label for="route-date-filter">{m.route_filter_date_label()}</label>

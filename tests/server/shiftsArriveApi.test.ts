@@ -65,11 +65,8 @@ const driverMetricsTable = {
 let POST: ArriveRouteModule['POST'];
 
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
-let selectChainMock: {
-	from: ReturnType<typeof vi.fn>;
-	innerJoin: ReturnType<typeof vi.fn>;
-	where: typeof selectWhereMock;
-};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let selectChainMock: any;
 let selectMock: ReturnType<
 	typeof vi.fn<
 		(shape: Record<string, unknown>) => {
@@ -151,11 +148,25 @@ beforeEach(async () => {
 	vi.resetModules();
 
 	selectWhereMock = vi.fn<(whereClause: unknown) => Promise<unknown[]>>(async () => []);
-	selectChainMock = {
-		from: vi.fn(() => selectChainMock),
-		innerJoin: vi.fn((_table: unknown, _on: unknown) => selectChainMock),
-		where: selectWhereMock
+	const createSelectChain = () => {
+		const chain: Record<string, unknown> = {
+			from: vi.fn(() => chain),
+			innerJoin: vi.fn((_table: unknown, _on: unknown) => chain),
+			where: vi.fn((whereClause: unknown) => {
+				const promise = selectWhereMock(whereClause);
+				const thenableChain: Record<string, unknown> = {
+					limit: vi.fn(() => thenableChain),
+					then: (resolve: (v: unknown) => void, reject?: (e: unknown) => void) =>
+						promise.then(resolve, reject),
+					catch: (reject: (e: unknown) => void) => promise.catch(reject)
+				};
+				return thenableChain;
+			}),
+			limit: vi.fn(() => chain)
+		};
+		return chain;
 	};
+	selectChainMock = createSelectChain();
 	selectMock = vi.fn<
 		(shape: Record<string, unknown>) => {
 			from: typeof selectChainMock.from;
@@ -201,7 +212,10 @@ beforeEach(async () => {
 		db: {
 			select: selectMock,
 			insert: insertMock,
-			update: updateMock
+			update: updateMock,
+			transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+				callback({ select: selectMock, insert: insertMock, update: updateMock })
+			)
 		}
 	}));
 
@@ -214,6 +228,10 @@ beforeEach(async () => {
 
 	vi.doMock('drizzle-orm', () => ({
 		eq: (left: unknown, right: unknown) => ({ left, right }),
+		and: (...conditions: unknown[]) => ({ conditions }),
+		inArray: (left: unknown, values: unknown[]) => ({ left, values }),
+		isNotNull: (left: unknown) => ({ operator: 'isNotNull', left }),
+		isNull: (left: unknown) => ({ operator: 'isNull', left }),
 		sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
 			strings: Array.from(strings),
 			values

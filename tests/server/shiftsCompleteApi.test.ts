@@ -250,7 +250,10 @@ beforeEach(async () => {
 	vi.doMock('$lib/server/db', () => ({
 		db: {
 			select: selectMock,
-			update: updateMock
+			update: updateMock,
+			transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+				callback({ select: selectMock, update: updateMock })
+			)
 		}
 	}));
 
@@ -263,6 +266,8 @@ beforeEach(async () => {
 
 	vi.doMock('drizzle-orm', () => ({
 		eq: (left: unknown, right: unknown) => ({ left, right }),
+		and: (...conditions: unknown[]) => ({ conditions }),
+		isNull: (field: unknown) => ({ operator: 'isNull', field }),
 		sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
 			strings: Array.from(strings),
 			values
@@ -291,6 +296,17 @@ beforeEach(async () => {
 		sendManagerAlert: sendManagerAlertMock
 	}));
 
+	vi.doMock('$lib/server/logger', () => ({
+		default: {
+			child: vi.fn(() => ({
+				info: vi.fn(),
+				debug: vi.fn(),
+				warn: vi.fn(),
+				error: vi.fn()
+			}))
+		}
+	}));
+
 	({ POST } = await import('../../src/routes/api/shifts/complete/+server'));
 });
 
@@ -304,6 +320,7 @@ afterEach(() => {
 	vi.doUnmock('$lib/server/realtime/managerSse');
 	vi.doUnmock('$lib/server/services/metrics');
 	vi.doUnmock('$lib/server/services/notifications');
+	vi.doUnmock('$lib/server/logger');
 });
 
 describe('POST /api/shifts/complete contract', () => {

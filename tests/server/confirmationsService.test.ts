@@ -31,7 +31,12 @@ const selectMock = vi.fn((_shape?: unknown) => {
 	return chain;
 });
 
-const updateWhereMock = vi.fn(async (_condition: unknown) => undefined);
+const updateReturningMock = vi.fn(async (_shape?: unknown) => [{ id: 'assignment-2' }]);
+const updateWhereMock = vi.fn((_condition: unknown) => {
+	const result = Promise.resolve(undefined);
+	(result as unknown as Record<string, unknown>).returning = updateReturningMock;
+	return result;
+});
 const updateSetMock = vi.fn((_values: Record<string, unknown>) => ({
 	where: updateWhereMock
 }));
@@ -40,6 +45,7 @@ const updateMock = vi.fn((_table: unknown) => ({
 }));
 
 const createAuditLogMock = vi.fn(async (_entry: Record<string, unknown>) => undefined);
+const broadcastAssignmentUpdatedMock = vi.fn();
 
 let calculateConfirmationDeadline: ConfirmationsModule['calculateConfirmationDeadline'];
 let confirmShift: ConfirmationsModule['confirmShift'];
@@ -49,12 +55,19 @@ beforeAll(async () => {
 	vi.doMock('$lib/server/db', () => ({
 		db: {
 			select: selectMock,
-			update: updateMock
+			update: updateMock,
+			transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+				callback({ select: selectMock, update: updateMock })
+			)
 		}
 	}));
 
 	vi.doMock('$lib/server/services/audit', () => ({
 		createAuditLog: createAuditLogMock
+	}));
+
+	vi.doMock('$lib/server/realtime/managerSse', () => ({
+		broadcastAssignmentUpdated: broadcastAssignmentUpdatedMock
 	}));
 
 	vi.doMock('$lib/server/logger', () => ({
@@ -78,7 +91,9 @@ beforeEach(() => {
 	updateMock.mockClear();
 	updateSetMock.mockClear();
 	updateWhereMock.mockClear();
+	updateReturningMock.mockClear();
 	createAuditLogMock.mockClear();
+	broadcastAssignmentUpdatedMock.mockClear();
 });
 
 afterEach(() => {
@@ -88,6 +103,7 @@ afterEach(() => {
 afterAll(() => {
 	vi.doUnmock('$lib/server/db');
 	vi.doUnmock('$lib/server/services/audit');
+	vi.doUnmock('$lib/server/realtime/managerSse');
 	vi.doUnmock('$lib/server/logger');
 	vi.clearAllMocks();
 });

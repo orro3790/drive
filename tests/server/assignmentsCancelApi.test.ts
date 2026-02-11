@@ -199,7 +199,10 @@ beforeEach(async () => {
 	vi.doMock('$lib/server/db', () => ({
 		db: {
 			select: selectMock,
-			update: updateMock
+			update: updateMock,
+			transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+				callback({ select: selectMock, update: updateMock })
+			)
 		}
 	}));
 
@@ -211,6 +214,7 @@ beforeEach(async () => {
 	vi.doMock('drizzle-orm', () => ({
 		eq: (left: unknown, right: unknown) => ({ left, right }),
 		and: (...conditions: unknown[]) => ({ conditions }),
+		ne: (left: unknown, right: unknown) => ({ operator: 'ne', left, right }),
 		sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
 			strings: Array.from(strings),
 			values

@@ -9,10 +9,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, routes, shifts, user, warehouses } from '$lib/server/db/schema';
 import { and, eq, gte, inArray, isNotNull, lte, desc } from 'drizzle-orm';
-import {
-	getDayOfWeekFromDateString,
-	addDaysToDateString
-} from '$lib/server/time/toronto';
+import { getDayOfWeekFromDateString, addDaysToDateString } from '$lib/server/time/toronto';
 import { getManagerWarehouseIds } from '$lib/server/services/managers';
 import type { WeekDetailResponse } from '$lib/schemas/weeklyReports';
 
@@ -47,7 +44,11 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
 	const accessibleWarehouses = await getManagerWarehouseIds(locals.user.id);
 	if (accessibleWarehouses.length === 0) {
-		return json({ weekStart, weekEnd: addDaysToDateString(weekStart, 6), shifts: [] } satisfies WeekDetailResponse);
+		return json({
+			weekStart,
+			weekEnd: addDaysToDateString(weekStart, 6),
+			shifts: []
+		} satisfies WeekDetailResponse);
 	}
 
 	const weekEnd = addDaysToDateString(weekStart, 6);

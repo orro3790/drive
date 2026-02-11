@@ -9,6 +9,7 @@
 import { db } from '$lib/server/db';
 import { assignments, driverMetrics, routes, warehouses } from '$lib/server/db/schema';
 import { createAuditLog } from '$lib/server/services/audit';
+import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
@@ -166,6 +167,13 @@ export async function confirmShift(
 	}
 
 	log.info({ confirmedAt }, 'Shift confirmed');
+
+	broadcastAssignmentUpdated({
+		assignmentId,
+		status: 'scheduled',
+		driverId: userId,
+		shiftProgress: 'confirmed'
+	});
 
 	return { success: true, confirmedAt };
 }
