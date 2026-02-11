@@ -342,7 +342,7 @@
 		clearSelection();
 	}
 
-	function closeDriverTab(driverId: string, event: MouseEvent) {
+	function closeDriverTab(driverId: string, event: Event) {
 		event.stopPropagation();
 		openDriverTabs = openDriverTabs.filter((t) => t.driverId !== driverId);
 		if (activeTabId === driverId) {
