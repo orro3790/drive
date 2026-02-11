@@ -8,21 +8,17 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { CRON_SECRET } from '$env/static/private';
-import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { and, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { assignments, notifications, shifts } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { sendNotification } from '$lib/server/services/notifications';
+import { verifyCronAuth } from '$lib/server/cron/auth';
 
 export const GET: RequestHandler = async ({ request }) => {
-	const authHeader = request.headers.get('authorization')?.trim();
-	const expectedToken = (CRON_SECRET || env.CRON_SECRET)?.trim();
-	if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
-		return json({ error: 'Unauthorized' }, { status: 401 });
-	}
+	const authError = verifyCronAuth(request);
+	if (authError) return authError;
 
 	const log = logger.child({ cron: 'stale-shift-reminder' });
 	const startedAt = Date.now();
@@ -58,11 +54,7 @@ export const GET: RequestHandler = async ({ request }) => {
 
 		// Build dedupe keys and batch-check for recent reminders
 		const candidateUserIds = Array.from(
-			new Set(
-				staleShifts
-					.map((s) => s.userId)
-					.filter((id): id is string => Boolean(id))
-			)
+			new Set(staleShifts.map((s) => s.userId).filter((id): id is string => Boolean(id)))
 		);
 
 		const existingDedupeRows =
@@ -80,9 +72,7 @@ export const GET: RequestHandler = async ({ request }) => {
 						);
 
 		const seenDedupeKeys = new Set(
-			existingDedupeRows
-				.map((row) => row.dedupeKey)
-				.filter((k): k is string => Boolean(k))
+			existingDedupeRows.map((row) => row.dedupeKey).filter((k): k is string => Boolean(k))
 		);
 
 		let sent = 0;

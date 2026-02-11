@@ -8,8 +8,6 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { CRON_SECRET } from '$env/static/private';
-import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { format, toZonedTime } from 'date-fns-tz';
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
@@ -17,6 +15,7 @@ import { db } from '$lib/server/db';
 import { assignments, notifications, routes, shifts, warehouses } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { sendNotification } from '$lib/server/services/notifications';
+import { verifyCronAuth } from '$lib/server/cron/auth';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -26,12 +25,8 @@ function getTodayToronto(): string {
 }
 
 export const GET: RequestHandler = async ({ request }) => {
-	// Verify cron secret to prevent unauthorized access
-	const authHeader = request.headers.get('authorization')?.trim();
-	const expectedToken = (CRON_SECRET || env.CRON_SECRET)?.trim();
-	if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
-		return json({ error: 'Unauthorized' }, { status: 401 });
-	}
+	const authError = verifyCronAuth(request);
+	if (authError) return authError;
 
 	const log = logger.child({ cron: 'shift-reminders' });
 	const startedAt = Date.now();

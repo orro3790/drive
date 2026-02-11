@@ -408,5 +408,25 @@
 	"weekly_reports_detail_exceptions": "例外",
 	"weekly_reports_detail_exception_notes": "例外备注",
 	"weekly_reports_detail_completed": "完成时间",
-	"weekly_reports_close_tab": "关闭标签"
+	"weekly_reports_close_tab": "关闭标签",
+
+	"weekly_reports_filter_date_from_label": "从",
+	"weekly_reports_filter_date_from_placeholder": "开始日期 (YYYY-MM-DD)",
+	"weekly_reports_filter_date_to_label": "到",
+	"weekly_reports_filter_date_to_placeholder": "结束日期 (YYYY-MM-DD)",
+	"weekly_reports_filter_driver_label": "司机",
+	"weekly_reports_filter_driver_placeholder": "按司机姓名筛选...",
+	"weekly_reports_filter_route_label": "路线",
+	"weekly_reports_filter_route_placeholder": "按路线名称筛选...",
+	"weekly_reports_filter_warehouse_label": "仓库",
+	"weekly_reports_filter_warehouse_placeholder": "按仓库名称筛选...",
+
+	"whitelist_revoked_by": "撤销者",
+	"whitelist_revoked_at": "撤销时间",
+	"whitelist_restore": "恢复",
+	"whitelist_restore_confirm_title": "恢复条目",
+	"whitelist_restore_confirm_message": "确定要恢复此白名单条目吗？该邮箱将再次被批准注册。",
+	"whitelist_restore_success": "条目已恢复。",
+	"whitelist_restore_error": "恢复条目失败。",
+	"whitelist_restore_conflict": "该邮箱已存在活跃条目。"
 }

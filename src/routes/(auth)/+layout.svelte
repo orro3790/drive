@@ -5,7 +5,7 @@
 <div class="auth-shell">
 	<div class="auth-content">
 		<a href="/" aria-label="Go to homepage" class="logo-link">
-			<img src="/images/logo.png" alt="Drive" class="auth-logo" />
+			<img src="/images/logo-3D.png" alt="Drive" class="auth-logo" />
 		</a>
 
 		<div class="auth-panel">
@@ -33,7 +33,7 @@
 	}
 
 	.auth-content {
-		--auth-logo-size: 72px;
+		--auth-logo-size: 120px;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -74,7 +74,7 @@
 		}
 
 		.auth-content {
-			--auth-logo-size: 64px;
+			--auth-logo-size: 96px;
 			gap: var(--spacing-4);
 		}
 	}

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { and, desc, eq, gt, isNull, lte, or } from 'drizzle-orm';
+import { aliasedTable, and, desc, eq, gt, isNull, lte, or } from 'drizzle-orm';
 
 import { db } from '$lib/server/db';
 import { signupOnboarding } from '$lib/server/db/schema';
@@ -49,6 +49,7 @@ export interface SignupOnboardingEntry {
 	consumedByUserId: string | null;
 	revokedAt: Date | null;
 	revokedByUserId: string | null;
+	revokedByName: string | null;
 	updatedAt: Date;
 }
 
@@ -136,7 +137,8 @@ function isEntryUsable(
 function toOnboardingEntry(
 	entry: SignupOnboardingEntryRecord,
 	now = new Date(),
-	createdByName: string | null = null
+	createdByName: string | null = null,
+	revokedByName: string | null = null
 ): SignupOnboardingEntry {
 	return {
 		id: entry.id,
@@ -152,6 +154,7 @@ function toOnboardingEntry(
 		consumedByUserId: entry.consumedByUserId,
 		revokedAt: entry.revokedAt,
 		revokedByUserId: entry.revokedByUserId,
+		revokedByName,
 		updatedAt: entry.updatedAt
 	};
 }
@@ -474,17 +477,20 @@ export async function listSignupOnboardingEntries(
 	dbClient: DbClient = db
 ): Promise<SignupOnboardingEntry[]> {
 	const now = new Date();
+	const revokedByUser = aliasedTable(user, 'revokedByUser');
 	const rows = await dbClient
 		.select({
 			entry: signupOnboarding,
-			createdByName: user.name
+			createdByName: user.name,
+			revokedByName: revokedByUser.name
 		})
 		.from(signupOnboarding)
 		.leftJoin(user, eq(signupOnboarding.createdBy, user.id))
+		.leftJoin(revokedByUser, eq(signupOnboarding.revokedByUserId, revokedByUser.id))
 		.orderBy(desc(signupOnboarding.createdAt))
 		.limit(limit);
 
-	return rows.map((row) => toOnboardingEntry(row.entry, now, row.createdByName));
+	return rows.map((row) => toOnboardingEntry(row.entry, now, row.createdByName, row.revokedByName));
 }
 
 export async function createOnboardingApproval(
@@ -693,4 +699,53 @@ export async function revokeOnboardingEntry(
 	}
 
 	return toOnboardingEntry(updated, now);
+}
+
+export type RestoreOnboardingResult =
+	| { restored: true; entry: SignupOnboardingEntry }
+	| { restored: false; reason: 'not_found' | 'not_revoked' | 'conflict' };
+
+export async function restoreOnboardingEntry(
+	entryId: string,
+	dbClient: DbClient = db
+): Promise<RestoreOnboardingResult> {
+	const now = new Date();
+
+	const [existing] = await dbClient
+		.select()
+		.from(signupOnboarding)
+		.where(eq(signupOnboarding.id, entryId))
+		.limit(1);
+
+	if (!existing) {
+		return { restored: false, reason: 'not_found' };
+	}
+
+	if (existing.status !== 'revoked') {
+		return { restored: false, reason: 'not_revoked' };
+	}
+
+	try {
+		const [updated] = await dbClient
+			.update(signupOnboarding)
+			.set({
+				status: 'pending',
+				revokedAt: null,
+				revokedByUserId: null,
+				updatedAt: now
+			})
+			.where(and(eq(signupOnboarding.id, entryId), eq(signupOnboarding.status, 'revoked')))
+			.returning();
+
+		if (!updated) {
+			return { restored: false, reason: 'not_found' };
+		}
+
+		return { restored: true, entry: toOnboardingEntry(updated, now) };
+	} catch (error) {
+		if (isPendingEmailKindUniqueViolation(error)) {
+			return { restored: false, reason: 'conflict' };
+		}
+		throw error;
+	}
 }

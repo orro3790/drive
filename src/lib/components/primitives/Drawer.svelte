@@ -75,6 +75,15 @@
 		}
 		isBackdropPointerDown = false;
 	}
+
+	function handleBackdropClick(e: MouseEvent) {
+		// Consume the click so it never reaches elements behind the backdrop.
+		// On mobile touch, pointerup may remove the backdrop before the
+		// synthesized click fires — this handler prevents click-through.
+		if (e.target === e.currentTarget) {
+			e.stopPropagation();
+		}
+	}
 </script>
 
 <div
@@ -84,6 +93,7 @@
 	onpointerdown={handleBackdropPointerDown}
 	onpointerup={handleBackdropPointerUp}
 	onpointercancel={() => (isBackdropPointerDown = false)}
+	onclick={handleBackdropClick}
 >
 	<div
 		class="drawer-container"

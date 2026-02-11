@@ -115,13 +115,63 @@ Release artifacts:
 - Required signing fields are missing or still placeholder values.
 - Configured keystore file path does not exist.
 
-### Environment stability flags (optional)
+### Windows build: use WSL (required)
 
-If Gradle reports transform cache move errors on Windows shells, rerun release commands with:
+Gradle 8.13+ has a [known bug on Windows](https://github.com/gradle/gradle/issues/31438) where transform cache file renames fail ("could not move temporary workspace to immutable location"). This affects all Windows shells (cmd, PowerShell, Git Bash) and persists even after cache wipes or antivirus exclusions.
+
+**The reliable workaround is to build from WSL (Windows Subsystem for Linux).**
+
+#### One-time WSL setup
+
+1. Install Java 21 and the Android SDK:
+
+```bash
+# Java
+sudo apt install openjdk-21-jdk-headless unzip -y
+
+# Android command-line tools
+cd ~
+curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+unzip cmdline-tools.zip
+mkdir -p ~/android-sdk/cmdline-tools
+mv cmdline-tools ~/android-sdk/cmdline-tools/latest
+
+# Install SDK components
+export ANDROID_HOME=~/android-sdk
+export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+yes | sdkmanager --licenses
+sdkmanager "build-tools;35.0.0" "platforms;android-35"
+```
+
+2. Optionally add to `~/.bashrc` so you don't have to export every time:
+
+```bash
+echo 'export ANDROID_HOME=~/android-sdk' >> ~/.bashrc
+echo 'export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH' >> ~/.bashrc
+```
+
+#### Building release artifacts from WSL
+
+```bash
+export ANDROID_HOME=~/android-sdk
+export CAP_SERVER_URL="https://drive-three-psi.vercel.app"
+cd /mnt/c/Users/matto/projects/drive/android
+./gradlew bundleRelease assembleRelease --no-daemon --max-workers=1
+```
+
+This builds both artifacts in one command:
+
+- **AAB** → `android/app/build/outputs/bundle/release/app-release.aab` (upload to Play Console)
+- **APK** → `android/app/build/outputs/apk/release/app-release.apk` (side-load to phone)
+
+**Important**: Run `pnpm mobile:android:sync` from Windows (Git Bash / PowerShell) before building in WSL, since pnpm/Node runs on the Windows side.
+
+#### Legacy workaround (insufficient)
+
+The flags below were the original mitigation but do not reliably fix the Gradle 8.14.3 bug:
 
 ```bash
 GRADLE_USER_HOME="$PWD/.gradle-home" CAP_GRADLE_MAX_WORKERS=1 pnpm mobile:android:bundle:release
-GRADLE_USER_HOME="$PWD/.gradle-home" CAP_GRADLE_MAX_WORKERS=1 pnpm mobile:android:apk:release
 ```
 
 `CAP_GRADLE_MAX_WORKERS` is supported by `scripts/mobile/android-gradle.mjs` and must be a positive integer.

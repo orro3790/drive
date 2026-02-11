@@ -8,21 +8,17 @@
 // - Instant/emergency past closesAt: close window, alert manager
 
 import { json } from '@sveltejs/kit';
-import { CRON_SECRET } from '$env/static/private';
-import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { bidWindows } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
+import { verifyCronAuth } from '$lib/server/cron/auth';
 
 export const GET: RequestHandler = async ({ request }) => {
-	const authHeader = request.headers.get('authorization')?.trim();
-	const expectedToken = (CRON_SECRET || env.CRON_SECRET)?.trim();
-	if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
-		return json({ error: 'Unauthorized' }, { status: 401 });
-	}
+	const authError = verifyCronAuth(request);
+	if (authError) return authError;
 
 	const log = logger.child({ cron: 'close-bid-windows' });
 	log.info('Starting bid window closure cron job');

@@ -795,6 +795,14 @@
 	"whitelist_filter_email_placeholder": "Search by email...",
 	"whitelist_filter_status_label": "Status",
 	"whitelist_filter_status_all": "All statuses",
+	"whitelist_revoked_by": "Revoked By",
+	"whitelist_revoked_at": "Revoked At",
+	"whitelist_restore": "Restore",
+	"whitelist_restore_confirm_title": "Restore Entry",
+	"whitelist_restore_confirm_message": "Are you sure you want to restore this whitelist entry? The email will be approved for signup again.",
+	"whitelist_restore_success": "Entry restored.",
+	"whitelist_restore_error": "Failed to restore entry.",
+	"whitelist_restore_conflict": "Another active entry exists for this email.",
 
 	"drivers_filter_name_label": "Name",
 	"drivers_filter_name_placeholder": "Search by name...",
@@ -832,5 +840,16 @@
 	"weekly_reports_detail_exceptions": "Exceptions",
 	"weekly_reports_detail_exception_notes": "Exception Notes",
 	"weekly_reports_detail_completed": "Completed",
-	"weekly_reports_close_tab": "Close tab"
+	"weekly_reports_close_tab": "Close tab",
+
+	"weekly_reports_filter_date_from_label": "From",
+	"weekly_reports_filter_date_from_placeholder": "Start date (YYYY-MM-DD)",
+	"weekly_reports_filter_date_to_label": "To",
+	"weekly_reports_filter_date_to_placeholder": "End date (YYYY-MM-DD)",
+	"weekly_reports_filter_driver_label": "Driver",
+	"weekly_reports_filter_driver_placeholder": "Filter by driver name...",
+	"weekly_reports_filter_route_label": "Route",
+	"weekly_reports_filter_route_placeholder": "Filter by route name...",
+	"weekly_reports_filter_warehouse_label": "Warehouse",
+	"weekly_reports_filter_warehouse_placeholder": "Filter by warehouse name..."
 }

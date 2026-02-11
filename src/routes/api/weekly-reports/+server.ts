@@ -13,13 +13,6 @@ import { getWeekStartFromDateString, addDaysToDateString } from '$lib/server/tim
 import { getManagerWarehouseIds } from '$lib/server/services/managers';
 import type { WeekSummary, WeeklyReportsResponse } from '$lib/schemas/weeklyReports';
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function formatWeekLabel(weekStart: string): string {
-	const [year, month, day] = weekStart.split('-').map(Number);
-	return `Week of ${MONTH_NAMES[month - 1]} ${day}, ${year}`;
-}
-
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user) {
 		throw error(401, 'Unauthorized');
@@ -78,10 +71,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 	// Convert to sorted array (most recent first)
 	const weeks: WeekSummary[] = Array.from(weekMap.entries())
 		.sort((a, b) => b[0].localeCompare(a[0]))
-		.map(([weekStart, data]) => ({
+		.map(([weekStart, data], i, arr) => ({
 			weekStart,
 			weekEnd: addDaysToDateString(weekStart, 6),
-			weekLabel: formatWeekLabel(weekStart),
+			weekLabel: `WK ${arr.length - i}`,
 			totalDelivered: data.totalDelivered,
 			totalReturned: data.totalReturned,
 			totalExcepted: data.totalExcepted,

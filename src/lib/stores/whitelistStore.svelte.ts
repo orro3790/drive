@@ -27,6 +27,7 @@ export interface WhitelistEntry {
 	consumedByUserId: string | null;
 	revokedAt: Date | null;
 	revokedByUserId: string | null;
+	revokedByName: string | null;
 	updatedAt: Date;
 }
 
@@ -44,6 +45,7 @@ const whitelistEntrySchema = z.object({
 	consumedByUserId: z.string().nullable(),
 	revokedAt: z.coerce.date().nullable(),
 	revokedByUserId: z.string().nullable(),
+	revokedByName: z.string().nullable(),
 	updatedAt: z.coerce.date()
 });
 
@@ -134,6 +136,7 @@ export const whitelistStore = {
 			consumedByUserId: null,
 			revokedAt: null,
 			revokedByUserId: null,
+			revokedByName: null,
 			updatedAt: now
 		};
 
@@ -244,6 +247,78 @@ export const whitelistStore = {
 			if (!isLatestMutationVersion(mutationKey, mutationVersion)) return;
 			state.entries = state.entries.map((e) => (e.id === id ? original : e));
 			toastStore.error(m.whitelist_revoke_error());
+		}
+	},
+
+	restore(id: string) {
+		if (!ensureOnlineForWrite()) {
+			return;
+		}
+
+		const original = state.entries.find((e) => e.id === id);
+		if (!original) return;
+		const mutationKey = `restore:${id}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
+
+		state.entries = state.entries.map((e) =>
+			e.id === id
+				? {
+						...e,
+						status: 'pending' as const,
+						resolvedStatus: 'pending' as const,
+						revokedAt: null,
+						revokedByUserId: null,
+						revokedByName: null,
+						updatedAt: new Date()
+					}
+				: e
+		);
+
+		this._restoreInApi(id, original, mutationKey, mutationVersion);
+	},
+
+	async _restoreInApi(
+		id: string,
+		original: WhitelistEntry,
+		mutationKey: string,
+		mutationVersion: number
+	) {
+		try {
+			const res = await fetch(`/api/onboarding/${id}/restore`, {
+				method: 'PATCH'
+			});
+
+			if (res.status === 409) {
+				if (!isLatestMutationVersion(mutationKey, mutationVersion)) return;
+				state.entries = state.entries.map((e) => (e.id === id ? original : e));
+				toastStore.error(m.whitelist_restore_conflict());
+				return;
+			}
+
+			if (!res.ok) {
+				throw new Error('Failed to restore entry');
+			}
+
+			const parsed = mutationResponseSchema.safeParse(await res.json());
+			if (!parsed.success) {
+				throw new Error('Invalid restore response');
+			}
+
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) return;
+
+			state.entries = state.entries.map((e) =>
+				e.id === id
+					? {
+							...parsed.data.entry,
+							createdByName: e.createdByName ?? parsed.data.entry.createdByName
+						}
+					: e
+			);
+			toastStore.success(m.whitelist_restore_success());
+		} catch {
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) return;
+			state.entries = state.entries.map((e) => (e.id === id ? original : e));
+			toastStore.error(m.whitelist_restore_error());
 		}
 	}
 };

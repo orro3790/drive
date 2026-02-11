@@ -17,6 +17,7 @@ import {
 	createAssignmentLifecycleContext,
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
+import logger from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -136,52 +137,74 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(409, 'Assignment is not ready for arrival');
 	}
 
-	// Create shift record
-	const [shift] = await db
-		.insert(shifts)
-		.values({
-			assignmentId,
-			arrivedAt
-		})
-		.returning({
-			id: shifts.id,
-			arrivedAt: shifts.arrivedAt
-		});
+	const userId = locals.user.id;
+	const log = logger.child({ operation: 'shiftArrive', assignmentId, userId });
+	log.info('Starting shift arrival');
 
-	// Check if arrived before 9 AM Toronto time → increment arrivedOnTimeCount
-	if (arrivedAt < arrivalDeadline) {
-		await db
-			.update(driverMetrics)
-			.set({
-				arrivedOnTimeCount: sql`${driverMetrics.arrivedOnTimeCount} + 1`,
-				updatedAt: new Date()
-			})
-			.where(eq(driverMetrics.userId, locals.user.id));
+	let shift: { id: string; arrivedAt: Date | null };
+	try {
+		shift = await db.transaction(async (tx) => {
+			// Create shift record
+			const [inserted] = await tx
+				.insert(shifts)
+				.values({
+					assignmentId,
+					arrivedAt
+				})
+				.returning({
+					id: shifts.id,
+					arrivedAt: shifts.arrivedAt
+				});
+
+			// Check if arrived before deadline → increment arrivedOnTimeCount
+			if (arrivedAt < arrivalDeadline) {
+				await tx
+					.update(driverMetrics)
+					.set({
+						arrivedOnTimeCount: sql`${driverMetrics.arrivedOnTimeCount} + 1`,
+						updatedAt: new Date()
+					})
+					.where(eq(driverMetrics.userId, userId));
+			}
+
+			// Update assignment status to active
+			await tx
+				.update(assignments)
+				.set({
+					status: 'active',
+					updatedAt: new Date()
+				})
+				.where(eq(assignments.id, assignmentId));
+
+			await createAuditLog(
+				{
+					entityType: 'shift',
+					entityId: inserted.id,
+					action: 'arrive',
+					actorType: 'user',
+					actorId: userId,
+					changes: { assignmentId, arrivedAt: arrivedAt.toISOString() }
+				},
+				tx
+			);
+
+			return inserted;
+		});
+	} catch (err: unknown) {
+		// Unique constraint on shifts.assignmentId — concurrent arrive
+		if (err instanceof Error && 'code' in err && (err as { code: string }).code === '23505') {
+			throw error(409, 'Already arrived');
+		}
+		throw err;
 	}
 
-	// Update assignment status to active
-	await db
-		.update(assignments)
-		.set({
-			status: 'active',
-			updatedAt: new Date()
-		})
-		.where(eq(assignments.id, assignmentId));
+	log.info({ shiftId: shift.id }, 'Shift arrival recorded');
 
 	broadcastAssignmentUpdated({
 		assignmentId,
 		status: 'active',
 		driverId: locals.user.id,
 		driverName: locals.user.name ?? null
-	});
-
-	await createAuditLog({
-		entityType: 'shift',
-		entityId: shift.id,
-		action: 'arrive',
-		actorType: 'user',
-		actorId: locals.user.id,
-		changes: { assignmentId, arrivedAt: arrivedAt.toISOString() }
 	});
 
 	return json({

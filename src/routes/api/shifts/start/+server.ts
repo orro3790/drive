@@ -16,6 +16,7 @@ import {
 	createAssignmentLifecycleContext,
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
+import logger from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -121,34 +122,51 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(409, 'Parcel inventory already recorded');
 	}
 
-	// Update shift with parcels and start time
-	const [updatedShift] = await db
-		.update(shifts)
-		.set({
-			parcelsStart,
-			startedAt: new Date()
-		})
-		.where(eq(shifts.id, shift.id))
-		.returning({
-			id: shifts.id,
-			parcelsStart: shifts.parcelsStart,
-			startedAt: shifts.startedAt
-		});
+	const userId = locals.user.id;
+	const log = logger.child({ operation: 'shiftStart', assignmentId, userId });
+	log.info('Starting parcel inventory recording');
+
+	const updatedShift = await db.transaction(async (tx) => {
+		// Update shift with parcels and start time — WHERE guard prevents double-start
+		const [updated] = await tx
+			.update(shifts)
+			.set({
+				parcelsStart,
+				startedAt: new Date()
+			})
+			.where(and(eq(shifts.id, shift.id), isNull(shifts.parcelsStart)))
+			.returning({
+				id: shifts.id,
+				parcelsStart: shifts.parcelsStart,
+				startedAt: shifts.startedAt
+			});
+
+		if (!updated) {
+			throw error(409, 'Parcel inventory already recorded');
+		}
+
+		await createAuditLog(
+			{
+				entityType: 'shift',
+				entityId: shift.id,
+				action: 'start',
+				actorType: 'user',
+				actorId: userId,
+				changes: { parcelsStart, assignmentId }
+			},
+			tx
+		);
+
+		return updated;
+	});
+
+	log.info({ shiftId: updatedShift.id }, 'Parcel inventory recorded');
 
 	broadcastAssignmentUpdated({
 		assignmentId,
 		status: 'active',
 		driverId: locals.user.id,
 		driverName: locals.user.name ?? null
-	});
-
-	await createAuditLog({
-		entityType: 'shift',
-		entityId: shift.id,
-		action: 'start',
-		actorType: 'user',
-		actorId: locals.user.id,
-		changes: { parcelsStart, assignmentId }
 	});
 
 	return json({

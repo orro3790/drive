@@ -58,7 +58,7 @@
 
 <div class="auth-card">
 	<header class="auth-header">
-		<h2>{m.auth_sign_in_title()}</h2>
+		<h2>Drive</h2>
 	</header>
 
 	{#if errorMessage}
@@ -148,7 +148,6 @@
 	</form>
 
 	<div class="auth-footer">
-		<span>{m.auth_sign_in_no_account()}</span>
 		<a href="/sign-up">{m.auth_sign_in_create_account()}</a>
 	</div>
 </div>

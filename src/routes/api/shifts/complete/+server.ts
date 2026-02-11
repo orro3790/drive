@@ -10,7 +10,7 @@ import { db } from '$lib/server/db';
 import { assignments, driverMetrics, routes, shifts } from '$lib/server/db/schema';
 import { recordRouteCompletion, updateDriverMetrics } from '$lib/server/services/metrics';
 import { shiftCompleteSchema } from '$lib/schemas/shift';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { addHours } from 'date-fns';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
@@ -20,6 +20,7 @@ import {
 	createAssignmentLifecycleContext,
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
+import logger from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -119,64 +120,103 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'Returns cannot exceed starting parcels');
 	}
 
-	// Server-calculated delivered count
-	const parcelsDelivered = shift.parcelsStart - parcelsReturned;
+	// Server-calculated delivered count (parcelsStart guaranteed non-null by guard above)
+	const parcelsStartValue = shift.parcelsStart;
+	const parcelsDelivered = parcelsStartValue - parcelsReturned;
 	const completedAt = new Date();
 	const editableUntil = addHours(completedAt, dispatchPolicy.shifts.completionEditWindowHours);
 
-	// Update shift record
-	const [updatedShift] = await db
-		.update(shifts)
-		.set({
-			parcelsDelivered,
-			parcelsReturned,
-			exceptedReturns,
-			exceptionNotes: exceptionNotes ?? null,
-			completedAt,
-			editableUntil
-		})
-		.where(eq(shifts.id, shift.id))
-		.returning({
-			id: shifts.id,
-			parcelsStart: shifts.parcelsStart,
-			parcelsDelivered: shifts.parcelsDelivered,
-			parcelsReturned: shifts.parcelsReturned,
-			exceptedReturns: shifts.exceptedReturns,
-			exceptionNotes: shifts.exceptionNotes,
-			startedAt: shifts.startedAt,
-			completedAt: shifts.completedAt,
-			editableUntil: shifts.editableUntil
-		});
+	const userId = locals.user.id;
+	const log = logger.child({ operation: 'shiftComplete', assignmentId, userId });
+	log.info('Starting shift completion');
 
-	// Check if high delivery (95%+) using adjusted rate (excludes excepted returns)
-	const adjustedDelivered = parcelsDelivered + exceptedReturns;
-	if (shift.parcelsStart > 0 && adjustedDelivered / shift.parcelsStart >= 0.95) {
-		await db
-			.update(driverMetrics)
+	const updatedShift = await db.transaction(async (tx) => {
+		// Update shift record — WHERE guard prevents double-complete
+		const [updated] = await tx
+			.update(shifts)
 			.set({
-				highDeliveryCount: sql`${driverMetrics.highDeliveryCount} + 1`,
+				parcelsDelivered,
+				parcelsReturned,
+				exceptedReturns,
+				exceptionNotes: exceptionNotes ?? null,
+				completedAt,
+				editableUntil
+			})
+			.where(and(eq(shifts.id, shift.id), isNull(shifts.completedAt)))
+			.returning({
+				id: shifts.id,
+				parcelsStart: shifts.parcelsStart,
+				parcelsDelivered: shifts.parcelsDelivered,
+				parcelsReturned: shifts.parcelsReturned,
+				exceptedReturns: shifts.exceptedReturns,
+				exceptionNotes: shifts.exceptionNotes,
+				startedAt: shifts.startedAt,
+				completedAt: shifts.completedAt,
+				editableUntil: shifts.editableUntil
+			});
+
+		if (!updated) {
+			throw error(409, 'Shift already completed');
+		}
+
+		// Check if high delivery (95%+) using adjusted rate (excludes excepted returns)
+		const adjustedDelivered = parcelsDelivered + exceptedReturns;
+		if (parcelsStartValue > 0 && adjustedDelivered / parcelsStartValue >= 0.95) {
+			await tx
+				.update(driverMetrics)
+				.set({
+					highDeliveryCount: sql`${driverMetrics.highDeliveryCount} + 1`,
+					updatedAt: new Date()
+				})
+				.where(eq(driverMetrics.userId, userId));
+		}
+
+		// Update assignment status to completed
+		await tx
+			.update(assignments)
+			.set({
+				status: 'completed',
 				updatedAt: new Date()
 			})
-			.where(eq(driverMetrics.userId, locals.user.id));
-	}
+			.where(eq(assignments.id, assignmentId));
 
-	// Notify manager if exceptions were filed
-	if (exceptedReturns > 0) {
-		await sendManagerAlert(assignment.routeId, 'return_exception', {
-			routeName: assignment.routeName ?? 'Unknown Route',
-			driverName: locals.user.name ?? 'A driver',
-			date: assignment.date
-		});
-	}
+		await createAuditLog(
+			{
+				entityType: 'assignment',
+				entityId: assignmentId,
+				action: 'complete',
+				actorType: 'user',
+				actorId: userId,
+				changes: {
+					before: { status: assignment.status },
+					after: { status: 'completed' }
+				}
+			},
+			tx
+		);
 
-	// Update assignment status to completed
-	await db
-		.update(assignments)
-		.set({
-			status: 'completed',
-			updatedAt: new Date()
-		})
-		.where(eq(assignments.id, assignmentId));
+		await createAuditLog(
+			{
+				entityType: 'shift',
+				entityId: shift.id,
+				action: 'complete',
+				actorType: 'user',
+				actorId: userId,
+				changes: {
+					parcelsDelivered,
+					parcelsReturned,
+					exceptedReturns,
+					exceptionNotes,
+					assignmentId
+				}
+			},
+			tx
+		);
+
+		return updated;
+	});
+
+	log.info({ shiftId: updatedShift.id }, 'Shift completion recorded');
 
 	broadcastAssignmentUpdated({
 		assignmentId,
@@ -185,26 +225,14 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		routeId: assignment.routeId
 	});
 
-	await createAuditLog({
-		entityType: 'assignment',
-		entityId: assignmentId,
-		action: 'complete',
-		actorType: 'user',
-		actorId: locals.user.id,
-		changes: {
-			before: { status: assignment.status },
-			after: { status: 'completed' }
-		}
-	});
-
-	await createAuditLog({
-		entityType: 'shift',
-		entityId: shift.id,
-		action: 'complete',
-		actorType: 'user',
-		actorId: locals.user.id,
-		changes: { parcelsDelivered, parcelsReturned, exceptedReturns, exceptionNotes, assignmentId }
-	});
+	// Best-effort notifications and async metrics
+	if (exceptedReturns > 0) {
+		await sendManagerAlert(assignment.routeId, 'return_exception', {
+			routeName: assignment.routeName ?? 'Unknown Route',
+			driverName: locals.user.name ?? 'A driver',
+			date: assignment.date
+		});
+	}
 
 	await Promise.all([
 		recordRouteCompletion({

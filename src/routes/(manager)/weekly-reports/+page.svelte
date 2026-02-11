@@ -20,9 +20,39 @@
 		type CellRendererContext
 	} from '$lib/components/data-table';
 	import Button from '$lib/components/primitives/Button.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
+	import Icon from '$lib/components/primitives/Icon.svelte';
+	import Drawer from '$lib/components/primitives/Drawer.svelte';
+	import InlineEditor from '$lib/components/InlineEditor.svelte';
+	import Filter from '$lib/components/icons/Filter.svelte';
+	import Reset from '$lib/components/icons/Reset.svelte';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import WeeklyReportDetailTable from '$lib/components/WeeklyReportDetailTable.svelte';
 	import type { WeekSummary } from '$lib/schemas/weeklyReports';
+
+	const MONTH_NAMES = [
+		'Jan',
+		'Feb',
+		'Mar',
+		'Apr',
+		'May',
+		'Jun',
+		'Jul',
+		'Aug',
+		'Sep',
+		'Oct',
+		'Nov',
+		'Dec'
+	];
+
+	function formatWeekDateRange(weekStart: string, weekEnd: string): string {
+		const [, sm, sd] = weekStart.split('-').map(Number);
+		const [, em, ed] = weekEnd.split('-').map(Number);
+		if (sm === em) {
+			return `${MONTH_NAMES[sm - 1]} ${sd}-${ed}`;
+		}
+		return `${MONTH_NAMES[sm - 1]} ${sd}-${MONTH_NAMES[em - 1]} ${ed}`;
+	}
 
 	// Data state
 	let weeks = $state<WeekSummary[]>([]);
@@ -32,8 +62,29 @@
 	let sorting = $state<SortingState>([]);
 	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
 
+	// Filter state
+	let showFilterDrawer = $state(false);
+	let dateFromFilter = $state('');
+	let dateToFilter = $state('');
+
+	const filteredWeeks = $derived.by(() => {
+		let data = weeks;
+		if (dateFromFilter) {
+			data = data.filter((w) => w.weekStart >= dateFromFilter);
+		}
+		if (dateToFilter) {
+			data = data.filter((w) => w.weekStart <= dateToFilter);
+		}
+		return data;
+	});
+
+	function resetFilters() {
+		dateFromFilter = '';
+		dateToFilter = '';
+	}
+
 	// Tab state
-	type WeekTab = { weekStart: string; weekLabel: string };
+	type WeekTab = { weekStart: string; weekEnd: string; weekLabel: string; weekDateRange: string };
 	let openWeekTabs = $state<WeekTab[]>([]);
 	let activeTabId = $state<string>('reports');
 	let tabsInitialized = $state(false);
@@ -47,7 +98,7 @@
 			header: m.weekly_reports_header_week(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 220,
+			width: 180,
 			stickyLeft: true,
 			mobileVisible: true,
 			mobilePriority: 1
@@ -56,19 +107,19 @@
 			header: m.weekly_reports_header_start_date(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 130
+			width: 160
 		}),
 		helper.text('weekEnd', {
 			header: m.weekly_reports_header_end_date(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 130
+			width: 160
 		}),
 		helper.number('shiftCount', {
 			header: m.weekly_reports_header_shifts(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 100,
+			width: 120,
 			mobileVisible: true,
 			mobilePriority: 2
 		}),
@@ -76,30 +127,30 @@
 			header: m.weekly_reports_header_total_delivered(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 140
+			width: 180
 		}),
 		helper.number('totalReturned', {
 			header: m.weekly_reports_header_total_returned(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 140
+			width: 180
 		}),
 		helper.number('totalExcepted', {
 			header: m.weekly_reports_header_total_excepted(),
 			sortable: true,
 			sizing: 'fixed',
-			width: 140
+			width: 180
 		}),
 		helper.accessor('actions', () => '', {
 			header: m.common_actions(),
 			sortable: false,
 			sizing: 'fixed',
-			width: 140
+			width: 160
 		})
 	];
 
 	const table = createSvelteTable<WeekSummary>(() => ({
-		data: weeks,
+		data: filteredWeeks,
 		columns,
 		getRowId: (row) => row.weekStart,
 		state: { sorting, pagination },
@@ -119,7 +170,15 @@
 	// Tab management
 	function openWeekTab(week: WeekSummary) {
 		if (!openWeekTabs.some((t) => t.weekStart === week.weekStart)) {
-			openWeekTabs = [...openWeekTabs, { weekStart: week.weekStart, weekLabel: week.weekLabel }];
+			openWeekTabs = [
+				...openWeekTabs,
+				{
+					weekStart: week.weekStart,
+					weekEnd: week.weekEnd,
+					weekLabel: week.weekLabel,
+					weekDateRange: formatWeekDateRange(week.weekStart, week.weekEnd)
+				}
+			];
 		}
 		activeTabId = week.weekStart;
 	}
@@ -178,9 +237,19 @@
 </script>
 
 {#snippet actionsCell(ctx: CellRendererContext<WeekSummary>)}
-	<Button variant="secondary" size="small" onclick={() => openWeekTab(ctx.row)}>
+	<Button variant="ghost" size="small" onclick={() => openWeekTab(ctx.row)}>
 		{m.weekly_reports_view_details()}
 	</Button>
+{/snippet}
+
+{#snippet toolbarSnippet()}
+	<IconButton tooltip={m.table_filter_label()} onclick={() => (showFilterDrawer = true)}>
+		<Icon><Filter /></Icon>
+	</IconButton>
+
+	<IconButton tooltip={m.table_filter_reset()} onclick={resetFilters}>
+		<Icon><Reset /></Icon>
+	</IconButton>
 {/snippet}
 
 {#snippet tabsSnippet()}
@@ -206,7 +275,7 @@
 				tabindex={activeTabId === weekTab.weekStart ? 0 : -1}
 				onclick={() => switchToTab(weekTab.weekStart)}
 			>
-				<span class="tab-label">{weekTab.weekLabel}</span>
+				<span class="tab-label">{weekTab.weekLabel} ({weekTab.weekDateRange})</span>
 				<span
 					role="button"
 					tabindex="-1"
@@ -246,6 +315,7 @@
 			stateStorageKey="weekly-reports"
 			exportFilename="weekly-reports"
 			tabs={tabsSnippet}
+			toolbar={toolbarSnippet}
 		/>
 	{:else}
 		{#each openWeekTabs as weekTab (weekTab.weekStart)}
@@ -260,6 +330,42 @@
 		{/each}
 	{/if}
 </div>
+
+<!-- Filter Drawer -->
+{#if showFilterDrawer}
+	<Drawer title={m.table_filter_title()} onClose={() => (showFilterDrawer = false)}>
+		<div class="filter-form">
+			<div class="filter-field">
+				<label for="reports-date-from-filter"
+					>{m.weekly_reports_filter_date_from_label()}</label
+				>
+				<InlineEditor
+					id="reports-date-from-filter"
+					value={dateFromFilter}
+					onInput={(v) => (dateFromFilter = v)}
+					placeholder={m.weekly_reports_filter_date_from_placeholder()}
+				/>
+			</div>
+			<div class="filter-field">
+				<label for="reports-date-to-filter">{m.weekly_reports_filter_date_to_label()}</label>
+				<InlineEditor
+					id="reports-date-to-filter"
+					value={dateToFilter}
+					onInput={(v) => (dateToFilter = v)}
+					placeholder={m.weekly_reports_filter_date_to_placeholder()}
+				/>
+			</div>
+			<div class="filter-actions">
+				<Button variant="secondary" onclick={resetFilters} fill>
+					{m.table_filter_clear_all()}
+				</Button>
+				<Button onclick={() => (showFilterDrawer = false)} fill>
+					{m.common_confirm()}
+				</Button>
+			</div>
+		</div>
+	</Drawer>
+{/if}
 
 <style>
 	/* Tab bar styling - matching Drive pattern (from drivers page) */
@@ -341,7 +447,7 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		max-width: 180px;
+		max-width: 220px;
 	}
 
 	.tab-close {
@@ -365,5 +471,30 @@
 	.tab-close:hover {
 		background: var(--interactive-hover);
 		color: var(--text-normal);
+	}
+
+	.filter-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
+		padding: var(--spacing-4);
+	}
+
+	.filter-field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-1);
+	}
+
+	.filter-field label {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-normal);
+	}
+
+	.filter-actions {
+		display: flex;
+		gap: var(--spacing-2);
+		margin-top: var(--spacing-2);
 	}
 </style>

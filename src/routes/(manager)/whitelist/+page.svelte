@@ -44,6 +44,7 @@
 	let showFilterDrawer = $state(false);
 	let selectedEntryId = $state<string | null>(null);
 	let revokeConfirm = $state<{ entry: WhitelistEntry; x: number; y: number } | null>(null);
+	let restoreConfirm = $state<{ entry: WhitelistEntry; x: number; y: number } | null>(null);
 
 	// Form state
 	let formEmail = $state('');
@@ -109,6 +110,10 @@
 		return entry.resolvedStatus === 'pending' || entry.resolvedStatus === 'reserved';
 	}
 
+	function isRestorable(entry: WhitelistEntry): boolean {
+		return entry.resolvedStatus === 'revoked';
+	}
+
 	// Column definitions
 	const helper = createColumnHelper<WhitelistEntry>();
 
@@ -145,6 +150,13 @@
 			sizing: 'fixed',
 			width: 220,
 			minWidth: 180
+		}),
+		helper.accessor('revokedByName', (row) => row.revokedByName ?? '', {
+			header: m.whitelist_revoked_by(),
+			sortable: true,
+			sizing: 'fixed',
+			width: 200,
+			minWidth: 160
 		})
 	];
 
@@ -244,6 +256,20 @@
 		whitelistStore.revoke(revokeConfirm.entry.id);
 		revokeConfirm = null;
 	}
+
+	function openRestoreConfirm(entry: WhitelistEntry, event: MouseEvent) {
+		restoreConfirm = {
+			entry,
+			x: event.clientX,
+			y: event.clientY
+		};
+	}
+
+	function handleRestore() {
+		if (!restoreConfirm) return;
+		whitelistStore.restore(restoreConfirm.entry.id);
+		restoreConfirm = null;
+	}
 </script>
 
 {#snippet tabsSnippet()}
@@ -284,6 +310,10 @@
 	<span class="date-cell">{formatDate(ctx.row.createdAt)}</span>
 {/snippet}
 
+{#snippet revokedByNameCell(ctx: CellRendererContext<WhitelistEntry>)}
+	<span class="created-by">{ctx.row.revokedByName ?? '—'}</span>
+{/snippet}
+
 {#snippet entryDetailView(entry: WhitelistEntry)}
 	<div class="detail-content">
 		<dl class="detail-list">
@@ -309,6 +339,16 @@
 				<dt>{m.whitelist_detail_created_at()}</dt>
 				<dd>{formatDate(entry.createdAt)}</dd>
 			</div>
+			{#if entry.resolvedStatus === 'revoked'}
+				<div class="detail-row">
+					<dt>{m.whitelist_revoked_by()}</dt>
+					<dd>{entry.revokedByName ?? m.whitelist_detail_not_set()}</dd>
+				</div>
+				<div class="detail-row">
+					<dt>{m.whitelist_revoked_at()}</dt>
+					<dd>{formatDate(entry.revokedAt)}</dd>
+				</div>
+			{/if}
 		</dl>
 	</div>
 {/snippet}
@@ -317,6 +357,11 @@
 	{#if isRevocable(entry)}
 		<Button variant="secondary" size="small" fill onclick={(e) => openRevokeConfirm(entry, e)}>
 			{m.whitelist_revoke_button()}
+		</Button>
+	{/if}
+	{#if isRestorable(entry)}
+		<Button variant="secondary" size="small" fill onclick={(e) => openRestoreConfirm(entry, e)}>
+			{m.whitelist_restore()}
 		</Button>
 	{/if}
 {/snippet}
@@ -346,12 +391,27 @@
 				<dt>{m.whitelist_detail_created_at()}</dt>
 				<dd>{formatDate(entry.createdAt)}</dd>
 			</div>
+			{#if entry.resolvedStatus === 'revoked'}
+				<div class="detail-row">
+					<dt>{m.whitelist_revoked_by()}</dt>
+					<dd>{entry.revokedByName ?? m.whitelist_detail_not_set()}</dd>
+				</div>
+				<div class="detail-row">
+					<dt>{m.whitelist_revoked_at()}</dt>
+					<dd>{formatDate(entry.revokedAt)}</dd>
+				</div>
+			{/if}
 		</dl>
 
 		<div class="detail-actions">
 			{#if isRevocable(entry)}
 				<Button variant="secondary" fill onclick={(e) => openRevokeConfirm(entry, e)}>
 					{m.whitelist_revoke_button()}
+				</Button>
+			{/if}
+			{#if isRestorable(entry)}
+				<Button variant="secondary" fill onclick={(e) => openRestoreConfirm(entry, e)}>
+					{m.whitelist_restore()}
 				</Button>
 			{/if}
 		</div>
@@ -383,7 +443,8 @@
 		cellComponents={{
 			resolvedStatus: statusCell,
 			createdByName: createdByNameCell,
-			createdAt: createdAtCell
+			createdAt: createdAtCell,
+			revokedByName: revokedByNameCell
 		}}
 		activeRowId={selectedEntryId ?? undefined}
 		onRowClick={handleRowClick}
@@ -407,7 +468,7 @@
 		onEditToggle={undefined}
 		onSave={undefined}
 		viewContent={entryDetailView}
-		viewActions={selectedEntry && isRevocable(selectedEntry) ? entryDetailActions : undefined}
+		viewActions={selectedEntry && (isRevocable(selectedEntry) || isRestorable(selectedEntry)) ? entryDetailActions : undefined}
 		showDefaultViewEditAction={false}
 		{tableContent}
 		storageKey="whitelist"
@@ -495,6 +556,20 @@
 		confirmVariant="danger"
 		onConfirm={handleRevoke}
 		onCancel={() => (revokeConfirm = null)}
+	/>
+{/if}
+
+<!-- Restore Confirmation -->
+{#if restoreConfirm}
+	<ConfirmationDialog
+		x={restoreConfirm.x}
+		y={restoreConfirm.y}
+		title={m.whitelist_restore_confirm_title()}
+		description={m.whitelist_restore_confirm_message()}
+		confirmLabel={m.whitelist_restore()}
+		confirmVariant="primary"
+		onConfirm={handleRestore}
+		onCancel={() => (restoreConfirm = null)}
 	/>
 {/if}
 
