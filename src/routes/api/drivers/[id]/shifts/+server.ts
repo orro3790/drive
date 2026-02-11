@@ -59,9 +59,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.leftJoin(shifts, eq(assignments.id, shifts.assignmentId))
-		.where(
-			and(eq(assignments.userId, id), inArray(assignments.status, ['completed', 'cancelled']))
-		)
+		.where(and(eq(assignments.userId, id), inArray(assignments.status, ['completed', 'cancelled'])))
 		.orderBy(desc(assignments.date))
 		.limit(500);
 
