@@ -87,6 +87,9 @@ Driver-facing endpoints in `src/routes/api/`:
 Manager-facing endpoints in `src/routes/api/`:
 
 - `GET /api/drivers/[id]/shifts` - Get all completed and cancelled shift records for a specific driver (includes parcel counts, timestamps, exception notes)
+- `GET /api/onboarding` - List all signup onboarding entries with createdByName (manager whitelist)
+- `POST /api/onboarding` - Create email approval for driver signup (kind: 'approval', email)
+- `PATCH /api/onboarding/[id]/revoke` - Revoke a pending/reserved onboarding entry
 
 ## UI Components
 
@@ -137,6 +140,7 @@ Svelte 5 stores in `src/lib/stores/`:
 
 - `dashboardStore.svelte.ts` - Driver dashboard state (shift data, metrics, pending bids)
 - `notificationsStore.svelte.ts` - Notification inbox state (list, unread count)
+- `whitelistStore.svelte.ts` - Manager whitelist/onboarding entries (load, create approval, revoke)
 
 ## Assets
 
