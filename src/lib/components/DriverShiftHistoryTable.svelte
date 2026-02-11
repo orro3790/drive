@@ -145,7 +145,7 @@
 			const res = await fetch(`/api/drivers/${driverId}/shifts`);
 			if (!res.ok) throw new Error('Failed to load shift history');
 			const data = await res.json();
-			shifts = data.shifts;
+			shifts = data.shifts ?? [];
 		} catch {
 			toastStore.error(m.drivers_shift_history_load_error());
 		} finally {
@@ -218,7 +218,6 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		display: block;
-		max-width: 200px;
 	}
 
 	.empty-cell {
