@@ -250,9 +250,7 @@
 				/>
 			</div>
 			<div class="filter-field">
-				<label for="detail-warehouse-filter"
-					>{m.weekly_reports_filter_warehouse_label()}</label
-				>
+				<label for="detail-warehouse-filter">{m.weekly_reports_filter_warehouse_label()}</label>
 				<InlineEditor
 					id="detail-warehouse-filter"
 					value={warehouseFilter}

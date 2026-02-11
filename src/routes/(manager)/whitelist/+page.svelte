@@ -468,7 +468,9 @@
 		onEditToggle={undefined}
 		onSave={undefined}
 		viewContent={entryDetailView}
-		viewActions={selectedEntry && (isRevocable(selectedEntry) || isRestorable(selectedEntry)) ? entryDetailActions : undefined}
+		viewActions={selectedEntry && (isRevocable(selectedEntry) || isRestorable(selectedEntry))
+			? entryDetailActions
+			: undefined}
 		showDefaultViewEditAction={false}
 		{tableContent}
 		storageKey="whitelist"
