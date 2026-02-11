@@ -96,8 +96,8 @@
 		helper.text('exceptionNotes', {
 			header: m.drivers_shift_history_header_exception_notes(),
 			sortable: false,
-			sizing: 'fill',
-			minWidth: 150
+			sizing: 'fixed',
+			width: 180
 		}),
 		helper.accessor('arrivedAt', (row) => row.arrivedAt, {
 			header: m.drivers_shift_history_header_arrived(),
