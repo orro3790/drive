@@ -44,27 +44,44 @@
 	const items = $derived.by(() => {
 		const notArrived = routes.filter((r) => r.shiftProgress === 'no_show').length;
 		const unconfirmed = routes.filter((r) => r.shiftProgress === 'unconfirmed').length;
-		const unfilled = routes.filter(
-			(r) => r.status === 'unfilled' || r.status === 'bidding'
-		).length;
+		const unfilled = routes.filter((r) => r.status === 'unfilled' || r.status === 'bidding').length;
 		const inProgress = routes.filter(
 			(r) => r.shiftProgress === 'arrived' || r.shiftProgress === 'started'
 		).length;
 		const completed = routes.filter((r) => r.shiftProgress === 'completed').length;
 
 		const all: AttentionItem[] = [
-			{ key: 'not_arrived', label: m.manager_attention_not_arrived(), count: notArrived, color: 'error' },
-			{ key: 'unconfirmed', label: m.manager_attention_unconfirmed(), count: unconfirmed, color: 'warning' },
+			{
+				key: 'not_arrived',
+				label: m.manager_attention_not_arrived(),
+				count: notArrived,
+				color: 'error'
+			},
+			{
+				key: 'unconfirmed',
+				label: m.manager_attention_unconfirmed(),
+				count: unconfirmed,
+				color: 'warning'
+			},
 			{ key: 'unfilled', label: m.manager_attention_unfilled(), count: unfilled, color: 'warning' },
-			{ key: 'in_progress', label: m.manager_attention_in_progress(), count: inProgress, color: 'info' },
-			{ key: 'completed', label: m.manager_attention_completed(), count: completed, color: 'success' }
+			{
+				key: 'in_progress',
+				label: m.manager_attention_in_progress(),
+				count: inProgress,
+				color: 'info'
+			},
+			{
+				key: 'completed',
+				label: m.manager_attention_completed(),
+				count: completed,
+				color: 'success'
+			}
 		];
 
 		return all.filter((item) => {
 			if (item.count === 0) return false;
 			if (dateRelation === 'past') return item.key === 'completed';
-			if (dateRelation === 'future')
-				return item.key === 'unconfirmed' || item.key === 'unfilled';
+			if (dateRelation === 'future') return item.key === 'unconfirmed' || item.key === 'unfilled';
 			return true;
 		});
 	});

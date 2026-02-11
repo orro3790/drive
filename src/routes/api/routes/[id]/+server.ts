@@ -8,14 +8,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import {
-	assignments,
-	bidWindows,
-	routes,
-	shifts,
-	user,
-	warehouses
-} from '$lib/server/db/schema';
+import { assignments, bidWindows, routes, shifts, user, warehouses } from '$lib/server/db/schema';
 import { routeIdParamsSchema, routeUpdateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, count, desc, eq, gt, ne } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';

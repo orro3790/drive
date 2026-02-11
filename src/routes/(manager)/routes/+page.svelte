@@ -225,9 +225,7 @@
 			case 'not_arrived':
 				return routeStore.routes.filter((r) => r.shiftProgress === 'no_show');
 			case 'unfilled':
-				return routeStore.routes.filter(
-					(r) => r.status === 'unfilled' || r.status === 'bidding'
-				);
+				return routeStore.routes.filter((r) => r.status === 'unfilled' || r.status === 'bidding');
 			case 'in_progress':
 				return routeStore.routes.filter(
 					(r) => r.shiftProgress === 'arrived' || r.shiftProgress === 'started'
@@ -906,7 +904,8 @@
 		/>
 	{/if}
 	{#if progressFilter}
-		{@const filterLabel = progressFilterOptions.find((o) => o.value === progressFilter)?.label ?? progressFilter}
+		{@const filterLabel =
+			progressFilterOptions.find((o) => o.value === progressFilter)?.label ?? progressFilter}
 		<Chip
 			variant="status"
 			status="info"
