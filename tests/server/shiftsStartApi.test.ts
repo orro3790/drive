@@ -125,8 +125,8 @@ beforeEach(async () => {
 	selectChainMock = {
 		from: vi.fn(() => selectChainMock),
 		innerJoin: vi.fn((_table: unknown, _on: unknown) => selectChainMock),
-		where: vi.fn((..._args: unknown[]) => {
-			const promise = selectWhereMock(..._args);
+		where: vi.fn((whereClause: unknown) => {
+			const promise = selectWhereMock(whereClause);
 			return Object.assign(promise, {
 				limit: vi.fn(() => promise)
 			});
