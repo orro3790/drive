@@ -50,26 +50,16 @@ const shiftsTable = {
 	arrivedAt: 'shifts.arrivedAt',
 	parcelsStart: 'shifts.parcelsStart',
 	completedAt: 'shifts.completedAt',
-	startedAt: 'shifts.startedAt'
+	startedAt: 'shifts.startedAt',
+	cancelledAt: 'shifts.cancelledAt'
 };
 
 let POST: StartRouteModule['POST'];
 
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
-let selectFromMock: ReturnType<
-	typeof vi.fn<
-		(table: unknown) => {
-			where: typeof selectWhereMock;
-		}
-	>
->;
-let selectMock: ReturnType<
-	typeof vi.fn<
-		(shape: Record<string, unknown>) => {
-			from: typeof selectFromMock;
-		}
-	>
->;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let selectChainMock: any;
+let selectMock: ReturnType<typeof vi.fn>;
 
 let updateReturningMock: ReturnType<
 	typeof vi.fn<(shape: Record<string, unknown>) => Promise<StartShiftResponse[]>>
@@ -132,12 +122,17 @@ beforeEach(async () => {
 	vi.resetModules();
 
 	selectWhereMock = vi.fn<(whereClause: unknown) => Promise<unknown[]>>(async () => []);
-	selectFromMock = vi.fn<(table: unknown) => { where: typeof selectWhereMock }>(() => ({
-		where: selectWhereMock
-	}));
-	selectMock = vi.fn<(shape: Record<string, unknown>) => { from: typeof selectFromMock }>(() => ({
-		from: selectFromMock
-	}));
+	selectChainMock = {
+		from: vi.fn(() => selectChainMock),
+		innerJoin: vi.fn((_table: unknown, _on: unknown) => selectChainMock),
+		where: vi.fn((..._args: unknown[]) => {
+			const promise = selectWhereMock(..._args);
+			return Object.assign(promise, {
+				limit: vi.fn(() => promise)
+			});
+		})
+	};
+	selectMock = vi.fn(() => selectChainMock);
 
 	updateReturningMock = vi.fn<(shape: Record<string, unknown>) => Promise<StartShiftResponse[]>>(
 		async () => []
@@ -164,7 +159,10 @@ beforeEach(async () => {
 	vi.doMock('$lib/server/db', () => ({
 		db: {
 			select: selectMock,
-			update: updateMock
+			update: updateMock,
+			transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+				callback({ select: selectMock, update: updateMock })
+			)
 		}
 	}));
 
@@ -174,7 +172,11 @@ beforeEach(async () => {
 	}));
 
 	vi.doMock('drizzle-orm', () => ({
-		eq: (left: unknown, right: unknown) => ({ left, right })
+		eq: (left: unknown, right: unknown) => ({ left, right }),
+		and: (...conditions: unknown[]) => ({ conditions }),
+		inArray: (field: unknown, values: unknown[]) => ({ operator: 'inArray', field, values }),
+		isNotNull: (field: unknown) => ({ operator: 'isNotNull', field }),
+		isNull: (field: unknown) => ({ operator: 'isNull', field })
 	}));
 
 	vi.doMock('$lib/server/services/assignmentLifecycle', () => ({
@@ -190,6 +192,17 @@ beforeEach(async () => {
 		broadcastAssignmentUpdated: broadcastAssignmentUpdatedMock
 	}));
 
+	vi.doMock('$lib/server/logger', () => ({
+		default: {
+			child: vi.fn(() => ({
+				info: vi.fn(),
+				debug: vi.fn(),
+				warn: vi.fn(),
+				error: vi.fn()
+			}))
+		}
+	}));
+
 	({ POST } = await import('../../src/routes/api/shifts/start/+server'));
 });
 
@@ -201,6 +214,7 @@ afterEach(() => {
 	vi.doUnmock('$lib/server/services/assignmentLifecycle');
 	vi.doUnmock('$lib/server/services/audit');
 	vi.doUnmock('$lib/server/realtime/managerSse');
+	vi.doUnmock('$lib/server/logger');
 });
 
 describe('POST /api/shifts/start contract', () => {
@@ -288,7 +302,7 @@ describe('POST /api/shifts/start contract', () => {
 		});
 
 		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 409 });
-		expect(selectWhereMock).toHaveBeenCalledTimes(1);
+		expect(selectWhereMock).toHaveBeenCalledTimes(2);
 	});
 
 	it('returns 404 when shift is missing', async () => {
@@ -324,7 +338,10 @@ describe('POST /api/shifts/start contract', () => {
 			parcelsStart: null,
 			completedAt: null
 		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([assignment])
+			.mockResolvedValueOnce([]) // incomplete shift check
+			.mockResolvedValueOnce([shift]);
 		deriveAssignmentLifecycleMock.mockReturnValue(createLifecycleOutput({ isStartable: false }));
 
 		const event = createRequestEvent({
@@ -350,7 +367,10 @@ describe('POST /api/shifts/start contract', () => {
 			parcelsStart: 5,
 			completedAt: null
 		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([assignment])
+			.mockResolvedValueOnce([]) // incomplete shift check
+			.mockResolvedValueOnce([shift]);
 		deriveAssignmentLifecycleMock.mockReturnValue(createLifecycleOutput({ isStartable: true }));
 
 		const event = createRequestEvent({
@@ -376,7 +396,10 @@ describe('POST /api/shifts/start contract', () => {
 			parcelsStart: null,
 			completedAt: null
 		};
-		selectWhereMock.mockResolvedValueOnce([assignment]).mockResolvedValueOnce([shift]);
+		selectWhereMock
+			.mockResolvedValueOnce([assignment])
+			.mockResolvedValueOnce([]) // incomplete shift check
+			.mockResolvedValueOnce([shift]);
 		updateReturningMock.mockResolvedValueOnce([
 			{
 				id: 'shift-1',
