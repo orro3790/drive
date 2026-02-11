@@ -31,7 +31,11 @@
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Filter from '$lib/components/icons/Filter.svelte';
 	import Reset from '$lib/components/icons/Reset.svelte';
-	import { whitelistStore, type WhitelistEntry, type WhitelistResolvedStatus } from '$lib/stores/whitelistStore.svelte';
+	import {
+		whitelistStore,
+		type WhitelistEntry,
+		type WhitelistResolvedStatus
+	} from '$lib/stores/whitelistStore.svelte';
 	import { onboardingCreateSchema } from '$lib/schemas/onboarding';
 	import type { SelectOption } from '$lib/schemas/ui/select';
 
@@ -311,12 +315,7 @@
 
 {#snippet entryDetailActions(entry: WhitelistEntry)}
 	{#if isRevocable(entry)}
-		<Button
-			variant="secondary"
-			size="small"
-			fill
-			onclick={(e) => openRevokeConfirm(entry, e)}
-		>
+		<Button variant="secondary" size="small" fill onclick={(e) => openRevokeConfirm(entry, e)}>
 			{m.whitelist_revoke_button()}
 		</Button>
 	{/if}

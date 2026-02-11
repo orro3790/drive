@@ -5,10 +5,7 @@
  * All API calls are owned by this store.
  */
 
-import type {
-	SignupOnboardingKind,
-	SignupOnboardingStatus
-} from '$lib/schemas/onboarding';
+import type { SignupOnboardingKind, SignupOnboardingStatus } from '$lib/schemas/onboarding';
 import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 import * as m from '$lib/paraglide/messages.js';
 import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
@@ -145,12 +142,7 @@ export const whitelistStore = {
 		this._createInApi(email, tempId, mutationKey, mutationVersion);
 	},
 
-	async _createInApi(
-		email: string,
-		tempId: string,
-		mutationKey: string,
-		mutationVersion: number
-	) {
+	async _createInApi(email: string, tempId: string, mutationKey: string, mutationVersion: number) {
 		try {
 			const res = await fetch('/api/onboarding', {
 				method: 'POST',
@@ -177,7 +169,12 @@ export const whitelistStore = {
 			if (!isLatestMutationVersion(mutationKey, mutationVersion)) return;
 
 			state.entries = state.entries.map((e) =>
-				e.id === tempId ? { ...parsed.data.entry, createdByName: e.createdByName ?? parsed.data.entry.createdByName } : e
+				e.id === tempId
+					? {
+							...parsed.data.entry,
+							createdByName: e.createdByName ?? parsed.data.entry.createdByName
+						}
+					: e
 			);
 			toastStore.success(m.whitelist_created_success());
 		} catch {
@@ -199,7 +196,13 @@ export const whitelistStore = {
 
 		state.entries = state.entries.map((e) =>
 			e.id === id
-				? { ...e, status: 'revoked' as const, resolvedStatus: 'revoked' as const, revokedAt: new Date(), updatedAt: new Date() }
+				? {
+						...e,
+						status: 'revoked' as const,
+						resolvedStatus: 'revoked' as const,
+						revokedAt: new Date(),
+						updatedAt: new Date()
+					}
 				: e
 		);
 
@@ -229,7 +232,12 @@ export const whitelistStore = {
 			if (!isLatestMutationVersion(mutationKey, mutationVersion)) return;
 
 			state.entries = state.entries.map((e) =>
-				e.id === id ? { ...parsed.data.entry, createdByName: e.createdByName ?? parsed.data.entry.createdByName } : e
+				e.id === id
+					? {
+							...parsed.data.entry,
+							createdByName: e.createdByName ?? parsed.data.entry.createdByName
+						}
+					: e
 			);
 			toastStore.success(m.whitelist_revoked_success());
 		} catch {
