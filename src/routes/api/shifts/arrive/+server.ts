@@ -9,7 +9,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, driverMetrics, routes, shifts } from '$lib/server/db/schema';
 import { shiftArriveSchema } from '$lib/schemas/shift';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
 import {
@@ -57,6 +57,26 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	// Verify ownership
 	if (assignment.userId !== locals.user.id) {
 		throw error(403, 'Forbidden');
+	}
+
+	// Check for any incomplete shift by this driver (arrived but not completed)
+	const [incompleteShift] = await db
+		.select({ id: shifts.id, assignmentId: shifts.assignmentId })
+		.from(shifts)
+		.innerJoin(assignments, eq(shifts.assignmentId, assignments.id))
+		.where(
+			and(
+				eq(assignments.userId, locals.user.id),
+				inArray(assignments.status, ['active', 'scheduled']),
+				isNotNull(shifts.arrivedAt),
+				isNull(shifts.completedAt),
+				isNull(shifts.cancelledAt)
+			)
+		)
+		.limit(1);
+
+	if (incompleteShift && incompleteShift.assignmentId !== assignmentId) {
+		throw error(409, 'You have an incomplete shift that must be closed out first');
 	}
 
 	// Check for existing shift record

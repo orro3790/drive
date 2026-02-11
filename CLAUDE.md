@@ -90,6 +90,8 @@ Manager-facing endpoints in `src/routes/api/`:
 - `GET /api/onboarding` - List all signup onboarding entries with createdByName (manager whitelist)
 - `POST /api/onboarding` - Create email approval for driver signup (kind: 'approval', email)
 - `PATCH /api/onboarding/[id]/revoke` - Revoke a pending/reserved onboarding entry
+- `GET /api/weekly-reports` - Aggregated parcel delivery totals per operational week (billing summary)
+- `GET /api/weekly-reports/[weekStart]` - Individual shift records for a specific week (weekStart must be a Monday)
 
 ## UI Components
 
@@ -101,12 +103,14 @@ Available in `src/lib/components/`:
 - `icons/` - Icon components
 - `driver/` - HealthCard (health score, stars, streak, simulation preview), CancelShiftModal
 - `DriverShiftHistoryTable.svelte` - Driver shift history table (used on manager drivers page, fetches from `/api/drivers/[id]/shifts`)
+- `WeeklyReportDetailTable.svelte` - Weekly report detail table (used on manager weekly reports page, fetches from `/api/weekly-reports/[weekStart]`)
 - Combobox, Select, DatePicker, ConfirmationDialog, ToastContainer
 
 **Shared Types** (`src/lib/schemas/`):
 
 - `health.ts` - `HealthResponse` type for `/api/driver-health` endpoint and HealthCard component
 - `driverShiftHistory.ts` - `DriverShiftRecord` and `DriverShiftHistoryResponse` types for `/api/drivers/[id]/shifts` endpoint and DriverShiftHistoryTable component
+- `weeklyReports.ts` - `WeekSummary`, `WeekShiftRecord`, `WeeklyReportsResponse`, `WeekDetailResponse` types for weekly reports endpoints and components
 
 ### Theme System
 

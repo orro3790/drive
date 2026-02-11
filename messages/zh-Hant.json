@@ -708,5 +708,30 @@
 	"bid_windows_assign_success": "司機已分配。",
 	"bid_windows_assign_error": "分配司機失敗。",
 	"bid_windows_close_success": "競標窗口已關閉。",
-	"bid_windows_close_error": "關閉競標窗口失敗。"
+	"bid_windows_close_error": "關閉競標窗口失敗。",
+
+	"nav_weekly_reports": "報表",
+
+	"weekly_reports_page_title": "週報表",
+	"weekly_reports_header_week": "週",
+	"weekly_reports_header_start_date": "開始日期",
+	"weekly_reports_header_end_date": "結束日期",
+	"weekly_reports_header_shifts": "班次",
+	"weekly_reports_header_total_delivered": "總配送",
+	"weekly_reports_header_total_returned": "總退回",
+	"weekly_reports_header_total_excepted": "總例外",
+	"weekly_reports_view_details": "查睇詳情",
+	"weekly_reports_empty": "暫時冇週報表",
+	"weekly_reports_empty_message": "暫時冇已完成嘅班次記錄。",
+	"weekly_reports_detail_date": "日期",
+	"weekly_reports_detail_route": "路線",
+	"weekly_reports_detail_warehouse": "倉庫",
+	"weekly_reports_detail_driver": "司機",
+	"weekly_reports_detail_parcels_start": "起始",
+	"weekly_reports_detail_parcels_delivered": "已配送",
+	"weekly_reports_detail_parcels_returned": "已退回",
+	"weekly_reports_detail_exceptions": "例外",
+	"weekly_reports_detail_exception_notes": "例外備註",
+	"weekly_reports_detail_completed": "完成時間",
+	"weekly_reports_close_tab": "關閉標籤"
 }

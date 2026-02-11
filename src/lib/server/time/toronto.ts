@@ -63,6 +63,12 @@ export function getDayOfWeekFromDateString(dateString: string): number {
 	return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 }
 
+export function getWeekStartFromDateString(dateString: string): string {
+	const dayOfWeek = getDayOfWeekFromDateString(dateString);
+	const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+	return addDaysToDateString(dateString, daysToMonday);
+}
+
 export function getTorontoWeekStartDateString(instant: Date): string {
 	const torontoDate = toTorontoDateString(instant);
 	const dayOfWeek = getDayOfWeekFromDateString(torontoDate);

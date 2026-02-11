@@ -801,5 +801,30 @@
 	"drivers_filter_pool_eligible_label": "Pool Eligible",
 	"drivers_filter_pool_eligible_all": "All",
 	"common_yes": "Yes",
-	"common_no": "No"
+	"common_no": "No",
+
+	"nav_weekly_reports": "Reports",
+
+	"weekly_reports_page_title": "Weekly Reports",
+	"weekly_reports_header_week": "Week",
+	"weekly_reports_header_start_date": "Start Date",
+	"weekly_reports_header_end_date": "End Date",
+	"weekly_reports_header_shifts": "Shifts",
+	"weekly_reports_header_total_delivered": "Total Delivered",
+	"weekly_reports_header_total_returned": "Total Returned",
+	"weekly_reports_header_total_excepted": "Total Excepted",
+	"weekly_reports_view_details": "View Details",
+	"weekly_reports_empty": "No weekly reports",
+	"weekly_reports_empty_message": "No completed shifts have been recorded yet.",
+	"weekly_reports_detail_date": "Date",
+	"weekly_reports_detail_route": "Route",
+	"weekly_reports_detail_warehouse": "Warehouse",
+	"weekly_reports_detail_driver": "Driver",
+	"weekly_reports_detail_parcels_start": "Start",
+	"weekly_reports_detail_parcels_delivered": "Delivered",
+	"weekly_reports_detail_parcels_returned": "Returned",
+	"weekly_reports_detail_exceptions": "Exceptions",
+	"weekly_reports_detail_exception_notes": "Exception Notes",
+	"weekly_reports_detail_completed": "Completed",
+	"weekly_reports_close_tab": "Close tab"
 }

@@ -23,6 +23,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import Driver from '$lib/components/icons/Driver.svelte';
 	import Route from '$lib/components/icons/Route.svelte';
 	import ShieldPlus from '$lib/components/icons/ShieldPlus.svelte';
+	import BarChart from '$lib/components/icons/BarChart.svelte';
 	import Settings from '$lib/components/icons/Settings.svelte';
 	import Logout from '$lib/components/icons/Logout.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
@@ -91,6 +92,12 @@ Mobile: Hidden by default, hamburger in header opens overlay
 			label: () => m.nav_whitelist(),
 			Icon: ShieldPlus,
 			path: '/whitelist'
+		},
+		{
+			id: 'weekly-reports',
+			label: () => m.nav_weekly_reports(),
+			Icon: BarChart,
+			path: '/weekly-reports'
 		}
 	];
 

@@ -39,5 +39,7 @@ export const notificationTypeConfig: Record<NotificationType, NotificationTypeCo
 	manual: { icon: MessageExclamation, color: '--status-warning' },
 	route_unfilled: { icon: Route, color: '--status-warning' },
 	route_cancelled: { icon: CalendarMinus, color: '--status-error' },
-	driver_no_show: { icon: AlertCircleIcon, color: '--status-error' }
+	driver_no_show: { icon: AlertCircleIcon, color: '--status-error' },
+	return_exception: { icon: AlertTriangleIcon, color: '--status-warning' },
+	stale_shift_reminder: { icon: Clock, color: '--status-warning' }
 };

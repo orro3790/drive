@@ -377,5 +377,30 @@
 	"bid_windows_assign_success": "已分配司机。",
 	"bid_windows_assign_error": "分配司机失败。",
 	"bid_windows_close_success": "竞标窗口已关闭。",
-	"bid_windows_close_error": "关闭竞标窗口失败。"
+	"bid_windows_close_error": "关闭竞标窗口失败。",
+
+	"nav_weekly_reports": "报表",
+
+	"weekly_reports_page_title": "周报表",
+	"weekly_reports_header_week": "周",
+	"weekly_reports_header_start_date": "开始日期",
+	"weekly_reports_header_end_date": "结束日期",
+	"weekly_reports_header_shifts": "班次",
+	"weekly_reports_header_total_delivered": "总配送",
+	"weekly_reports_header_total_returned": "总退回",
+	"weekly_reports_header_total_excepted": "总例外",
+	"weekly_reports_view_details": "查看详情",
+	"weekly_reports_empty": "暂无周报表",
+	"weekly_reports_empty_message": "暂无已完成的班次记录。",
+	"weekly_reports_detail_date": "日期",
+	"weekly_reports_detail_route": "路线",
+	"weekly_reports_detail_warehouse": "仓库",
+	"weekly_reports_detail_driver": "司机",
+	"weekly_reports_detail_parcels_start": "起始",
+	"weekly_reports_detail_parcels_delivered": "已配送",
+	"weekly_reports_detail_parcels_returned": "已退回",
+	"weekly_reports_detail_exceptions": "例外",
+	"weekly_reports_detail_exception_notes": "例外备注",
+	"weekly_reports_detail_completed": "完成时间",
+	"weekly_reports_close_tab": "关闭标签"
 }
