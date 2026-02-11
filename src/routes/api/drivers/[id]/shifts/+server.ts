@@ -66,6 +66,12 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
 	return json({
 		driverName: target.name,
-		shifts: rows
+		shifts: rows.map((row) => ({
+			...row,
+			status: row.status as 'completed' | 'cancelled',
+			arrivedAt: row.arrivedAt?.toISOString() ?? null,
+			startedAt: row.startedAt?.toISOString() ?? null,
+			completedAt: row.completedAt?.toISOString() ?? null
+		}))
 	} satisfies DriverShiftHistoryResponse);
 };
