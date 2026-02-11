@@ -176,7 +176,9 @@ export const whitelistStore = {
 
 			if (!isLatestMutationVersion(mutationKey, mutationVersion)) return;
 
-			state.entries = state.entries.map((e) => (e.id === tempId ? parsed.data.entry : e));
+			state.entries = state.entries.map((e) =>
+				e.id === tempId ? { ...parsed.data.entry, createdByName: e.createdByName ?? parsed.data.entry.createdByName } : e
+			);
 			toastStore.success(m.whitelist_created_success());
 		} catch {
 			if (!isLatestMutationVersion(mutationKey, mutationVersion)) return;
@@ -226,7 +228,9 @@ export const whitelistStore = {
 
 			if (!isLatestMutationVersion(mutationKey, mutationVersion)) return;
 
-			state.entries = state.entries.map((e) => (e.id === id ? parsed.data.entry : e));
+			state.entries = state.entries.map((e) =>
+				e.id === id ? { ...parsed.data.entry, createdByName: e.createdByName ?? parsed.data.entry.createdByName } : e
+			);
 			toastStore.success(m.whitelist_revoked_success());
 		} catch {
 			if (!isLatestMutationVersion(mutationKey, mutationVersion)) return;

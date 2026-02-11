@@ -259,7 +259,7 @@
 		<Icon><Plus /></Icon>
 	</IconButton>
 
-	<IconButton tooltip={m.drivers_filter_reset()} onclick={resetFilters}>
+	<IconButton tooltip={m.table_filter_reset()} onclick={resetFilters}>
 		<Icon><Reset /></Icon>
 	</IconButton>
 {/snippet}
@@ -429,7 +429,7 @@
 				/>
 			</div>
 			<div class="filter-field">
-				<label for="whitelist-status-filter">{m.whitelist_filter_status_label()}</label>
+				<label>{m.whitelist_filter_status_label()}</label>
 				<Select
 					options={statusFilterOptions}
 					value={statusFilter}

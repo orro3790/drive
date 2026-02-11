@@ -569,7 +569,7 @@
 		<Icon><Filter /></Icon>
 	</IconButton>
 
-	<IconButton tooltip={m.drivers_filter_reset()} onclick={resetFilters}>
+	<IconButton tooltip={m.table_filter_reset()} onclick={resetFilters}>
 		<Icon><Reset /></Icon>
 	</IconButton>
 {/snippet}
@@ -978,7 +978,7 @@
 				/>
 			</div>
 			<div class="filter-field">
-				<label for="drivers-health-filter">{m.drivers_filter_health_state_label()}</label>
+				<label>{m.drivers_filter_health_state_label()}</label>
 				<Select
 					options={healthStateOptions}
 					value={healthStateFilter}
@@ -986,7 +986,7 @@
 				/>
 			</div>
 			<div class="filter-field">
-				<label for="drivers-flagged-filter">{m.drivers_filter_flagged_label()}</label>
+				<label>{m.drivers_filter_flagged_label()}</label>
 				<Select
 					options={booleanFilterOptions(m.drivers_filter_flagged_all())}
 					value={flaggedFilter}
@@ -994,7 +994,7 @@
 				/>
 			</div>
 			<div class="filter-field">
-				<label for="drivers-pool-filter">{m.drivers_filter_pool_eligible_label()}</label>
+				<label>{m.drivers_filter_pool_eligible_label()}</label>
 				<Select
 					options={booleanFilterOptions(m.drivers_filter_pool_eligible_all())}
 					value={poolEligibleFilter}

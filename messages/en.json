@@ -163,6 +163,7 @@
 	"table_filter_title": "Filters",
 	"table_filter_aria_label": "Filter table",
 	"table_filter_clear_all": "Clear all",
+	"table_filter_reset": "Reset filters",
 	"table_filter_no_columns": "No filterable columns",
 	"table_filter_tooltip_active": "{count} active",
 	"table_filter_dropdown_clear": "Clear",
@@ -799,8 +800,6 @@
 	"drivers_filter_flagged_all": "All",
 	"drivers_filter_pool_eligible_label": "Pool Eligible",
 	"drivers_filter_pool_eligible_all": "All",
-	"drivers_filter_reset": "Reset filters",
-
 	"common_yes": "Yes",
 	"common_no": "No"
 }
