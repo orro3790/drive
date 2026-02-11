@@ -62,7 +62,8 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 		.where(
 			and(eq(assignments.userId, id), inArray(assignments.status, ['completed', 'cancelled']))
 		)
-		.orderBy(desc(assignments.date));
+		.orderBy(desc(assignments.date))
+		.limit(500);
 
 	return json({
 		driverName: target.name,

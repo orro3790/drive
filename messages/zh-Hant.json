@@ -651,6 +651,7 @@
 	"drivers_detail_tooltip_member_since": "司機加入平台嘅日期",
 
 	"drivers_view_route_history": "查看路線歷史",
+	"drivers_close_tab": "關閉標籤",
 	"drivers_shift_history_empty": "暫無班次歷史",
 	"drivers_shift_history_empty_message": "該司機暫無已完成或已取消嘅班次。",
 	"drivers_shift_history_load_error": "載入班次歷史失敗。",

@@ -320,6 +320,7 @@
 	"drivers_detail_tooltip_member_since": "司机加入平台的日期",
 
 	"drivers_view_route_history": "查看路线历史",
+	"drivers_close_tab": "关闭标签",
 	"drivers_shift_history_empty": "暂无班次历史",
 	"drivers_shift_history_empty_message": "该司机暂无已完成或已取消的班次。",
 	"drivers_shift_history_load_error": "加载班次历史失败。",

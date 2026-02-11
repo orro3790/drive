@@ -478,25 +478,27 @@
 			{m.drivers_page_title()}
 		</button>
 		{#each openDriverTabs as driverTab (driverTab.driverId)}
-			<div
+			<button
+				type="button"
 				class="tab"
 				class:active={activeTabId === driverTab.driverId}
 				role="tab"
 				aria-selected={activeTabId === driverTab.driverId}
 				tabindex={activeTabId === driverTab.driverId ? 0 : -1}
 				onclick={() => switchToTab(driverTab.driverId)}
-				onkeydown={(e) => e.key === 'Enter' && switchToTab(driverTab.driverId)}
 			>
 				<span class="tab-label">{driverTab.driverName}</span>
-				<button
-					type="button"
+				<span
+					role="button"
+					tabindex="-1"
 					class="tab-close"
-					aria-label="Close tab"
+					aria-label={m.drivers_close_tab()}
 					onclick={(e) => closeDriverTab(driverTab.driverId, e)}
+					onkeydown={(e) => e.key === 'Enter' && closeDriverTab(driverTab.driverId, e)}
 				>
 					&times;
-				</button>
-			</div>
+				</span>
+			</button>
 		{/each}
 	</div>
 {/snippet}

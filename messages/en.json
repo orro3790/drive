@@ -692,6 +692,7 @@
 	"drivers_detail_tooltip_member_since": "Date the driver joined the platform",
 
 	"drivers_view_route_history": "View Route History",
+	"drivers_close_tab": "Close tab",
 	"drivers_shift_history_empty": "No shift history",
 	"drivers_shift_history_empty_message": "This driver has no completed or cancelled shifts yet.",
 	"drivers_shift_history_load_error": "Failed to load shift history.",
