@@ -130,15 +130,15 @@ describe('updateDriverMetrics org forwarding', () => {
 		expect(whereClauses.length).toBeGreaterThanOrEqual(3);
 
 		// Check that all compound where clauses include the org filter
-		const compoundClauses = whereClauses.filter(
-			(c) => (c as { op: string }).op === 'and'
-		) as { op: string; conditions: unknown[] }[];
+		const compoundClauses = whereClauses.filter((c) => (c as { op: string }).op === 'and') as {
+			op: string;
+			conditions: unknown[];
+		}[];
 
 		for (const clause of compoundClauses) {
 			const orgCondition = clause.conditions.find(
 				(c) =>
-					(c as { op: string; left: string; right: string }).left ===
-						'warehouses.organizationId' &&
+					(c as { op: string; left: string; right: string }).left === 'warehouses.organizationId' &&
 					(c as { op: string; left: string; right: string }).right === 'org-abc'
 			);
 			expect(orgCondition).toBeDefined();
