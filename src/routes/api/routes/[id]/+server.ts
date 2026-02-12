@@ -130,7 +130,11 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 	}
 
 	// Validate manager has access to this route's warehouse
-	const canAccess = await canManagerAccessWarehouse(manager.id, existing.warehouseId, organizationId);
+	const canAccess = await canManagerAccessWarehouse(
+		manager.id,
+		existing.warehouseId,
+		organizationId
+	);
 	if (!canAccess) {
 		throw error(403, 'No access to this route');
 	}
@@ -287,7 +291,11 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 	}
 
 	// Validate manager has access to this route's warehouse
-	const canAccess = await canManagerAccessWarehouse(manager.id, existing.warehouseId, organizationId);
+	const canAccess = await canManagerAccessWarehouse(
+		manager.id,
+		existing.warehouseId,
+		organizationId
+	);
 	if (!canAccess) {
 		throw error(403, 'No access to this route');
 	}
