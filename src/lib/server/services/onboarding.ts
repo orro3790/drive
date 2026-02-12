@@ -12,7 +12,7 @@ import {
 
 const INVITE_TOKEN_BYTES = 24;
 const RESERVATION_TIMEOUT_MS = 10 * 60 * 1000;
-const PENDING_EMAIL_KIND_UNIQUE_CONSTRAINT = 'uq_signup_onboarding_pending_email_kind';
+const PENDING_EMAIL_KIND_UNIQUE_CONSTRAINT = 'uq_signup_onboarding_pending_org_email_kind_role';
 
 export type SignupOnboardingResolvedStatus = SignupOnboardingStatus | 'expired';
 export type { SignupOnboardingKind, SignupOnboardingStatus };
@@ -21,6 +21,7 @@ type DbClient = Pick<typeof db, 'select' | 'insert' | 'update'>;
 
 export interface SignupOnboardingEntryRecord {
 	id: string;
+	organizationId: string | null;
 	email: string;
 	kind: SignupOnboardingKind;
 	tokenHash: string | null;
@@ -37,6 +38,7 @@ export interface SignupOnboardingEntryRecord {
 
 export interface SignupOnboardingEntry {
 	id: string;
+	organizationId: string | null;
 	email: string;
 	kind: SignupOnboardingKind;
 	status: SignupOnboardingStatus;
@@ -83,12 +85,14 @@ export interface ReleaseProductionSignupAuthorizationReservationInput {
 
 export interface CreateOnboardingApprovalInput {
 	email: string;
+	organizationId: string;
 	createdBy: string;
 	expiresAt?: Date | null;
 }
 
 export interface CreateOnboardingInviteInput {
 	email: string;
+	organizationId: string;
 	createdBy: string;
 	expiresAt: Date;
 }
@@ -142,6 +146,7 @@ function toOnboardingEntry(
 ): SignupOnboardingEntry {
 	return {
 		id: entry.id,
+		organizationId: entry.organizationId,
 		email: entry.email,
 		kind: entry.kind,
 		status: entry.status,
@@ -162,36 +167,44 @@ function toOnboardingEntry(
 async function getPendingEntriesByEmailAndKind(
 	email: string,
 	kind: SignupOnboardingKind,
-	dbClient: DbClient = db
+	dbClient: DbClient = db,
+	organizationId?: string
 ): Promise<SignupOnboardingEntryRecord[]> {
+	const conditions = [
+		eq(signupOnboarding.email, email),
+		eq(signupOnboarding.kind, kind),
+		eq(signupOnboarding.status, 'pending')
+	];
+	if (organizationId) {
+		conditions.push(eq(signupOnboarding.organizationId, organizationId));
+	}
+
 	return dbClient
 		.select()
 		.from(signupOnboarding)
-		.where(
-			and(
-				eq(signupOnboarding.email, email),
-				eq(signupOnboarding.kind, kind),
-				eq(signupOnboarding.status, 'pending')
-			)
-		)
+		.where(and(...conditions))
 		.orderBy(desc(signupOnboarding.createdAt));
 }
 
 async function getReservedEntriesByEmailAndKind(
 	email: string,
 	kind: SignupOnboardingKind,
-	dbClient: DbClient = db
+	dbClient: DbClient = db,
+	organizationId?: string
 ): Promise<SignupOnboardingEntryRecord[]> {
+	const conditions = [
+		eq(signupOnboarding.email, email),
+		eq(signupOnboarding.kind, kind),
+		eq(signupOnboarding.status, 'reserved')
+	];
+	if (organizationId) {
+		conditions.push(eq(signupOnboarding.organizationId, organizationId));
+	}
+
 	return dbClient
 		.select()
 		.from(signupOnboarding)
-		.where(
-			and(
-				eq(signupOnboarding.email, email),
-				eq(signupOnboarding.kind, kind),
-				eq(signupOnboarding.status, 'reserved')
-			)
-		)
+		.where(and(...conditions))
 		.orderBy(desc(signupOnboarding.createdAt));
 }
 
@@ -336,8 +349,19 @@ async function revokeExpiredPendingEntriesByKind(
 	email: string,
 	kind: SignupOnboardingKind,
 	now: Date,
-	dbClient: DbClient = db
+	dbClient: DbClient = db,
+	organizationId?: string
 ): Promise<void> {
+	const conditions = [
+		eq(signupOnboarding.email, email),
+		eq(signupOnboarding.kind, kind),
+		eq(signupOnboarding.status, 'pending'),
+		lte(signupOnboarding.expiresAt, now)
+	];
+	if (organizationId) {
+		conditions.push(eq(signupOnboarding.organizationId, organizationId));
+	}
+
 	await dbClient
 		.update(signupOnboarding)
 		.set({
@@ -346,14 +370,7 @@ async function revokeExpiredPendingEntriesByKind(
 			revokedByUserId: null,
 			updatedAt: now
 		})
-		.where(
-			and(
-				eq(signupOnboarding.email, email),
-				eq(signupOnboarding.kind, kind),
-				eq(signupOnboarding.status, 'pending'),
-				lte(signupOnboarding.expiresAt, now)
-			)
-		)
+		.where(and(...conditions))
 		.returning();
 }
 
@@ -473,6 +490,7 @@ export async function releaseProductionSignupAuthorizationReservation(
 }
 
 export async function listSignupOnboardingEntries(
+	organizationId: string,
 	limit = 200,
 	dbClient: DbClient = db
 ): Promise<SignupOnboardingEntry[]> {
@@ -487,6 +505,7 @@ export async function listSignupOnboardingEntries(
 		.from(signupOnboarding)
 		.leftJoin(user, eq(signupOnboarding.createdBy, user.id))
 		.leftJoin(revokedByUser, eq(signupOnboarding.revokedByUserId, revokedByUser.id))
+		.where(eq(signupOnboarding.organizationId, organizationId))
 		.orderBy(desc(signupOnboarding.createdAt))
 		.limit(limit);
 
@@ -499,13 +518,21 @@ export async function createOnboardingApproval(
 ): Promise<CreateOnboardingResult> {
 	const now = new Date();
 	const normalizedEmail = normalizeEmail(input.email);
+	const { organizationId } = input;
 
-	await revokeExpiredPendingEntriesByKind(normalizedEmail, 'approval', now, dbClient);
+	await revokeExpiredPendingEntriesByKind(
+		normalizedEmail,
+		'approval',
+		now,
+		dbClient,
+		organizationId
+	);
 
 	const existingApprovals = await getPendingEntriesByEmailAndKind(
 		normalizedEmail,
 		'approval',
-		dbClient
+		dbClient,
+		organizationId
 	);
 	const existing = hasActivePendingEntry(existingApprovals, now);
 	if (existing) {
@@ -518,7 +545,8 @@ export async function createOnboardingApproval(
 	const existingReservedApprovals = await getReservedEntriesByEmailAndKind(
 		normalizedEmail,
 		'approval',
-		dbClient
+		dbClient,
+		organizationId
 	);
 	const existingReservedApproval = existingReservedApprovals[0] ?? null;
 	if (existingReservedApproval) {
@@ -533,6 +561,7 @@ export async function createOnboardingApproval(
 			.insert(signupOnboarding)
 			.values({
 				email: normalizedEmail,
+				organizationId,
 				kind: 'approval',
 				status: 'pending',
 				createdBy: input.createdBy,
@@ -550,7 +579,8 @@ export async function createOnboardingApproval(
 			const racedApprovals = await getPendingEntriesByEmailAndKind(
 				normalizedEmail,
 				'approval',
-				dbClient
+				dbClient,
+				organizationId
 			);
 			const racedEntry = hasActivePendingEntry(racedApprovals, now);
 
@@ -564,7 +594,8 @@ export async function createOnboardingApproval(
 			const racedReservedApprovals = await getReservedEntriesByEmailAndKind(
 				normalizedEmail,
 				'approval',
-				dbClient
+				dbClient,
+				organizationId
 			);
 			const racedReserved = racedReservedApprovals[0] ?? null;
 
@@ -586,13 +617,21 @@ export async function createOnboardingInvite(
 ): Promise<CreateOnboardingInviteResult> {
 	const now = new Date();
 	const normalizedEmail = normalizeEmail(input.email);
+	const { organizationId } = input;
 
-	await revokeExpiredPendingEntriesByKind(normalizedEmail, 'invite', now, dbClient);
+	await revokeExpiredPendingEntriesByKind(
+		normalizedEmail,
+		'invite',
+		now,
+		dbClient,
+		organizationId
+	);
 
 	const existingInvites = await getPendingEntriesByEmailAndKind(
 		normalizedEmail,
 		'invite',
-		dbClient
+		dbClient,
+		organizationId
 	);
 	const existing = hasActivePendingEntry(existingInvites, now);
 	if (existing) {
@@ -605,7 +644,8 @@ export async function createOnboardingInvite(
 	const existingReservedInvites = await getReservedEntriesByEmailAndKind(
 		normalizedEmail,
 		'invite',
-		dbClient
+		dbClient,
+		organizationId
 	);
 	const existingReservedInvite = existingReservedInvites[0] ?? null;
 	if (existingReservedInvite) {
@@ -623,6 +663,7 @@ export async function createOnboardingInvite(
 			.insert(signupOnboarding)
 			.values({
 				email: normalizedEmail,
+				organizationId,
 				kind: 'invite',
 				tokenHash,
 				status: 'pending',
@@ -642,7 +683,8 @@ export async function createOnboardingInvite(
 			const racedInvites = await getPendingEntriesByEmailAndKind(
 				normalizedEmail,
 				'invite',
-				dbClient
+				dbClient,
+				organizationId
 			);
 			const racedEntry = hasActivePendingEntry(racedInvites, now);
 
@@ -656,7 +698,8 @@ export async function createOnboardingInvite(
 			const racedReservedInvites = await getReservedEntriesByEmailAndKind(
 				normalizedEmail,
 				'invite',
-				dbClient
+				dbClient,
+				organizationId
 			);
 			const racedReserved = racedReservedInvites[0] ?? null;
 
@@ -674,6 +717,7 @@ export async function createOnboardingInvite(
 
 export async function revokeOnboardingEntry(
 	entryId: string,
+	organizationId: string,
 	revokedByUserId: string,
 	dbClient: DbClient = db
 ): Promise<SignupOnboardingEntry | null> {
@@ -689,6 +733,7 @@ export async function revokeOnboardingEntry(
 		.where(
 			and(
 				eq(signupOnboarding.id, entryId),
+				eq(signupOnboarding.organizationId, organizationId),
 				or(eq(signupOnboarding.status, 'pending'), eq(signupOnboarding.status, 'reserved'))
 			)
 		)
@@ -707,6 +752,7 @@ export type RestoreOnboardingResult =
 
 export async function restoreOnboardingEntry(
 	entryId: string,
+	organizationId: string,
 	dbClient: DbClient = db
 ): Promise<RestoreOnboardingResult> {
 	const now = new Date();
@@ -714,7 +760,12 @@ export async function restoreOnboardingEntry(
 	const [existing] = await dbClient
 		.select()
 		.from(signupOnboarding)
-		.where(eq(signupOnboarding.id, entryId))
+		.where(
+			and(
+				eq(signupOnboarding.id, entryId),
+				eq(signupOnboarding.organizationId, organizationId)
+			)
+		)
 		.limit(1);
 
 	if (!existing) {
@@ -734,7 +785,13 @@ export async function restoreOnboardingEntry(
 				revokedByUserId: null,
 				updatedAt: now
 			})
-			.where(and(eq(signupOnboarding.id, entryId), eq(signupOnboarding.status, 'revoked')))
+			.where(
+				and(
+					eq(signupOnboarding.id, entryId),
+					eq(signupOnboarding.organizationId, organizationId),
+					eq(signupOnboarding.status, 'revoked')
+				)
+			)
 			.returning();
 
 		if (!updated) {

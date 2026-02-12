@@ -16,11 +16,14 @@ type SelectResult = SignupOnboardingEntryRecord[];
 type UpdateResult = SignupOnboardingEntryRecord[] | Error;
 type InsertResult = SignupOnboardingEntryRecord[] | Error;
 
+const TEST_ORG_ID = 'org-test-111';
+
 function createEntry(overrides: Partial<SignupOnboardingEntryRecord>): SignupOnboardingEntryRecord {
 	const now = new Date('2026-02-09T00:00:00.000Z');
 
 	return {
 		id: overrides.id ?? '11111111-1111-4111-8111-111111111111',
+		organizationId: overrides.organizationId ?? TEST_ORG_ID,
 		email: overrides.email ?? 'driver@example.com',
 		kind: overrides.kind ?? 'approval',
 		tokenHash: overrides.tokenHash ?? null,
@@ -270,7 +273,7 @@ describe('onboarding service reservation flow', () => {
 		});
 		const uniqueCollision = Object.assign(new Error('pending duplicate'), {
 			code: '23505',
-			constraint: 'uq_signup_onboarding_pending_email_kind'
+			constraint: 'uq_signup_onboarding_pending_org_email_kind_role'
 		});
 
 		const { dbClient, mocks } = createDbClientMock(
@@ -329,6 +332,7 @@ describe('onboarding service duplicate race handling', () => {
 		const result = await createOnboardingApproval(
 			{
 				email: 'reserved@driver.test',
+				organizationId: TEST_ORG_ID,
 				createdBy: 'manager-1'
 			},
 			dbClient
@@ -346,7 +350,7 @@ describe('onboarding service duplicate race handling', () => {
 		});
 		const uniqueError = Object.assign(new Error('duplicate key value'), {
 			code: '23505',
-			constraint: 'uq_signup_onboarding_pending_email_kind'
+			constraint: 'uq_signup_onboarding_pending_org_email_kind_role'
 		});
 
 		const { dbClient } = createDbClientMock([[], [pendingApproval]], [[]], [uniqueError]);
@@ -354,6 +358,7 @@ describe('onboarding service duplicate race handling', () => {
 		const result = await createOnboardingApproval(
 			{
 				email: 'duplicate@driver.test',
+				organizationId: TEST_ORG_ID,
 				createdBy: 'manager-1'
 			},
 			dbClient
@@ -370,7 +375,7 @@ describe('onboarding service duplicate race handling', () => {
 			kind: 'invite'
 		});
 		const uniqueError = Object.assign(
-			new Error('duplicate key uq_signup_onboarding_pending_email_kind'),
+			new Error('duplicate key uq_signup_onboarding_pending_org_email_kind_role'),
 			{
 				code: '23505'
 			}
@@ -381,6 +386,7 @@ describe('onboarding service duplicate race handling', () => {
 		const result = await createOnboardingInvite(
 			{
 				email: 'invite-duplicate@driver.test',
+				organizationId: TEST_ORG_ID,
 				createdBy: 'manager-1',
 				expiresAt: new Date('2026-02-20T00:00:00.000Z')
 			},
@@ -403,6 +409,7 @@ describe('onboarding service duplicate race handling', () => {
 			createOnboardingInvite(
 				{
 					email: 'other@driver.test',
+					organizationId: TEST_ORG_ID,
 					createdBy: 'manager-1',
 					expiresAt: new Date('2026-02-20T00:00:00.000Z')
 				},
@@ -427,7 +434,12 @@ describe('onboarding revocation behavior', () => {
 
 		const { dbClient } = createDbClientMock([], [[revokedApproval]]);
 
-		const revoked = await revokeOnboardingEntry(reservedApproval.id, 'manager-1', dbClient);
+		const revoked = await revokeOnboardingEntry(
+			reservedApproval.id,
+			TEST_ORG_ID,
+			'manager-1',
+			dbClient
+		);
 
 		expect(revoked?.status).toBe('revoked');
 		expect(revoked?.revokedByUserId).toBe('manager-1');

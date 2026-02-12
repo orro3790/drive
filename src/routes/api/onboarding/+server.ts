@@ -9,14 +9,14 @@ import {
 } from '$lib/server/services/onboarding';
 
 export const GET: RequestHandler = async ({ locals }) => {
-	requireManagerWithOrg(locals);
+	const { organizationId } = requireManagerWithOrg(locals);
 
-	const entries = await listSignupOnboardingEntries();
+	const entries = await listSignupOnboardingEntries(organizationId);
 	return json({ entries });
 };
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	const { user } = requireManagerWithOrg(locals);
+	const { user, organizationId } = requireManagerWithOrg(locals);
 
 	const body = await request.json().catch(() => null);
 	if (body === null) {
@@ -30,6 +30,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	const result = await createOnboardingApproval({
 		email: parsed.data.email,
+		organizationId,
 		createdBy: user.id
 	});
 
