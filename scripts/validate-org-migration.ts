@@ -37,6 +37,9 @@ interface CheckResult {
 }
 
 async function checkNullUsers(): Promise<CheckResult> {
+	// user.organizationId stays nullable because Better Auth's signup flow
+	// creates the user with null org before the after-hook sets it.
+	// This check is advisory — it should be zero after backfill, but is not a blocker.
 	const [result] = await db
 		.select({ count: sql<number>`count(*)` })
 		.from(user)
@@ -44,9 +47,12 @@ async function checkNullUsers(): Promise<CheckResult> {
 
 	const count = Number(result.count);
 	return {
-		name: 'Users with null organizationId',
-		passed: count === 0,
-		detail: count === 0 ? 'OK — zero null rows' : `FAIL — ${count} users have null organizationId`
+		name: 'Users with null organizationId (advisory)',
+		passed: true, // Not a blocker — user table stays nullable
+		detail:
+			count === 0
+				? 'OK — zero null rows'
+				: `INFO — ${count} users have null organizationId (expected during active signups)`
 	};
 }
 
@@ -100,8 +106,7 @@ async function checkOrganizationsExist(): Promise<CheckResult> {
 	};
 }
 
-async function checkFkIntegrity(): Promise<CheckResult> {
-	// Check for user.organizationId values that don't exist in organizations
+async function checkFkIntegrityUsers(): Promise<CheckResult> {
 	const [result] = await db.execute(sql`
 		SELECT count(*) AS count
 		FROM "user" u
@@ -121,6 +126,46 @@ async function checkFkIntegrity(): Promise<CheckResult> {
 	};
 }
 
+async function checkFkIntegrityWarehouses(): Promise<CheckResult> {
+	const [result] = await db.execute(sql`
+		SELECT count(*) AS count
+		FROM warehouses w
+		LEFT JOIN organizations o ON w.organization_id = o.id
+		WHERE w.organization_id IS NOT NULL
+		  AND o.id IS NULL
+	`);
+
+	const count = Number((result as { count: number }).count);
+	return {
+		name: 'FK integrity (warehouses → organizations)',
+		passed: count === 0,
+		detail:
+			count === 0
+				? 'OK — all referenced orgs exist'
+				: `FAIL — ${count} warehouses reference non-existent organizations`
+	};
+}
+
+async function checkFkIntegritySignupOnboarding(): Promise<CheckResult> {
+	const [result] = await db.execute(sql`
+		SELECT count(*) AS count
+		FROM signup_onboarding s
+		LEFT JOIN organizations o ON s.organization_id = o.id
+		WHERE s.organization_id IS NOT NULL
+		  AND o.id IS NULL
+	`);
+
+	const count = Number((result as { count: number }).count);
+	return {
+		name: 'FK integrity (signup_onboarding → organizations)',
+		passed: count === 0,
+		detail:
+			count === 0
+				? 'OK — all referenced orgs exist'
+				: `FAIL — ${count} onboarding entries reference non-existent organizations`
+	};
+}
+
 async function main() {
 	console.log('\n=== Organization Migration Validation ===\n');
 
@@ -129,7 +174,9 @@ async function main() {
 		checkNullWarehouses(),
 		checkNullSignupOnboarding(),
 		checkOrganizationsExist(),
-		checkFkIntegrity()
+		checkFkIntegrityUsers(),
+		checkFkIntegrityWarehouses(),
+		checkFkIntegritySignupOnboarding()
 	]);
 
 	let allPassed = true;

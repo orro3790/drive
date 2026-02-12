@@ -36,7 +36,9 @@ export const user = pgTable(
 		isFlagged: boolean('is_flagged').notNull().default(false),
 		flagWarningDate: timestamp('flag_warning_date', { withTimezone: true }),
 		fcmToken: text('fcm_token'),
-		organizationId: uuid('organization_id').notNull(),
+		// Nullable: Better Auth creates users with null org, then the after-hook sets it.
+		// Application-layer guards (org-scope.ts) enforce non-null at runtime.
+		organizationId: uuid('organization_id'),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 	},

@@ -35,7 +35,8 @@ import {
 	driverHealthSnapshots,
 	driverHealthState,
 	organizations,
-	organizationDispatchSettings
+	organizationDispatchSettings,
+	signupOnboarding
 } from '../src/lib/server/db/schema';
 
 // Seed modules
@@ -131,6 +132,9 @@ async function clearData() {
 		await db.delete(account).where(inArray(account.userId, seedManagerIds));
 		await db.delete(user).where(inArray(user.id, seedManagerIds));
 	}
+
+	// Delete signup_onboarding entries (references organizations with onDelete: restrict)
+	await db.delete(signupOnboarding);
 
 	// Create new seed org before deleting old orgs (remaining users need a valid org ref)
 	console.log('\n   Creating seed organization...');
