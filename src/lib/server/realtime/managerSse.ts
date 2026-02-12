@@ -39,54 +39,110 @@ type DriverFlaggedPayload = {
 };
 
 const encoder = new TextEncoder();
-const managerClients = new Set<ReadableStreamDefaultController<Uint8Array>>();
+const managerClientsByOrganization = new Map<
+	string,
+	Set<ReadableStreamDefaultController<Uint8Array>>
+>();
+
+function getManagerClientBucket(organizationId: string) {
+	let bucket = managerClientsByOrganization.get(organizationId);
+	if (!bucket) {
+		bucket = new Set<ReadableStreamDefaultController<Uint8Array>>();
+		managerClientsByOrganization.set(organizationId, bucket);
+	}
+
+	return bucket;
+}
+
+function removeManagerClient(
+	organizationId: string,
+	controller: ReadableStreamDefaultController<Uint8Array>
+) {
+	const bucket = managerClientsByOrganization.get(organizationId);
+	if (!bucket) {
+		return;
+	}
+
+	bucket.delete(controller);
+	if (bucket.size === 0) {
+		managerClientsByOrganization.delete(organizationId);
+	}
+}
+
+function normalizeOrganizationId(organizationId: string): string | null {
+	const trimmed = organizationId.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
 
 function formatSse(event: ManagerEventName, payload: unknown) {
 	const data = JSON.stringify(payload);
 	return encoder.encode(`event: ${event}\ndata: ${data}\n\n`);
 }
 
-export function broadcastManagerEvent(event: ManagerEventName, payload: unknown) {
+export function broadcastManagerEvent(
+	organizationId: string,
+	event: ManagerEventName,
+	payload: unknown
+) {
+	const scopedOrganizationId = normalizeOrganizationId(organizationId);
+	if (!scopedOrganizationId) {
+		return;
+	}
+
+	const bucket = managerClientsByOrganization.get(scopedOrganizationId);
+	if (!bucket || bucket.size === 0) {
+		return;
+	}
+
 	const message = formatSse(event, payload);
-	for (const controller of managerClients) {
+	for (const controller of bucket) {
 		try {
 			controller.enqueue(message);
 		} catch {
-			managerClients.delete(controller);
+			removeManagerClient(scopedOrganizationId, controller);
 		}
 	}
 }
 
-export function broadcastAssignmentUpdated(payload: AssignmentUpdatedPayload) {
-	broadcastManagerEvent('assignment:updated', payload);
+export function broadcastAssignmentUpdated(
+	organizationId: string,
+	payload: AssignmentUpdatedPayload
+) {
+	broadcastManagerEvent(organizationId, 'assignment:updated', payload);
 }
 
-export function broadcastBidWindowOpened(payload: BidWindowOpenedPayload) {
-	broadcastManagerEvent('bid_window:opened', payload);
+export function broadcastBidWindowOpened(organizationId: string, payload: BidWindowOpenedPayload) {
+	broadcastManagerEvent(organizationId, 'bid_window:opened', payload);
 }
 
-export function broadcastBidWindowClosed(payload: BidWindowClosedPayload) {
-	broadcastManagerEvent('bid_window:closed', payload);
+export function broadcastBidWindowClosed(organizationId: string, payload: BidWindowClosedPayload) {
+	broadcastManagerEvent(organizationId, 'bid_window:closed', payload);
 }
 
-export function broadcastDriverFlagged(payload: DriverFlaggedPayload) {
-	broadcastManagerEvent('driver:flagged', payload);
+export function broadcastDriverFlagged(organizationId: string, payload: DriverFlaggedPayload) {
+	broadcastManagerEvent(organizationId, 'driver:flagged', payload);
 }
 
-export function createManagerSseStream() {
+export function createManagerSseStream(organizationId: string) {
+	const scopedOrganizationId = normalizeOrganizationId(organizationId);
+	if (!scopedOrganizationId) {
+		throw new Error('Organization context is required for manager SSE stream');
+	}
+
 	let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
 	let heartbeat: ReturnType<typeof setInterval> | null = null;
 
 	return new ReadableStream<Uint8Array>({
 		start(controller) {
 			controllerRef = controller;
-			managerClients.add(controller);
+			const bucket = getManagerClientBucket(scopedOrganizationId);
+			bucket.add(controller);
 			controller.enqueue(encoder.encode(':connected\n\n'));
 			heartbeat = setInterval(() => {
 				try {
 					controller.enqueue(encoder.encode(':keepalive\n\n'));
 				} catch {
-					managerClients.delete(controller);
+					removeManagerClient(scopedOrganizationId, controller);
 					if (heartbeat) {
 						clearInterval(heartbeat);
 						heartbeat = null;
@@ -100,7 +156,7 @@ export function createManagerSseStream() {
 				heartbeat = null;
 			}
 			if (controllerRef) {
-				managerClients.delete(controllerRef);
+				removeManagerClient(scopedOrganizationId, controllerRef);
 			}
 		}
 	});

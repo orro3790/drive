@@ -1,17 +1,15 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createManagerSseStream } from '$lib/server/realtime/managerSse';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user) {
 		throw error(401, 'Unauthorized');
 	}
 
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
-
-	const stream = createManagerSseStream();
+	const { organizationId } = requireManagerWithOrg(locals);
+	const stream = createManagerSseStream(organizationId);
 
 	return new Response(stream, {
 		headers: {

@@ -134,6 +134,7 @@ async function closeOpenWindowForUrgentEscalation(params: {
 	assignmentId: string;
 	bidWindowId: string;
 	actorId: string;
+	organizationId: string;
 	assignmentStatusBefore: AssignmentSnapshot['status'];
 }) {
 	const resolvedAt = new Date();
@@ -185,7 +186,7 @@ async function closeOpenWindowForUrgentEscalation(params: {
 	});
 
 	if (closedWindow) {
-		broadcastBidWindowClosed({
+		broadcastBidWindowClosed(params.organizationId, {
 			assignmentId: params.assignmentId,
 			bidWindowId: closedWindow.id,
 			winnerId: null,
@@ -204,6 +205,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (locals.user.role !== 'manager') {
 		return overrideError(403, 'forbidden', 'Only managers can override assignments');
 	}
+
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
 
 	const paramsResult = assignmentIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -231,7 +234,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const hasWarehouseAccess = await canManagerAccessWarehouse(
 		locals.user.id,
 		assignment.warehouseId,
-		locals.organizationId ?? locals.user.organizationId ?? ''
+		organizationId
 	);
 	if (!hasWarehouseAccess) {
 		return overrideError(403, 'forbidden', 'No access to this warehouse');
@@ -252,7 +255,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			assignmentId,
 			driverId: parsed.data.driverId,
 			actorId: locals.user.id,
-			organizationId: locals.organizationId ?? locals.user.organizationId ?? '',
+			organizationId,
 			allowedStatuses: ['scheduled', 'unfilled']
 		});
 
@@ -289,7 +292,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		}
 
 		if (result.bidWindowId) {
-			broadcastBidWindowClosed({
+			broadcastBidWindowClosed(organizationId, {
 				assignmentId: result.assignmentId,
 				bidWindowId: result.bidWindowId,
 				winnerId: null,
@@ -297,7 +300,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			});
 		}
 
-		broadcastAssignmentUpdated({
+		broadcastAssignmentUpdated(organizationId, {
 			assignmentId: result.assignmentId,
 			status: 'scheduled',
 			driverId: result.driverId,
@@ -342,7 +345,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		}
 
 		const result = await createBidWindow(assignmentId, {
-			organizationId: locals.organizationId ?? locals.user.organizationId ?? '',
+			organizationId,
 			trigger: 'manager'
 		});
 
@@ -402,6 +405,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			assignmentId,
 			bidWindowId: openWindow.id,
 			actorId: locals.user.id,
+			organizationId,
 			assignmentStatusBefore: assignment.status
 		});
 
@@ -428,11 +432,9 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		}
 	}
 
-	const emergencyBonusPercent = await getEmergencyBonusPercent(
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	const emergencyBonusPercent = await getEmergencyBonusPercent(organizationId);
 	const urgentResult = await createBidWindow(assignmentId, {
-		organizationId: locals.organizationId ?? locals.user.organizationId ?? '',
+		organizationId,
 		mode: 'emergency',
 		trigger: 'manager',
 		payBonusPercent: emergencyBonusPercent

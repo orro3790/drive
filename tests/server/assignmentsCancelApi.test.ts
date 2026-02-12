@@ -119,13 +119,14 @@ let createBidWindowMock: ReturnType<
 		(
 			assignmentId: string,
 			options: {
+				organizationId: string;
 				trigger: 'cancellation';
 			}
 		) => Promise<unknown>
 	>
 >;
 let broadcastAssignmentUpdatedMock: ReturnType<
-	typeof vi.fn<(payload: Record<string, unknown>) => void>
+	typeof vi.fn<(organizationId: string, payload: Record<string, unknown>) => void>
 >;
 
 function createLifecycleOutput(overrides: Partial<LifecycleOutput> = {}): LifecycleOutput {
@@ -147,7 +148,8 @@ function createUser(role: 'driver' | 'manager', id: string): App.Locals['user'] 
 		id,
 		role,
 		name: `${role}-${id}`,
-		email: `${id}@example.test`
+		email: `${id}@example.test`,
+		organizationId: 'org-test'
 	} as App.Locals['user'];
 }
 
@@ -407,11 +409,13 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 		});
 
 		expect(createBidWindowMock).toHaveBeenCalledWith('assignment-1', {
+			organizationId: 'org-test',
 			trigger: 'cancellation'
 		});
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
 		expect(sendManagerAlertMock).toHaveBeenCalledTimes(1);
 		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
+			'org-test',
 			expect.objectContaining({
 				assignmentId: 'assignment-1',
 				status: 'cancelled',

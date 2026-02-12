@@ -176,7 +176,7 @@ export async function checkAndApplyFlag(
 	}
 
 	if (nextIsFlagged && !userRecord.isFlagged) {
-		broadcastDriverFlagged({
+		broadcastDriverFlagged(resolvedOrganizationId ?? '', {
 			driverId: userId,
 			attendanceRate,
 			threshold,

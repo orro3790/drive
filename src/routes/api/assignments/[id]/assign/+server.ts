@@ -16,6 +16,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(403, 'Forbidden');
 	}
 
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+
 	const paramsResult = assignmentIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
 		throw error(400, 'Invalid assignment ID');
@@ -36,7 +38,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const result = await manualAssignDriverToAssignment({
 		assignmentId: paramsResult.data.id,
 		driverId: parsed.data.userId,
-		actorId: locals.user.id
+		actorId: locals.user.id,
+		organizationId
 	});
 
 	if (!result.ok) {
@@ -62,7 +65,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	}
 
 	if (result.bidWindowId) {
-		broadcastBidWindowClosed({
+		broadcastBidWindowClosed(organizationId, {
 			assignmentId: result.assignmentId,
 			bidWindowId: result.bidWindowId,
 			winnerId: null,
@@ -70,7 +73,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		});
 	}
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId: result.assignmentId,
 		status: 'scheduled',
 		driverId: result.driverId,

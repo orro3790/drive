@@ -87,6 +87,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const cancelledAt = new Date();
 
 	const userId = locals.user.id;
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
 	const log = logger.child({ operation: 'assignmentCancel', assignmentId: id, userId });
 	log.info({ isLateCancellation }, 'Starting assignment cancellation');
 
@@ -159,7 +160,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 				driverName: locals.user.name ?? 'A driver',
 				date: existing.date
 			},
-			locals.organizationId ?? locals.user.organizationId ?? ''
+			organizationId
 		);
 	} catch {
 		// Manager alert is best-effort
@@ -167,11 +168,11 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	// Create bid window via service (handles mode selection automatically)
 	await createBidWindow(existing.id, {
-		organizationId: locals.organizationId ?? locals.user.organizationId ?? '',
+		organizationId,
 		trigger: 'cancellation'
 	});
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId: existing.id,
 		status: 'cancelled',
 		driverId: locals.user.id,

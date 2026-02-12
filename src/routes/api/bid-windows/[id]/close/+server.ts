@@ -31,6 +31,8 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		throw error(403, 'Forbidden');
 	}
 
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+
 	const actorId = locals.user.id;
 
 	const paramsResult = bidWindowIdParamsSchema.safeParse(params);
@@ -62,11 +64,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		throw error(404, 'Bid window not found');
 	}
 
-	const canAccess = await canManagerAccessWarehouse(
-		actorId,
-		window.warehouseId,
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	const canAccess = await canManagerAccessWarehouse(actorId, window.warehouseId, organizationId);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -122,13 +120,13 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 			);
 		});
 
-		broadcastBidWindowClosed({
+		broadcastBidWindowClosed(organizationId, {
 			assignmentId: window.assignmentId,
 			bidWindowId: window.id,
 			winnerId: null
 		});
 
-		broadcastAssignmentUpdated({
+		broadcastAssignmentUpdated(organizationId, {
 			assignmentId: window.assignmentId,
 			status: 'unfilled',
 			routeId: window.routeId,
@@ -141,7 +139,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 				actorType: 'user',
 				actorId
 			},
-			locals.organizationId ?? locals.user.organizationId ?? ''
+			organizationId
 		);
 
 		if (resolvedResult.reason === 'not_open') {
@@ -166,10 +164,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		}
 	});
 
-	const bidWindow = await getBidWindowDetail(
-		window.id,
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	const bidWindow = await getBidWindowDetail(window.id, organizationId);
 
 	return json({ bidWindow });
 };
