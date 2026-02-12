@@ -12,7 +12,14 @@ import type { RequestHandler } from './$types';
 import { format, toZonedTime } from 'date-fns-tz';
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { assignments, notifications, routes, shifts, warehouses } from '$lib/server/db/schema';
+import {
+	assignments,
+	notifications,
+	organizations,
+	routes,
+	shifts,
+	warehouses
+} from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { sendNotification } from '$lib/server/services/notifications';
 import { verifyCronAuth } from '$lib/server/cron/auth';
@@ -35,109 +42,140 @@ export const GET: RequestHandler = async ({ request }) => {
 	log.info({ today }, 'Starting shift reminders cron job');
 
 	try {
-		// Find all scheduled assignments for today that have a driver
-		const todayAssignments = await db
-			.select({
-				assignmentId: assignments.id,
-				userId: assignments.userId,
-				routeName: routes.name,
-				warehouseName: warehouses.name
-			})
-			.from(assignments)
-			.innerJoin(routes, eq(routes.id, assignments.routeId))
-			.innerJoin(warehouses, eq(warehouses.id, assignments.warehouseId))
-			.where(
-				and(
-					eq(assignments.date, today),
-					eq(assignments.status, 'scheduled'),
-					isNotNull(assignments.userId)
-				)
-			);
-
-		// Get shifts that have started for today's assignments
-		const startedShiftAssignmentIds = new Set(
-			(
-				await db
-					.select({ assignmentId: shifts.assignmentId })
-					.from(shifts)
-					.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
-					.where(and(eq(assignments.date, today), isNotNull(shifts.startedAt)))
-			).map((row) => row.assignmentId)
-		);
-
-		// Filter out assignments with started shifts
-		const toNotify = todayAssignments.filter((a) => !startedShiftAssignmentIds.has(a.assignmentId));
-
-		log.info(
-			{
-				totalAssignments: todayAssignments.length,
-				alreadyStarted: startedShiftAssignmentIds.size,
-				toNotify: toNotify.length
-			},
-			'Found assignments to remind'
-		);
-
 		let sentCount = 0;
 		let skippedDuplicates = 0;
 		let errorCount = 0;
 
-		const candidateUserIds = Array.from(
-			new Set(
-				toNotify
-					.map((assignment) => assignment.userId)
-					.filter((userId): userId is string => Boolean(userId))
-			)
-		);
+		const organizationRows = await db.select({ id: organizations.id }).from(organizations);
 
-		const existingDedupeRows =
-			candidateUserIds.length === 0
-				? []
-				: await db
-						.select({ dedupeKey: sql<string>`${notifications.data} ->> 'dedupeKey'` })
-						.from(notifications)
+		if (organizationRows.length === 0) {
+			const elapsedMs = Date.now() - startedAt;
+			log.info({ elapsedMs }, 'No organizations found for shift reminders');
+			return json({
+				success: true,
+				sentCount,
+				skippedDuplicates,
+				errorCount,
+				elapsedMs
+			});
+		}
+
+		for (const organization of organizationRows) {
+			const organizationId = organization.id;
+			const orgLog = log.child({ organizationId });
+
+			// Find all scheduled assignments for today that have a driver within this org
+			const todayAssignments = await db
+				.select({
+					assignmentId: assignments.id,
+					userId: assignments.userId,
+					routeName: routes.name,
+					warehouseName: warehouses.name
+				})
+				.from(assignments)
+				.innerJoin(routes, eq(routes.id, assignments.routeId))
+				.innerJoin(warehouses, eq(warehouses.id, assignments.warehouseId))
+				.where(
+					and(
+						eq(warehouses.organizationId, organizationId),
+						eq(assignments.date, today),
+						eq(assignments.status, 'scheduled'),
+						isNotNull(assignments.userId)
+					)
+				);
+
+			// Get shifts that have started for today's assignments within this org
+			const startedShiftAssignmentIds = new Set(
+				(
+					await db
+						.select({ assignmentId: shifts.assignmentId })
+						.from(shifts)
+						.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
+						.innerJoin(warehouses, eq(warehouses.id, assignments.warehouseId))
 						.where(
 							and(
-								eq(notifications.type, 'shift_reminder'),
-								inArray(notifications.userId, candidateUserIds),
-								sql`${notifications.data} ->> 'date' = ${today}`
+								eq(warehouses.organizationId, organizationId),
+								eq(assignments.date, today),
+								isNotNull(shifts.startedAt)
 							)
-						);
+						)
+				).map((row) => row.assignmentId)
+			);
 
-		const seenDedupeKeys = new Set(
-			existingDedupeRows
-				.map((row) => row.dedupeKey)
-				.filter((dedupeKey): dedupeKey is string => Boolean(dedupeKey))
-		);
+			// Filter out assignments with started shifts
+			const toNotify = todayAssignments.filter(
+				(a) => !startedShiftAssignmentIds.has(a.assignmentId)
+			);
 
-		// Send notifications
-		for (const assignment of toNotify) {
-			if (!assignment.userId) continue;
+			orgLog.info(
+				{
+					totalAssignments: todayAssignments.length,
+					alreadyStarted: startedShiftAssignmentIds.size,
+					toNotify: toNotify.length
+				},
+				'Found assignments to remind'
+			);
 
-			const dedupeKey = `shift_reminder:${assignment.assignmentId}:${assignment.userId}:${today}`;
-			if (seenDedupeKeys.has(dedupeKey)) {
-				skippedDuplicates++;
-				continue;
-			}
+			const candidateUserIds = Array.from(
+				new Set(
+					toNotify
+						.map((assignment) => assignment.userId)
+						.filter((userId): userId is string => Boolean(userId))
+				)
+			);
 
-			try {
-				await sendNotification(assignment.userId, 'shift_reminder', {
-					customBody: `Your shift on route ${assignment.routeName} at ${assignment.warehouseName} is today.`,
-					data: {
-						assignmentId: assignment.assignmentId,
-						routeName: assignment.routeName,
-						warehouseName: assignment.warehouseName,
-						date: today,
-						dedupeKey
-					}
-				});
-				seenDedupeKeys.add(dedupeKey);
-				sentCount++;
-			} catch (error) {
-				errorCount++;
-				log.error(
-					{ error, userId: assignment.userId, assignmentId: assignment.assignmentId },
-					'Failed to send shift reminder'
-				);
+			const existingDedupeRows =
+				candidateUserIds.length === 0
+					? []
+					: await db
+							.select({ dedupeKey: sql<string>`${notifications.data} ->> 'dedupeKey'` })
+							.from(notifications)
+							.where(
+								and(
+									eq(notifications.organizationId, organizationId),
+									eq(notifications.type, 'shift_reminder'),
+									inArray(notifications.userId, candidateUserIds),
+									sql`${notifications.data} ->> 'date' = ${today}`
+								)
+							);
+
+			const seenDedupeKeys = new Set(
+				existingDedupeRows
+					.map((row) => row.dedupeKey)
+					.filter((dedupeKey): dedupeKey is string => Boolean(dedupeKey))
+			);
+
+			// Send notifications
+			for (const assignment of toNotify) {
+				if (!assignment.userId) continue;
+
+				const dedupeKey = `shift_reminder:${organizationId}:${assignment.assignmentId}:${assignment.userId}:${today}`;
+				if (seenDedupeKeys.has(dedupeKey)) {
+					skippedDuplicates++;
+					continue;
+				}
+
+				try {
+					await sendNotification(assignment.userId, 'shift_reminder', {
+						customBody: `Your shift on route ${assignment.routeName} at ${assignment.warehouseName} is today.`,
+						organizationId,
+						data: {
+							assignmentId: assignment.assignmentId,
+							routeName: assignment.routeName,
+							warehouseName: assignment.warehouseName,
+							date: today,
+							dedupeKey
+						}
+					});
+					seenDedupeKeys.add(dedupeKey);
+					sentCount++;
+				} catch (error) {
+					errorCount++;
+					orgLog.error(
+						{ error, userId: assignment.userId, assignmentId: assignment.assignmentId },
+						'Failed to send shift reminder'
+					);
+				}
 			}
 		}
 

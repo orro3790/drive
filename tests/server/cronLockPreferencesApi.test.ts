@@ -18,6 +18,14 @@ interface ExistingNotificationRow {
 	userId: string;
 }
 
+interface DriverRow {
+	id: string;
+}
+
+interface OrganizationRow {
+	id: string;
+}
+
 interface ScheduleResult {
 	created: number;
 	skipped: number;
@@ -40,8 +48,24 @@ const assignmentsTable = {
 
 const notificationsTable = {
 	userId: 'notifications.userId',
+	organizationId: 'notifications.organizationId',
 	type: 'notifications.type',
 	data: 'notifications.data'
+};
+
+const organizationsTable = {
+	id: 'organizations.id'
+};
+
+const userTable = {
+	id: 'user.id',
+	role: 'user.role',
+	organizationId: 'user.organizationId'
+};
+
+const warehousesTable = {
+	id: 'warehouses.id',
+	organizationId: 'warehouses.organizationId'
 };
 
 let GET: LockPreferencesRouteModule['GET'];
@@ -72,17 +96,13 @@ let updateMock: ReturnType<
 >;
 
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
-let selectFromMock: ReturnType<
-	typeof vi.fn<
-		(table: unknown) => {
-			where: typeof selectWhereMock;
-		}
-	>
->;
+let selectInnerJoinMock: ReturnType<typeof vi.fn>;
+let selectFromMock: ReturnType<typeof vi.fn>;
+let selectOrgFromMock: ReturnType<typeof vi.fn<(table: unknown) => Promise<OrganizationRow[]>>>;
 let selectMock: ReturnType<
 	typeof vi.fn<
 		(shape: Record<string, unknown>) => {
-			from: typeof selectFromMock;
+			from: ReturnType<typeof vi.fn>;
 		}
 	>
 >;
@@ -93,6 +113,7 @@ let sendBulkNotificationsMock: ReturnType<
 			userIds: string[],
 			type: 'assignment_confirmed',
 			payload: {
+				organizationId: string;
 				data: {
 					weekStart: string;
 				};
@@ -101,7 +122,7 @@ let sendBulkNotificationsMock: ReturnType<
 	>
 >;
 let generateWeekScheduleMock: ReturnType<
-	typeof vi.fn<(targetWeekStart: Date) => Promise<ScheduleResult>>
+	typeof vi.fn<(targetWeekStart: Date, organizationId?: string) => Promise<ScheduleResult>>
 >;
 let getWeekStartMock: ReturnType<typeof vi.fn<(date: Date) => Date>>;
 
@@ -135,15 +156,31 @@ beforeEach(async () => {
 	}));
 
 	selectWhereMock = vi.fn<(whereClause: unknown) => Promise<unknown[]>>(async () => []);
-	selectFromMock = vi.fn<(table: unknown) => { where: typeof selectWhereMock }>(() => ({
+	selectInnerJoinMock = vi.fn((_table: unknown, _condition: unknown) => ({
+		innerJoin: selectInnerJoinMock,
 		where: selectWhereMock
 	}));
-	selectMock = vi.fn<(shape: Record<string, unknown>) => { from: typeof selectFromMock }>(() => ({
-		from: selectFromMock
-	}));
+	selectOrgFromMock = vi.fn<(table: unknown) => Promise<OrganizationRow[]>>(async () => [
+		{ id: 'org-1' }
+	]);
+	selectFromMock = vi.fn((table: unknown) => {
+		if (table === organizationsTable) {
+			return Promise.resolve([{ id: 'org-1' }]);
+		}
+
+		return {
+			innerJoin: selectInnerJoinMock,
+			where: selectWhereMock
+		};
+	});
+	selectMock = vi.fn<(shape: Record<string, unknown>) => { from: typeof selectFromMock }>(
+		(shape) => ({
+			from: 'id' in shape && shape.id === organizationsTable.id ? selectOrgFromMock : selectFromMock
+		})
+	);
 
 	sendBulkNotificationsMock = vi.fn(async () => new Map<string, unknown>());
-	generateWeekScheduleMock = vi.fn(async () => ({
+	generateWeekScheduleMock = vi.fn(async (_targetWeekStart: Date, _organizationId?: string) => ({
 		created: 0,
 		skipped: 0,
 		unfilled: 0,
@@ -152,10 +189,12 @@ beforeEach(async () => {
 	getWeekStartMock = vi.fn(() => new Date('2026-02-09T00:00:00.000Z'));
 
 	const childLogger = {
+		child: vi.fn(),
 		info: vi.fn(),
 		warn: vi.fn(),
 		error: vi.fn()
 	};
+	childLogger.child.mockReturnValue(childLogger);
 
 	vi.doMock('$env/static/private', () => ({ CRON_SECRET: CRON_TOKEN }));
 	vi.doMock('$env/dynamic/private', () => ({ env: {} }));
@@ -170,13 +209,17 @@ beforeEach(async () => {
 	vi.doMock('$lib/server/db/schema', () => ({
 		driverPreferences: driverPreferencesTable,
 		assignments: assignmentsTable,
-		notifications: notificationsTable
+		notifications: notificationsTable,
+		organizations: organizationsTable,
+		user: userTable,
+		warehouses: warehousesTable
 	}));
 
 	vi.doMock('drizzle-orm', () => ({
 		and: (...conditions: unknown[]) => ({ conditions }),
 		eq: (left: unknown, right: unknown) => ({ left, right }),
 		gte: (left: unknown, right: unknown) => ({ left, right }),
+		inArray: (left: unknown, right: unknown[]) => ({ left, right }),
 		isNotNull: (column: unknown) => ({ column }),
 		isNull: (column: unknown) => ({ column }),
 		lt: (left: unknown, right: unknown) => ({ left, right }),
@@ -240,6 +283,7 @@ describe('GET /api/cron/lock-preferences contract', () => {
 		updateReturningMock.mockResolvedValueOnce([{ id: 'pref-1' }, { id: 'pref-2' }]);
 		generateWeekScheduleMock.mockResolvedValueOnce(schedule);
 		selectWhereMock
+			.mockResolvedValueOnce([{ id: 'driver-1' }, { id: 'driver-2' }] as DriverRow[])
 			.mockResolvedValueOnce([
 				{ userId: 'driver-1' },
 				{ userId: 'driver-2' },
@@ -276,6 +320,11 @@ describe('GET /api/cron/lock-preferences contract', () => {
 		});
 		selectWhereMock
 			.mockResolvedValueOnce([
+				{ id: 'driver-1' },
+				{ id: 'driver-2' },
+				{ id: 'driver-3' }
+			] as DriverRow[])
+			.mockResolvedValueOnce([
 				{ userId: 'driver-1' },
 				{ userId: 'driver-2' },
 				{ userId: 'driver-3' }
@@ -295,6 +344,7 @@ describe('GET /api/cron/lock-preferences contract', () => {
 			['driver-1', 'driver-3'],
 			'assignment_confirmed',
 			expect.objectContaining({
+				organizationId: 'org-1',
 				data: expect.objectContaining({
 					weekStart: expect.any(String)
 				})
@@ -312,6 +362,7 @@ describe('GET /api/cron/lock-preferences contract', () => {
 			errors: []
 		});
 		selectWhereMock
+			.mockResolvedValueOnce([{ id: 'driver-1' }] as DriverRow[])
 			.mockResolvedValueOnce([{ userId: 'driver-1' }] as AssignmentUserRow[])
 			.mockResolvedValueOnce([{ userId: 'driver-1' }] as ExistingNotificationRow[]);
 

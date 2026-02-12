@@ -9,6 +9,10 @@ interface DriverRow {
 	id: string;
 }
 
+interface OrganizationRow {
+	id: string;
+}
+
 interface FlaggingResult {
 	warningSent: boolean;
 	gracePenaltyApplied: boolean;
@@ -19,23 +23,33 @@ const CRON_TOKEN = 'cron-secret-test-token';
 
 const userTable = {
 	id: 'user.id',
-	role: 'user.role'
+	role: 'user.role',
+	organizationId: 'user.organizationId'
+};
+
+const organizationsTable = {
+	id: 'organizations.id'
 };
 
 let GET: PerformanceCheckRouteModule['GET'];
+let organizationRows: OrganizationRow[];
 
 let whereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<DriverRow[]>>>;
-let fromMock: ReturnType<typeof vi.fn<(table: unknown) => { where: typeof whereMock }>>;
+let fromMock: ReturnType<typeof vi.fn>;
 let selectMock: ReturnType<
 	typeof vi.fn<
 		(shape: Record<string, unknown>) => {
-			from: typeof fromMock;
+			from: ReturnType<typeof vi.fn>;
 		}
 	>
 >;
 
-let updateDriverMetricsMock: ReturnType<typeof vi.fn<(userId: string) => Promise<void>>>;
-let checkAndApplyFlagMock: ReturnType<typeof vi.fn<(userId: string) => Promise<FlaggingResult>>>;
+let updateDriverMetricsMock: ReturnType<
+	typeof vi.fn<(userId: string, organizationId?: string) => Promise<void>>
+>;
+let checkAndApplyFlagMock: ReturnType<
+	typeof vi.fn<(userId: string, organizationId?: string) => Promise<FlaggingResult>>
+>;
 
 function createAuthorizedEvent(token: string = CRON_TOKEN) {
 	return createRequestEvent({
@@ -49,26 +63,33 @@ function createAuthorizedEvent(token: string = CRON_TOKEN) {
 beforeEach(async () => {
 	vi.resetModules();
 
+	organizationRows = [{ id: 'org-1' }];
 	whereMock = vi.fn<(whereClause: unknown) => Promise<DriverRow[]>>(async () => []);
-	fromMock = vi.fn<(table: unknown) => { where: typeof whereMock }>(() => ({
-		where: whereMock
-	}));
+	fromMock = vi.fn((table: unknown) => {
+		if (table === organizationsTable) {
+			return Promise.resolve(organizationRows);
+		}
+
+		return { where: whereMock };
+	});
 	selectMock = vi.fn<(shape: Record<string, unknown>) => { from: typeof fromMock }>(() => ({
 		from: fromMock
 	}));
 
-	updateDriverMetricsMock = vi.fn(async () => undefined);
-	checkAndApplyFlagMock = vi.fn(async () => ({
+	updateDriverMetricsMock = vi.fn(async (_userId: string, _organizationId?: string) => undefined);
+	checkAndApplyFlagMock = vi.fn(async (_userId: string, _organizationId?: string) => ({
 		warningSent: false,
 		gracePenaltyApplied: false,
 		rewardApplied: false
 	}));
 
 	const childLogger = {
+		child: vi.fn(),
 		info: vi.fn(),
 		debug: vi.fn(),
 		error: vi.fn()
 	};
+	childLogger.child.mockReturnValue(childLogger);
 
 	vi.doMock('$env/static/private', () => ({ CRON_SECRET: CRON_TOKEN }));
 	vi.doMock('$env/dynamic/private', () => ({ env: {} }));
@@ -80,10 +101,12 @@ beforeEach(async () => {
 	}));
 
 	vi.doMock('$lib/server/db/schema', () => ({
+		organizations: organizationsTable,
 		user: userTable
 	}));
 
 	vi.doMock('drizzle-orm', () => ({
+		and: (...conditions: unknown[]) => ({ conditions }),
 		eq: (left: unknown, right: unknown) => ({ left, right })
 	}));
 
@@ -196,6 +219,8 @@ describe('GET /api/cron/performance-check contract', () => {
 
 		expect(updateDriverMetricsMock).toHaveBeenCalledTimes(4);
 		expect(checkAndApplyFlagMock).toHaveBeenCalledTimes(4);
+		expect(updateDriverMetricsMock).toHaveBeenCalledWith('driver-1', 'org-1');
+		expect(checkAndApplyFlagMock).toHaveBeenCalledWith('driver-1', 'org-1');
 	});
 
 	it('returns 500 when top-level driver query fails', async () => {

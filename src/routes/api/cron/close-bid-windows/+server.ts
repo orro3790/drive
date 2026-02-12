@@ -44,8 +44,10 @@ export const GET: RequestHandler = async ({ request }) => {
 	let errors = 0;
 
 	for (const org of orgRows) {
+		const orgLog = log.child({ organizationId: org.id });
 		const expiredWindows = await getExpiredBidWindows(undefined, org.id);
 		if (expiredWindows.length === 0) {
+			orgLog.info('No expired bid windows for organization');
 			continue;
 		}
 
@@ -61,24 +63,24 @@ export const GET: RequestHandler = async ({ request }) => {
 
 				if (result.resolved) {
 					resolved++;
-					log.info(
+					orgLog.info(
 						{ windowId: window.id, winnerId: result.winnerId, bidCount: result.bidCount },
 						'Bid window resolved'
 					);
 				} else if (result.transitioned) {
 					transitioned++;
-					log.info({ windowId: window.id }, 'Competitive window transitioned to instant');
+					orgLog.info({ windowId: window.id }, 'Competitive window transitioned to instant');
 				} else if (result.reason === 'no_bids') {
 					// Instant/emergency window with no bids — close it
 					await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, window.id));
 					closed++;
-					log.info({ windowId: window.id, mode: window.mode }, 'Window closed (no bids)');
+					orgLog.info({ windowId: window.id, mode: window.mode }, 'Window closed (no bids)');
 				} else {
-					log.info({ windowId: window.id, reason: result.reason }, 'Bid window not resolved');
+					orgLog.info({ windowId: window.id, reason: result.reason }, 'Bid window not resolved');
 				}
 			} catch (err) {
 				errors++;
-				log.error({ windowId: window.id, error: err }, 'Failed to process bid window');
+				orgLog.error({ windowId: window.id, error: err }, 'Failed to process bid window');
 			}
 		}
 	}

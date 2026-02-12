@@ -14,9 +14,16 @@ interface WeeklySummary {
 }
 
 const CRON_TOKEN = 'cron-secret-test-token';
+const organizationsTable = {
+	id: 'organizations.id'
+};
 
 let GET: HealthWeeklyRouteModule['GET'];
-let runWeeklyHealthEvaluationMock: ReturnType<typeof vi.fn<() => Promise<WeeklySummary>>>;
+let runWeeklyHealthEvaluationMock: ReturnType<
+	typeof vi.fn<(organizationId?: string) => Promise<WeeklySummary>>
+>;
+let dbSelectMock: ReturnType<typeof vi.fn>;
+let selectFromMock: ReturnType<typeof vi.fn>;
 
 function createAuthorizedEvent(token: string = CRON_TOKEN) {
 	return createRequestEvent({
@@ -30,7 +37,7 @@ function createAuthorizedEvent(token: string = CRON_TOKEN) {
 beforeEach(async () => {
 	vi.resetModules();
 
-	runWeeklyHealthEvaluationMock = vi.fn(async () => ({
+	runWeeklyHealthEvaluationMock = vi.fn(async (_organizationId?: string) => ({
 		evaluated: 10,
 		qualified: 6,
 		hardStopResets: 1,
@@ -39,13 +46,28 @@ beforeEach(async () => {
 		elapsedMs: 35
 	}));
 
+	selectFromMock = vi.fn(async (_table: unknown) => [{ id: 'org-1' }]);
+	dbSelectMock = vi.fn((_shape: Record<string, unknown>) => ({ from: selectFromMock }));
+
 	const childLogger = {
+		child: vi.fn(),
 		info: vi.fn(),
 		error: vi.fn()
 	};
+	childLogger.child.mockReturnValue(childLogger);
 
 	vi.doMock('$env/static/private', () => ({ CRON_SECRET: CRON_TOKEN }));
 	vi.doMock('$env/dynamic/private', () => ({ env: {} }));
+
+	vi.doMock('$lib/server/db', () => ({
+		db: {
+			select: dbSelectMock
+		}
+	}));
+
+	vi.doMock('$lib/server/db/schema', () => ({
+		organizations: organizationsTable
+	}));
 
 	vi.doMock('$lib/server/services/health', () => ({
 		runWeeklyHealthEvaluation: runWeeklyHealthEvaluationMock
@@ -64,6 +86,8 @@ afterEach(() => {
 	vi.clearAllMocks();
 	vi.doUnmock('$env/static/private');
 	vi.doUnmock('$env/dynamic/private');
+	vi.doUnmock('$lib/server/db');
+	vi.doUnmock('$lib/server/db/schema');
 	vi.doUnmock('$lib/server/services/health');
 	vi.doUnmock('$lib/server/logger');
 });
@@ -91,11 +115,19 @@ describe('GET /api/cron/health-weekly contract', () => {
 		const response = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(200);
-		await expect(response.json()).resolves.toEqual({
+		await expect(response.json()).resolves.toMatchObject({
 			success: true,
-			summary
+			summary: {
+				evaluated: 12,
+				qualified: 7,
+				hardStopResets: 2,
+				neutral: 3,
+				errors: 1,
+				elapsedMs: expect.any(Number)
+			}
 		});
 		expect(runWeeklyHealthEvaluationMock).toHaveBeenCalledTimes(1);
+		expect(runWeeklyHealthEvaluationMock).toHaveBeenCalledWith('org-1');
 	});
 
 	it('returns 500 when service throws', async () => {
