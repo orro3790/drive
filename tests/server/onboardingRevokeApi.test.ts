@@ -15,7 +15,8 @@ function createUser(role: 'manager' | 'driver', id: string): App.Locals['user'] 
 		id,
 		role,
 		name: `${role}-${id}`,
-		email: `${id}@example.test`
+		email: `${id}@example.test`,
+		organizationId: 'org-test'
 	} as App.Locals['user'];
 }
 

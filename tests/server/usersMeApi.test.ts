@@ -19,7 +19,8 @@ function createUser(
 		id,
 		email,
 		role,
-		name: `${role}-${id}`
+		name: `${role}-${id}`,
+		organizationId: 'org-test'
 	} as App.Locals['user'];
 }
 

@@ -2,16 +2,11 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 import { signupOnboardingReservationIdSchema } from '$lib/schemas/onboarding';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import { restoreOnboardingEntry } from '$lib/server/services/onboarding';
 
 export const PATCH: RequestHandler = async ({ locals, params }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	requireManagerWithOrg(locals);
 
 	const idResult = signupOnboardingReservationIdSchema.safeParse(params.id);
 	if (!idResult.success) {

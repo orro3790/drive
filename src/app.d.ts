@@ -10,6 +10,7 @@ declare global {
 			session?: AuthSession['session'];
 			user?: AuthSession['user'];
 			userId?: string;
+			organizationId?: string;
 			requestId?: string;
 		}
 		// interface PageData {}

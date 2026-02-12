@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { dispatchSettingsSchema } from '$lib/schemas/dispatch-settings';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import {
 	getDispatchSettings,
 	updateDispatchSettings,
@@ -16,20 +17,8 @@ function toDispatchSettingsResponse(settings: DispatchSettingsRecord) {
 	};
 }
 
-function requireManager(locals: App.Locals) {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
-
-	return locals.user;
-}
-
 export const GET: RequestHandler = async ({ locals }) => {
-	requireManager(locals);
+	requireManagerWithOrg(locals);
 
 	try {
 		const settings = await getDispatchSettings();
@@ -46,7 +35,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 };
 
 export const PATCH: RequestHandler = async ({ locals, request }) => {
-	const user = requireManager(locals);
+	const { user } = requireManagerWithOrg(locals);
 
 	let body: unknown;
 	try {

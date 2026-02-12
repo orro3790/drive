@@ -11,6 +11,7 @@ import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/schema';
 import { account } from '$lib/server/db/auth-schema';
 import logger, { toSafeErrorMessage } from '$lib/server/logger';
+import { requireAuthenticatedWithOrg } from '$lib/server/org-scope';
 import { userProfileUpdateSchema } from '$lib/schemas/user-settings';
 
 export const PATCH: RequestHandler = async ({ locals, request }) => {
@@ -29,7 +30,7 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 		throw error(401, 'Unauthorized');
 	}
 
-	const currentUser = locals.user;
+	const { user: currentUser } = requireAuthenticatedWithOrg(locals);
 	const log = logger.child({
 		event: 'user.profile.update',
 		requestId,
@@ -62,7 +63,7 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'Validation failed');
 	}
 
-	const userId = locals.user.id;
+	const userId = currentUser.id;
 	const now = new Date();
 	const normalizedEmail = result.data.email.trim().toLowerCase();
 	const normalizedName = result.data.name.trim();

@@ -6,12 +6,17 @@ export default [
 			'.beads/**',
 			'.bv/**',
 			'.claude/**',
+			'.gradle-home/**',
 			'.svelte-kit/**',
+			'android/.gradle/**',
+			'android/.gradle-local/**',
+			'android/**/build/**',
 			'build/**',
 			'drizzle/**',
 			'node_modules/**',
 			'project.inlang/**',
 			'ralph/**',
+			'src/paraglide/**',
 			'src/lib/paraglide/**'
 		]
 	},

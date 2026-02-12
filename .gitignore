@@ -27,10 +27,17 @@ vite.config.ts.timestamp-*
 /drizzle/meta
 
 # Paraglide (auto-generated)
+/src/paraglide/
 /src/lib/paraglide/
 
 # Local tooling
 .agent-browser/
+
+# Android and Gradle build artifacts
+.gradle-home/
+android/.gradle/
+android/.gradle-local/
+android/**/build/
 
 # bv (beads viewer) local config and caches
 .bv/
