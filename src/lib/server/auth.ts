@@ -92,6 +92,12 @@ export const auth = betterAuth({
 				defaultValue: 'driver',
 				input: false
 			},
+			organizationId: {
+				type: 'string',
+				required: false,
+				defaultValue: null,
+				input: false
+			},
 			phone: {
 				type: 'string',
 				required: false,

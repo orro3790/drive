@@ -114,7 +114,8 @@ function createUser(role: 'driver' | 'manager', id: string): App.Locals['user'] 
 		id,
 		role,
 		name: `${role}-${id}`,
-		email: `${id}@example.test`
+		email: `${id}@example.test`,
+		organizationId: 'org-test'
 	} as App.Locals['user'];
 }
 
@@ -168,7 +169,15 @@ beforeEach(async () => {
 
 	vi.doMock('$lib/server/db/schema', () => ({
 		assignments: assignmentsTable,
-		shifts: shiftsTable
+		shifts: shiftsTable,
+		user: {
+			id: 'user.id',
+			organizationId: 'user.organizationId'
+		},
+		warehouses: {
+			id: 'warehouses.id',
+			organizationId: 'warehouses.organizationId'
+		}
 	}));
 
 	vi.doMock('drizzle-orm', () => ({

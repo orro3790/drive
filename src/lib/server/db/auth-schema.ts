@@ -5,7 +5,16 @@
  * Keep separate from domain schema (schema.ts).
  */
 
-import { bigint, boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+	bigint,
+	boolean,
+	index,
+	integer,
+	pgTable,
+	text,
+	timestamp,
+	uuid
+} from 'drizzle-orm/pg-core';
 
 /**
  * Better Auth User table
@@ -13,21 +22,28 @@ import { bigint, boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/
  * Single source of truth for user data. Domain tables reference this table.
  * Includes domain fields (phone, weeklyCap, isFlagged, flagWarningDate).
  */
-export const user = pgTable('user', {
-	id: text('id').primaryKey(),
-	name: text('name').notNull(),
-	email: text('email').notNull().unique(),
-	emailVerified: boolean('email_verified').notNull().default(false),
-	image: text('image'),
-	role: text('role').notNull().default('driver'),
-	phone: text('phone'),
-	weeklyCap: integer('weekly_cap').notNull().default(4),
-	isFlagged: boolean('is_flagged').notNull().default(false),
-	flagWarningDate: timestamp('flag_warning_date', { withTimezone: true }),
-	fcmToken: text('fcm_token'),
-	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
-});
+export const user = pgTable(
+	'user',
+	{
+		id: text('id').primaryKey(),
+		name: text('name').notNull(),
+		email: text('email').notNull().unique(),
+		emailVerified: boolean('email_verified').notNull().default(false),
+		image: text('image'),
+		role: text('role').notNull().default('driver'),
+		phone: text('phone'),
+		weeklyCap: integer('weekly_cap').notNull().default(4),
+		isFlagged: boolean('is_flagged').notNull().default(false),
+		flagWarningDate: timestamp('flag_warning_date', { withTimezone: true }),
+		fcmToken: text('fcm_token'),
+		organizationId: uuid('organization_id'),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => ({
+		idxUserOrg: index('idx_user_org').on(table.organizationId)
+	})
+);
 
 /**
  * Better Auth Session table

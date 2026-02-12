@@ -12,6 +12,7 @@ import { shiftStartSchema } from '$lib/schemas/shift';
 import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 import {
 	createAssignmentLifecycleContext,
 	deriveAssignmentLifecycle
@@ -19,13 +20,7 @@ import {
 import logger from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can start shifts');
-	}
+	const { user } = requireDriverWithOrg(locals);
 
 	const body = await request.json();
 	const result = shiftStartSchema.safeParse(body);
@@ -53,7 +48,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	// Verify ownership
-	if (assignment.userId !== locals.user.id) {
+	if (assignment.userId !== user.id) {
 		throw error(403, 'Forbidden');
 	}
 
@@ -64,7 +59,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.innerJoin(assignments, eq(shifts.assignmentId, assignments.id))
 		.where(
 			and(
-				eq(assignments.userId, locals.user.id),
+				eq(assignments.userId, user.id),
 				inArray(assignments.status, ['active', 'scheduled']),
 				isNotNull(shifts.arrivedAt),
 				isNull(shifts.completedAt),
@@ -122,7 +117,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(409, 'Parcel inventory already recorded');
 	}
 
-	const userId = locals.user.id;
+	const userId = user.id;
 	const log = logger.child({ operation: 'shiftStart', assignmentId, userId });
 	log.info('Starting parcel inventory recording');
 
@@ -165,8 +160,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	broadcastAssignmentUpdated({
 		assignmentId,
 		status: 'active',
-		driverId: locals.user.id,
-		driverName: locals.user.name ?? null,
+		driverId: user.id,
+		driverName: user.name ?? null,
 		shiftProgress: 'started'
 	});
 

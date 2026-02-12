@@ -18,11 +18,13 @@ describe('POST /api/onboarding', () => {
 			headers: { 'content-type': 'application/json' },
 			body: '{"kind":"approval",',
 			locals: {
+				organizationId: 'org-test',
 				user: {
 					id: 'manager-1',
 					name: 'Manager',
 					email: 'manager@example.test',
-					role: 'manager'
+					role: 'manager',
+					organizationId: 'org-test'
 				}
 			} as App.Locals
 		});
@@ -42,11 +44,13 @@ describe('POST /api/onboarding', () => {
 				expiresInHours: 24
 			},
 			locals: {
+				organizationId: 'org-test',
 				user: {
 					id: 'manager-1',
 					name: 'Manager',
 					email: 'manager@example.test',
-					role: 'manager'
+					role: 'manager',
+					organizationId: 'org-test'
 				}
 			} as App.Locals
 		});

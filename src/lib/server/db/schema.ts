@@ -83,15 +83,40 @@ export const signupOnboardingStatusEnum = pgEnum('signup_onboarding_status', [
 	'revoked'
 ]);
 
+// Organizations
+export const organizations = pgTable(
+	'organizations',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		name: text('name').notNull(),
+		slug: text('slug').notNull(),
+		joinCodeHash: text('join_code_hash').notNull(),
+		ownerUserId: text('owner_user_id').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => ({
+		slugUnique: uniqueIndex('uq_organizations_slug').on(table.slug),
+		joinCodeHashUnique: uniqueIndex('uq_organizations_join_code_hash').on(table.joinCodeHash)
+	})
+);
+
 // Warehouses
-export const warehouses = pgTable('warehouses', {
-	id: uuid('id').primaryKey().defaultRandom(),
-	name: text('name').notNull(),
-	address: text('address').notNull(),
-	createdBy: text('created_by').references(() => user.id),
-	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
-});
+export const warehouses = pgTable(
+	'warehouses',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		name: text('name').notNull(),
+		address: text('address').notNull(),
+		organizationId: uuid('organization_id').references(() => organizations.id),
+		createdBy: text('created_by').references(() => user.id),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => ({
+		idxWarehousesOrg: index('idx_warehouses_org').on(table.organizationId)
+	})
+);
 
 // Routes (one-to-one with warehouse)
 export const routes = pgTable(
@@ -262,6 +287,16 @@ export const dispatchSettings = pgTable('dispatch_settings', {
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
 
+// Organization dispatch settings (one row per organization)
+export const organizationDispatchSettings = pgTable('organization_dispatch_settings', {
+	organizationId: uuid('organization_id')
+		.primaryKey()
+		.references(() => organizations.id, { onDelete: 'cascade' }),
+	emergencyBonusPercent: integer('emergency_bonus_percent').notNull().default(20),
+	updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});
+
 // Driver Metrics (denormalized for performance)
 export const driverMetrics = pgTable('driver_metrics', {
 	userId: text('user_id')
@@ -311,6 +346,7 @@ export const notifications = pgTable(
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
+		organizationId: uuid('organization_id').references(() => organizations.id),
 		type: notificationTypeEnum('type').notNull(),
 		title: text('title').notNull(),
 		body: text('body').notNull(),
@@ -336,6 +372,7 @@ export const auditLogs = pgTable(
 		entityId: uuid('entity_id').notNull(),
 		action: text('action').notNull(),
 		actorId: text('actor_id').references(() => user.id),
+		organizationId: uuid('organization_id').references(() => organizations.id),
 		actorType: actorTypeEnum('actor_type').notNull(),
 		changes: jsonb('changes'),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
@@ -354,8 +391,10 @@ export const signupOnboarding = pgTable(
 	'signup_onboarding',
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
+		organizationId: uuid('organization_id').references(() => organizations.id),
 		email: text('email').notNull(),
 		kind: signupOnboardingKindEnum('kind').notNull().default('approval'),
+		targetRole: text('target_role').notNull().default('driver'),
 		tokenHash: text('token_hash'),
 		status: signupOnboardingStatusEnum('status').notNull().default('pending'),
 		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
@@ -372,12 +411,18 @@ export const signupOnboarding = pgTable(
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 	},
 	(table) => ({
-		emailStatusIdx: index('idx_signup_onboarding_email_status').on(table.email, table.status),
+		orgEmailStatusIdx: index('idx_signup_onboarding_org_email_status').on(
+			table.organizationId,
+			table.email,
+			table.status
+		),
 		expiresAtIdx: index('idx_signup_onboarding_expires_at').on(table.expiresAt),
 		tokenHashIdx: index('idx_signup_onboarding_token_hash').on(table.tokenHash),
 		tokenHashUnique: unique('uq_signup_onboarding_token_hash').on(table.tokenHash),
-		pendingEmailKindUniqueIdx: uniqueIndex('uq_signup_onboarding_pending_email_kind')
-			.on(table.email, table.kind)
+		pendingOrgEmailKindRoleUniqueIdx: uniqueIndex(
+			'uq_signup_onboarding_pending_org_email_kind_role'
+		)
+			.on(table.organizationId, table.email, table.kind, table.targetRole)
 			.where(sql`${table.status} = 'pending'`)
 	})
 );
@@ -425,6 +470,10 @@ export const driverHealthState = pgTable('driver_health_state', {
 
 // Relations
 export const userRelations = relations(user, ({ one, many }) => ({
+	organization: one(organizations, {
+		fields: [user.organizationId],
+		references: [organizations.id]
+	}),
 	preferences: one(driverPreferences, {
 		fields: [user.id],
 		references: [driverPreferences.userId]
@@ -444,6 +493,21 @@ export const userRelations = relations(user, ({ one, many }) => ({
 	healthSnapshots: many(driverHealthSnapshots)
 }));
 
+export const organizationsRelations = relations(organizations, ({ one, many }) => ({
+	owner: one(user, {
+		fields: [organizations.ownerUserId],
+		references: [user.id]
+	}),
+	warehouses: many(warehouses),
+	onboardingEntries: many(signupOnboarding),
+	notifications: many(notifications),
+	auditLogs: many(auditLogs),
+	dispatchSettings: one(organizationDispatchSettings, {
+		fields: [organizations.id],
+		references: [organizationDispatchSettings.organizationId]
+	})
+}));
+
 export const routesRelations = relations(routes, ({ one, many }) => ({
 	warehouse: one(warehouses, {
 		fields: [routes.warehouseId],
@@ -457,7 +521,11 @@ export const routesRelations = relations(routes, ({ one, many }) => ({
 	completions: many(routeCompletions)
 }));
 
-export const warehousesRelations = relations(warehouses, ({ many }) => ({
+export const warehousesRelations = relations(warehouses, ({ one, many }) => ({
+	organization: one(organizations, {
+		fields: [warehouses.organizationId],
+		references: [organizations.id]
+	}),
 	routes: many(routes),
 	assignments: many(assignments),
 	managers: many(warehouseManagers)
@@ -533,8 +601,26 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
 	user: one(user, {
 		fields: [notifications.userId],
 		references: [user.id]
+	}),
+	organization: one(organizations, {
+		fields: [notifications.organizationId],
+		references: [organizations.id]
 	})
 }));
+
+export const organizationDispatchSettingsRelations = relations(
+	organizationDispatchSettings,
+	({ one }) => ({
+		organization: one(organizations, {
+			fields: [organizationDispatchSettings.organizationId],
+			references: [organizations.id]
+		}),
+		updatedByUser: one(user, {
+			fields: [organizationDispatchSettings.updatedBy],
+			references: [user.id]
+		})
+	})
+);
 
 export const driverMetricsRelations = relations(driverMetrics, ({ one }) => ({
 	user: one(user, {
