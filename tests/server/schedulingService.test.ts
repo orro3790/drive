@@ -22,6 +22,7 @@ function nextSelectResult() {
 const selectMock = vi.fn((_shape?: unknown) => {
 	const chain = {
 		from: vi.fn(() => chain),
+		innerJoin: vi.fn((_table: unknown, _on: unknown) => chain),
 		where: vi.fn(async (_condition: unknown) => nextSelectResult())
 	};
 
@@ -87,7 +88,7 @@ describe('scheduling service boundaries', () => {
 		setSelectResults([[]]);
 
 		await expect(
-			getDriverWeeklyAssignmentCount('driver-empty', new Date('2026-02-02T00:00:00.000Z'))
+			getDriverWeeklyAssignmentCount('driver-empty', new Date('2026-02-02T00:00:00.000Z'), 'org-a')
 		).resolves.toBe(0);
 	});
 
@@ -95,7 +96,7 @@ describe('scheduling service boundaries', () => {
 		setSelectResults([[{ weeklyCap: 4, isFlagged: true }]]);
 
 		await expect(
-			canDriverTakeAssignment('driver-flagged', new Date('2026-02-02T00:00:00.000Z'))
+			canDriverTakeAssignment('driver-flagged', new Date('2026-02-02T00:00:00.000Z'), 'org-a')
 		).resolves.toBe(false);
 	});
 
@@ -109,7 +110,17 @@ describe('scheduling service boundaries', () => {
 
 		const weekStart = new Date('2026-02-02T00:00:00.000Z');
 
-		await expect(canDriverTakeAssignment('driver-under-cap', weekStart)).resolves.toBe(true);
-		await expect(canDriverTakeAssignment('driver-at-cap', weekStart)).resolves.toBe(false);
+		await expect(canDriverTakeAssignment('driver-under-cap', weekStart, 'org-a')).resolves.toBe(
+			true
+		);
+		await expect(canDriverTakeAssignment('driver-at-cap', weekStart, 'org-a')).resolves.toBe(false);
+	});
+
+	it('denies drivers when user lookup is out-of-org', async () => {
+		setSelectResults([[]]);
+
+		await expect(
+			canDriverTakeAssignment('driver-cross-org', new Date('2026-02-02T00:00:00.000Z'), 'org-a')
+		).resolves.toBe(false);
 	});
 });

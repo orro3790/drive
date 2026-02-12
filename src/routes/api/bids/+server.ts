@@ -12,7 +12,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { bids, bidWindows, assignments, user } from '$lib/server/db/schema';
+import { bids, bidWindows, assignments, user, warehouses } from '$lib/server/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { parseISO, set, startOfDay } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
@@ -52,6 +52,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	const driverId = locals.user.id;
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
 
 	const log = logger.child({ operation: 'submitBid' });
 
@@ -73,7 +74,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const [driverInfo] = await db
 		.select({ isFlagged: user.isFlagged })
 		.from(user)
-		.where(eq(user.id, driverId));
+		.where(and(eq(user.id, driverId), eq(user.organizationId, organizationId)));
 
 	if (driverInfo?.isFlagged) {
 		log.warn('Flagged driver attempted to bid');
@@ -93,7 +94,14 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		})
 		.from(bidWindows)
 		.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
-		.where(and(eq(bidWindows.assignmentId, assignmentId), eq(bidWindows.status, 'open')))
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.where(
+			and(
+				eq(bidWindows.assignmentId, assignmentId),
+				eq(bidWindows.status, 'open'),
+				eq(warehouses.organizationId, organizationId)
+			)
+		)
 		.orderBy(desc(bidWindows.opensAt), desc(bidWindows.id))
 		.limit(1);
 
@@ -118,7 +126,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	// Check weekly cap for the assignment's week
 	const assignmentWeekStart = getWeekStart(parseISO(window.assignmentDate));
-	const canTake = await canDriverTakeAssignment(driverId, assignmentWeekStart);
+	const canTake = await canDriverTakeAssignment(driverId, assignmentWeekStart, organizationId);
 	if (!canTake) {
 		throw error(400, 'You have reached your weekly cap for that week');
 	}
@@ -140,7 +148,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	// Instant or emergency mode: assign immediately
 	if (effectiveMode === 'instant' || effectiveMode === 'emergency') {
-		const result = await instantAssign(assignmentId, driverId, window.id);
+		const result = await instantAssign(assignmentId, driverId, window.id, organizationId);
 
 		if (!result.instantlyAssigned) {
 			throw error(400, result.error ?? 'Route already assigned');
@@ -181,7 +189,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 		try {
 			await sendNotification(driverId, 'bid_won', {
-				data: { assignmentId, bidWindowId: window.id }
+				data: { assignmentId, bidWindowId: window.id },
+				organizationId
 			});
 		} catch (err) {
 			log.warn(

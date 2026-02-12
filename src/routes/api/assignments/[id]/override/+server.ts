@@ -230,7 +230,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	const hasWarehouseAccess = await canManagerAccessWarehouse(
 		locals.user.id,
-		assignment.warehouseId
+		assignment.warehouseId,
+		locals.organizationId ?? locals.user.organizationId ?? ''
 	);
 	if (!hasWarehouseAccess) {
 		return overrideError(403, 'forbidden', 'No access to this warehouse');
@@ -251,6 +252,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			assignmentId,
 			driverId: parsed.data.driverId,
 			actorId: locals.user.id,
+			organizationId: locals.organizationId ?? locals.user.organizationId ?? '',
 			allowedStatuses: ['scheduled', 'unfilled']
 		});
 
@@ -340,6 +342,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		}
 
 		const result = await createBidWindow(assignmentId, {
+			organizationId: locals.organizationId ?? locals.user.organizationId ?? '',
 			trigger: 'manager'
 		});
 
@@ -425,8 +428,11 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		}
 	}
 
-	const emergencyBonusPercent = await getEmergencyBonusPercent();
+	const emergencyBonusPercent = await getEmergencyBonusPercent(
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	const urgentResult = await createBidWindow(assignmentId, {
+		organizationId: locals.organizationId ?? locals.user.organizationId ?? '',
 		mode: 'emergency',
 		trigger: 'manager',
 		payBonusPercent: emergencyBonusPercent

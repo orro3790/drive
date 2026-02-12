@@ -73,7 +73,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	}
 
 	// Get warehouses this manager can access
-	const accessibleWarehouses = await getManagerWarehouseIds(currentUserId);
+	const accessibleWarehouses = await getManagerWarehouseIds(
+		currentUserId,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (accessibleWarehouses.length === 0) {
 		return json({ routes: [], date });
 	}
@@ -212,7 +215,11 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const { name, warehouseId, managerId, startTime } = result.data;
 
 	// Validate manager has access to this warehouse
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
+	const canAccess = await canManagerAccessWarehouse(
+		locals.user.id,
+		warehouseId,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}

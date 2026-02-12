@@ -107,7 +107,11 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 	}
 
 	const { id } = paramsResult.data;
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, id);
+	const canAccess = await canManagerAccessWarehouse(
+		locals.user.id,
+		id,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -151,7 +155,11 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 	}
 
 	const { id } = paramsResult.data;
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, id);
+	const canAccess = await canManagerAccessWarehouse(
+		locals.user.id,
+		id,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -225,7 +233,11 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 	}
 
 	const { id } = paramsResult.data;
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, id);
+	const canAccess = await canManagerAccessWarehouse(
+		locals.user.id,
+		id,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}

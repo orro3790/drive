@@ -18,10 +18,10 @@ function toDispatchSettingsResponse(settings: DispatchSettingsRecord) {
 }
 
 export const GET: RequestHandler = async ({ locals }) => {
-	requireManagerWithOrg(locals);
+	const { organizationId } = requireManagerWithOrg(locals);
 
 	try {
-		const settings = await getDispatchSettings();
+		const settings = await getDispatchSettings(organizationId);
 		return json({ settings: toDispatchSettingsResponse(settings) });
 	} catch {
 		return json({
@@ -35,7 +35,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 };
 
 export const PATCH: RequestHandler = async ({ locals, request }) => {
-	const { user } = requireManagerWithOrg(locals);
+	const { user, organizationId } = requireManagerWithOrg(locals);
 
 	let body: unknown;
 	try {
@@ -51,6 +51,7 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 
 	try {
 		const settings = await updateDispatchSettings({
+			organizationId,
 			emergencyBonusPercent: parsed.data.emergencyBonusPercent,
 			actorId: user.id
 		});

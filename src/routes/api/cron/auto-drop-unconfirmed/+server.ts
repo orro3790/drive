@@ -11,7 +11,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { and, eq, gte, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { assignments, driverMetrics, routes } from '$lib/server/db/schema';
+import { assignments, driverMetrics, routes, warehouses } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { createBidWindow } from '$lib/server/services/bidding';
 import { sendNotification } from '$lib/server/services/notifications';
@@ -38,10 +38,12 @@ export const GET: RequestHandler = async ({ request }) => {
 				userId: assignments.userId,
 				routeId: assignments.routeId,
 				date: assignments.date,
-				routeName: routes.name
+				routeName: routes.name,
+				organizationId: warehouses.organizationId
 			})
 			.from(assignments)
 			.innerJoin(routes, eq(assignments.routeId, routes.id))
+			.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 			.where(
 				and(
 					eq(assignments.status, 'scheduled'),
@@ -69,9 +71,11 @@ export const GET: RequestHandler = async ({ request }) => {
 
 			try {
 				const originalUserId = candidate.userId!;
+				const organizationId = candidate.organizationId ?? '';
 
 				// Create bid window
 				const result = await createBidWindow(candidate.id, {
+					organizationId,
 					trigger: 'auto_drop'
 				});
 				if (!result.success) {
@@ -124,6 +128,7 @@ export const GET: RequestHandler = async ({ request }) => {
 				try {
 					await sendNotification(originalUserId, 'shift_auto_dropped', {
 						customBody: `Your shift on ${candidate.date} at ${candidate.routeName} was dropped because it wasn't confirmed in time.`,
+						organizationId,
 						data: {
 							assignmentId: candidate.id,
 							routeName: candidate.routeName,

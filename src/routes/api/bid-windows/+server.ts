@@ -51,7 +51,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	} = paramsResult.data;
 
 	// Get manager's warehouse IDs for scoping
-	const managerWarehouseIds = await getManagerWarehouseIds(locals.user.id);
+	const managerWarehouseIds = await getManagerWarehouseIds(
+		locals.user.id,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (managerWarehouseIds.length === 0) {
 		return json({ bidWindows: [], lastUpdated: new Date().toISOString() });
 	}
@@ -62,12 +65,13 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	}
 
 	const warehouseIds = warehouseIdParam ? [warehouseIdParam] : managerWarehouseIds;
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
 
 	// Resolve any expired bid windows before returning (event-driven)
 	try {
-		const expiredWindows = await getExpiredBidWindows(warehouseIds);
+		const expiredWindows = await getExpiredBidWindows(warehouseIds, organizationId);
 		for (const window of expiredWindows) {
-			await resolveBidWindow(window.id);
+			await resolveBidWindow(window.id, { actorType: 'system', actorId: null }, organizationId);
 		}
 		if (expiredWindows.length > 0) {
 			log.info({ count: expiredWindows.length }, 'Resolved expired bid windows');

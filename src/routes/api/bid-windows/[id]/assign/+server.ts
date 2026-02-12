@@ -98,7 +98,11 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(404, 'Bid window not found');
 	}
 
-	const canAccess = await canManagerAccessWarehouse(actorId, window.warehouseId);
+	const canAccess = await canManagerAccessWarehouse(
+		actorId,
+		window.warehouseId,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -227,7 +231,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	await sendNotification(driver.id, 'assignment_confirmed', {
 		customBody: `You were assigned ${window.routeName} for ${window.assignmentDate}.`,
-		data: notificationData
+		data: notificationData,
+		organizationId: locals.organizationId ?? locals.user.organizationId ?? ''
 	});
 
 	const loserIds = pendingBids.filter((bid) => bid.userId !== driver.id).map((bid) => bid.userId);
@@ -235,7 +240,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (loserIds.length > 0) {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
 			customBody: `${window.routeName} for ${window.assignmentDate} was assigned by a manager.`,
-			data: notificationData
+			data: notificationData,
+			organizationId: locals.organizationId ?? locals.user.organizationId ?? ''
 		});
 	}
 
@@ -254,7 +260,10 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		routeId: window.routeId
 	});
 
-	const bidWindow = await getBidWindowDetail(window.id);
+	const bidWindow = await getBidWindowDetail(
+		window.id,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 
 	return json({ bidWindow });
 };

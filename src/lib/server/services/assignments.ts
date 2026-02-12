@@ -1,7 +1,7 @@
 import { parseISO } from 'date-fns';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { assignments, bids, bidWindows, routes, user } from '$lib/server/db/schema';
+import { assignments, bids, bidWindows, routes, user, warehouses } from '$lib/server/db/schema';
 import { createAuditLog } from '$lib/server/services/audit';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
@@ -38,9 +38,15 @@ export async function manualAssignDriverToAssignment(params: {
 	assignmentId: string;
 	driverId: string;
 	actorId: string;
+	organizationId?: string;
 	allowedStatuses?: AssignmentStatus[];
 }): Promise<ManualAssignResult> {
 	const allowedStatuses = params.allowedStatuses ?? ['unfilled'];
+	const scopedOrganizationId = params.organizationId;
+	const assignmentConditions = [eq(assignments.id, params.assignmentId)];
+	if (scopedOrganizationId) {
+		assignmentConditions.push(eq(warehouses.organizationId, scopedOrganizationId));
+	}
 
 	const [assignment] = await db
 		.select({
@@ -50,19 +56,24 @@ export async function manualAssignDriverToAssignment(params: {
 			warehouseId: assignments.warehouseId,
 			date: assignments.date,
 			status: assignments.status,
-			userId: assignments.userId
+			userId: assignments.userId,
+			organizationId: warehouses.organizationId
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
-		.where(eq(assignments.id, params.assignmentId));
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.where(and(...assignmentConditions));
 
-	if (!assignment) {
+	if (!assignment || !assignment.organizationId) {
 		return { ok: false, code: 'assignment_not_found' };
 	}
 
+	const assignmentOrganizationId = assignment.organizationId;
+
 	const canAccessWarehouse = await canManagerAccessWarehouse(
 		params.actorId,
-		assignment.warehouseId
+		assignment.warehouseId,
+		assignmentOrganizationId
 	);
 	if (!canAccessWarehouse) {
 		return { ok: false, code: 'forbidden' };
@@ -81,7 +92,7 @@ export async function manualAssignDriverToAssignment(params: {
 			weeklyCap: user.weeklyCap
 		})
 		.from(user)
-		.where(eq(user.id, params.driverId));
+		.where(and(eq(user.id, params.driverId), eq(user.organizationId, assignmentOrganizationId)));
 
 	if (!driver || driver.role !== 'driver') {
 		return { ok: false, code: 'driver_not_found' };
@@ -94,7 +105,8 @@ export async function manualAssignDriverToAssignment(params: {
 	const assignmentWeekStart = getWeekStart(parseISO(assignment.date));
 	const currentAssignmentCount = await getDriverWeeklyAssignmentCount(
 		driver.id,
-		assignmentWeekStart
+		assignmentWeekStart,
+		assignmentOrganizationId
 	);
 	if (currentAssignmentCount >= driver.weeklyCap) {
 		return { ok: false, code: 'driver_over_weekly_cap' };
@@ -208,7 +220,8 @@ export async function manualAssignDriverToAssignment(params: {
 
 	await sendNotification(driver.id, 'assignment_confirmed', {
 		customBody: `You were assigned ${assignment.routeName} for ${assignment.date}.`,
-		data: notificationData
+		data: notificationData,
+		organizationId: assignmentOrganizationId
 	});
 
 	const loserIds = transactionResult.pendingBids
@@ -217,7 +230,8 @@ export async function manualAssignDriverToAssignment(params: {
 	if (loserIds.length > 0) {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
 			customBody: `${assignment.routeName} for ${assignment.date} was assigned by a manager.`,
-			data: notificationData
+			data: notificationData,
+			organizationId: assignmentOrganizationId
 		});
 	}
 

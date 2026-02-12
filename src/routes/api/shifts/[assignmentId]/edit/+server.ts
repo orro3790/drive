@@ -201,15 +201,23 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 
 	// Best-effort: notify manager on 0→>0 exception transition
 	if (previousExceptedReturns === 0 && finalExceptedReturns > 0) {
-		await sendManagerAlert(assignment.routeId, 'return_exception', {
-			routeName: assignment.routeName ?? 'Unknown Route',
-			driverName: locals.user.name ?? 'A driver',
-			date: assignment.date
-		});
+		await sendManagerAlert(
+			assignment.routeId,
+			'return_exception',
+			{
+				routeName: assignment.routeName ?? 'Unknown Route',
+				driverName: locals.user.name ?? 'A driver',
+				date: assignment.date
+			},
+			locals.organizationId ?? locals.user.organizationId ?? ''
+		);
 	}
 
 	// Recalculate driver metrics
-	await updateDriverMetrics(locals.user.id);
+	await updateDriverMetrics(
+		locals.user.id,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 
 	return json({
 		success: true,

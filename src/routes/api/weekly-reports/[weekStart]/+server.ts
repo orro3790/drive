@@ -42,7 +42,10 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 		throw error(400, 'weekStart must be a Monday');
 	}
 
-	const accessibleWarehouses = await getManagerWarehouseIds(locals.user.id);
+	const accessibleWarehouses = await getManagerWarehouseIds(
+		locals.user.id,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (accessibleWarehouses.length === 0) {
 		return json({
 			weekStart,
