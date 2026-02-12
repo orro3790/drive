@@ -10,6 +10,7 @@ import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import * as authSchema from '$lib/server/db/auth-schema';
 import logger from '$lib/server/logger';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import type { Actions } from './$types';
 
 async function readAuthErrorMessage(response: Response): Promise<string | null> {
@@ -28,10 +29,7 @@ async function readAuthErrorMessage(response: Response): Promise<string | null> 
 
 export const actions: Actions = {
 	default: async ({ request, locals }) => {
-		// Double-check manager role (layout already checks, but be safe)
-		if (!locals.user || locals.user.role !== 'manager') {
-			return fail(403, { error: 'Access denied' });
-		}
+		const { organizationId } = requireManagerWithOrg(locals);
 
 		const formData = await request.formData();
 		const email = formData.get('email')?.toString().trim().toLowerCase();
@@ -52,11 +50,13 @@ export const actions: Actions = {
 		}
 
 		try {
-			// Find the user by email (using select instead of query builder)
+			// Find the user by email within the same org
 			const [targetUser] = await db
 				.select()
 				.from(authSchema.user)
-				.where(eq(authSchema.user.email, email))
+				.where(
+					and(eq(authSchema.user.email, email), eq(authSchema.user.organizationId, organizationId))
+				)
 				.limit(1);
 
 			if (!targetUser) {

@@ -11,27 +11,22 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { driverHealthState, driverHealthSnapshots, user } from '$lib/server/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc } from 'drizzle-orm';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { computeContributions } from '$lib/server/services/health';
 import type { HealthResponse } from '$lib/schemas/health';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 
 export const GET: RequestHandler = async ({ locals, params }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Only managers can access this endpoint');
-	}
+	const { organizationId } = requireManagerWithOrg(locals);
 
 	const { id } = params;
 
-	// Verify the target user exists and is a driver
+	// Verify the target user exists, is a driver, and is in the same org
 	const [target] = await db
 		.select({ id: user.id, role: user.role })
 		.from(user)
-		.where(eq(user.id, id));
+		.where(and(eq(user.id, id), eq(user.organizationId, organizationId)));
 
 	if (!target) {
 		throw error(404, 'Driver not found');

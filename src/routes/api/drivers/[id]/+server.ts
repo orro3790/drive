@@ -10,22 +10,17 @@
  * All changes are audit logged.
  */
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { driverHealthState, driverMetrics, user } from '$lib/server/db/schema';
 import { driverUpdateSchema } from '$lib/schemas/driver';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 
 export const PATCH: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { organizationId } = requireManagerWithOrg(locals);
 
 	const { id } = params;
 	const body = await request.json();
@@ -49,7 +44,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 			createdAt: user.createdAt
 		})
 		.from(user)
-		.where(eq(user.id, id));
+		.where(and(eq(user.id, id), eq(user.organizationId, organizationId)));
 
 	if (!existing) {
 		throw error(404, 'Driver not found');
