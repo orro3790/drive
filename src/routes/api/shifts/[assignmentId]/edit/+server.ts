@@ -14,15 +14,10 @@ import { sendManagerAlert } from '$lib/server/services/notifications';
 import { and, eq, gt, isNotNull } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
 import logger from '$lib/server/logger';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const PATCH: RequestHandler = async ({ locals, request, params }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can edit shifts');
-	}
+	const { user, organizationId } = requireDriverWithOrg(locals);
 
 	const body = await request.json();
 	const result = shiftEditSchema.safeParse(body);
@@ -64,7 +59,7 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 		throw error(404, 'Assignment not found');
 	}
 
-	if (assignment.userId !== locals.user.id) {
+	if (assignment.userId !== user.id) {
 		throw error(403, 'Forbidden');
 	}
 
@@ -131,7 +126,7 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 		exceptionNotes: shift.exceptionNotes
 	};
 
-	const userId = locals.user.id;
+	const userId = user.id;
 	const log = logger.child({
 		operation: 'shiftEdit',
 		assignmentId: params.assignmentId,
@@ -206,18 +201,15 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 			'return_exception',
 			{
 				routeName: assignment.routeName ?? 'Unknown Route',
-				driverName: locals.user.name ?? 'A driver',
+				driverName: user.name ?? 'A driver',
 				date: assignment.date
 			},
-			locals.organizationId ?? locals.user.organizationId ?? ''
+			organizationId
 		);
 	}
 
 	// Recalculate driver metrics
-	await updateDriverMetrics(
-		locals.user.id,
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	await updateDriverMetrics(user.id, organizationId);
 
 	return json({
 		success: true,

@@ -13,11 +13,10 @@ import {
 	notificationIdSchema,
 	notificationMarkReadResponseSchema
 } from '$lib/schemas/api/notifications';
+import { requireAuthenticatedWithOrg } from '$lib/server/org-scope';
 
 export const PATCH: RequestHandler = async ({ locals, params }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user } = requireAuthenticatedWithOrg(locals);
 
 	const paramsResult = notificationIdSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -29,7 +28,7 @@ export const PATCH: RequestHandler = async ({ locals, params }) => {
 	const [updated] = await db
 		.update(notifications)
 		.set({ read: true })
-		.where(and(eq(notifications.id, id), eq(notifications.userId, locals.user.id)))
+		.where(and(eq(notifications.id, id), eq(notifications.userId, user.id)))
 		.returning({ id: notifications.id });
 
 	if (!updated) {

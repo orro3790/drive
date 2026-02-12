@@ -8,7 +8,7 @@
  * results without waiting for the daily cron job.
  */
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, bidWindows, bids, routes, warehouses, user } from '$lib/server/db/schema';
@@ -17,22 +17,15 @@ import { parseISO } from 'date-fns';
 import { getWeekStart, canDriverTakeAssignment } from '$lib/server/services/scheduling';
 import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
 import logger from '$lib/server/logger';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can view available bids');
-	}
-
-	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+	const { user: driver, organizationId } = requireDriverWithOrg(locals);
 
 	// Event-driven resolution: resolve any expired windows before returning results
 	const expiredWindows = await getExpiredBidWindows(undefined, organizationId);
 	if (expiredWindows.length > 0) {
-		const log = logger.child({ operation: 'event-driven-resolution', userId: locals.user.id });
+		const log = logger.child({ operation: 'event-driven-resolution', userId: driver.id });
 		for (const window of expiredWindows) {
 			try {
 				await resolveBidWindow(window.id, { actorType: 'system', actorId: null }, organizationId);
@@ -46,7 +39,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 	const [driverInfo] = await db
 		.select({ isFlagged: user.isFlagged })
 		.from(user)
-		.where(and(eq(user.id, locals.user.id), eq(user.organizationId, organizationId)));
+		.where(and(eq(user.id, driver.id), eq(user.organizationId, organizationId)));
 
 	if (driverInfo?.isFlagged) {
 		// Flagged drivers can't bid, return empty list
@@ -92,7 +85,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 	const existingBids = await db
 		.select({ bidWindowId: bids.bidWindowId })
 		.from(bids)
-		.where(and(eq(bids.userId, locals.user.id), inArray(bids.bidWindowId, openWindowIds)));
+		.where(and(eq(bids.userId, driver.id), inArray(bids.bidWindowId, openWindowIds)));
 
 	const alreadyBidWindows = new Set(existingBids.map((bid) => bid.bidWindowId));
 
@@ -107,11 +100,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 		// Check weekly cap for the assignment's week
 		const assignmentWeekStart = getWeekStart(parseISO(window.assignmentDate));
-		const canTake = await canDriverTakeAssignment(
-			locals.user.id,
-			assignmentWeekStart,
-			organizationId
-		);
+		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart, organizationId);
 		if (!canTake) {
 			continue;
 		}

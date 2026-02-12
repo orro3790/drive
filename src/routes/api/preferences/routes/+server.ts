@@ -5,21 +5,15 @@
  * Drivers need access to route list for preference selection.
  */
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { routes, warehouses } from '$lib/server/db/schema';
 import { eq, ilike, or } from 'drizzle-orm';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const GET: RequestHandler = async ({ locals, url }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	// Drivers only
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can access this endpoint');
-	}
+	requireDriverWithOrg(locals);
 
 	const query = url.searchParams.get('q')?.trim() || '';
 

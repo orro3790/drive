@@ -4,7 +4,7 @@
  * GET /api/assignments/mine - Get current driver's assignments (this week + next week)
  */
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, routes, warehouses, shifts } from '$lib/server/db/schema';
@@ -16,6 +16,7 @@ import {
 	createAssignmentLifecycleContext,
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -24,13 +25,7 @@ function toTorontoDateString(date: Date): string {
 }
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can access assignments');
-	}
+	const { user } = requireDriverWithOrg(locals);
 
 	const weekStart = getWeekStart(new Date());
 	const nextWeekStart = addDays(weekStart, 7);
@@ -66,7 +61,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.leftJoin(shifts, eq(assignments.id, shifts.assignmentId))
 		.where(
 			and(
-				eq(assignments.userId, locals.user.id),
+				eq(assignments.userId, user.id),
 				gte(assignments.date, weekStartString),
 				lt(assignments.date, windowEndString)
 			)
