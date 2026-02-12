@@ -100,11 +100,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 		// Check weekly cap for the assignment's week
 		const assignmentWeekStart = getWeekStart(parseISO(window.assignmentDate));
-		const canTake = await canDriverTakeAssignment(
-			driver.id,
-			assignmentWeekStart,
-			organizationId
-		);
+		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart, organizationId);
 		if (!canTake) {
 			continue;
 		}

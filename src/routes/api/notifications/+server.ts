@@ -46,10 +46,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 			.orderBy(desc(notifications.createdAt))
 			.limit(pageSize)
 			.offset(offset),
-		db
-			.select({ count: count() })
-			.from(notifications)
-			.where(eq(notifications.userId, user.id)),
+		db.select({ count: count() }).from(notifications).where(eq(notifications.userId, user.id)),
 		db
 			.select({ count: count() })
 			.from(notifications)
