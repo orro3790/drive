@@ -676,6 +676,7 @@ describe('POST /api/assignments/[id]/override', () => {
 		expect(txUpdateMock).toHaveBeenCalled();
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
 		expect(broadcastBidWindowClosedMock).toHaveBeenCalledWith(
+			'org-test',
 			expect.objectContaining({ bidWindowId: 'window-competitive' })
 		);
 		expect(createBidWindowMock).toHaveBeenCalledWith(

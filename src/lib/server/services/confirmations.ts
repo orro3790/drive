@@ -84,9 +84,11 @@ export async function confirmShift(
 			userId: assignments.userId,
 			date: assignments.date,
 			status: assignments.status,
-			confirmedAt: assignments.confirmedAt
+			confirmedAt: assignments.confirmedAt,
+			organizationId: warehouses.organizationId
 		})
 		.from(assignments)
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.where(eq(assignments.id, assignmentId));
 
 	if (!assignment) {
@@ -168,7 +170,7 @@ export async function confirmShift(
 
 	log.info({ confirmedAt }, 'Shift confirmed');
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(assignment.organizationId ?? '', {
 		assignmentId,
 		status: 'scheduled',
 		driverId: userId,

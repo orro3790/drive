@@ -92,7 +92,7 @@ let deriveAssignmentLifecycleMock: ReturnType<
 >;
 let createAuditLogMock: ReturnType<typeof vi.fn<(entry: Record<string, unknown>) => Promise<void>>>;
 let broadcastAssignmentUpdatedMock: ReturnType<
-	typeof vi.fn<(payload: Record<string, unknown>) => void>
+	typeof vi.fn<(organizationId: string, payload: Record<string, unknown>) => void>
 >;
 
 function createLifecycleOutput(overrides: Partial<LifecycleOutput> = {}): LifecycleOutput {
@@ -436,6 +436,7 @@ describe('POST /api/shifts/start contract', () => {
 		});
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
 		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
+			'org-test',
 			expect.objectContaining({
 				assignmentId: '10cfac3e-c728-4dbb-b41f-7c5d7a71c2cb',
 				status: 'active',

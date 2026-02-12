@@ -323,7 +323,7 @@ export async function createBidWindow(
 		payBonusPercent: options.payBonusPercent ?? 0
 	});
 
-	broadcastBidWindowOpened({
+	broadcastBidWindowOpened(organizationId, {
 		assignmentId,
 		routeId: assignment.routeId,
 		routeName,
@@ -331,7 +331,7 @@ export async function createBidWindow(
 		closesAt: closesAt.toISOString()
 	});
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId,
 		status: 'unfilled',
 		driverId: null,
@@ -797,7 +797,7 @@ export async function resolveBidWindow(
 		}
 
 		try {
-			broadcastBidWindowClosed({
+			broadcastBidWindowClosed(assignmentOrganizationId, {
 				assignmentId: assignment.id,
 				bidWindowId,
 				winnerId: transactionResult.winnerId
@@ -807,7 +807,7 @@ export async function resolveBidWindow(
 		}
 
 		try {
-			broadcastAssignmentUpdated({
+			broadcastAssignmentUpdated(assignmentOrganizationId, {
 				assignmentId: assignment.id,
 				status: 'scheduled',
 				driverId: transactionResult.winnerId,

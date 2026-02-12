@@ -20,7 +20,7 @@ import {
 import logger from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	const { user } = requireDriverWithOrg(locals);
+	const { user, organizationId } = requireDriverWithOrg(locals);
 
 	const body = await request.json();
 	const result = shiftStartSchema.safeParse(body);
@@ -157,7 +157,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	log.info({ shiftId: updatedShift.id }, 'Parcel inventory recorded');
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId,
 		status: 'active',
 		driverId: user.id,

@@ -31,6 +31,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(403, 'Only drivers can complete shifts');
 	}
 
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+
 	const body = await request.json();
 	const result = shiftCompleteSchema.safeParse(body);
 
@@ -218,7 +220,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	log.info({ shiftId: updatedShift.id }, 'Shift completion recorded');
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId,
 		status: 'completed',
 		driverId: assignment.userId,
@@ -236,7 +238,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 				driverName: locals.user.name ?? 'A driver',
 				date: assignment.date
 			},
-			locals.organizationId ?? locals.user.organizationId ?? ''
+			organizationId
 		);
 	}
 
@@ -245,12 +247,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			userId: assignment.userId,
 			routeId: assignment.routeId,
 			completedAt,
-			organizationId: locals.organizationId ?? locals.user.organizationId ?? ''
+			organizationId
 		}),
-		updateDriverMetrics(
-			assignment.userId,
-			locals.organizationId ?? locals.user.organizationId ?? ''
-		)
+		updateDriverMetrics(assignment.userId, organizationId)
 	]);
 
 	return json({

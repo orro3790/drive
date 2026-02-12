@@ -155,7 +155,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		}
 
 		try {
-			broadcastBidWindowClosed({
+			broadcastBidWindowClosed(organizationId, {
 				assignmentId,
 				bidWindowId: window.id,
 				winnerId: driverId
@@ -171,7 +171,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		}
 
 		try {
-			broadcastAssignmentUpdated({
+			broadcastAssignmentUpdated(organizationId, {
 				assignmentId,
 				status: 'scheduled',
 				driverId,

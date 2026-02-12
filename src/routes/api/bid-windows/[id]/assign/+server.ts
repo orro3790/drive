@@ -54,6 +54,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(403, 'Forbidden');
 	}
 
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+
 	const actorId = locals.user.id;
 
 	let body: unknown;
@@ -98,11 +100,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(404, 'Bid window not found');
 	}
 
-	const canAccess = await canManagerAccessWarehouse(
-		actorId,
-		window.warehouseId,
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	const canAccess = await canManagerAccessWarehouse(actorId, window.warehouseId, organizationId);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -232,7 +230,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	await sendNotification(driver.id, 'assignment_confirmed', {
 		customBody: `You were assigned ${window.routeName} for ${window.assignmentDate}.`,
 		data: notificationData,
-		organizationId: locals.organizationId ?? locals.user.organizationId ?? ''
+		organizationId
 	});
 
 	const loserIds = pendingBids.filter((bid) => bid.userId !== driver.id).map((bid) => bid.userId);
@@ -241,18 +239,18 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
 			customBody: `${window.routeName} for ${window.assignmentDate} was assigned by a manager.`,
 			data: notificationData,
-			organizationId: locals.organizationId ?? locals.user.organizationId ?? ''
+			organizationId
 		});
 	}
 
-	broadcastBidWindowClosed({
+	broadcastBidWindowClosed(organizationId, {
 		assignmentId: window.assignmentId,
 		bidWindowId: window.id,
 		winnerId: driver.id,
 		winnerName: driver.name
 	});
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId: window.assignmentId,
 		status: 'scheduled',
 		driverId: driver.id,
@@ -260,10 +258,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		routeId: window.routeId
 	});
 
-	const bidWindow = await getBidWindowDetail(
-		window.id,
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	const bidWindow = await getBidWindowDetail(window.id, organizationId);
 
 	return json({ bidWindow });
 };

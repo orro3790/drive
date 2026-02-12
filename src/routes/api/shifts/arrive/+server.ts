@@ -28,6 +28,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(403, 'Only drivers can signal arrival');
 	}
 
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+
 	const body = await request.json();
 	const result = shiftArriveSchema.safeParse(body);
 
@@ -200,7 +202,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	log.info({ shiftId: shift.id }, 'Shift arrival recorded');
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId,
 		status: 'active',
 		driverId: locals.user.id,

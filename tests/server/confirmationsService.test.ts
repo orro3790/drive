@@ -156,7 +156,8 @@ describe('confirmation service boundaries', () => {
 					userId: 'driver-1',
 					date: '2026-02-20',
 					status: 'scheduled',
-					confirmedAt: null
+					confirmedAt: null,
+					organizationId: 'org-a'
 				}
 			]
 		]);
@@ -178,7 +179,8 @@ describe('confirmation service boundaries', () => {
 					userId: 'driver-2',
 					date: '2026-02-20',
 					status: 'scheduled',
-					confirmedAt: null
+					confirmedAt: null,
+					organizationId: 'org-a'
 				}
 			]
 		]);
@@ -189,6 +191,15 @@ describe('confirmation service boundaries', () => {
 		expect(result.confirmedAt).toBeInstanceOf(Date);
 		expect(updateMock).toHaveBeenCalledTimes(2);
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
+		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
+			'org-a',
+			expect.objectContaining({
+				assignmentId: 'assignment-2',
+				status: 'scheduled',
+				driverId: 'driver-2',
+				shiftProgress: 'confirmed'
+			})
+		);
 	});
 
 	it('filters unconfirmed assignments to ones still before deadline', async () => {

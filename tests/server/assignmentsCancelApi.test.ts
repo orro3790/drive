@@ -126,7 +126,7 @@ let createBidWindowMock: ReturnType<
 	>
 >;
 let broadcastAssignmentUpdatedMock: ReturnType<
-	typeof vi.fn<(payload: Record<string, unknown>) => void>
+	typeof vi.fn<(organizationId: string, payload: Record<string, unknown>) => void>
 >;
 
 function createLifecycleOutput(overrides: Partial<LifecycleOutput> = {}): LifecycleOutput {
@@ -415,6 +415,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
 		expect(sendManagerAlertMock).toHaveBeenCalledTimes(1);
 		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
+			'org-test',
 			expect.objectContaining({
 				assignmentId: 'assignment-1',
 				status: 'cancelled',
