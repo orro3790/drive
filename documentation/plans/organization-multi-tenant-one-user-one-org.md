@@ -119,9 +119,9 @@ Validation gates before enforcement:
 
 After all code paths are migrated and validated:
 
-1. Set `user.organizationId` to NOT NULL.
-2. Set `warehouses.organizationId` to NOT NULL.
-3. Set `signup_onboarding.organizationId` to NOT NULL.
+1. Set `warehouses.organizationId` to NOT NULL. ✓ (Track L)
+2. Set `signup_onboarding.organizationId` to NOT NULL. ✓ (Track L)
+3. **Keep `user.organizationId` NULLABLE** — Better Auth signup flow creates user with null org, then the after-hook sets it. Application-layer guards (`org-scope.ts`) enforce non-null at runtime.
 4. Remove legacy global dispatch settings reads/writes.
 
 ## 7) Auth and Session Context

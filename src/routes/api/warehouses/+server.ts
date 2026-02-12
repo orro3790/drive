@@ -133,7 +133,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 };
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	const { user: manager } = requireManagerWithOrg(locals);
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	let body: unknown;
 	try {
@@ -155,6 +155,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.values({
 			name,
 			address,
+			organizationId,
 			createdBy: manager.id
 		})
 		.returning();

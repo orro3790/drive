@@ -12,12 +12,13 @@
 
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, ne, inArray } from 'drizzle-orm';
 import { config } from 'dotenv';
 import { faker } from '@faker-js/faker';
 
 // Schema imports
 import { user, account } from '../src/lib/server/db/auth-schema';
+import { createHash, randomBytes } from 'node:crypto';
 import {
 	warehouses,
 	warehouseManagers,
@@ -32,7 +33,10 @@ import {
 	notifications,
 	auditLogs,
 	driverHealthSnapshots,
-	driverHealthState
+	driverHealthState,
+	organizations,
+	organizationDispatchSettings,
+	signupOnboarding
 } from '../src/lib/server/db/schema';
 
 // Seed modules
@@ -59,6 +63,35 @@ if (!DATABASE_URL) {
 
 const sql = neon(DATABASE_URL);
 const db = drizzle(sql);
+
+const SEED_ORG_SLUG = 'seed-test-org';
+
+function hashJoinCode(code: string): string {
+	return createHash('sha256').update(code.trim().toUpperCase()).digest('hex');
+}
+
+async function createSeedOrganization(): Promise<string> {
+	const joinCode = randomBytes(6).toString('hex').toUpperCase();
+	const [org] = await db
+		.insert(organizations)
+		.values({
+			name: 'Seed Test Org',
+			slug: SEED_ORG_SLUG,
+			joinCodeHash: hashJoinCode(joinCode),
+			ownerUserId: null
+		})
+		.returning({ id: organizations.id });
+
+	if (!org) throw new Error('Failed to create seed organization');
+
+	await db
+		.insert(organizationDispatchSettings)
+		.values({ organizationId: org.id, updatedBy: null })
+		.onConflictDoNothing();
+
+	console.log(`   Created seed org: ${org.id} (join code: ${joinCode})`);
+	return org.id;
+}
 
 async function clearData() {
 	console.log('Clearing existing data...');
@@ -100,18 +133,42 @@ async function clearData() {
 		await db.delete(user).where(inArray(user.id, seedManagerIds));
 	}
 
+	// Delete signup_onboarding entries (references organizations with onDelete: restrict)
+	await db.delete(signupOnboarding);
+
+	// Create new seed org before deleting old orgs (remaining users need a valid org ref)
+	console.log('\n   Creating seed organization...');
+	const seedOrgId = await createSeedOrganization();
+
+	// Point any remaining users (e.g. real test user) to the new seed org
+	const remainingUsers = await db.select({ id: user.id }).from(user);
+	if (remainingUsers.length > 0) {
+		await db.update(user).set({ organizationId: seedOrgId, updatedAt: new Date() });
+		console.log(`   Reassigned ${remainingUsers.length} remaining user(s) to seed org`);
+	}
+
+	// Now safe to delete old organizations (no more references)
+	await db
+		.delete(organizationDispatchSettings)
+		.where(ne(organizationDispatchSettings.organizationId, seedOrgId));
+	await db.delete(organizations).where(ne(organizations.id, seedOrgId));
+
 	console.log('Data cleared.');
+	return seedOrgId;
 }
 
-async function seed(seedConfig: SeedConfig) {
+async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 	console.log(`\nSeeding with config:`, seedConfig);
+	console.log(`Using seed org: ${seedOrgId}`);
 
 	// 1. Generate warehouses
 	console.log('\n1. Creating warehouses...');
 	const warehouseData = generateWarehouses(seedConfig);
 	const insertedWarehouses = await db
 		.insert(warehouses)
-		.values(warehouseData.map((w) => ({ name: w.name, address: w.address })))
+		.values(
+			warehouseData.map((w) => ({ name: w.name, address: w.address, organizationId: seedOrgId }))
+		)
 		.returning({ id: warehouses.id, name: warehouses.name });
 	console.log(`   Created ${insertedWarehouses.length} warehouses`);
 	const warehouseNameById = new Map(insertedWarehouses.map((w) => [w.id, w.name]));
@@ -153,6 +210,7 @@ async function seed(seedConfig: SeedConfig) {
 			weeklyCap: u.weeklyCap,
 			isFlagged: u.isFlagged,
 			flagWarningDate: u.flagWarningDate,
+			organizationId: seedOrgId,
 			createdAt: u.createdAt,
 			updatedAt: u.createdAt
 		}))
@@ -222,6 +280,11 @@ async function seed(seedConfig: SeedConfig) {
 					userId: testUser.id
 				});
 			}
+			// Set test user as org owner
+			await db
+				.update(organizations)
+				.set({ ownerUserId: testUser.id, updatedAt: new Date() })
+				.where(eq(organizations.id, seedOrgId));
 			testUserForNotifications = {
 				id: testUser.id,
 				name: testUser.name,
@@ -476,6 +539,7 @@ async function seed(seedConfig: SeedConfig) {
 		await db.insert(notifications).values(
 			notificationData.map((notification) => ({
 				userId: notification.userId,
+				organizationId: seedOrgId,
 				type: notification.type,
 				title: notification.title,
 				body: notification.body,
@@ -550,8 +614,8 @@ async function main() {
 		}
 	}
 
-	await clearData();
-	await seed(seedConfig);
+	const seedOrgId = await clearData();
+	await seed(seedConfig, seedOrgId);
 }
 
 main().catch((err) => {

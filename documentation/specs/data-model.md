@@ -4,12 +4,46 @@
 
 PostgreSQL database hosted on Neon, accessed via Drizzle ORM. All timestamps in Toronto/Eastern timezone.
 
+**IMPORTANT: This schema documentation is outdated. For the authoritative schema, see `src/lib/server/db/schema.ts` and `src/lib/server/db/auth-schema.ts`.**
+
+### Multi-Tenant Organization Structure (Track L)
+
+The database enforces strict organization boundaries:
+
+- **`organizations`** table is the root tenant anchor. Every warehouse, onboarding entry, and dispatch setting belongs to exactly one organization.
+- **`user.organizationId`** (nullable) — links users to their organization. Better Auth signup creates users with null org; application guards enforce non-null at runtime.
+- **`warehouses.organizationId`** (NOT NULL) — enforced at database level. Every warehouse must belong to an organization.
+- **`signup_onboarding.organizationId`** (NOT NULL) — enforced at database level. All onboarding approvals are org-scoped.
+- **Cascade behavior** — Warehouses cascade to routes, assignments, shifts, bids, and notifications through the warehouse-to-route-to-assignment graph.
+
+All manager and driver API endpoints enforce organization boundaries via `requireManagerWithOrg()` and `requireDriverWithOrg()` guards in `src/lib/server/org-scope.ts`.
+
 ---
 
 ## Drizzle Schema
 
+**CRITICAL: The schema code below is OUTDATED. It does not reflect recent organization-scoping changes (Track A-L).**
+
+**For the authoritative schema, see:**
+
+- `src/lib/server/db/schema.ts` (domain tables)
+- `src/lib/server/db/auth-schema.ts` (Better Auth user table with organizationId)
+
+**Key differences from below:**
+
+- `organizations` table exists (root tenant anchor)
+- `user.organizationId` is nullable (Better Auth compatibility); application guards enforce non-null
+- `warehouses.organizationId` is NOT NULL and indexed
+- `signup_onboarding` table exists with organizationId NOT NULL
+- `notifications.organizationId` is nullable (org-scoped fanout)
+- `audit_logs.organizationId` is nullable (forensic traceability)
+- `organizationDispatchSettings` table exists (org-scoped settings)
+- User references in schema use `text` type (Better Auth generates text IDs), not UUID
+- Foreign key constraints use `onDelete: 'restrict'` to prevent accidental org/warehouse deletion
+
 ```typescript
-// src/lib/server/db/schema.ts
+// OUTDATED - src/lib/server/db/schema.ts
+// See src/lib/server/db/schema.ts for current implementation
 
 import {
 	pgTable,
