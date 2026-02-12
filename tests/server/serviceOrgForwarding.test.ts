@@ -125,19 +125,24 @@ describe('updateDriverMetrics org forwarding', () => {
 	it('uses provided organizationId in warehouse join filter', async () => {
 		await updateDriverMetrics('driver-1', 'org-abc');
 
-		// The first where clause (total shifts) should include eq(warehouses.organizationId, 'org-abc')
-		expect(whereClauses.length).toBeGreaterThanOrEqual(1);
+		// updateDriverMetrics makes multiple queries (total shifts, attendance, delivery rate, route completions)
+		// all filtered through warehouses.organizationId
+		expect(whereClauses.length).toBeGreaterThanOrEqual(3);
 
-		const firstWhere = whereClauses[0] as { op: string; conditions: unknown[] };
-		expect(firstWhere.op).toBe('and');
+		// Check that all compound where clauses include the org filter
+		const compoundClauses = whereClauses.filter(
+			(c) => (c as { op: string }).op === 'and'
+		) as { op: string; conditions: unknown[] }[];
 
-		// Verify organizationId is included in the conditions
-		const orgCondition = firstWhere.conditions.find(
-			(c) =>
-				(c as { op: string; left: string; right: string }).left === 'warehouses.organizationId' &&
-				(c as { op: string; left: string; right: string }).right === 'org-abc'
-		);
-		expect(orgCondition).toBeDefined();
+		for (const clause of compoundClauses) {
+			const orgCondition = clause.conditions.find(
+				(c) =>
+					(c as { op: string; left: string; right: string }).left ===
+						'warehouses.organizationId' &&
+					(c as { op: string; left: string; right: string }).right === 'org-abc'
+			);
+			expect(orgCondition).toBeDefined();
+		}
 	});
 
 	it('does NOT skip metrics when organizationId is provided', async () => {
@@ -148,7 +153,8 @@ describe('updateDriverMetrics org forwarding', () => {
 	});
 
 	it('skips metrics when no organizationId can be resolved', async () => {
-		// Override the user lookup to return no org
+		// When no organizationId is passed, resolveMetricsOrganizationId looks up the user.
+		// If that user has organizationId: null, it returns null and the function exits early.
 		selectWhereMock.mockImplementationOnce((clause: unknown) => {
 			whereClauses.push(clause);
 			const result = Promise.resolve([{ organizationId: null }]);

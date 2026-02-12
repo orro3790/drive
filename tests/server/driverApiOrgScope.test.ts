@@ -300,6 +300,13 @@ testDriverGuard(
 
 testDriverGuard('GET /api/metrics guard', '../../src/routes/api/metrics/+server', 'GET', 'GET');
 
+testDriverGuard(
+	'GET /api/driver-health guard',
+	'../../src/routes/api/driver-health/+server',
+	'GET',
+	'GET'
+);
+
 // ─── Authenticated Endpoints (requireAuthenticatedWithOrg — no role check) ───
 
 testAuthenticatedGuard(

@@ -60,6 +60,8 @@ beforeEach(async () => {
 	// Build a select chain that handles two select patterns:
 	// 1. db.select({id}).from(organizations) → returns organizationRows
 	// 2. db.select({...}).from(assignments).innerJoin(routes).innerJoin(warehouses).where(...) → returns candidates
+	// NOTE: Discriminates by select-shape key count. If the production org query
+	// ever selects additional columns, this mock must be updated.
 	const selectMock = vi.fn((selectShape: Record<string, unknown>) => {
 		// Org query: only {id} selected
 		if (Object.keys(selectShape).length === 1 && 'id' in selectShape) {
