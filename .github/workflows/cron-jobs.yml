@@ -11,6 +11,7 @@ on:
     - cron: '0 1 * * *'
     - cron: '0 7 * * *'
     - cron: '0 8 * * 1'
+    - cron: '0 */12 * * *'
   workflow_dispatch:
     inputs:
       route:
@@ -27,6 +28,7 @@ on:
           - /api/cron/send-confirmation-reminders
           - /api/cron/health-daily
           - /api/cron/health-weekly
+          - /api/cron/stale-shift-reminder
 
 jobs:
   trigger:
@@ -58,6 +60,7 @@ jobs:
               '0 1 * * *') route='/api/cron/performance-check' ;;
               '0 7 * * *') route='/api/cron/health-daily' ;;
               '0 8 * * 1') route='/api/cron/health-weekly' ;;
+              '0 */12 * * *') route='/api/cron/stale-shift-reminder' ;;
               *)
                 echo "Unsupported schedule: $SCHEDULE"
                 exit 1
