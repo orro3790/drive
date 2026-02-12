@@ -6,14 +6,14 @@ import { requireManagerWithOrg } from '$lib/server/org-scope';
 import { restoreOnboardingEntry } from '$lib/server/services/onboarding';
 
 export const PATCH: RequestHandler = async ({ locals, params }) => {
-	requireManagerWithOrg(locals);
+	const { organizationId } = requireManagerWithOrg(locals);
 
 	const idResult = signupOnboardingReservationIdSchema.safeParse(params.id);
 	if (!idResult.success) {
 		throw error(400, 'Invalid onboarding entry ID');
 	}
 
-	const result = await restoreOnboardingEntry(idResult.data);
+	const result = await restoreOnboardingEntry(idResult.data, organizationId);
 
 	if (!result.restored) {
 		switch (result.reason) {
