@@ -67,9 +67,7 @@ async function checkNullWarehouses(): Promise<CheckResult> {
 		name: 'Warehouses with null organizationId',
 		passed: count === 0,
 		detail:
-			count === 0
-				? 'OK — zero null rows'
-				: `FAIL — ${count} warehouses have null organizationId`
+			count === 0 ? 'OK — zero null rows' : `FAIL — ${count} warehouses have null organizationId`
 	};
 }
 
@@ -91,9 +89,7 @@ async function checkNullSignupOnboarding(): Promise<CheckResult> {
 }
 
 async function checkOrganizationsExist(): Promise<CheckResult> {
-	const [result] = await db
-		.select({ count: sql<number>`count(*)` })
-		.from(organizations);
+	const [result] = await db.select({ count: sql<number>`count(*)` }).from(organizations);
 
 	const count = Number(result.count);
 	return {

@@ -25,10 +25,12 @@ All manager and driver API endpoints enforce organization boundaries via `requir
 **CRITICAL: The schema code below is OUTDATED. It does not reflect recent organization-scoping changes (Track A-L).**
 
 **For the authoritative schema, see:**
+
 - `src/lib/server/db/schema.ts` (domain tables)
 - `src/lib/server/db/auth-schema.ts` (Better Auth user table with organizationId)
 
 **Key differences from below:**
+
 - `organizations` table exists (root tenant anchor)
 - `user.organizationId` is nullable (Better Auth compatibility); application guards enforce non-null
 - `warehouses.organizationId` is NOT NULL and indexed
