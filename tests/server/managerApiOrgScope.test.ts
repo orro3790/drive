@@ -6,7 +6,22 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createRequestEvent } from '../harness/requestEvent';
+import {
+	createRequestEvent,
+	type RequestEventBody,
+	type RequestEventOptions
+} from '../harness/requestEvent';
+
+function buildOptions(
+	method: string,
+	userLocals: Partial<App.Locals>,
+	extra?: { body?: RequestEventBody; params?: Record<string, string> }
+): RequestEventOptions {
+	const opts: RequestEventOptions = { method, locals: userLocals as App.Locals };
+	if (extra?.body) opts.body = extra.body;
+	if (extra?.params) opts.params = extra.params;
+	return opts;
+}
 
 function createUser(
 	role: 'driver' | 'manager',
@@ -215,7 +230,7 @@ function testManagerGuard(
 	importPath: string,
 	handlerName: string,
 	method: string,
-	extra?: { body?: unknown; params?: Record<string, string> }
+	extra?: { body?: RequestEventBody; params?: Record<string, string> }
 ) {
 	describe(description, () => {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -234,32 +249,21 @@ function testManagerGuard(
 		});
 
 		it('returns 401 when no user is present', async () => {
-			const event = createRequestEvent({
-				method,
-				locals: locals(),
-				...(extra?.body ? { body: extra.body } : {}),
-				...(extra?.params ? { params: extra.params } : {})
-			});
+			const event = createRequestEvent(buildOptions(method, locals(), extra));
 			await expect(handler(event)).rejects.toMatchObject({ status: 401 });
 		});
 
 		it('returns 403 when user has no organizationId', async () => {
-			const event = createRequestEvent({
-				method,
-				locals: { user: createUser('manager', 'manager-1', null) },
-				...(extra?.body ? { body: extra.body } : {}),
-				...(extra?.params ? { params: extra.params } : {})
-			});
+			const event = createRequestEvent(
+				buildOptions(method, { user: createUser('manager', 'manager-1', null) }, extra)
+			);
 			await expect(handler(event)).rejects.toMatchObject({ status: 403 });
 		});
 
 		it('returns 403 for non-manager role', async () => {
-			const event = createRequestEvent({
-				method,
-				locals: locals(createUser('driver', 'driver-1', 'org-test')),
-				...(extra?.body ? { body: extra.body } : {}),
-				...(extra?.params ? { params: extra.params } : {})
-			});
+			const event = createRequestEvent(
+				buildOptions(method, locals(createUser('driver', 'driver-1', 'org-test')), extra)
+			);
 			await expect(handler(event)).rejects.toMatchObject({ status: 403 });
 		});
 	});
