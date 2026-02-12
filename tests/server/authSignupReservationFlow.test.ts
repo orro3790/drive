@@ -23,20 +23,23 @@ describe('auth signup reservation flow', () => {
 			.mockResolvedValueOnce({
 				allowed: true,
 				reservationId: '77777777-7777-4777-8777-777777777777',
-				matchedEntryId: '77777777-7777-4777-8777-777777777777',
-				matchedKind: 'approval'
+				organizationId: 'org-1',
+				targetRole: 'driver'
 			})
-			.mockResolvedValueOnce({ allowed: false });
+			.mockResolvedValueOnce({ allowed: false, reason: 'approval_not_found' });
 
 		const guard = createSignupAbuseGuard(createProductionAllowlistConfig(), {
-			reserveProductionSignupAuthorization: reserveAuthorization
+			reserveOrganizationJoinSignup: reserveAuthorization
 		});
 
 		await expect(
 			guard({
 				path: '/sign-up/email',
 				body: { email: 'race@driver.test' },
-				headers: new Headers(),
+				headers: new Headers({
+					'x-signup-org-mode': 'join',
+					'x-signup-org-code': 'ORG-RACE-123'
+				}),
 				context: {}
 			} as never)
 		).resolves.toBeUndefined();
@@ -44,7 +47,10 @@ describe('auth signup reservation flow', () => {
 		const blockedAttempt = guard({
 			path: '/sign-up/email',
 			body: { email: 'race@driver.test' },
-			headers: new Headers(),
+			headers: new Headers({
+				'x-signup-org-mode': 'join',
+				'x-signup-org-code': 'ORG-RACE-123'
+			}),
 			context: {}
 		} as never);
 
@@ -54,13 +60,39 @@ describe('auth signup reservation flow', () => {
 		});
 	});
 
+	it('denies signup when organization code is invalid', async () => {
+		const reserveAuthorization = vi.fn(async () => ({
+			allowed: false as const,
+			reason: 'invalid_org_code' as const
+		}));
+
+		const guard = createSignupAbuseGuard(createProductionAllowlistConfig(), {
+			reserveOrganizationJoinSignup: reserveAuthorization
+		});
+
+		const blockedAttempt = guard({
+			path: '/sign-up/email',
+			body: { email: 'invalid-org@driver.test' },
+			headers: new Headers({
+				'x-signup-org-mode': 'join',
+				'x-signup-org-code': 'BAD-CODE'
+			}),
+			context: {}
+		} as never);
+
+		await expect(blockedAttempt).rejects.toBeInstanceOf(APIError);
+		await expect(blockedAttempt).rejects.toMatchObject({
+			message: 'Invalid organization code'
+		});
+	});
+
 	it('records reconciliation when finalize does not consume an acquired reservation', async () => {
 		const finalizeReservation = vi.fn(async () => null);
 		const releaseReservation = vi.fn(async () => null);
 		const recordReconciliation = vi.fn(async () => undefined);
 
 		const consumer = createSignupOnboardingConsumer(createProductionAllowlistConfig(), {
-			finalizeProductionSignupAuthorizationReservation: finalizeReservation,
+			finalizeOrganizationJoinSignup: finalizeReservation,
 			releaseProductionSignupAuthorizationReservation: releaseReservation,
 			recordSignupFinalizeReconciliation: recordReconciliation
 		});
@@ -71,6 +103,10 @@ describe('auth signup reservation flow', () => {
 				headers: new Headers(),
 				context: {
 					signupOnboardingReservationId: '88888888-8888-4888-8888-888888888888',
+					signupOrganization: {
+						mode: 'join',
+						organizationCode: 'ORG-RACE-123'
+					},
 					returned: {
 						user: {
 							id: 'driver-8',
