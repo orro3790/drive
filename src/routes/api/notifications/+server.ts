@@ -4,7 +4,7 @@
  * GET /api/notifications - List current user's notifications (paginated)
  */
 
-import { json } from '@sveltejs/kit';
+import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { notifications } from '$lib/server/db/schema';
