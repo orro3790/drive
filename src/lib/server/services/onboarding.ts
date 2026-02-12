@@ -619,13 +619,7 @@ export async function createOnboardingInvite(
 	const normalizedEmail = normalizeEmail(input.email);
 	const { organizationId } = input;
 
-	await revokeExpiredPendingEntriesByKind(
-		normalizedEmail,
-		'invite',
-		now,
-		dbClient,
-		organizationId
-	);
+	await revokeExpiredPendingEntriesByKind(normalizedEmail, 'invite', now, dbClient, organizationId);
 
 	const existingInvites = await getPendingEntriesByEmailAndKind(
 		normalizedEmail,
@@ -761,10 +755,7 @@ export async function restoreOnboardingEntry(
 		.select()
 		.from(signupOnboarding)
 		.where(
-			and(
-				eq(signupOnboarding.id, entryId),
-				eq(signupOnboarding.organizationId, organizationId)
-			)
+			and(eq(signupOnboarding.id, entryId), eq(signupOnboarding.organizationId, organizationId))
 		)
 		.limit(1);
 

@@ -7,7 +7,9 @@ type OnboardingRevokeRouteModule =
 
 let PATCH: OnboardingRevokeRouteModule['PATCH'];
 let revokeOnboardingEntryMock: ReturnType<
-	typeof vi.fn<(entryId: string, organizationId: string, revokedByUserId: string) => Promise<unknown>>
+	typeof vi.fn<
+		(entryId: string, organizationId: string, revokedByUserId: string) => Promise<unknown>
+	>
 >;
 
 function createUser(role: 'manager' | 'driver', id: string): App.Locals['user'] {
