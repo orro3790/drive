@@ -13,6 +13,7 @@ import { routeIdParamsSchema, routeUpdateSchema, type RouteStatus } from '$lib/s
 import { and, count, desc, eq, gt, ne } from 'drizzle-orm';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { createAuditLog } from '$lib/server/services/audit';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import {
 	toLocalYmd,
 	isValidDate,
@@ -87,13 +88,7 @@ async function getRouteAssignmentDetails(
 }
 
 export const PATCH: RequestHandler = async ({ locals, params, request, url }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = routeIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -136,9 +131,9 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 
 	// Validate manager has access to this route's warehouse
 	const canAccess = await canManagerAccessWarehouse(
-		locals.user.id,
+		manager.id,
 		existing.warehouseId,
-		locals.organizationId ?? locals.user.organizationId ?? ''
+		organizationId
 	);
 	if (!canAccess) {
 		throw error(403, 'No access to this route');
@@ -183,9 +178,9 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 	let nextWarehouseName = existing.warehouseName;
 	if (updates.warehouseId && updates.warehouseId !== existing.warehouseId) {
 		const canAccessTargetWarehouse = await canManagerAccessWarehouse(
-			locals.user.id,
+			manager.id,
 			updates.warehouseId,
-			locals.organizationId ?? locals.user.organizationId ?? ''
+			organizationId
 		);
 		if (!canAccessTargetWarehouse) {
 			throw error(403, 'No access to target warehouse');
@@ -229,7 +224,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 		entityId: id,
 		action: 'update',
 		actorType: 'user',
-		actorId: locals.user.id,
+		actorId: manager.id,
 		changes: {
 			before: {
 				name: existing.name,
@@ -273,13 +268,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request, url }) =>
 };
 
 export const DELETE: RequestHandler = async ({ locals, params }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = routeIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -303,9 +292,9 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 
 	// Validate manager has access to this route's warehouse
 	const canAccess = await canManagerAccessWarehouse(
-		locals.user.id,
+		manager.id,
 		existing.warehouseId,
-		locals.organizationId ?? locals.user.organizationId ?? ''
+		organizationId
 	);
 	if (!canAccess) {
 		throw error(403, 'No access to this route');
@@ -328,7 +317,7 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 		entityId: id,
 		action: 'delete',
 		actorType: 'user',
-		actorId: locals.user.id,
+		actorId: manager.id,
 		changes: {
 			before: { name: existing.name, warehouseId: existing.warehouseId }
 		}

@@ -11,6 +11,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { warehouseManagers, warehouses, user } from '$lib/server/db/schema';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import { and, eq, count } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -27,8 +28,7 @@ const warehouseIdParamsSchema = z.object({
 });
 
 export const GET: RequestHandler = async ({ locals, params }) => {
-	if (!locals.user) throw error(401, 'Unauthorized');
-	if (locals.user.role !== 'manager') throw error(403, 'Forbidden');
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = warehouseIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) throw error(400, 'Invalid warehouse ID');
@@ -36,11 +36,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 	const { id: warehouseId } = paramsResult.data;
 
 	// Verify caller has access to this warehouse
-	const canAccess = await canManagerAccessWarehouse(
-		locals.user.id,
-		warehouseId,
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	const canAccess = await canManagerAccessWarehouse(manager.id, warehouseId, organizationId);
 	if (!canAccess) throw error(403, 'No access to this warehouse');
 
 	const managers = await db
@@ -59,8 +55,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 };
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) throw error(401, 'Unauthorized');
-	if (locals.user.role !== 'manager') throw error(403, 'Forbidden');
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = warehouseIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) throw error(400, 'Invalid warehouse ID');
@@ -68,11 +63,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const { id: warehouseId } = paramsResult.data;
 
 	// Verify caller has access
-	const canAccess = await canManagerAccessWarehouse(
-		locals.user.id,
-		warehouseId,
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	const canAccess = await canManagerAccessWarehouse(manager.id, warehouseId, organizationId);
 	if (!canAccess) throw error(403, 'No access to this warehouse');
 
 	// Verify warehouse exists
@@ -119,8 +110,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 };
 
 export const DELETE: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) throw error(401, 'Unauthorized');
-	if (locals.user.role !== 'manager') throw error(403, 'Forbidden');
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = warehouseIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) throw error(400, 'Invalid warehouse ID');
@@ -128,11 +118,7 @@ export const DELETE: RequestHandler = async ({ locals, params, request }) => {
 	const { id: warehouseId } = paramsResult.data;
 
 	// Verify caller has access
-	const canAccess = await canManagerAccessWarehouse(
-		locals.user.id,
-		warehouseId,
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	const canAccess = await canManagerAccessWarehouse(manager.id, warehouseId, organizationId);
 	if (!canAccess) throw error(403, 'No access to this warehouse');
 
 	let body: unknown;
@@ -153,7 +139,7 @@ export const DELETE: RequestHandler = async ({ locals, params, request }) => {
 		.from(warehouseManagers)
 		.where(eq(warehouseManagers.warehouseId, warehouseId));
 
-	if (countResult.count <= 1 && userId === locals.user.id) {
+	if (countResult.count <= 1 && userId === manager.id) {
 		throw error(400, 'Cannot remove last manager from warehouse');
 	}
 

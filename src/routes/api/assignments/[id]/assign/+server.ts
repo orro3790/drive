@@ -6,17 +6,10 @@ import {
 	broadcastAssignmentUpdated,
 	broadcastBidWindowClosed
 } from '$lib/server/realtime/managerSse';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
-
-	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = assignmentIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -38,7 +31,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const result = await manualAssignDriverToAssignment({
 		assignmentId: paramsResult.data.id,
 		driverId: parsed.data.userId,
-		actorId: locals.user.id,
+		actorId: manager.id,
 		organizationId
 	});
 

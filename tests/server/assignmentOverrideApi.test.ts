@@ -270,9 +270,7 @@ describe('POST /api/assignments/[id]/override', () => {
 			body: { action: 'open_bidding' }
 		});
 
-		const response = await POST(event as Parameters<typeof POST>[0]);
-		expect(response.status).toBe(403);
-		await expect(response.json()).resolves.toMatchObject({ code: 'forbidden' });
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 403 });
 		expect(selectMock).not.toHaveBeenCalled();
 	});
 
