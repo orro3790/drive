@@ -291,7 +291,7 @@
 
 		<Button
 			variant="primary"
-			size="standard"
+			size="large"
 			type="submit"
 			fill={true}
 			isLoading={isSubmitting}
