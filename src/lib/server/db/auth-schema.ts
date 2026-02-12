@@ -36,7 +36,7 @@ export const user = pgTable(
 		isFlagged: boolean('is_flagged').notNull().default(false),
 		flagWarningDate: timestamp('flag_warning_date', { withTimezone: true }),
 		fcmToken: text('fcm_token'),
-		organizationId: uuid('organization_id'),
+		organizationId: uuid('organization_id').notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 	},

@@ -108,7 +108,9 @@ export const warehouses = pgTable(
 		id: uuid('id').primaryKey().defaultRandom(),
 		name: text('name').notNull(),
 		address: text('address').notNull(),
-		organizationId: uuid('organization_id').references(() => organizations.id),
+		organizationId: uuid('organization_id')
+			.notNull()
+			.references(() => organizations.id, { onDelete: 'restrict' }),
 		createdBy: text('created_by').references(() => user.id),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
@@ -391,7 +393,9 @@ export const signupOnboarding = pgTable(
 	'signup_onboarding',
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
-		organizationId: uuid('organization_id').references(() => organizations.id),
+		organizationId: uuid('organization_id')
+			.notNull()
+			.references(() => organizations.id, { onDelete: 'restrict' }),
 		email: text('email').notNull(),
 		kind: signupOnboardingKindEnum('kind').notNull().default('approval'),
 		targetRole: text('target_role').notNull().default('driver'),
