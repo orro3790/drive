@@ -29,7 +29,7 @@ async function readAuthErrorMessage(response: Response): Promise<string | null> 
 
 export const actions: Actions = {
 	default: async ({ request, locals }) => {
-		const { organizationId } = requireManagerWithOrg(locals);
+		const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 		const formData = await request.formData();
 		const email = formData.get('email')?.toString().trim().toLowerCase();
@@ -108,7 +108,7 @@ export const actions: Actions = {
 				logger.error(
 					{
 						targetEmail: email,
-						adminEmail: locals.user.email,
+						adminEmail: manager.email,
 						status: authResponse.status,
 						authMessage
 					},
@@ -119,7 +119,7 @@ export const actions: Actions = {
 			}
 
 			logger.info(
-				{ targetEmail: email, adminEmail: locals.user.email },
+				{ targetEmail: email, adminEmail: manager.email },
 				'Admin password reset completed'
 			);
 

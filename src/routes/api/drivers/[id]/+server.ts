@@ -10,7 +10,7 @@
  * All changes are audit logged.
  */
 
-import { json } from '@sveltejs/kit';
+import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { driverHealthState, driverMetrics, user } from '$lib/server/db/schema';
@@ -20,7 +20,7 @@ import { createAuditLog } from '$lib/server/services/audit';
 import { requireManagerWithOrg } from '$lib/server/org-scope';
 
 export const PATCH: RequestHandler = async ({ locals, params, request }) => {
-	const { organizationId } = requireManagerWithOrg(locals);
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const { id } = params;
 	const body = await request.json();
@@ -102,7 +102,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 				entityId: id,
 				action: 'reinstate',
 				actorType: 'user',
-				actorId: locals.user.id,
+				actorId: manager.id,
 				changes: {
 					assignmentPoolEligible: { from: false, to: true },
 					requiresManagerIntervention: { from: true, to: false }
@@ -160,7 +160,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 			entityId: id,
 			action: updates.unflag ? 'unflag' : 'update',
 			actorType: 'user',
-			actorId: locals.user.id,
+			actorId: manager.id,
 			changes: {
 				before: {
 					weeklyCap: existing.weeklyCap,
