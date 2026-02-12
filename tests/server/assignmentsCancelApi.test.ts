@@ -119,6 +119,7 @@ let createBidWindowMock: ReturnType<
 		(
 			assignmentId: string,
 			options: {
+				organizationId: string;
 				trigger: 'cancellation';
 			}
 		) => Promise<unknown>
@@ -147,7 +148,8 @@ function createUser(role: 'driver' | 'manager', id: string): App.Locals['user'] 
 		id,
 		role,
 		name: `${role}-${id}`,
-		email: `${id}@example.test`
+		email: `${id}@example.test`,
+		organizationId: 'org-test'
 	} as App.Locals['user'];
 }
 
@@ -407,6 +409,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 		});
 
 		expect(createBidWindowMock).toHaveBeenCalledWith('assignment-1', {
+			organizationId: 'org-test',
 			trigger: 'cancellation'
 		});
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);

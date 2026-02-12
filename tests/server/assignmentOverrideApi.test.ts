@@ -146,7 +146,8 @@ function createManagerUser(id = 'manager-1'): App.Locals['user'] {
 		id,
 		role: 'manager',
 		name: `manager-${id}`,
-		email: `${id}@example.test`
+		email: `${id}@example.test`,
+		organizationId: 'org-test'
 	} as App.Locals['user'];
 }
 
@@ -155,7 +156,8 @@ function createDriverUser(id = 'driver-1'): App.Locals['user'] {
 		id,
 		role: 'driver',
 		name: `driver-${id}`,
-		email: `${id}@example.test`
+		email: `${id}@example.test`,
+		organizationId: 'org-test'
 	} as App.Locals['user'];
 }
 
@@ -398,7 +400,10 @@ describe('POST /api/assignments/[id]/override', () => {
 			notifiedCount: 3
 		});
 
-		expect(createBidWindowMock).toHaveBeenCalledWith(ASSIGNMENT_ID, { trigger: 'manager' });
+		expect(createBidWindowMock).toHaveBeenCalledWith(ASSIGNMENT_ID, {
+			organizationId: 'org-test',
+			trigger: 'manager'
+		});
 		expect(getEmergencyBonusPercentMock).not.toHaveBeenCalled();
 	});
 
@@ -459,6 +464,7 @@ describe('POST /api/assignments/[id]/override', () => {
 				assignmentId: ASSIGNMENT_ID,
 				driverId: 'driver-2',
 				actorId: 'manager-2',
+				organizationId: 'org-test',
 				allowedStatuses: ['scheduled', 'unfilled']
 			})
 		);

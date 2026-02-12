@@ -173,7 +173,8 @@ describe('manual assignment service boundaries', () => {
 					warehouseId: 'warehouse-1',
 					date: '2026-02-20',
 					status: 'unfilled',
-					userId: null
+					userId: null,
+					organizationId: 'org-test'
 				}
 			]
 		]);
@@ -197,7 +198,8 @@ describe('manual assignment service boundaries', () => {
 					warehouseId: 'warehouse-1',
 					date: '2026-02-20',
 					status: 'scheduled',
-					userId: 'driver-existing'
+					userId: 'driver-existing',
+					organizationId: 'org-test'
 				}
 			]
 		]);
@@ -222,7 +224,8 @@ describe('manual assignment service boundaries', () => {
 					warehouseId: 'warehouse-2',
 					date: '2026-02-21',
 					status: 'unfilled',
-					userId: null
+					userId: null,
+					organizationId: 'org-test'
 				}
 			],
 			[
@@ -257,7 +260,8 @@ describe('manual assignment service boundaries', () => {
 					warehouseId: 'warehouse-4',
 					date: '2026-02-22',
 					status: 'unfilled',
-					userId: null
+					userId: null,
+					organizationId: 'org-test'
 				}
 			],
 			[
