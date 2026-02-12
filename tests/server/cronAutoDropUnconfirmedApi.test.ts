@@ -14,6 +14,10 @@ type AutoDropCandidate = {
 	organizationId: string;
 };
 
+type OrganizationRow = {
+	id: string;
+};
+
 type CreateBidWindowResult = {
 	success: boolean;
 	bidWindowId?: string;
@@ -67,20 +71,9 @@ let selectInnerJoinMock: ReturnType<
 		}
 	>
 >;
-let selectFromMock: ReturnType<
-	typeof vi.fn<
-		(fromTable: unknown) => {
-			innerJoin: typeof selectInnerJoinMock;
-		}
-	>
->;
-let selectMock: ReturnType<
-	typeof vi.fn<
-		(selectShape: Record<string, unknown>) => {
-			from: typeof selectFromMock;
-		}
-	>
->;
+let selectFromMock: ReturnType<typeof vi.fn>;
+let selectOrgFromMock: ReturnType<typeof vi.fn<(fromTable: unknown) => Promise<OrganizationRow[]>>>;
+let selectMock: ReturnType<typeof vi.fn>;
 
 let updateWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
 let updateSetMock: ReturnType<
@@ -134,12 +127,19 @@ beforeEach(async () => {
 			where: typeof selectWhereMock;
 		}
 	>(() => ({ innerJoin: selectInnerJoinMock, where: selectWhereMock }));
+	selectOrgFromMock = vi.fn<(fromTable: unknown) => Promise<OrganizationRow[]>>(async () => [
+		{ id: 'org-1' }
+	]);
 	selectFromMock = vi.fn<(fromTable: unknown) => { innerJoin: typeof selectInnerJoinMock }>(() => ({
 		innerJoin: selectInnerJoinMock
 	}));
-	selectMock = vi.fn<(selectShape: Record<string, unknown>) => { from: typeof selectFromMock }>(
-		() => ({ from: selectFromMock })
-	);
+	selectMock = vi.fn((selectShape: Record<string, unknown>) => {
+		if (Object.keys(selectShape).length === 1 && 'id' in selectShape) {
+			return { from: selectOrgFromMock };
+		}
+
+		return { from: selectFromMock };
+	});
 
 	updateWhereMock = vi.fn<(whereClause: unknown) => Promise<unknown[]>>(async () => []);
 	updateSetMock = vi.fn<(setValues: Record<string, unknown>) => { where: typeof updateWhereMock }>(
@@ -154,6 +154,12 @@ beforeEach(async () => {
 
 	const loggerInfoMock = vi.fn();
 	const loggerErrorMock = vi.fn();
+	const childLogger = {
+		child: vi.fn(),
+		info: loggerInfoMock,
+		error: loggerErrorMock
+	};
+	childLogger.child.mockReturnValue(childLogger);
 
 	vi.doMock('$env/static/private', () => ({
 		CRON_SECRET: 'test-cron-secret'
@@ -185,10 +191,7 @@ beforeEach(async () => {
 
 	vi.doMock('$lib/server/logger', () => ({
 		default: {
-			child: vi.fn(() => ({
-				info: loggerInfoMock,
-				error: loggerErrorMock
-			}))
+			child: vi.fn(() => childLogger)
 		}
 	}));
 

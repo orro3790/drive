@@ -77,9 +77,11 @@ beforeEach(async () => {
 	}));
 
 	const childLogger = {
+		child: vi.fn(),
 		info: vi.fn(),
 		error: vi.fn()
 	};
+	childLogger.child.mockReturnValue(childLogger);
 
 	vi.doMock('$lib/server/services/bidding', () => ({
 		getExpiredBidWindows: getExpiredBidWindowsMock,

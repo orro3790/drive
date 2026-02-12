@@ -16,16 +16,27 @@ interface NoShowDetectionPayload {
 	skippedBeforeDeadline: boolean;
 }
 
+interface OrganizationRow {
+	id: string;
+}
+
 const CRON_TOKEN = 'launch-secret';
 
 let GET: NoShowCronRouteModule['GET'];
-let detectNoShowsMock: ReturnType<typeof createBoundaryMock<[], Promise<NoShowDetectionPayload>>>;
+let detectNoShowsForOrganizationMock: ReturnType<
+	typeof createBoundaryMock<[organizationId: string], Promise<NoShowDetectionPayload>>
+>;
+let dbSelectMock: ReturnType<typeof vi.fn>;
+let selectFromMock: ReturnType<typeof vi.fn<(table: unknown) => Promise<OrganizationRow[]>>>;
 
 beforeEach(async () => {
 	vi.resetModules();
 
-	detectNoShowsMock = createBoundaryMock<[], Promise<NoShowDetectionPayload>>();
-	detectNoShowsMock.mockResolvedValue({
+	detectNoShowsForOrganizationMock = createBoundaryMock<
+		[organizationId: string],
+		Promise<NoShowDetectionPayload>
+	>();
+	detectNoShowsForOrganizationMock.mockResolvedValue({
 		evaluated: 2,
 		noShows: 1,
 		bidWindowsCreated: 1,
@@ -35,10 +46,17 @@ beforeEach(async () => {
 		skippedBeforeDeadline: false
 	});
 
+	selectFromMock = vi.fn<(table: unknown) => Promise<OrganizationRow[]>>(async () => [
+		{ id: 'org-1' }
+	]);
+	dbSelectMock = vi.fn((_shape: Record<string, unknown>) => ({ from: selectFromMock }));
+
 	const childLogger = {
+		child: vi.fn(),
 		info: vi.fn(),
 		error: vi.fn()
 	};
+	childLogger.child.mockReturnValue(childLogger);
 
 	vi.doMock('$env/static/private', () => ({
 		CRON_SECRET: CRON_TOKEN
@@ -48,8 +66,18 @@ beforeEach(async () => {
 			CRON_SECRET: CRON_TOKEN
 		}
 	}));
+	vi.doMock('$lib/server/db', () => ({
+		db: {
+			select: dbSelectMock
+		}
+	}));
+	vi.doMock('$lib/server/db/schema', () => ({
+		organizations: {
+			id: 'organizations.id'
+		}
+	}));
 	vi.doMock('$lib/server/services/noshow', () => ({
-		detectNoShows: detectNoShowsMock
+		detectNoShowsForOrganization: detectNoShowsForOrganizationMock
 	}));
 	vi.doMock('$lib/server/logger', () => ({
 		default: {
@@ -64,6 +92,8 @@ afterEach(() => {
 	resetTime();
 	vi.doUnmock('$env/static/private');
 	vi.doUnmock('$env/dynamic/private');
+	vi.doUnmock('$lib/server/db');
+	vi.doUnmock('$lib/server/db/schema');
 	vi.doUnmock('$lib/server/services/noshow');
 	vi.doUnmock('$lib/server/logger');
 	vi.clearAllMocks();
@@ -77,7 +107,7 @@ describe('LC-05 API boundary: GET /api/cron/no-show-detection', () => {
 
 		expect(response.status).toBe(401);
 		await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
-		expect(detectNoShowsMock).not.toHaveBeenCalled();
+		expect(detectNoShowsForOrganizationMock).not.toHaveBeenCalled();
 	});
 
 	it('returns 401 when authorization token does not match', async () => {
@@ -90,7 +120,7 @@ describe('LC-05 API boundary: GET /api/cron/no-show-detection', () => {
 
 		expect(response.status).toBe(401);
 		await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
-		expect(detectNoShowsMock).not.toHaveBeenCalled();
+		expect(detectNoShowsForOrganizationMock).not.toHaveBeenCalled();
 	});
 
 	it('returns success payload from detection service with deterministic elapsed time', async () => {
@@ -118,11 +148,12 @@ describe('LC-05 API boundary: GET /api/cron/no-show-detection', () => {
 			skippedBeforeDeadline: false
 		});
 		expect(payload.elapsedMs).toBe(0);
-		expect(detectNoShowsMock).toHaveBeenCalledTimes(1);
+		expect(detectNoShowsForOrganizationMock).toHaveBeenCalledTimes(1);
+		expect(detectNoShowsForOrganizationMock).toHaveBeenCalledWith('org-1');
 	});
 
 	it('returns 500 when detection service throws', async () => {
-		detectNoShowsMock.mockRejectedValueOnce(new Error('cron service unavailable'));
+		detectNoShowsForOrganizationMock.mockRejectedValueOnce(new Error('cron service unavailable'));
 		const event = createRequestEvent({
 			method: 'GET',
 			headers: { authorization: `Bearer ${CRON_TOKEN}` }

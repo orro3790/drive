@@ -15,6 +15,10 @@ interface StartedShiftRow {
 	assignmentId: string;
 }
 
+interface OrganizationRow {
+	id: string;
+}
+
 const CRON_TOKEN = 'cron-secret-test-token';
 
 const assignmentsTable = {
@@ -46,6 +50,7 @@ let GET: ShiftRemindersRouteModule['GET'];
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
 let selectInnerJoinMock: ReturnType<typeof vi.fn>;
 let selectFromMock: ReturnType<typeof vi.fn>;
+let selectOrgFromMock: ReturnType<typeof vi.fn<(fromTable: unknown) => Promise<OrganizationRow[]>>>;
 let selectMock: ReturnType<typeof vi.fn>;
 
 let sendNotificationMock: ReturnType<
@@ -55,6 +60,7 @@ let sendNotificationMock: ReturnType<
 			type: 'shift_reminder',
 			payload: {
 				customBody: string;
+				organizationId: string;
 				data: {
 					assignmentId: string;
 					routeName: string;
@@ -87,22 +93,31 @@ beforeEach(async () => {
 		innerJoin: selectInnerJoinMock,
 		where: selectWhereMock
 	}));
+	selectOrgFromMock = vi.fn<(fromTable: unknown) => Promise<OrganizationRow[]>>(async () => [
+		{ id: 'org-1' }
+	]);
 	selectFromMock = vi.fn((table: unknown) => ({
 		innerJoin: selectInnerJoinMock,
 		where: selectWhereMock
 	}));
-	selectMock = vi.fn((shape: Record<string, unknown>) => ({
-		from: selectFromMock
-	}));
+	selectMock = vi.fn((shape: Record<string, unknown>) => {
+		if (Object.keys(shape).length === 1 && 'id' in shape) {
+			return { from: selectOrgFromMock };
+		}
+
+		return { from: selectFromMock };
+	});
 
 	sendNotificationMock = vi.fn(async () => ({ inAppCreated: true, pushSent: true }));
 	formatMock = vi.fn(() => '2026-02-09');
 	toZonedTimeMock = vi.fn((date: Date) => date);
 
 	const childLogger = {
+		child: vi.fn(),
 		info: vi.fn(),
 		error: vi.fn()
 	};
+	childLogger.child.mockReturnValue(childLogger);
 
 	vi.doMock('$env/static/private', () => ({ CRON_SECRET: CRON_TOKEN }));
 	vi.doMock('$env/dynamic/private', () => ({ env: {} }));
@@ -115,7 +130,11 @@ beforeEach(async () => {
 
 	vi.doMock('$lib/server/db/schema', () => ({
 		assignments: assignmentsTable,
+		organizations: {
+			id: 'organizations.id'
+		},
 		notifications: {
+			organizationId: 'notifications.organizationId',
 			type: 'notifications.type',
 			userId: 'notifications.userId',
 			data: 'notifications.data'
@@ -227,22 +246,24 @@ describe('GET /api/cron/shift-reminders contract', () => {
 		expect(sendNotificationMock).toHaveBeenCalledTimes(2);
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(1, 'driver-1', 'shift_reminder', {
 			customBody: 'Your shift on route Route A at Warehouse A is today.',
+			organizationId: 'org-1',
 			data: {
 				assignmentId: 'assignment-1',
 				routeName: 'Route A',
 				warehouseName: 'Warehouse A',
 				date: '2026-02-09',
-				dedupeKey: 'shift_reminder:assignment-1:driver-1:2026-02-09'
+				dedupeKey: 'shift_reminder:org-1:assignment-1:driver-1:2026-02-09'
 			}
 		});
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(2, 'driver-3', 'shift_reminder', {
 			customBody: 'Your shift on route Route C at Warehouse C is today.',
+			organizationId: 'org-1',
 			data: {
 				assignmentId: 'assignment-3',
 				routeName: 'Route C',
 				warehouseName: 'Warehouse C',
 				date: '2026-02-09',
-				dedupeKey: 'shift_reminder:assignment-3:driver-3:2026-02-09'
+				dedupeKey: 'shift_reminder:org-1:assignment-3:driver-3:2026-02-09'
 			}
 		});
 	});
@@ -300,7 +321,9 @@ describe('GET /api/cron/shift-reminders contract', () => {
 		selectWhereMock
 			.mockResolvedValueOnce(todayAssignments)
 			.mockResolvedValueOnce([])
-			.mockResolvedValueOnce([{ dedupeKey: 'shift_reminder:assignment-1:driver-1:2026-02-09' }]);
+			.mockResolvedValueOnce([
+				{ dedupeKey: 'shift_reminder:org-1:assignment-1:driver-1:2026-02-09' }
+			]);
 
 		const response = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);
 
@@ -316,8 +339,9 @@ describe('GET /api/cron/shift-reminders contract', () => {
 			'driver-2',
 			'shift_reminder',
 			expect.objectContaining({
+				organizationId: 'org-1',
 				data: expect.objectContaining({
-					dedupeKey: 'shift_reminder:assignment-2:driver-2:2026-02-09'
+					dedupeKey: 'shift_reminder:org-1:assignment-2:driver-2:2026-02-09'
 				})
 			})
 		);
@@ -339,7 +363,9 @@ describe('GET /api/cron/shift-reminders contract', () => {
 			.mockResolvedValueOnce([])
 			.mockResolvedValueOnce(todayAssignments)
 			.mockResolvedValueOnce([])
-			.mockResolvedValueOnce([{ dedupeKey: 'shift_reminder:assignment-1:driver-1:2026-02-09' }]);
+			.mockResolvedValueOnce([
+				{ dedupeKey: 'shift_reminder:org-1:assignment-1:driver-1:2026-02-09' }
+			]);
 
 		const firstResponse = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);
 		const secondResponse = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);

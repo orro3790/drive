@@ -13,7 +13,13 @@ import { addDays, format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { and, eq, gte, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { assignments, notifications, routes } from '$lib/server/db/schema';
+import {
+	assignments,
+	notifications,
+	organizations,
+	routes,
+	warehouses
+} from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { sendNotification } from '$lib/server/services/notifications';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
@@ -34,85 +40,112 @@ export const GET: RequestHandler = async ({ request }) => {
 	log.info({ targetDate }, 'Starting confirmation reminders cron');
 
 	try {
-		const unconfirmed = await db
-			.select({
-				assignmentId: assignments.id,
-				userId: assignments.userId,
-				date: assignments.date,
-				routeName: routes.name
-			})
-			.from(assignments)
-			.innerJoin(routes, eq(routes.id, assignments.routeId))
-			.where(
-				and(
-					eq(assignments.date, targetDate),
-					eq(assignments.status, 'scheduled'),
-					isNotNull(assignments.userId),
-					isNull(assignments.confirmedAt),
-					gte(assignments.date, dispatchPolicy.confirmation.deploymentDate)
-				)
-			);
-
 		let sent = 0;
 		let skippedDuplicates = 0;
 		let errors = 0;
 
-		const candidateUserIds = Array.from(
-			new Set(
-				unconfirmed
-					.map((assignment) => assignment.userId)
-					.filter((userId): userId is string => Boolean(userId))
-			)
-		);
+		const organizationRows = await db.select({ id: organizations.id }).from(organizations);
 
-		const existingDedupeRows =
-			candidateUserIds.length === 0
-				? []
-				: await db
-						.select({ dedupeKey: sql<string>`${notifications.data} ->> 'dedupeKey'` })
-						.from(notifications)
-						.where(
-							and(
-								eq(notifications.type, 'confirmation_reminder'),
-								inArray(notifications.userId, candidateUserIds),
-								sql`${notifications.data} ->> 'date' = ${targetDate}`
-							)
-						);
+		if (organizationRows.length === 0) {
+			const elapsedMs = Date.now() - startedAt;
+			log.info({ elapsedMs }, 'No organizations found for confirmation reminders');
+			return json({ success: true, sent, skippedDuplicates, errors, date: targetDate, elapsedMs });
+		}
 
-		const seenDedupeKeys = new Set(
-			existingDedupeRows
-				.map((row) => row.dedupeKey)
-				.filter((dedupeKey): dedupeKey is string => Boolean(dedupeKey))
-		);
+		for (const organization of organizationRows) {
+			const organizationId = organization.id;
+			const orgLog = log.child({ organizationId });
 
-		for (const assignment of unconfirmed) {
-			if (!assignment.userId) continue;
-
-			const dedupeKey = `confirmation_reminder:${assignment.assignmentId}:${assignment.userId}:${assignment.date}`;
-			if (seenDedupeKeys.has(dedupeKey)) {
-				skippedDuplicates++;
-				continue;
-			}
-
-			try {
-				await sendNotification(assignment.userId, 'confirmation_reminder', {
-					customBody: `Your shift on ${assignment.date} at ${assignment.routeName} needs confirmation within 24 hours.`,
-					data: {
-						assignmentId: assignment.assignmentId,
-						routeName: assignment.routeName,
-						date: assignment.date,
-						dedupeKey
-					}
-				});
-				seenDedupeKeys.add(dedupeKey);
-				sent++;
-			} catch (err) {
-				errors++;
-				log.error(
-					{ userId: assignment.userId, assignmentId: assignment.assignmentId, error: err },
-					'Failed to send confirmation reminder'
+			const unconfirmed = await db
+				.select({
+					assignmentId: assignments.id,
+					userId: assignments.userId,
+					date: assignments.date,
+					routeName: routes.name
+				})
+				.from(assignments)
+				.innerJoin(routes, eq(routes.id, assignments.routeId))
+				.innerJoin(warehouses, eq(warehouses.id, assignments.warehouseId))
+				.where(
+					and(
+						eq(warehouses.organizationId, organizationId),
+						eq(assignments.date, targetDate),
+						eq(assignments.status, 'scheduled'),
+						isNotNull(assignments.userId),
+						isNull(assignments.confirmedAt),
+						gte(assignments.date, dispatchPolicy.confirmation.deploymentDate)
+					)
 				);
+
+			const candidateUserIds = Array.from(
+				new Set(
+					unconfirmed
+						.map((assignment) => assignment.userId)
+						.filter((userId): userId is string => Boolean(userId))
+				)
+			);
+
+			const existingDedupeRows =
+				candidateUserIds.length === 0
+					? []
+					: await db
+							.select({ dedupeKey: sql<string>`${notifications.data} ->> 'dedupeKey'` })
+							.from(notifications)
+							.where(
+								and(
+									eq(notifications.organizationId, organizationId),
+									eq(notifications.type, 'confirmation_reminder'),
+									inArray(notifications.userId, candidateUserIds),
+									sql`${notifications.data} ->> 'date' = ${targetDate}`
+								)
+							);
+
+			const seenDedupeKeys = new Set(
+				existingDedupeRows
+					.map((row) => row.dedupeKey)
+					.filter((dedupeKey): dedupeKey is string => Boolean(dedupeKey))
+			);
+
+			for (const assignment of unconfirmed) {
+				if (!assignment.userId) continue;
+
+				const dedupeKey = `confirmation_reminder:${organizationId}:${assignment.assignmentId}:${assignment.userId}:${assignment.date}`;
+				if (seenDedupeKeys.has(dedupeKey)) {
+					skippedDuplicates++;
+					continue;
+				}
+
+				try {
+					await sendNotification(assignment.userId, 'confirmation_reminder', {
+						customBody: `Your shift on ${assignment.date} at ${assignment.routeName} needs confirmation within 24 hours.`,
+						organizationId,
+						data: {
+							assignmentId: assignment.assignmentId,
+							routeName: assignment.routeName,
+							date: assignment.date,
+							dedupeKey
+						}
+					});
+					seenDedupeKeys.add(dedupeKey);
+					sent++;
+				} catch (err) {
+					errors++;
+					orgLog.error(
+						{ userId: assignment.userId, assignmentId: assignment.assignmentId, error: err },
+						'Failed to send confirmation reminder'
+					);
+				}
 			}
+
+			orgLog.info(
+				{
+					candidateCount: unconfirmed.length,
+					sent,
+					skippedDuplicates,
+					errors
+				},
+				'Confirmation reminder processing completed for organization'
+			);
 		}
 
 		const elapsedMs = Date.now() - startedAt;

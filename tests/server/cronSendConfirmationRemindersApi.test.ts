@@ -11,6 +11,10 @@ interface ReminderCandidate {
 	routeName: string;
 }
 
+interface OrganizationRow {
+	id: string;
+}
+
 type ReminderRouteModule =
 	typeof import('../../src/routes/api/cron/send-confirmation-reminders/+server');
 type SendNotificationMock = ReturnType<
@@ -20,6 +24,7 @@ type SendNotificationMock = ReturnType<
 			notificationType: string,
 			options: {
 				customBody: string;
+				organizationId: string;
 				data: {
 					assignmentId: string;
 					routeName: string;
@@ -42,6 +47,7 @@ let sendNotificationMock: SendNotificationMock;
 let selectMock: ReturnType<typeof vi.fn>;
 let fromMock: ReturnType<typeof vi.fn>;
 let innerJoinMock: ReturnType<typeof vi.fn>;
+let selectOrgFromMock: ReturnType<typeof vi.fn<(table: unknown) => Promise<OrganizationRow[]>>>;
 let whereMock: ReturnType<typeof vi.fn>;
 
 function createAuthorizedCronEvent() {
@@ -62,6 +68,7 @@ beforeEach(async () => {
 			string,
 			{
 				customBody: string;
+				organizationId: string;
 				data: {
 					assignmentId: string;
 					routeName: string;
@@ -74,14 +81,28 @@ beforeEach(async () => {
 	>();
 
 	whereMock = vi.fn(async (_condition: unknown) => [] as ReminderCandidate[]);
-	innerJoinMock = vi.fn((_table: unknown, _on: unknown) => ({ where: whereMock }));
+	innerJoinMock = vi.fn((_table: unknown, _on: unknown) => ({
+		innerJoin: innerJoinMock,
+		where: whereMock
+	}));
+	selectOrgFromMock = vi.fn<(table: unknown) => Promise<OrganizationRow[]>>(async () => [
+		{ id: 'org-1' }
+	]);
 	fromMock = vi.fn((_table: unknown) => ({ innerJoin: innerJoinMock, where: whereMock }));
-	selectMock = vi.fn((_shape: Record<string, unknown>) => ({ from: fromMock }));
+	selectMock = vi.fn((shape: Record<string, unknown>) => {
+		if (Object.keys(shape).length === 1 && 'id' in shape) {
+			return { from: selectOrgFromMock };
+		}
+
+		return { from: fromMock };
+	});
 
 	const childLogger = {
+		child: vi.fn(),
 		info: vi.fn(),
 		error: vi.fn()
 	};
+	childLogger.child.mockReturnValue(childLogger);
 
 	vi.doMock('$lib/server/services/notifications', () => ({
 		sendNotification: sendNotificationMock
@@ -100,13 +121,22 @@ beforeEach(async () => {
 			date: 'assignments.date',
 			status: 'assignments.status',
 			confirmedAt: 'assignments.confirmedAt',
-			routeId: 'assignments.routeId'
+			routeId: 'assignments.routeId',
+			warehouseId: 'assignments.warehouseId'
+		},
+		organizations: {
+			id: 'organizations.id'
 		},
 		routes: {
 			id: 'routes.id',
 			name: 'routes.name'
 		},
+		warehouses: {
+			id: 'warehouses.id',
+			organizationId: 'warehouses.organizationId'
+		},
 		notifications: {
+			organizationId: 'notifications.organizationId',
 			type: 'notifications.type',
 			userId: 'notifications.userId',
 			data: 'notifications.data'
@@ -190,11 +220,12 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 		expect(sendNotificationMock).toHaveBeenCalledTimes(2);
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(1, 'driver-1', 'confirmation_reminder', {
 			customBody: 'Your shift on 2026-03-05 at Route A needs confirmation within 24 hours.',
+			organizationId: 'org-1',
 			data: {
 				assignmentId: 'assignment-1',
 				routeName: 'Route A',
 				date: '2026-03-05',
-				dedupeKey: 'confirmation_reminder:assignment-1:driver-1:2026-03-05'
+				dedupeKey: 'confirmation_reminder:org-1:assignment-1:driver-1:2026-03-05'
 			}
 		});
 	});
@@ -229,6 +260,7 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 			'driver-2',
 			'confirmation_reminder',
 			expect.objectContaining({
+				organizationId: 'org-1',
 				data: expect.objectContaining({ assignmentId: 'assignment-valid' })
 			})
 		);
@@ -283,7 +315,7 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 				}
 			])
 			.mockResolvedValueOnce([
-				{ dedupeKey: 'confirmation_reminder:assignment-1:driver-1:2026-03-05' }
+				{ dedupeKey: 'confirmation_reminder:org-1:assignment-1:driver-1:2026-03-05' }
 			]);
 		sendNotificationMock.mockResolvedValue(undefined);
 
@@ -301,8 +333,9 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 			'driver-2',
 			'confirmation_reminder',
 			expect.objectContaining({
+				organizationId: 'org-1',
 				data: expect.objectContaining({
-					dedupeKey: 'confirmation_reminder:assignment-2:driver-2:2026-03-05'
+					dedupeKey: 'confirmation_reminder:org-1:assignment-2:driver-2:2026-03-05'
 				})
 			})
 		);
@@ -330,7 +363,7 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 				}
 			])
 			.mockResolvedValueOnce([
-				{ dedupeKey: 'confirmation_reminder:assignment-1:driver-1:2026-03-05' }
+				{ dedupeKey: 'confirmation_reminder:org-1:assignment-1:driver-1:2026-03-05' }
 			]);
 
 		sendNotificationMock.mockResolvedValue(undefined);
