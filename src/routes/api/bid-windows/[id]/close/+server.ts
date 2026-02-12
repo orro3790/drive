@@ -17,23 +17,16 @@ import {
 } from '$lib/server/services/bidding';
 import { bidWindowIdParamsSchema } from '$lib/schemas/api/bidding';
 import { createAuditLog } from '$lib/server/services/audit';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import {
 	broadcastAssignmentUpdated,
 	broadcastBidWindowClosed
 } from '$lib/server/realtime/managerSse';
 
 export const POST: RequestHandler = async ({ locals, params }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
-
-	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
-
-	const actorId = locals.user.id;
+	const actorId = manager.id;
 
 	const paramsResult = bidWindowIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {

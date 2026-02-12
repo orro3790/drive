@@ -11,18 +11,13 @@ import { assignments, routes, shifts, user, warehouses } from '$lib/server/db/sc
 import { and, eq, gte, inArray, isNotNull, lte, desc } from 'drizzle-orm';
 import { getDayOfWeekFromDateString, addDaysToDateString } from '$lib/server/time/toronto';
 import { getManagerWarehouseIds } from '$lib/server/services/managers';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import type { WeekDetailResponse } from '$lib/schemas/weeklyReports';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export const GET: RequestHandler = async ({ locals, params }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Only managers can access weekly reports');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const { weekStart } = params;
 
@@ -42,10 +37,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 		throw error(400, 'weekStart must be a Monday');
 	}
 
-	const accessibleWarehouses = await getManagerWarehouseIds(
-		locals.user.id,
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	const accessibleWarehouses = await getManagerWarehouseIds(manager.id, organizationId);
 	if (accessibleWarehouses.length === 0) {
 		return json({
 			weekStart,

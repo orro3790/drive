@@ -15,6 +15,7 @@ import { sendBulkNotifications, sendNotification } from '$lib/server/services/no
 import { getBidWindowDetail } from '$lib/server/services/bidding';
 import { bidWindowIdParamsSchema } from '$lib/schemas/api/bidding';
 import { createAuditLog } from '$lib/server/services/audit';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import {
 	broadcastAssignmentUpdated,
 	broadcastBidWindowClosed
@@ -46,17 +47,9 @@ function isActiveAssignmentConflict(err: unknown): boolean {
 }
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
-
-	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
-
-	const actorId = locals.user.id;
+	const actorId = manager.id;
 
 	let body: unknown;
 	try {

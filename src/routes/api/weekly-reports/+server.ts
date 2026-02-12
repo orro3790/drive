@@ -4,28 +4,20 @@
  * GET /api/weekly-reports - Aggregated parcel delivery totals per operational week
  */
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, shifts } from '$lib/server/db/schema';
 import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { getWeekStartFromDateString, addDaysToDateString } from '$lib/server/time/toronto';
 import { getManagerWarehouseIds } from '$lib/server/services/managers';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import type { WeekSummary, WeeklyReportsResponse } from '$lib/schemas/weeklyReports';
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Only managers can access weekly reports');
-	}
-
-	const accessibleWarehouses = await getManagerWarehouseIds(
-		locals.user.id,
-		locals.organizationId ?? locals.user.organizationId ?? ''
-	);
+	const accessibleWarehouses = await getManagerWarehouseIds(manager.id, organizationId);
 	if (accessibleWarehouses.length === 0) {
 		return json({ weeks: [] } satisfies WeeklyReportsResponse);
 	}

@@ -1,4 +1,4 @@
-import { error, json } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { parseRouteStartTime } from '$lib/config/dispatchPolicy';
 import { assignmentIdParamsSchema, assignmentOverrideSchema } from '$lib/schemas/assignment';
@@ -13,6 +13,7 @@ import { manualAssignDriverToAssignment } from '$lib/server/services/assignments
 import { createBidWindow } from '$lib/server/services/bidding';
 import { getEmergencyBonusPercent } from '$lib/server/services/dispatchSettings';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
 import { and, desc, eq } from 'drizzle-orm';
 
@@ -198,15 +199,7 @@ async function closeOpenWindowForUrgentEscalation(params: {
 }
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		return overrideError(403, 'forbidden', 'Only managers can override assignments');
-	}
-
-	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = assignmentIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -232,7 +225,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	}
 
 	const hasWarehouseAccess = await canManagerAccessWarehouse(
-		locals.user.id,
+		manager.id,
 		assignment.warehouseId,
 		organizationId
 	);
@@ -254,7 +247,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		const result = await manualAssignDriverToAssignment({
 			assignmentId,
 			driverId: parsed.data.driverId,
-			actorId: locals.user.id,
+			actorId: manager.id,
 			organizationId,
 			allowedStatuses: ['scheduled', 'unfilled']
 		});
@@ -404,7 +397,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		const closed = await closeOpenWindowForUrgentEscalation({
 			assignmentId,
 			bidWindowId: openWindow.id,
-			actorId: locals.user.id,
+			actorId: manager.id,
 			organizationId,
 			assignmentStatusBefore: assignment.status
 		});
