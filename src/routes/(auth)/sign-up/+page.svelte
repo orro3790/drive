@@ -6,8 +6,10 @@
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Icon from '$lib/components/primitives/Icon.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
+	import Building from '$lib/components/icons/Building.svelte';
 	import Eye from '$lib/components/icons/Eye.svelte';
 	import EyeOff from '$lib/components/icons/EyeOff.svelte';
+	import Key from '$lib/components/icons/Key.svelte';
 	import Mail from '$lib/components/icons/Mail.svelte';
 	import User from '$lib/components/icons/User.svelte';
 	import * as m from '$lib/paraglide/messages.js';
@@ -18,6 +20,9 @@
 	let email = $state('');
 	let password = $state('');
 	let confirmPassword = $state('');
+	let organizationMode = $state<'create' | 'join'>('create');
+	let organizationName = $state('');
+	let organizationCode = $state('');
 	let showPassword = $state(false);
 	let showConfirmPassword = $state(false);
 	let errorMessage = $state<string | null>(null);
@@ -26,12 +31,31 @@
 	const PasswordToggleIcon = $derived(showPassword ? EyeOff : Eye);
 	const ConfirmPasswordToggleIcon = $derived(showConfirmPassword ? EyeOff : Eye);
 
+	function handleOrganizationModeChange(mode: 'create' | 'join') {
+		organizationMode = mode;
+		errorMessage = null;
+	}
+
 	const handleSubmit = async () => {
 		if (isSubmitting) {
 			return;
 		}
 
 		errorMessage = null;
+
+		const normalizedOrganizationName = organizationName.trim();
+		const normalizedOrganizationCode = organizationCode.trim();
+
+		if (organizationMode === 'create' && normalizedOrganizationName.length < 2) {
+			errorMessage = m.auth_sign_up_error_org_name_required();
+			return;
+		}
+
+		if (organizationMode === 'join' && normalizedOrganizationCode.length < 4) {
+			errorMessage = m.auth_sign_up_error_org_code_required();
+			return;
+		}
+
 		if (password !== confirmPassword) {
 			errorMessage = m.auth_sign_up_error_password_mismatch();
 			return;
@@ -47,6 +71,14 @@
 				callbackURL: redirectTo
 			},
 			{
+				fetchOptions: {
+					headers: {
+						'x-signup-org-mode': organizationMode,
+						...(organizationMode === 'create'
+							? { 'x-signup-org-name': normalizedOrganizationName }
+							: { 'x-signup-org-code': normalizedOrganizationCode })
+					}
+				},
 				onSuccess: () => {
 					goto(redirectTo);
 				}
@@ -74,6 +106,75 @@
 		}}
 		novalidate
 	>
+		<div class="signup-mode" role="group" aria-label="Organization mode">
+			<button
+				type="button"
+				class="mode-option"
+				class:active={organizationMode === 'create'}
+				onclick={() => handleOrganizationModeChange('create')}
+			>
+				{m.auth_sign_up_mode_create()}
+			</button>
+			<button
+				type="button"
+				class="mode-option"
+				class:active={organizationMode === 'join'}
+				onclick={() => handleOrganizationModeChange('join')}
+			>
+				{m.auth_sign_up_mode_join()}
+			</button>
+		</div>
+
+		{#if organizationMode === 'create'}
+			<InlineEditor
+				id="organization-name"
+				name="organizationName"
+				inputType="text"
+				autocomplete="organization"
+				placeholder={m.auth_organization_name_placeholder()}
+				ariaLabel={m.auth_organization_name_label()}
+				required={true}
+				mode="form"
+				variant="bordered"
+				size="base"
+				value={organizationName}
+				onInput={(v) => {
+					organizationName = v;
+				}}
+				onSave={async (v) => {
+					organizationName = v;
+				}}
+			>
+				{#snippet leadingIcon()}
+					<Icon><Building /></Icon>
+				{/snippet}
+			</InlineEditor>
+		{:else}
+			<InlineEditor
+				id="organization-code"
+				name="organizationCode"
+				inputType="text"
+				autocomplete="off"
+				placeholder={m.auth_organization_code_placeholder()}
+				ariaLabel={m.auth_organization_code_label()}
+				required={true}
+				mode="form"
+				variant="bordered"
+				size="base"
+				value={organizationCode}
+				onInput={(v) => {
+					organizationCode = v;
+				}}
+				onSave={async (v) => {
+					organizationCode = v;
+				}}
+			>
+				{#snippet leadingIcon()}
+					<Icon><Key /></Icon>
+				{/snippet}
+			</InlineEditor>
+		{/if}
+
 		<InlineEditor
 			id="name"
 			name="name"
@@ -225,6 +326,48 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-3);
+	}
+
+	.signup-mode {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--spacing-2);
+		padding: var(--spacing-1);
+		border-radius: var(--radius-md);
+		background: var(--surface-muted);
+		border: var(--border-width-thin) solid var(--border-muted);
+	}
+
+	.mode-option {
+		appearance: none;
+		-webkit-appearance: none;
+		border: none;
+		border-radius: var(--radius-md);
+		padding: var(--spacing-2) var(--spacing-3);
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-muted);
+		background: transparent;
+		cursor: pointer;
+		transition:
+			background var(--transition-duration-200) var(--transition-ease),
+			color var(--transition-duration-200) var(--transition-ease),
+			box-shadow var(--transition-duration-200) var(--transition-ease);
+	}
+
+	.mode-option:hover {
+		color: var(--text-normal);
+	}
+
+	.mode-option.active {
+		background: var(--surface-primary);
+		color: var(--text-normal);
+		box-shadow: var(--shadow-sm);
+	}
+
+	.mode-option:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px var(--interactive-accent);
 	}
 
 	.auth-footer {

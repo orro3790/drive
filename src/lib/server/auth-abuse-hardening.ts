@@ -1,14 +1,18 @@
 import { env } from '$env/dynamic/private';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import logger from './logger';
+import { releaseProductionSignupAuthorizationReservation } from './services/onboarding';
 import {
-	finalizeProductionSignupAuthorizationReservation,
-	releaseProductionSignupAuthorizationReservation,
-	reserveProductionSignupAuthorization
-} from './services/onboarding';
+	finalizeOrganizationCreateSignup,
+	finalizeOrganizationJoinSignup,
+	reserveOrganizationJoinSignup
+} from './services/organizationSignup';
 import {
 	authSignupReturnedPayloadSchema,
+	signupOrganizationMetadataSchema,
 	signupOnboardingReservationIdSchema,
+	type SignupCreateOrganizationFinalizeReconciliationInput,
+	type SignupOrganizationMetadata,
 	type SignupFinalizeReconciliationInput
 } from '$lib/schemas/onboarding';
 
@@ -19,6 +23,11 @@ const SIGNUP_POLICY_VALUES = new Set([ALLOWLIST_POLICY, OPEN_POLICY]);
 
 const SIGN_UP_BLOCKED_MESSAGE = 'Signup is restricted. Please contact a manager for approval.';
 const INVALID_INVITE_CODE_MESSAGE = 'Invalid invite code';
+const INVALID_ORGANIZATION_CODE_MESSAGE = 'Invalid organization code';
+const INVALID_ORGANIZATION_SIGNUP_MESSAGE = 'Invalid organization signup details';
+const SIGNUP_ORGANIZATION_MODE_HEADER = 'x-signup-org-mode';
+const SIGNUP_ORGANIZATION_NAME_HEADER = 'x-signup-org-name';
+const SIGNUP_ORGANIZATION_CODE_HEADER = 'x-signup-org-code';
 
 type RuntimeEnv = Record<string, string | undefined>;
 
@@ -32,11 +41,15 @@ export interface SignupAbusePolicyConfig {
 }
 
 export interface SignupAbuseGuardDependencies {
-	reserveProductionSignupAuthorization?: typeof reserveProductionSignupAuthorization;
-	finalizeProductionSignupAuthorizationReservation?: typeof finalizeProductionSignupAuthorizationReservation;
+	reserveOrganizationJoinSignup?: typeof reserveOrganizationJoinSignup;
+	finalizeOrganizationJoinSignup?: typeof finalizeOrganizationJoinSignup;
+	finalizeOrganizationCreateSignup?: typeof finalizeOrganizationCreateSignup;
 	releaseProductionSignupAuthorizationReservation?: typeof releaseProductionSignupAuthorizationReservation;
 	recordSignupFinalizeReconciliation?: (
 		input: SignupFinalizeReconciliationInput
+	) => Promise<void> | void;
+	recordSignupCreateOrganizationFinalizeReconciliation?: (
+		input: SignupCreateOrganizationFinalizeReconciliationInput
 	) => Promise<void> | void;
 }
 
@@ -184,8 +197,47 @@ function extractClientIp(headers: Headers | undefined): string | null {
 	return forwardedFor.split(',')[0]?.trim() || null;
 }
 
-function isProductionAllowlistMode(config: SignupAbusePolicyConfig): boolean {
-	return config.isProduction && config.signupPolicyMode === ALLOWLIST_POLICY;
+function parseSignupOrganizationMetadataFromHeaders(
+	headers: Headers | undefined
+): SignupOrganizationMetadata | null {
+	if (!headers) {
+		return null;
+	}
+
+	const mode = headers.get(SIGNUP_ORGANIZATION_MODE_HEADER)?.trim().toLowerCase();
+	if (!mode) {
+		return null;
+	}
+
+	if (mode === 'create') {
+		const organizationName = headers.get(SIGNUP_ORGANIZATION_NAME_HEADER) ?? '';
+		const parsed = signupOrganizationMetadataSchema.safeParse({
+			mode,
+			organizationName
+		});
+		return parsed.success ? parsed.data : null;
+	}
+
+	if (mode === 'join') {
+		const organizationCode = headers.get(SIGNUP_ORGANIZATION_CODE_HEADER) ?? '';
+		const parsed = signupOrganizationMetadataSchema.safeParse({
+			mode,
+			organizationCode
+		});
+		return parsed.success ? parsed.data : null;
+	}
+
+	return null;
+}
+
+function resolveOrganizationJoinFailureMessage(
+	reason: 'invalid_org_code' | 'approval_not_found'
+): string {
+	if (reason === 'invalid_org_code') {
+		return INVALID_ORGANIZATION_CODE_MESSAGE;
+	}
+
+	return SIGN_UP_BLOCKED_MESSAGE;
 }
 
 async function extractSuccessfulAuthPayload(
@@ -232,6 +284,7 @@ function extractSignedUpUser(
 interface SignupHookContext {
 	returned?: unknown;
 	signupOnboardingReservationId?: string;
+	signupOrganization?: SignupOrganizationMetadata;
 }
 
 function setSignupReservationIdOnContext(ctx: { context?: unknown }, reservationId: string): void {
@@ -241,6 +294,19 @@ function setSignupReservationIdOnContext(ctx: { context?: unknown }, reservation
 			: ({} as SignupHookContext);
 
 	context.signupOnboardingReservationId = reservationId;
+	(ctx as { context?: SignupHookContext }).context = context;
+}
+
+function setSignupOrganizationOnContext(
+	ctx: { context?: unknown },
+	signupOrganization: SignupOrganizationMetadata
+): void {
+	const context =
+		typeof ctx.context === 'object' && ctx.context
+			? (ctx.context as SignupHookContext)
+			: ({} as SignupHookContext);
+
+	context.signupOrganization = signupOrganization;
 	(ctx as { context?: SignupHookContext }).context = context;
 }
 
@@ -256,6 +322,18 @@ function getSignupReservationIdFromContext(ctx: { context?: unknown }): string |
 
 	const normalizedReservationId = reservationId.trim();
 	const parsed = signupOnboardingReservationIdSchema.safeParse(normalizedReservationId);
+	return parsed.success ? parsed.data : null;
+}
+
+function getSignupOrganizationFromContext(ctx: {
+	context?: unknown;
+}): SignupOrganizationMetadata | null {
+	const signupOrganization =
+		typeof ctx.context === 'object' && ctx.context
+			? (ctx.context as SignupHookContext).signupOrganization
+			: null;
+
+	const parsed = signupOrganizationMetadataSchema.safeParse(signupOrganization);
 	return parsed.success ? parsed.data : null;
 }
 
@@ -300,12 +378,47 @@ async function reportFinalizeReconciliation(
 	}
 }
 
+async function logSignupCreateOrganizationFinalizeNeedsReconciliation(
+	input: SignupCreateOrganizationFinalizeReconciliationInput
+): Promise<void> {
+	logger.error(
+		{
+			emailDomain: emailDomain(input.email),
+			userId: input.userId,
+			organizationName: input.organizationName,
+			error: input.error
+		},
+		'auth_signup_organization_create_finalize_needs_reconciliation'
+	);
+}
+
+async function reportCreateOrganizationFinalizeReconciliation(
+	recorder: NonNullable<
+		SignupAbuseGuardDependencies['recordSignupCreateOrganizationFinalizeReconciliation']
+	>,
+	input: SignupCreateOrganizationFinalizeReconciliationInput
+): Promise<void> {
+	try {
+		await recorder(input);
+	} catch (error) {
+		logger.error(
+			{
+				emailDomain: emailDomain(input.email),
+				userId: input.userId,
+				organizationName: input.organizationName,
+				error
+			},
+			'auth_signup_organization_create_reconciliation_report_failed'
+		);
+	}
+}
+
 export function createSignupAbuseGuard(
 	config = resolveSignupAbusePolicyConfig(),
 	dependencies: SignupAbuseGuardDependencies = {}
 ) {
-	const reserveProductionAuthorization =
-		dependencies.reserveProductionSignupAuthorization ?? reserveProductionSignupAuthorization;
+	const reserveJoinAuthorization =
+		dependencies.reserveOrganizationJoinSignup ?? reserveOrganizationJoinSignup;
 
 	return createAuthMiddleware(async (ctx) => {
 		if (ctx.path !== SIGN_UP_PATH) {
@@ -334,69 +447,169 @@ export function createSignupAbuseGuard(
 			throw new APIError('BAD_REQUEST', { message: decision.message });
 		}
 
-		if (isProductionAllowlistMode(config)) {
-			let reservation: Awaited<ReturnType<typeof reserveProductionAuthorization>> | null = null;
-
-			try {
-				reservation = await reserveProductionAuthorization({
-					email: attempt.email!,
-					inviteCodeHeader: attempt.inviteCodeHeader
-				});
-			} catch (error) {
-				logger.error(
-					{
-						emailDomain: emailDomain(attempt.email),
-						ip: extractClientIp(ctx.headers),
-						error
-					},
-					'auth_signup_onboarding_reserve_failed'
-				);
-
-				throw new APIError('BAD_REQUEST', { message: SIGN_UP_BLOCKED_MESSAGE });
-			}
-
-			if (reservation.allowed) {
-				setSignupReservationIdOnContext(ctx, reservation.reservationId);
-				return;
-			}
-
+		const signupOrganization = parseSignupOrganizationMetadataFromHeaders(ctx.headers);
+		if (!signupOrganization) {
 			logger.warn(
 				{
-					reason: 'allowlist_denied',
+					reason: 'invalid_organization_signup',
 					emailDomain: emailDomain(attempt.email),
-					ip: extractClientIp(ctx.headers),
-					signupPolicyMode: config.signupPolicyMode,
-					isProduction: config.isProduction
+					ip: extractClientIp(ctx.headers)
 				},
 				'auth_signup_blocked'
+			);
+
+			throw new APIError('BAD_REQUEST', { message: INVALID_ORGANIZATION_SIGNUP_MESSAGE });
+		}
+
+		setSignupOrganizationOnContext(ctx, signupOrganization);
+
+		if (signupOrganization.mode === 'create') {
+			return;
+		}
+
+		let reservation: Awaited<ReturnType<typeof reserveJoinAuthorization>> | null = null;
+
+		try {
+			reservation = await reserveJoinAuthorization({
+				email: attempt.email!,
+				organizationCode: signupOrganization.organizationCode
+			});
+		} catch (error) {
+			logger.error(
+				{
+					emailDomain: emailDomain(attempt.email),
+					ip: extractClientIp(ctx.headers),
+					error
+				},
+				'auth_signup_onboarding_reserve_failed'
 			);
 
 			throw new APIError('BAD_REQUEST', { message: SIGN_UP_BLOCKED_MESSAGE });
 		}
 
-		return;
+		if (reservation.allowed) {
+			setSignupReservationIdOnContext(ctx, reservation.reservationId);
+			return;
+		}
+
+		logger.warn(
+			{
+				reason: reservation.reason,
+				emailDomain: emailDomain(attempt.email),
+				ip: extractClientIp(ctx.headers),
+				signupPolicyMode: config.signupPolicyMode,
+				isProduction: config.isProduction
+			},
+			'auth_signup_blocked'
+		);
+
+		throw new APIError('BAD_REQUEST', {
+			message: resolveOrganizationJoinFailureMessage(reservation.reason)
+		});
 	});
 }
 
 export function createSignupOnboardingConsumer(
-	config = resolveSignupAbusePolicyConfig(),
+	_config = resolveSignupAbusePolicyConfig(),
 	dependencies: SignupAbuseGuardDependencies = {}
 ) {
-	const finalizeReservation =
-		dependencies.finalizeProductionSignupAuthorizationReservation ??
-		finalizeProductionSignupAuthorizationReservation;
+	const finalizeJoinReservation =
+		dependencies.finalizeOrganizationJoinSignup ?? finalizeOrganizationJoinSignup;
+	const finalizeCreateOrganization =
+		dependencies.finalizeOrganizationCreateSignup ?? finalizeOrganizationCreateSignup;
 	const releaseReservation =
 		dependencies.releaseProductionSignupAuthorizationReservation ??
 		releaseProductionSignupAuthorizationReservation;
 	const recordFinalizeReconciliation =
 		dependencies.recordSignupFinalizeReconciliation ?? logSignupFinalizeNeedsReconciliation;
+	const recordCreateOrganizationFinalizeReconciliation =
+		dependencies.recordSignupCreateOrganizationFinalizeReconciliation ??
+		logSignupCreateOrganizationFinalizeNeedsReconciliation;
+
+	const releaseSignupReservation = async (reservationId: string) => {
+		try {
+			const released = await releaseReservation({ reservationId });
+			if (!released) {
+				logger.warn({ reservationId }, 'auth_signup_onboarding_release_not_applied');
+			}
+		} catch (error) {
+			logger.error(
+				{
+					reservationId,
+					error
+				},
+				'auth_signup_onboarding_release_failed'
+			);
+		}
+	};
 
 	return createAuthMiddleware(async (ctx) => {
 		if (ctx.path !== SIGN_UP_PATH) {
 			return;
 		}
 
-		if (!isProductionAllowlistMode(config)) {
+		const signupOrganization = getSignupOrganizationFromContext(ctx);
+		if (!signupOrganization) {
+			logger.error(
+				{
+					ip: extractClientIp(ctx.headers)
+				},
+				'auth_signup_organization_context_missing'
+			);
+			return;
+		}
+
+		const payload = await extractSuccessfulAuthPayload(getReturnedHookValue(ctx));
+		const signedUpUser = payload ? extractSignedUpUser(payload) : null;
+
+		if (!signedUpUser) {
+			if (signupOrganization.mode === 'join') {
+				const reservationId = getSignupReservationIdFromContext(ctx);
+				if (!reservationId) {
+					logger.error(
+						{
+							ip: extractClientIp(ctx.headers)
+						},
+						'auth_signup_onboarding_reservation_missing'
+					);
+					return;
+				}
+
+				await releaseSignupReservation(reservationId);
+			}
+
+			return;
+		}
+
+		if (signupOrganization.mode === 'create') {
+			try {
+				const finalized = await finalizeCreateOrganization({
+					userId: signedUpUser.id,
+					organizationName: signupOrganization.organizationName
+				});
+
+				if (!finalized) {
+					await reportCreateOrganizationFinalizeReconciliation(
+						recordCreateOrganizationFinalizeReconciliation,
+						{
+							userId: signedUpUser.id,
+							email: signedUpUser.email,
+							organizationName: signupOrganization.organizationName
+						}
+					);
+				}
+			} catch (error) {
+				await reportCreateOrganizationFinalizeReconciliation(
+					recordCreateOrganizationFinalizeReconciliation,
+					{
+						userId: signedUpUser.id,
+						email: signedUpUser.email,
+						organizationName: signupOrganization.organizationName,
+						error
+					}
+				);
+			}
+
 			return;
 		}
 
@@ -411,48 +624,8 @@ export function createSignupOnboardingConsumer(
 			return;
 		}
 
-		const payload = await extractSuccessfulAuthPayload(getReturnedHookValue(ctx));
-		if (!payload) {
-			try {
-				const released = await releaseReservation({ reservationId });
-				if (!released) {
-					logger.warn({ reservationId }, 'auth_signup_onboarding_release_not_applied');
-				}
-			} catch (error) {
-				logger.error(
-					{
-						reservationId,
-						error
-					},
-					'auth_signup_onboarding_release_failed'
-				);
-			}
-
-			return;
-		}
-
-		const signedUpUser = extractSignedUpUser(payload);
-		if (!signedUpUser) {
-			try {
-				const released = await releaseReservation({ reservationId });
-				if (!released) {
-					logger.warn({ reservationId }, 'auth_signup_onboarding_release_not_applied');
-				}
-			} catch (error) {
-				logger.error(
-					{
-						reservationId,
-						error
-					},
-					'auth_signup_onboarding_release_failed'
-				);
-			}
-
-			return;
-		}
-
 		try {
-			const finalized = await finalizeReservation({
+			const finalized = await finalizeJoinReservation({
 				reservationId,
 				userId: signedUpUser.id
 			});
