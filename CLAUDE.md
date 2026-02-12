@@ -87,9 +87,10 @@ Driver-facing endpoints in `src/routes/api/`:
 Manager-facing endpoints in `src/routes/api/`:
 
 - `GET /api/drivers/[id]/shifts` - Get all completed and cancelled shift records for a specific driver (includes parcel counts, timestamps, exception notes)
-- `GET /api/onboarding` - List all signup onboarding entries with createdByName (manager whitelist)
-- `POST /api/onboarding` - Create email approval for driver signup (kind: 'approval', email)
-- `PATCH /api/onboarding/[id]/revoke` - Revoke a pending/reserved onboarding entry
+- `GET /api/onboarding` - List org-scoped signup onboarding entries with createdByName (manager whitelist)
+- `POST /api/onboarding` - Create org-scoped email approval for driver signup (kind: 'approval', email)
+- `PATCH /api/onboarding/[id]/revoke` - Revoke a pending/reserved onboarding entry (org-scoped)
+- `PATCH /api/onboarding/[id]/restore` - Restore a revoked onboarding entry (org-scoped)
 - `GET /api/weekly-reports` - Aggregated parcel delivery totals per operational week (billing summary)
 - `GET /api/weekly-reports/[weekStart]` - Individual shift records for a specific week (weekStart must be a Monday)
 
