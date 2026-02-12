@@ -10,7 +10,7 @@
  * Also performs event-driven bid resolution to ensure data is fresh.
  */
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import {
@@ -32,6 +32,7 @@ import {
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
 import logger from '$lib/server/logger';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -40,20 +41,12 @@ function toTorontoDateString(date: Date): string {
 }
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can access dashboard');
-	}
-
-	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+	const { user, organizationId } = requireDriverWithOrg(locals);
 
 	// Event-driven resolution: resolve any expired bid windows before fetching data
 	const expiredWindows = await getExpiredBidWindows(undefined, organizationId);
 	if (expiredWindows.length > 0) {
-		const log = logger.child({ operation: 'event-driven-resolution', userId: locals.user.id });
+		const log = logger.child({ operation: 'event-driven-resolution', userId: user.id });
 		for (const window of expiredWindows) {
 			try {
 				await resolveBidWindow(window.id, { actorType: 'system', actorId: null }, organizationId);
@@ -101,7 +94,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			.leftJoin(shifts, eq(assignments.id, shifts.assignmentId))
 			.where(
 				and(
-					eq(assignments.userId, locals.user.id),
+					eq(assignments.userId, user.id),
 					gte(assignments.date, weekStartString),
 					lt(assignments.date, windowEndString)
 				)
@@ -109,7 +102,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			.orderBy(asc(assignments.date)),
 
 		// Get driver metrics
-		db.select().from(driverMetrics).where(eq(driverMetrics.userId, locals.user.id)).limit(1),
+		db.select().from(driverMetrics).where(eq(driverMetrics.userId, user.id)).limit(1),
 
 		// Get pending bids with assignment details
 		db
@@ -129,7 +122,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 			.where(
 				and(
-					eq(bids.userId, locals.user.id),
+					eq(bids.userId, user.id),
 					eq(bids.status, 'pending'),
 					gte(bids.windowClosesAt, new Date())
 				)
@@ -229,7 +222,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 	}));
 
 	// Get unconfirmed shifts within confirmation window
-	const unconfirmedShifts = await getUnconfirmedAssignments(locals.user.id);
+	const unconfirmedShifts = await getUnconfirmedAssignments(user.id);
 
 	// Check for any incomplete shift (arrived but not completed, from a previous day)
 	const [incompleteShiftRow] = await db
@@ -254,7 +247,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.where(
 			and(
-				eq(assignments.userId, locals.user.id),
+				eq(assignments.userId, user.id),
 				isNotNull(shifts.arrivedAt),
 				isNull(shifts.completedAt),
 				isNull(shifts.cancelledAt),

@@ -4,20 +4,15 @@
  * GET /api/bids/mine - Get current driver's bids (pending and past)
  */
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { bids, assignments, routes, warehouses } from '$lib/server/db/schema';
 import { desc, eq } from 'drizzle-orm';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can view their bids');
-	}
+	const { user } = requireDriverWithOrg(locals);
 
 	// Get all bids for this driver with assignment details
 	const driverBids = await db
@@ -37,7 +32,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.innerJoin(assignments, eq(bids.assignmentId, assignments.id))
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
-		.where(eq(bids.userId, locals.user.id))
+		.where(eq(bids.userId, user.id))
 		.orderBy(desc(bids.bidAt));
 
 	const formattedBids = driverBids.map((bid) => ({

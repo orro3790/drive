@@ -11,6 +11,7 @@ import { db } from '$lib/server/db';
 import { driverPreferences, routes, warehouses } from '$lib/server/db/schema';
 import { preferencesUpdateSchema } from '$lib/schemas/preferences';
 import { eq, inArray } from 'drizzle-orm';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 /**
  * Get next Sunday 23:59:59 Toronto time as lock deadline
@@ -64,16 +65,9 @@ function isPreferencesLocked(lockedAt: Date | null): boolean {
 }
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user } = requireDriverWithOrg(locals);
 
-	// Drivers only
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can access preferences');
-	}
-
-	const userId = locals.user.id;
+	const userId = user.id;
 
 	// Get existing preferences
 	const [preferences] = await db
@@ -119,15 +113,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 };
 
 export const PUT: RequestHandler = async ({ locals, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user } = requireDriverWithOrg(locals);
 
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can update preferences');
-	}
-
-	const userId = locals.user.id;
+	const userId = user.id;
 
 	// Check if preferences are locked
 	const [existing] = await db

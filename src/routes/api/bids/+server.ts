@@ -26,6 +26,7 @@ import { sendNotification } from '$lib/server/services/notifications';
 import { bidSubmissionSchema } from '$lib/schemas/api/bidding';
 import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 const INSTANT_MODE_CUTOFF_MS = dispatchPolicy.bidding.instantModeCutoffHours * 60 * 60 * 1000;
 const PG_UNIQUE_VIOLATION = '23505';
@@ -43,16 +44,9 @@ function isWindowScopedDuplicateBidError(err: unknown): boolean {
 }
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user: driver, organizationId } = requireDriverWithOrg(locals);
 
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can submit bids');
-	}
-
-	const driverId = locals.user.id;
-	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+	const driverId = driver.id;
 
 	const log = logger.child({ operation: 'submitBid' });
 
