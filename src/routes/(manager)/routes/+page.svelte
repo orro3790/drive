@@ -101,6 +101,22 @@
 	let sorting = $state<SortingState>([]);
 	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
 
+	const filteredRoutes = $derived.by(() => {
+		if (!progressFilter) return routeStore.routes;
+		switch (progressFilter) {
+			case 'not_arrived':
+				return routeStore.routes.filter((r) => r.shiftProgress === 'no_show');
+			case 'unfilled':
+				return routeStore.routes.filter((r) => r.status === 'unfilled' || r.status === 'bidding');
+			case 'in_progress':
+				return routeStore.routes.filter(
+					(r) => r.shiftProgress === 'arrived' || r.shiftProgress === 'started'
+				);
+			default:
+				return routeStore.routes.filter((r) => r.shiftProgress === progressFilter);
+		}
+	});
+
 	const helper = createColumnHelper<RouteWithWarehouse>();
 
 	const columns = [
@@ -218,22 +234,6 @@
 		{ value: 'unfilled', label: statusLabels.unfilled },
 		{ value: 'bidding', label: statusLabels.bidding }
 	];
-
-	const filteredRoutes = $derived.by(() => {
-		if (!progressFilter) return routeStore.routes;
-		switch (progressFilter) {
-			case 'not_arrived':
-				return routeStore.routes.filter((r) => r.shiftProgress === 'no_show');
-			case 'unfilled':
-				return routeStore.routes.filter((r) => r.status === 'unfilled' || r.status === 'bidding');
-			case 'in_progress':
-				return routeStore.routes.filter(
-					(r) => r.shiftProgress === 'arrived' || r.shiftProgress === 'started'
-				);
-			default:
-				return routeStore.routes.filter((r) => r.shiftProgress === progressFilter);
-		}
-	});
 
 	const progressFilterSelectValue = $derived(progressFilter ?? '');
 

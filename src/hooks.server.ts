@@ -12,7 +12,7 @@ import {
 	isMonitoredAuthRateLimitPath,
 	isPublicRoute
 } from '$lib/server/auth-route-policy';
-import logger, { toSafeErrorMessage } from '$lib/server/logger';
+import logger, { toErrorDetails } from '$lib/server/logger';
 
 function extractClientIp(headers: Headers): string | null {
 	const forwardedFor = headers.get('x-forwarded-for');
@@ -133,6 +133,7 @@ export const handleError: HandleServerError = ({ error, event, status, message }
 	const requestId = event.locals.requestId ?? getRequestId(event.request.headers);
 
 	if (status >= 500) {
+		const { errorType, errorMessage, errorStack } = toErrorDetails(error);
 		logger.error(
 			{
 				event: 'http.server_error',
@@ -143,9 +144,11 @@ export const handleError: HandleServerError = ({ error, event, status, message }
 				path: event.url.pathname,
 				status,
 				userId: event.locals.user?.id ?? null,
-				errorType: toSafeErrorMessage(error)
+				errorType,
+				errorMessage,
+				errorStack
 			},
-			'Unhandled server error'
+			`Unhandled server error: ${errorType}: ${errorMessage}`
 		);
 	}
 
