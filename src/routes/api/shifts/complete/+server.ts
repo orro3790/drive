@@ -228,20 +228,29 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	// Best-effort notifications and async metrics
 	if (exceptedReturns > 0) {
-		await sendManagerAlert(assignment.routeId, 'return_exception', {
-			routeName: assignment.routeName ?? 'Unknown Route',
-			driverName: locals.user.name ?? 'A driver',
-			date: assignment.date
-		});
+		await sendManagerAlert(
+			assignment.routeId,
+			'return_exception',
+			{
+				routeName: assignment.routeName ?? 'Unknown Route',
+				driverName: locals.user.name ?? 'A driver',
+				date: assignment.date
+			},
+			locals.organizationId ?? locals.user.organizationId ?? ''
+		);
 	}
 
 	await Promise.all([
 		recordRouteCompletion({
 			userId: assignment.userId,
 			routeId: assignment.routeId,
-			completedAt
+			completedAt,
+			organizationId: locals.organizationId ?? locals.user.organizationId ?? ''
 		}),
-		updateDriverMetrics(assignment.userId)
+		updateDriverMetrics(
+			assignment.userId,
+			locals.organizationId ?? locals.user.organizationId ?? ''
+		)
 	]);
 
 	return json({

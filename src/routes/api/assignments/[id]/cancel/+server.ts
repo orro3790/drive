@@ -152,16 +152,24 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	// Send alert to route manager (best-effort)
 	try {
-		await sendManagerAlert(existing.routeId, 'route_cancelled', {
-			driverName: locals.user.name ?? 'A driver',
-			date: existing.date
-		});
+		await sendManagerAlert(
+			existing.routeId,
+			'route_cancelled',
+			{
+				driverName: locals.user.name ?? 'A driver',
+				date: existing.date
+			},
+			locals.organizationId ?? locals.user.organizationId ?? ''
+		);
 	} catch {
 		// Manager alert is best-effort
 	}
 
 	// Create bid window via service (handles mode selection automatically)
-	await createBidWindow(existing.id, { trigger: 'cancellation' });
+	await createBidWindow(existing.id, {
+		organizationId: locals.organizationId ?? locals.user.organizationId ?? '',
+		trigger: 'cancellation'
+	});
 
 	broadcastAssignmentUpdated({
 		assignmentId: existing.id,

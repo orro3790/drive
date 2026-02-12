@@ -36,7 +36,11 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 	const { id: warehouseId } = paramsResult.data;
 
 	// Verify caller has access to this warehouse
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
+	const canAccess = await canManagerAccessWarehouse(
+		locals.user.id,
+		warehouseId,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (!canAccess) throw error(403, 'No access to this warehouse');
 
 	const managers = await db
@@ -64,7 +68,11 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const { id: warehouseId } = paramsResult.data;
 
 	// Verify caller has access
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
+	const canAccess = await canManagerAccessWarehouse(
+		locals.user.id,
+		warehouseId,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (!canAccess) throw error(403, 'No access to this warehouse');
 
 	// Verify warehouse exists
@@ -120,7 +128,11 @@ export const DELETE: RequestHandler = async ({ locals, params, request }) => {
 	const { id: warehouseId } = paramsResult.data;
 
 	// Verify caller has access
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
+	const canAccess = await canManagerAccessWarehouse(
+		locals.user.id,
+		warehouseId,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (!canAccess) throw error(403, 'No access to this warehouse');
 
 	let body: unknown;

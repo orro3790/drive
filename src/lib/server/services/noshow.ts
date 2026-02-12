@@ -11,6 +11,7 @@ import {
 	bidWindows,
 	driverHealthState,
 	driverMetrics,
+	organizations,
 	routes,
 	shifts,
 	user,
@@ -57,11 +58,58 @@ export interface NoShowDetectionResult {
  *
  * Driver fanout is owned by createBidWindow() to prevent duplicate emergency notifications.
  */
-export async function detectNoShows(): Promise<NoShowDetectionResult> {
+export async function detectNoShows(organizationId?: string): Promise<NoShowDetectionResult> {
+	if (organizationId) {
+		return detectNoShowsForOrganization(organizationId);
+	}
+
+	const organizationsToProcess = await db
+		.select({ id: organizations.id })
+		.from(organizations)
+		.where(isNotNull(organizations.id));
+
+	if (organizationsToProcess.length === 0) {
+		return {
+			evaluated: 0,
+			noShows: 0,
+			bidWindowsCreated: 0,
+			managerAlertsSent: 0,
+			driversNotified: 0,
+			errors: 0,
+			skippedBeforeDeadline: false
+		};
+	}
+
+	const aggregate: NoShowDetectionResult = {
+		evaluated: 0,
+		noShows: 0,
+		bidWindowsCreated: 0,
+		managerAlertsSent: 0,
+		driversNotified: 0,
+		errors: 0,
+		skippedBeforeDeadline: false
+	};
+
+	for (const organization of organizationsToProcess) {
+		const scopedResult = await detectNoShowsForOrganization(organization.id);
+		aggregate.evaluated += scopedResult.evaluated;
+		aggregate.noShows += scopedResult.noShows;
+		aggregate.bidWindowsCreated += scopedResult.bidWindowsCreated;
+		aggregate.managerAlertsSent += scopedResult.managerAlertsSent;
+		aggregate.driversNotified += scopedResult.driversNotified;
+		aggregate.errors += scopedResult.errors;
+	}
+
+	return aggregate;
+}
+
+export async function detectNoShowsForOrganization(
+	organizationId: string
+): Promise<NoShowDetectionResult> {
 	const log = logger.child({ operation: 'detectNoShows' });
 	const nowToronto = getTorontoNow();
 	const today = toTorontoDateString(nowToronto);
-	const emergencyBonusPercent = await getEmergencyBonusPercent();
+	const emergencyBonusPercent = await getEmergencyBonusPercent(organizationId);
 
 	// Find confirmed assignments for today where driver hasn't arrived.
 	// We fetch all confirmed-but-not-arrived assignments and filter per-route
@@ -92,6 +140,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 		.leftJoin(user, eq(assignments.userId, user.id))
 		.where(
 			and(
+				eq(warehouses.organizationId, organizationId),
 				eq(assignments.date, today),
 				eq(assignments.status, 'scheduled'),
 				isNotNull(assignments.userId),
@@ -128,6 +177,7 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 		try {
 			// 1. Create emergency bid window
 			const result = await createBidWindow(candidate.assignmentId, {
+				organizationId,
 				mode: 'emergency',
 				trigger: 'no_show',
 				payBonusPercent: emergencyBonusPercent,
@@ -171,11 +221,16 @@ export async function detectNoShows(): Promise<NoShowDetectionResult> {
 
 				// 3. Alert route manager
 				try {
-					await sendManagerAlert(candidate.routeId, 'driver_no_show', {
-						routeName: candidate.routeName ?? 'Unknown Route',
-						driverName: candidate.driverName ?? 'A driver',
-						date: candidate.assignmentDate
-					});
+					await sendManagerAlert(
+						candidate.routeId,
+						'driver_no_show',
+						{
+							routeName: candidate.routeName ?? 'Unknown Route',
+							driverName: candidate.driverName ?? 'A driver',
+							date: candidate.assignmentDate
+						},
+						organizationId
+					);
 					managerAlertsSent++;
 				} catch (error) {
 					log.warn(

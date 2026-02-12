@@ -24,14 +24,14 @@ beforeEach(async () => {
 	vi.resetModules();
 
 	getDispatchSettingsMock = vi.fn(async () => ({
-		id: 'global',
+		organizationId: 'org-test',
 		emergencyBonusPercent: 20,
 		updatedBy: 'manager-1',
 		updatedAt: new Date('2026-02-11T00:00:00.000Z')
 	}));
 
 	updateDispatchSettingsMock = vi.fn(async () => ({
-		id: 'global',
+		organizationId: 'org-test',
 		emergencyBonusPercent: 35,
 		updatedBy: 'manager-1',
 		updatedAt: new Date('2026-02-11T01:00:00.000Z')
@@ -84,6 +84,7 @@ describe('GET /api/settings/dispatch', () => {
 			}
 		});
 		expect(getDispatchSettingsMock).toHaveBeenCalledTimes(1);
+		expect(getDispatchSettingsMock).toHaveBeenCalledWith('org-test');
 	});
 
 	it('falls back to default settings when service lookup fails', async () => {
@@ -178,6 +179,7 @@ describe('PATCH /api/settings/dispatch', () => {
 		});
 
 		expect(updateDispatchSettingsMock).toHaveBeenCalledWith({
+			organizationId: 'org-test',
 			emergencyBonusPercent: 35,
 			actorId: 'manager-1'
 		});

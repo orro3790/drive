@@ -44,7 +44,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 	}
 
 	// Get warehouses this manager can access
-	const accessibleWarehouses = await getManagerWarehouseIds(locals.user.id);
+	const accessibleWarehouses = await getManagerWarehouseIds(
+		locals.user.id,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (accessibleWarehouses.length === 0) {
 		return json({ warehouses: [] });
 	}

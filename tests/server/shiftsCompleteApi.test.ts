@@ -147,11 +147,27 @@ let broadcastAssignmentUpdatedMock: ReturnType<
 	typeof vi.fn<(payload: Record<string, unknown>) => void>
 >;
 let recordRouteCompletionMock: ReturnType<
-	typeof vi.fn<(payload: { userId: string; routeId: string; completedAt: Date }) => Promise<void>>
+	typeof vi.fn<
+		(payload: {
+			userId: string;
+			routeId: string;
+			completedAt: Date;
+			organizationId: string;
+		}) => Promise<void>
+	>
 >;
-let updateDriverMetricsServiceMock: ReturnType<typeof vi.fn<(userId: string) => Promise<void>>>;
+let updateDriverMetricsServiceMock: ReturnType<
+	typeof vi.fn<(userId: string, organizationId: string) => Promise<void>>
+>;
 let sendManagerAlertMock: ReturnType<
-	typeof vi.fn<(routeId: string, type: string, data: Record<string, unknown>) => Promise<void>>
+	typeof vi.fn<
+		(
+			routeId: string,
+			type: string,
+			data: Record<string, unknown>,
+			organizationId: string
+		) => Promise<void>
+	>
 >;
 
 function createLifecycleOutput(overrides: Partial<LifecycleOutput> = {}): LifecycleOutput {
@@ -173,7 +189,8 @@ function createUser(role: 'driver' | 'manager', id: string): App.Locals['user'] 
 		id,
 		role,
 		name: `${role}-${id}`,
-		email: `${id}@example.test`
+		email: `${id}@example.test`,
+		organizationId: 'org-test'
 	} as App.Locals['user'];
 }
 
@@ -553,9 +570,10 @@ describe('POST /api/shifts/complete contract', () => {
 		expect(recordRouteCompletionMock).toHaveBeenCalledWith({
 			userId: 'driver-1',
 			routeId: 'route-1',
-			completedAt: expect.any(Date)
+			completedAt: expect.any(Date),
+			organizationId: 'org-test'
 		});
-		expect(updateDriverMetricsServiceMock).toHaveBeenCalledWith('driver-1');
+		expect(updateDriverMetricsServiceMock).toHaveBeenCalledWith('driver-1', 'org-test');
 		expect(updateMock).toHaveBeenCalledTimes(2);
 		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -633,11 +651,16 @@ describe('POST /api/shifts/complete contract', () => {
 		const response = await POST(event as Parameters<typeof POST>[0]);
 
 		expect(response.status).toBe(200);
-		expect(sendManagerAlertMock).toHaveBeenCalledWith('route-1', 'return_exception', {
-			routeName: 'Route Alpha',
-			driverName: 'driver-driver-1',
-			date: '2026-02-09'
-		});
+		expect(sendManagerAlertMock).toHaveBeenCalledWith(
+			'route-1',
+			'return_exception',
+			{
+				routeName: 'Route Alpha',
+				driverName: 'driver-driver-1',
+				date: '2026-02-09'
+			},
+			'org-test'
+		);
 	});
 
 	it('includes exception data in shift audit log', async () => {

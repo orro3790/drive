@@ -27,13 +27,15 @@ export const GET: RequestHandler = async ({ locals }) => {
 		throw error(403, 'Only drivers can view available bids');
 	}
 
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+
 	// Event-driven resolution: resolve any expired windows before returning results
-	const expiredWindows = await getExpiredBidWindows();
+	const expiredWindows = await getExpiredBidWindows(undefined, organizationId);
 	if (expiredWindows.length > 0) {
 		const log = logger.child({ operation: 'event-driven-resolution', userId: locals.user.id });
 		for (const window of expiredWindows) {
 			try {
-				await resolveBidWindow(window.id);
+				await resolveBidWindow(window.id, { actorType: 'system', actorId: null }, organizationId);
 			} catch (err) {
 				log.error({ windowId: window.id, error: err }, 'Failed to resolve expired window');
 			}
@@ -44,7 +46,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 	const [driverInfo] = await db
 		.select({ isFlagged: user.isFlagged })
 		.from(user)
-		.where(eq(user.id, locals.user.id));
+		.where(and(eq(user.id, locals.user.id), eq(user.organizationId, organizationId)));
 
 	if (driverInfo?.isFlagged) {
 		// Flagged drivers can't bid, return empty list
@@ -72,7 +74,13 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
-		.where(and(eq(bidWindows.status, 'open'), gt(bidWindows.closesAt, now)));
+		.where(
+			and(
+				eq(bidWindows.status, 'open'),
+				gt(bidWindows.closesAt, now),
+				eq(warehouses.organizationId, organizationId)
+			)
+		);
 
 	if (openWindows.length === 0) {
 		return json({ bidWindows: [] });
@@ -99,7 +107,11 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 		// Check weekly cap for the assignment's week
 		const assignmentWeekStart = getWeekStart(parseISO(window.assignmentDate));
-		const canTake = await canDriverTakeAssignment(locals.user.id, assignmentWeekStart);
+		const canTake = await canDriverTakeAssignment(
+			locals.user.id,
+			assignmentWeekStart,
+			organizationId
+		);
 		if (!canTake) {
 			continue;
 		}

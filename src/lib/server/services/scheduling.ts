@@ -10,11 +10,13 @@ import {
 	assignments,
 	driverPreferences,
 	driverMetrics,
+	organizations,
 	routeCompletions,
 	routes,
-	user
+	user,
+	warehouses
 } from '$lib/server/db/schema';
-import { and, eq, gte, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import logger from '$lib/server/logger';
 import { createAuditLog } from '$lib/server/services/audit';
 import {
@@ -65,9 +67,56 @@ interface ScheduleGenerationResult {
  * @param targetWeekStart - The Monday of the week to generate schedule for
  */
 export async function generateWeekSchedule(
-	targetWeekStart: Date
+	targetWeekStart: Date,
+	organizationId?: string
 ): Promise<ScheduleGenerationResult> {
-	const log = logger.child({ operation: 'generateWeekSchedule', targetWeekStart });
+	if (organizationId) {
+		return generateWeekScheduleForOrganization(targetWeekStart, organizationId);
+	}
+
+	const organizationRows = await db.select({ id: organizations.id }).from(organizations);
+
+	if (organizationRows.length === 0) {
+		return {
+			created: 0,
+			skipped: 0,
+			unfilled: 0,
+			errors: []
+		};
+	}
+
+	const aggregate: ScheduleGenerationResult = {
+		created: 0,
+		skipped: 0,
+		unfilled: 0,
+		errors: []
+	};
+
+	for (const org of organizationRows) {
+		const scopedResult = await generateWeekScheduleForOrganization(targetWeekStart, org.id);
+		aggregate.created += scopedResult.created;
+		aggregate.skipped += scopedResult.skipped;
+		aggregate.unfilled += scopedResult.unfilled;
+		aggregate.errors.push(...scopedResult.errors.map((message) => `[${org.id}] ${message}`));
+	}
+
+	return aggregate;
+}
+
+async function generateWeekScheduleForOrganization(
+	targetWeekStart: Date,
+	organizationId: string
+): Promise<ScheduleGenerationResult> {
+	if (!organizationId) {
+		return {
+			created: 0,
+			skipped: 0,
+			unfilled: 0,
+			errors: []
+		};
+	}
+
+	const log = logger.child({ operation: 'generateWeekSchedule', targetWeekStart, organizationId });
 	const result: ScheduleGenerationResult = {
 		created: 0,
 		skipped: 0,
@@ -82,7 +131,11 @@ export async function generateWeekSchedule(
 	log.info({ weekStartDate, weekEndDate }, 'Starting schedule generation');
 
 	// Get all routes
-	const allRoutes = await db.select().from(routes);
+	const allRoutes = await db
+		.select({ id: routes.id, warehouseId: routes.warehouseId })
+		.from(routes)
+		.innerJoin(warehouses, eq(routes.warehouseId, warehouses.id))
+		.where(eq(warehouses.organizationId, organizationId));
 
 	if (allRoutes.length === 0) {
 		log.warn('No routes found, nothing to schedule');
@@ -96,22 +149,53 @@ export async function generateWeekSchedule(
 			weeklyCap: user.weeklyCap
 		})
 		.from(user)
-		.where(and(eq(user.role, 'driver'), eq(user.isFlagged, false)));
+		.where(
+			and(
+				eq(user.role, 'driver'),
+				eq(user.isFlagged, false),
+				eq(user.organizationId, organizationId)
+			)
+		);
 
 	if (eligibleDrivers.length === 0) {
 		log.warn('No eligible drivers found');
 	}
 
 	// Get all driver preferences
-	const allPreferences = await db.select().from(driverPreferences);
+	const eligibleDriverIds = eligibleDrivers.map((driver) => driver.id);
+	const allPreferences =
+		eligibleDriverIds.length > 0
+			? await db
+					.select()
+					.from(driverPreferences)
+					.where(inArray(driverPreferences.userId, eligibleDriverIds))
+			: [];
 	const preferencesByUser = new Map(allPreferences.map((p) => [p.userId, p]));
 
 	// Get all driver metrics
-	const allMetrics = await db.select().from(driverMetrics);
+	const allMetrics =
+		eligibleDriverIds.length > 0
+			? await db
+					.select()
+					.from(driverMetrics)
+					.where(inArray(driverMetrics.userId, eligibleDriverIds))
+			: [];
 	const metricsByUser = new Map(allMetrics.map((m) => [m.userId, m]));
 
 	// Get all route completion counts
-	const allCompletions = await db.select().from(routeCompletions);
+	const allRouteIds = allRoutes.map((route) => route.id);
+	const allCompletions =
+		eligibleDriverIds.length > 0 && allRouteIds.length > 0
+			? await db
+					.select()
+					.from(routeCompletions)
+					.where(
+						and(
+							inArray(routeCompletions.userId, eligibleDriverIds),
+							inArray(routeCompletions.routeId, allRouteIds)
+						)
+					)
+			: [];
 	const completionsByUserRoute = new Map(
 		allCompletions.map((c) => [`${c.userId}:${c.routeId}`, c.completionCount])
 	);
@@ -127,8 +211,10 @@ export async function generateWeekSchedule(
 			date: assignments.date
 		})
 		.from(assignments)
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.where(
 			and(
+				eq(warehouses.organizationId, organizationId),
 				gte(assignments.date, weekStartDate),
 				lt(assignments.date, weekEndDate),
 				ne(assignments.status, 'cancelled')
@@ -319,17 +405,27 @@ export async function generateWeekSchedule(
  */
 export async function getDriverWeeklyAssignmentCount(
 	userId: string,
-	weekStart: Date
+	weekStart: Date,
+	organizationId?: string
 ): Promise<number> {
+	const resolvedOrganizationId =
+		organizationId ?? (await resolveUserOrganizationId(userId)) ?? undefined;
+
+	if (!resolvedOrganizationId) {
+		return 0;
+	}
+
 	const weekStartDate = getTorontoWeekStartDateString(weekStart);
 	const weekEndDate = addDaysToDateString(weekStartDate, 7);
 
 	const [result] = await db
 		.select({ count: sql<number>`count(*)::int` })
 		.from(assignments)
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.where(
 			and(
 				eq(assignments.userId, userId),
+				eq(warehouses.organizationId, resolvedOrganizationId),
 				gte(assignments.date, weekStartDate),
 				lt(assignments.date, weekEndDate),
 				ne(assignments.status, 'cancelled')
@@ -342,17 +438,41 @@ export async function getDriverWeeklyAssignmentCount(
 /**
  * Check if a driver can take an additional assignment in the given week.
  */
-export async function canDriverTakeAssignment(userId: string, weekStart: Date): Promise<boolean> {
+export async function canDriverTakeAssignment(
+	userId: string,
+	weekStart: Date,
+	organizationId?: string
+): Promise<boolean> {
+	const resolvedOrganizationId =
+		organizationId ?? (await resolveUserOrganizationId(userId)) ?? undefined;
+	if (!resolvedOrganizationId) {
+		return false;
+	}
+
 	// Get user info
 	const [userInfo] = await db
 		.select({ weeklyCap: user.weeklyCap, isFlagged: user.isFlagged })
 		.from(user)
-		.where(eq(user.id, userId));
+		.where(and(eq(user.id, userId), eq(user.organizationId, resolvedOrganizationId)));
 
 	if (!userInfo || userInfo.isFlagged) {
 		return false;
 	}
 
-	const currentCount = await getDriverWeeklyAssignmentCount(userId, weekStart);
+	const currentCount = await getDriverWeeklyAssignmentCount(
+		userId,
+		weekStart,
+		resolvedOrganizationId
+	);
 	return currentCount < userInfo.weeklyCap;
+}
+
+async function resolveUserOrganizationId(userId: string): Promise<string | null> {
+	const [userRecord] = await db
+		.select({ organizationId: user.organizationId })
+		.from(user)
+		.where(eq(user.id, userId))
+		.limit(1);
+
+	return userRecord?.organizationId ?? null;
 }

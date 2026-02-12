@@ -22,7 +22,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 		throw error(403, 'Only managers can access weekly reports');
 	}
 
-	const accessibleWarehouses = await getManagerWarehouseIds(locals.user.id);
+	const accessibleWarehouses = await getManagerWarehouseIds(
+		locals.user.id,
+		locals.organizationId ?? locals.user.organizationId ?? ''
+	);
 	if (accessibleWarehouses.length === 0) {
 		return json({ weeks: [] } satisfies WeeklyReportsResponse);
 	}

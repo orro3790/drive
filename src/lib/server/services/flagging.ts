@@ -6,7 +6,7 @@
  */
 
 import { addDays } from 'date-fns';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { driverMetrics, user } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
@@ -33,19 +33,27 @@ export interface FlaggingResult {
 	rewardApplied: boolean;
 }
 
-export async function checkAndApplyFlag(userId: string): Promise<FlaggingResult | null> {
+export async function checkAndApplyFlag(
+	userId: string,
+	organizationId?: string
+): Promise<FlaggingResult | null> {
 	const log = logger.child({ operation: 'checkAndApplyFlag', userId });
+	const userConditions = [eq(user.id, userId)];
+	if (organizationId) {
+		userConditions.push(eq(user.organizationId, organizationId));
+	}
 
 	const [userRecord] = await db
 		.select({
 			id: user.id,
 			role: user.role,
+			organizationId: user.organizationId,
 			weeklyCap: user.weeklyCap,
 			isFlagged: user.isFlagged,
 			flagWarningDate: user.flagWarningDate
 		})
 		.from(user)
-		.where(eq(user.id, userId));
+		.where(and(...userConditions));
 
 	if (!userRecord) {
 		log.warn('User not found, skipping flagging');
@@ -57,6 +65,8 @@ export async function checkAndApplyFlag(userId: string): Promise<FlaggingResult 
 		return null;
 	}
 
+	const resolvedOrganizationId = userRecord.organizationId ?? organizationId;
+
 	let [metrics] = await db
 		.select({
 			totalShifts: driverMetrics.totalShifts,
@@ -66,7 +76,7 @@ export async function checkAndApplyFlag(userId: string): Promise<FlaggingResult 
 		.where(eq(driverMetrics.userId, userId));
 
 	if (!metrics) {
-		await updateDriverMetrics(userId);
+		await updateDriverMetrics(userId, resolvedOrganizationId ?? undefined);
 		[metrics] = await db
 			.select({
 				totalShifts: driverMetrics.totalShifts,
@@ -175,7 +185,9 @@ export async function checkAndApplyFlag(userId: string): Promise<FlaggingResult 
 	}
 
 	if (warningSent) {
-		await sendNotification(userId, 'warning');
+		await sendNotification(userId, 'warning', {
+			organizationId: resolvedOrganizationId ?? undefined
+		});
 	}
 
 	log.info(

@@ -48,13 +48,15 @@ export const GET: RequestHandler = async ({ locals }) => {
 		throw error(403, 'Only drivers can access dashboard');
 	}
 
+	const organizationId = locals.organizationId ?? locals.user.organizationId ?? '';
+
 	// Event-driven resolution: resolve any expired bid windows before fetching data
-	const expiredWindows = await getExpiredBidWindows();
+	const expiredWindows = await getExpiredBidWindows(undefined, organizationId);
 	if (expiredWindows.length > 0) {
 		const log = logger.child({ operation: 'event-driven-resolution', userId: locals.user.id });
 		for (const window of expiredWindows) {
 			try {
-				await resolveBidWindow(window.id);
+				await resolveBidWindow(window.id, { actorType: 'system', actorId: null }, organizationId);
 			} catch (err) {
 				log.error({ windowId: window.id, error: err }, 'Failed to resolve expired window');
 			}

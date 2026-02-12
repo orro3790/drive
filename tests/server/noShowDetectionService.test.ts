@@ -48,7 +48,9 @@ let sendManagerAlertMock: ReturnType<
 let createAuditLogMock: ReturnType<
 	typeof createBoundaryMock<[entry: Record<string, unknown>], Promise<void>>
 >;
-let getEmergencyBonusPercentMock: ReturnType<typeof createBoundaryMock<[], Promise<number>>>;
+let getEmergencyBonusPercentMock: ReturnType<
+	typeof createBoundaryMock<[organizationId: string], Promise<number>>
+>;
 
 function createCandidate(overrides: Partial<NoShowCandidate> = {}): NoShowCandidate {
 	return {
@@ -71,8 +73,16 @@ function createCandidate(overrides: Partial<NoShowCandidate> = {}): NoShowCandid
 beforeEach(async () => {
 	vi.resetModules();
 	candidates = [];
+	let whereCallCount = 0;
 
-	const selectWhereMock = vi.fn(async (_condition: unknown) => candidates);
+	const selectWhereMock = vi.fn(async (_condition: unknown) => {
+		whereCallCount++;
+		if (whereCallCount % 2 === 1) {
+			return [{ id: 'org-a' }];
+		}
+
+		return candidates;
+	});
 	const selectChain = {
 		from: vi.fn(() => selectChain),
 		innerJoin: vi.fn((_table: unknown, _on: unknown) => selectChain),
@@ -99,7 +109,7 @@ beforeEach(async () => {
 		Promise<void>
 	>();
 	createAuditLogMock = createBoundaryMock<[Record<string, unknown>], Promise<void>>();
-	getEmergencyBonusPercentMock = createBoundaryMock<[], Promise<number>>();
+	getEmergencyBonusPercentMock = createBoundaryMock<[string], Promise<number>>();
 
 	createBidWindowMock.mockResolvedValue({
 		success: true,
@@ -301,16 +311,22 @@ describe('LC-05 cron service: detectNoShows', () => {
 		const result = await detectNoShows();
 
 		expect(createBidWindowMock).toHaveBeenCalledWith('assignment-1', {
+			organizationId: 'org-a',
 			mode: 'emergency',
 			trigger: 'no_show',
 			payBonusPercent: 20,
 			allowPastShift: true
 		});
-		expect(sendManagerAlertMock).toHaveBeenCalledWith('route-1', 'driver_no_show', {
-			routeName: 'Downtown Route',
-			driverName: 'Driver One',
-			date: '2026-02-10'
-		});
+		expect(sendManagerAlertMock).toHaveBeenCalledWith(
+			'route-1',
+			'driver_no_show',
+			{
+				routeName: 'Downtown Route',
+				driverName: 'Driver One',
+				date: '2026-02-10'
+			},
+			'org-a'
+		);
 		expect(createAuditLogMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				entityType: 'assignment',
@@ -343,9 +359,11 @@ describe('LC-05 cron service: detectNoShows', () => {
 		await detectNoShows();
 
 		expect(getEmergencyBonusPercentMock).toHaveBeenCalledTimes(1);
+		expect(getEmergencyBonusPercentMock).toHaveBeenCalledWith('org-a');
 		expect(createBidWindowMock).toHaveBeenCalledWith(
 			'assignment-1',
 			expect.objectContaining({
+				organizationId: 'org-a',
 				mode: 'emergency',
 				payBonusPercent: 37
 			})

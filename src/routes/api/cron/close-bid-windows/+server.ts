@@ -11,7 +11,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { bidWindows } from '$lib/server/db/schema';
+import { bidWindows, organizations } from '$lib/server/db/schema';
 import logger from '$lib/server/logger';
 import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
 import { verifyCronAuth } from '$lib/server/cron/auth';
@@ -23,9 +23,9 @@ export const GET: RequestHandler = async ({ request }) => {
 	const log = logger.child({ cron: 'close-bid-windows' });
 	log.info('Starting bid window closure cron job');
 
-	const expiredWindows = await getExpiredBidWindows();
+	const orgRows = await db.select({ id: organizations.id }).from(organizations);
 
-	if (expiredWindows.length === 0) {
+	if (orgRows.length === 0) {
 		log.info('No expired bid windows to process');
 		return json({
 			success: true,
@@ -37,48 +37,60 @@ export const GET: RequestHandler = async ({ request }) => {
 		});
 	}
 
-	log.info({ count: expiredWindows.length }, 'Found expired bid windows');
-
+	let processed = 0;
 	let resolved = 0;
 	let transitioned = 0;
 	let closed = 0;
 	let errors = 0;
 
-	for (const window of expiredWindows) {
-		try {
-			const result = await resolveBidWindow(window.id);
+	for (const org of orgRows) {
+		const expiredWindows = await getExpiredBidWindows(undefined, org.id);
+		if (expiredWindows.length === 0) {
+			continue;
+		}
 
-			if (result.resolved) {
-				resolved++;
-				log.info(
-					{ windowId: window.id, winnerId: result.winnerId, bidCount: result.bidCount },
-					'Bid window resolved'
+		processed += expiredWindows.length;
+
+		for (const window of expiredWindows) {
+			try {
+				const result = await resolveBidWindow(
+					window.id,
+					{ actorType: 'system', actorId: null },
+					org.id
 				);
-			} else if (result.transitioned) {
-				transitioned++;
-				log.info({ windowId: window.id }, 'Competitive window transitioned to instant');
-			} else if (result.reason === 'no_bids') {
-				// Instant/emergency window with no bids — close it
-				await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, window.id));
-				closed++;
-				log.info({ windowId: window.id, mode: window.mode }, 'Window closed (no bids)');
-			} else {
-				log.info({ windowId: window.id, reason: result.reason }, 'Bid window not resolved');
+
+				if (result.resolved) {
+					resolved++;
+					log.info(
+						{ windowId: window.id, winnerId: result.winnerId, bidCount: result.bidCount },
+						'Bid window resolved'
+					);
+				} else if (result.transitioned) {
+					transitioned++;
+					log.info({ windowId: window.id }, 'Competitive window transitioned to instant');
+				} else if (result.reason === 'no_bids') {
+					// Instant/emergency window with no bids — close it
+					await db.update(bidWindows).set({ status: 'closed' }).where(eq(bidWindows.id, window.id));
+					closed++;
+					log.info({ windowId: window.id, mode: window.mode }, 'Window closed (no bids)');
+				} else {
+					log.info({ windowId: window.id, reason: result.reason }, 'Bid window not resolved');
+				}
+			} catch (err) {
+				errors++;
+				log.error({ windowId: window.id, error: err }, 'Failed to process bid window');
 			}
-		} catch (err) {
-			errors++;
-			log.error({ windowId: window.id, error: err }, 'Failed to process bid window');
 		}
 	}
 
 	log.info(
-		{ processed: expiredWindows.length, resolved, transitioned, closed, errors },
+		{ processed, resolved, transitioned, closed, errors },
 		'Bid window closure cron completed'
 	);
 
 	return json({
 		success: true,
-		processed: expiredWindows.length,
+		processed,
 		resolved,
 		transitioned,
 		closed,

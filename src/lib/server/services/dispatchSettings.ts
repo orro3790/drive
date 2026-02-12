@@ -1,43 +1,56 @@
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { db } from '$lib/server/db';
-import { dispatchSettings } from '$lib/server/db/schema';
+import { organizationDispatchSettings } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 
-const GLOBAL_DISPATCH_SETTINGS_ID = 'global';
 const DEFAULT_EMERGENCY_BONUS_PERCENT = dispatchPolicy.bidding.emergencyBonusPercent;
 
 export type DispatchSettingsRecord = {
-	id: string;
+	organizationId: string;
 	emergencyBonusPercent: number;
 	updatedBy: string | null;
 	updatedAt: Date;
 };
 
-async function selectGlobalDispatchSettings(): Promise<DispatchSettingsRecord | null> {
+function assertOrganizationId(organizationId: string): string {
+	if (!organizationId) {
+		throw new Error('Organization id is required');
+	}
+
+	return organizationId;
+}
+
+async function selectDispatchSettings(
+	organizationId: string
+): Promise<DispatchSettingsRecord | null> {
+	const resolvedOrganizationId = assertOrganizationId(organizationId);
+
 	const [row] = await db
 		.select({
-			id: dispatchSettings.id,
-			emergencyBonusPercent: dispatchSettings.emergencyBonusPercent,
-			updatedBy: dispatchSettings.updatedBy,
-			updatedAt: dispatchSettings.updatedAt
+			organizationId: organizationDispatchSettings.organizationId,
+			emergencyBonusPercent: organizationDispatchSettings.emergencyBonusPercent,
+			updatedBy: organizationDispatchSettings.updatedBy,
+			updatedAt: organizationDispatchSettings.updatedAt
 		})
-		.from(dispatchSettings)
-		.where(eq(dispatchSettings.id, GLOBAL_DISPATCH_SETTINGS_ID))
+		.from(organizationDispatchSettings)
+		.where(eq(organizationDispatchSettings.organizationId, resolvedOrganizationId))
 		.limit(1);
 
 	return row ?? null;
 }
 
-async function ensureGlobalDispatchSettings(): Promise<DispatchSettingsRecord> {
+async function ensureDispatchSettings(organizationId: string): Promise<DispatchSettingsRecord> {
+	const resolvedOrganizationId = assertOrganizationId(organizationId);
+
 	await db
-		.insert(dispatchSettings)
+		.insert(organizationDispatchSettings)
 		.values({
-			id: GLOBAL_DISPATCH_SETTINGS_ID,
+			organizationId: resolvedOrganizationId,
 			emergencyBonusPercent: DEFAULT_EMERGENCY_BONUS_PERCENT
 		})
 		.onConflictDoNothing();
 
-	const existing = await selectGlobalDispatchSettings();
+	const existing = await selectDispatchSettings(resolvedOrganizationId);
 	if (!existing) {
 		throw new Error('Failed to initialize dispatch settings');
 	}
@@ -45,31 +58,34 @@ async function ensureGlobalDispatchSettings(): Promise<DispatchSettingsRecord> {
 	return existing;
 }
 
-export async function getDispatchSettings(): Promise<DispatchSettingsRecord> {
-	const existing = await selectGlobalDispatchSettings();
+export async function getDispatchSettings(organizationId: string): Promise<DispatchSettingsRecord> {
+	const resolvedOrganizationId = assertOrganizationId(organizationId);
+	const existing = await selectDispatchSettings(resolvedOrganizationId);
 	if (existing) {
 		return existing;
 	}
 
-	return ensureGlobalDispatchSettings();
+	return ensureDispatchSettings(resolvedOrganizationId);
 }
 
 export async function updateDispatchSettings(params: {
+	organizationId: string;
 	emergencyBonusPercent: number;
 	actorId: string;
 }): Promise<DispatchSettingsRecord> {
+	const resolvedOrganizationId = assertOrganizationId(params.organizationId);
 	const updatedAt = new Date();
 
 	const [updated] = await db
-		.insert(dispatchSettings)
+		.insert(organizationDispatchSettings)
 		.values({
-			id: GLOBAL_DISPATCH_SETTINGS_ID,
+			organizationId: resolvedOrganizationId,
 			emergencyBonusPercent: params.emergencyBonusPercent,
 			updatedBy: params.actorId,
 			updatedAt
 		})
 		.onConflictDoUpdate({
-			target: dispatchSettings.id,
+			target: organizationDispatchSettings.organizationId,
 			set: {
 				emergencyBonusPercent: params.emergencyBonusPercent,
 				updatedBy: params.actorId,
@@ -77,24 +93,20 @@ export async function updateDispatchSettings(params: {
 			}
 		})
 		.returning({
-			id: dispatchSettings.id,
-			emergencyBonusPercent: dispatchSettings.emergencyBonusPercent,
-			updatedBy: dispatchSettings.updatedBy,
-			updatedAt: dispatchSettings.updatedAt
+			organizationId: organizationDispatchSettings.organizationId,
+			emergencyBonusPercent: organizationDispatchSettings.emergencyBonusPercent,
+			updatedBy: organizationDispatchSettings.updatedBy,
+			updatedAt: organizationDispatchSettings.updatedAt
 		});
 
 	if (updated) {
 		return updated;
 	}
 
-	return ensureGlobalDispatchSettings();
+	return ensureDispatchSettings(resolvedOrganizationId);
 }
 
-export async function getEmergencyBonusPercent(): Promise<number> {
-	try {
-		const settings = await getDispatchSettings();
-		return settings.emergencyBonusPercent;
-	} catch {
-		return DEFAULT_EMERGENCY_BONUS_PERCENT;
-	}
+export async function getEmergencyBonusPercent(organizationId: string): Promise<number> {
+	const settings = await getDispatchSettings(organizationId);
+	return settings.emergencyBonusPercent;
 }
