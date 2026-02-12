@@ -254,12 +254,7 @@ function testAuthenticatedGuard(
 
 // ─── Driver Endpoints (requireDriverWithOrg) ───
 
-testDriverGuard(
-	'GET /api/dashboard guard',
-	'../../src/routes/api/dashboard/+server',
-	'GET',
-	'GET'
-);
+testDriverGuard('GET /api/dashboard guard', '../../src/routes/api/dashboard/+server', 'GET', 'GET');
 
 testDriverGuard(
 	'GET /api/assignments/mine guard',
@@ -272,12 +267,7 @@ testDriverGuard('POST /api/bids guard', '../../src/routes/api/bids/+server', 'PO
 	body: { bidWindowId: 'test-window' }
 });
 
-testDriverGuard(
-	'GET /api/bids/mine guard',
-	'../../src/routes/api/bids/mine/+server',
-	'GET',
-	'GET'
-);
+testDriverGuard('GET /api/bids/mine guard', '../../src/routes/api/bids/mine/+server', 'GET', 'GET');
 
 testDriverGuard(
 	'GET /api/bids/available guard',
@@ -308,12 +298,7 @@ testDriverGuard(
 	'GET'
 );
 
-testDriverGuard(
-	'GET /api/metrics guard',
-	'../../src/routes/api/metrics/+server',
-	'GET',
-	'GET'
-);
+testDriverGuard('GET /api/metrics guard', '../../src/routes/api/metrics/+server', 'GET', 'GET');
 
 // ─── Authenticated Endpoints (requireAuthenticatedWithOrg — no role check) ───
 

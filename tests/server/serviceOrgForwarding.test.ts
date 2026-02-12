@@ -84,11 +84,27 @@ describe('updateDriverMetrics org forwarding', () => {
 
 		vi.doMock('$lib/server/db', () => dbMock);
 		vi.doMock('$lib/server/db/schema', () => ({
-			assignments: { userId: 'assignments.userId', warehouseId: 'assignments.warehouseId', id: 'assignments.id' },
+			assignments: {
+				userId: 'assignments.userId',
+				warehouseId: 'assignments.warehouseId',
+				id: 'assignments.id'
+			},
 			driverMetrics: { userId: 'driver_metrics.userId' },
-			routeCompletions: { userId: 'route_completions.userId', routeId: 'route_completions.routeId', lastCompletedAt: 'route_completions.lastCompletedAt', completionCount: 'route_completions.completionCount' },
+			routeCompletions: {
+				userId: 'route_completions.userId',
+				routeId: 'route_completions.routeId',
+				lastCompletedAt: 'route_completions.lastCompletedAt',
+				completionCount: 'route_completions.completionCount'
+			},
 			routes: { id: 'routes.id', warehouseId: 'routes.warehouseId' },
-			shifts: { assignmentId: 'shifts.assignmentId', completedAt: 'shifts.completedAt', parcelsStart: 'shifts.parcelsStart', parcelsReturned: 'shifts.parcelsReturned', exceptedReturns: 'shifts.exceptedReturns', parcelsDelivered: 'shifts.parcelsDelivered' },
+			shifts: {
+				assignmentId: 'shifts.assignmentId',
+				completedAt: 'shifts.completedAt',
+				parcelsStart: 'shifts.parcelsStart',
+				parcelsReturned: 'shifts.parcelsReturned',
+				exceptedReturns: 'shifts.exceptedReturns',
+				parcelsDelivered: 'shifts.parcelsDelivered'
+			},
 			user: { id: 'user.id', organizationId: 'user.organizationId' },
 			warehouses: { id: 'warehouses.id', organizationId: 'warehouses.organizationId' }
 		}));
@@ -97,7 +113,10 @@ describe('updateDriverMetrics org forwarding', () => {
 			and: (...conditions: unknown[]) => ({ op: 'and', conditions }),
 			isNotNull: (left: unknown) => ({ op: 'isNotNull', left }),
 			ne: (left: unknown, right: unknown) => ({ op: 'ne', left, right }),
-			sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings: Array.from(strings), values })
+			sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+				strings: Array.from(strings),
+				values
+			})
 		}));
 
 		({ updateDriverMetrics } = await import('../../src/lib/server/services/metrics'));
@@ -115,8 +134,7 @@ describe('updateDriverMetrics org forwarding', () => {
 		// Verify organizationId is included in the conditions
 		const orgCondition = firstWhere.conditions.find(
 			(c) =>
-				(c as { op: string; left: string; right: string }).left ===
-					'warehouses.organizationId' &&
+				(c as { op: string; left: string; right: string }).left === 'warehouses.organizationId' &&
 				(c as { op: string; left: string; right: string }).right === 'org-abc'
 		);
 		expect(orgCondition).toBeDefined();

@@ -271,12 +271,7 @@ function testManagerGuard(
 
 // ─── Driver Management ───
 
-testManagerGuard(
-	'GET /api/drivers guard',
-	'../../src/routes/api/drivers/+server',
-	'GET',
-	'GET'
-);
+testManagerGuard('GET /api/drivers guard', '../../src/routes/api/drivers/+server', 'GET', 'GET');
 
 testManagerGuard(
 	'PATCH /api/drivers/[id] guard',
@@ -304,20 +299,11 @@ testManagerGuard(
 
 // ─── Routes Management ───
 
-testManagerGuard(
-	'GET /api/routes guard',
-	'../../src/routes/api/routes/+server',
-	'GET',
-	'GET'
-);
+testManagerGuard('GET /api/routes guard', '../../src/routes/api/routes/+server', 'GET', 'GET');
 
-testManagerGuard(
-	'POST /api/routes guard',
-	'../../src/routes/api/routes/+server',
-	'POST',
-	'POST',
-	{ body: { name: 'Route A', warehouseId: 'wh-1' } }
-);
+testManagerGuard('POST /api/routes guard', '../../src/routes/api/routes/+server', 'POST', 'POST', {
+	body: { name: 'Route A', warehouseId: 'wh-1' }
+});
 
 testManagerGuard(
 	'PATCH /api/routes/[id] guard',
