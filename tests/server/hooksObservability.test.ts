@@ -63,7 +63,12 @@ beforeEach(async () => {
 			warn: loggerWarnMock,
 			error: loggerErrorMock
 		},
-		toSafeErrorMessage: vi.fn(() => 'Error')
+		toSafeErrorMessage: vi.fn(() => 'Error'),
+		toErrorDetails: vi.fn((error: unknown) => ({
+			errorType: error instanceof Error ? error.name || 'Error' : 'UnknownError',
+			errorMessage: error instanceof Error ? error.message : String(error),
+			errorStack: error instanceof Error ? error.stack : undefined
+		}))
 	}));
 
 	({ handle, handleError } = await import('../../src/hooks.server'));
@@ -156,9 +161,10 @@ describe('hooks observability', () => {
 				path: '/api/users/me',
 				status: 500,
 				userId: 'driver-1',
-				errorType: 'Error'
+				errorType: 'Error',
+				errorMessage: 'boom'
 			}),
-			'Unhandled server error'
+			'Unhandled server error: Error: boom'
 		);
 		expect(appError).toEqual({ message: 'Internal Error' });
 	});
