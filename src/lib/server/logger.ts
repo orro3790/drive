@@ -228,4 +228,39 @@ export function toSafeErrorMessage(error: unknown): string {
 	return 'UnknownError';
 }
 
+/**
+ * Extract structured error details for logging.
+ *
+ * Returns name, message, and stack separately so structured loggers
+ * (Pino/Axiom) can index them. The message is always included — the
+ * original `toSafeErrorMessage` intentionally omitted it to avoid
+ * leaking PII into client responses, but server-side logs need the
+ * full picture for debugging.
+ */
+export function toErrorDetails(error: unknown): {
+	errorType: string;
+	errorMessage: string;
+	errorStack?: string;
+} {
+	if (error instanceof Error) {
+		return {
+			errorType: error.name || 'Error',
+			errorMessage: error.message,
+			errorStack: error.stack
+		};
+	}
+
+	if (typeof error === 'string') {
+		return {
+			errorType: 'Error',
+			errorMessage: error
+		};
+	}
+
+	return {
+		errorType: 'UnknownError',
+		errorMessage: String(error)
+	};
+}
+
 export default logger;
