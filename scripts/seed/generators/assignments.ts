@@ -423,9 +423,7 @@ function findEligibleDriver(
  * Past dates: only completed or cancelled. Never active or scheduled.
  * Persona controls completion rate.
  */
-function determineStatusPast(
-	persona: PersonaType
-): 'completed' | 'cancelled' {
+function determineStatusPast(persona: PersonaType): 'completed' | 'cancelled' {
 	const roll = random();
 
 	switch (persona) {
@@ -437,7 +435,7 @@ function determineStatusPast(
 			return roll < 0.95 ? 'completed' : 'cancelled';
 		case 'unreliable':
 			// ~70% completed, ~30% cancelled
-			return roll < 0.70 ? 'completed' : 'cancelled';
+			return roll < 0.7 ? 'completed' : 'cancelled';
 		default:
 			return 'completed';
 	}
@@ -446,9 +444,7 @@ function determineStatusPast(
 /**
  * Map today lifecycle stage to assignment status.
  */
-function todayStageToAssignmentStatus(
-	stage: TodayStage
-): 'scheduled' | 'active' | 'completed' {
+function todayStageToAssignmentStatus(stage: TodayStage): 'scheduled' | 'active' | 'completed' {
 	switch (stage) {
 		case 'awaiting_confirm':
 		case 'confirmed_arrivable':
@@ -495,7 +491,7 @@ function createShiftForStatus(
 		} else if (persona === 'unreliable') {
 			deliveryRate = 0.82 + random() * 0.13; // 82-95%
 		} else {
-			deliveryRate = 0.90 + random() * 0.10; // 90-100%
+			deliveryRate = 0.9 + random() * 0.1; // 90-100%
 		}
 		const parcelsDelivered = Math.floor(parcelsStart * deliveryRate);
 		const parcelsReturned = parcelsStart - parcelsDelivered;
@@ -503,7 +499,7 @@ function createShiftForStatus(
 		// ~20% of completed shifts get excepted returns
 		let exceptedReturns = 0;
 		let exceptionNotes: string | null = null;
-		if (random() < 0.20) {
+		if (random() < 0.2) {
 			exceptedReturns = 1 + randomInt(0, 3); // 1-3
 			exceptionNotes = EXCEPTION_NOTES[randomInt(0, EXCEPTION_NOTES.length)];
 		}
@@ -514,7 +510,11 @@ function createShiftForStatus(
 
 		return {
 			assignmentIndex,
-			arrivedAt: randomTimeOnDate(dateString, arrivalStartHour, arrivalEndHour || arrivalStartHour + 1),
+			arrivedAt: randomTimeOnDate(
+				dateString,
+				arrivalStartHour,
+				arrivalEndHour || arrivalStartHour + 1
+			),
 			parcelsStart,
 			parcelsDelivered,
 			parcelsReturned,
@@ -631,9 +631,7 @@ function createTodayStageShift(
 			const parcelsDelivered = Math.floor(parcelsStart * deliveryRate);
 			const parcelsReturned = parcelsStart - parcelsDelivered;
 			const completedAt = new Date(now.getTime() - 5 * 60 * 1000); // 5 min ago
-			const editableUntil = new Date(
-				completedAt.getTime() + editWindowHours * 60 * 60 * 1000
-			); // ~55 min remaining
+			const editableUntil = new Date(completedAt.getTime() + editWindowHours * 60 * 60 * 1000); // ~55 min remaining
 
 			return {
 				...baseShift,
@@ -653,9 +651,7 @@ function createTodayStageShift(
 			const parcelsDelivered2 = Math.floor(parcelsStart * deliveryRate2);
 			const parcelsReturned2 = parcelsStart - parcelsDelivered2;
 			const completedAt2 = randomTimeOnDate(todayStr, 8, 12);
-			const editableUntil2 = new Date(
-				completedAt2.getTime() + editWindowHours * 60 * 60 * 1000
-			);
+			const editableUntil2 = new Date(completedAt2.getTime() + editWindowHours * 60 * 60 * 1000);
 
 			return {
 				...baseShift,

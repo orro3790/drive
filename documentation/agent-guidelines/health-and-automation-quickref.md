@@ -282,12 +282,12 @@ ASSIGN → CONFIRM → ARRIVE → START → COMPLETE → EDIT WINDOW
 
 ## Cancellation & Drop Events
 
-| Event                                | Cancel Type     | Health Impact  | Creates Bid Window?        |
-| ------------------------------------ | --------------- | -------------- | -------------------------- |
-| Driver early cancel (>48h)           | `driver`        | -8 points      | Yes (competitive)          |
-| Driver late cancel (≤48h, confirmed) | `late`          | -32 points     | Yes (instant)              |
-| Auto-drop (unconfirmed at deadline)  | `auto_drop`     | -12 points     | Yes (auto-determined)      |
-| No-show (confirmed, didn't arrive)   | N/A (emergency) | Full reset     | Yes (emergency, 20% bonus) |
+| Event                                | Cancel Type     | Health Impact | Creates Bid Window?        |
+| ------------------------------------ | --------------- | ------------- | -------------------------- |
+| Driver early cancel (>48h)           | `driver`        | -8 points     | Yes (competitive)          |
+| Driver late cancel (≤48h, confirmed) | `late`          | -32 points    | Yes (instant)              |
+| Auto-drop (unconfirmed at deadline)  | `auto_drop`     | -12 points    | Yes (auto-determined)      |
+| No-show (confirmed, didn't arrive)   | N/A (emergency) | Full reset    | Yes (emergency, 20% bonus) |
 
 **Late cancellation definition**: Assignment was `confirmed` AND cancelled within 48 hours of shift start.
 

@@ -72,10 +72,7 @@ export function generateNotifications(
 		return format(parseISO(dateStr), 'MMM d');
 	}
 
-	function assignmentData(
-		a: GeneratedAssignment,
-		index: number
-	): Record<string, string> | null {
+	function assignmentData(a: GeneratedAssignment, index: number): Record<string, string> | null {
 		const route = routeFor(a);
 		const assignmentId = assignmentIdByIndex.get(index);
 		const data: Record<string, string> = {
@@ -331,12 +328,7 @@ export function generateNotifications(
 	// --- 8. Future unconfirmed -> confirmation_reminder ---
 	for (let i = 0; i < context.assignments.length; i++) {
 		const a = context.assignments[i];
-		if (
-			a.status === 'scheduled' &&
-			a.userId &&
-			isFutureDate(a.date) &&
-			a.confirmedAt === null
-		) {
+		if (a.status === 'scheduled' && a.userId && isFutureDate(a.date) && a.confirmedAt === null) {
 			const route = routeFor(a);
 			notifications.push({
 				userId: a.userId,
@@ -415,11 +407,26 @@ export function generateNotifications(
 
 	// --- Showcase fallbacks: ensure every type appears at least once ---
 	const allTypes: NotificationType[] = [
-		'shift_reminder', 'bid_open', 'bid_won', 'bid_lost', 'shift_cancelled',
-		'warning', 'manual', 'schedule_locked', 'assignment_confirmed',
-		'confirmation_reminder', 'shift_auto_dropped', 'emergency_route_available',
-		'streak_advanced', 'streak_reset', 'bonus_eligible', 'corrective_warning',
-		'route_unfilled', 'route_cancelled', 'driver_no_show', 'return_exception',
+		'shift_reminder',
+		'bid_open',
+		'bid_won',
+		'bid_lost',
+		'shift_cancelled',
+		'warning',
+		'manual',
+		'schedule_locked',
+		'assignment_confirmed',
+		'confirmation_reminder',
+		'shift_auto_dropped',
+		'emergency_route_available',
+		'streak_advanced',
+		'streak_reset',
+		'bonus_eligible',
+		'corrective_warning',
+		'route_unfilled',
+		'route_cancelled',
+		'driver_no_show',
+		'return_exception',
 		'stale_shift_reminder'
 	];
 
@@ -429,13 +436,7 @@ export function generateNotifications(
 		for (const type of allTypes) {
 			if (generatedTypes.has(type)) continue;
 
-			const fallbackNotif = createShowcaseFallback(
-				showcaseUser,
-				managers[0],
-				type,
-				route,
-				now
-			);
+			const fallbackNotif = createShowcaseFallback(showcaseUser, managers[0], type, route, now);
 			if (fallbackNotif) {
 				notifications.push(fallbackNotif);
 				generatedTypes.add(type);
@@ -453,43 +454,94 @@ function createShowcaseFallback(
 	route: RouteInfo,
 	now: Date
 ): GeneratedNotification | null {
-	const targetUser =
-		['route_unfilled', 'route_cancelled', 'driver_no_show', 'return_exception'].includes(type)
-			? manager
-			: driver;
+	const targetUser = [
+		'route_unfilled',
+		'route_cancelled',
+		'driver_no_show',
+		'return_exception'
+	].includes(type)
+		? manager
+		: driver;
 
 	if (!targetUser) return null;
 
 	const dateLabel = format(now, 'MMM d');
 
 	const copyMap: Record<string, { title: string; body: string }> = {
-		warning: { title: 'Account Warning', body: 'Your attendance has dipped below the expected threshold.' },
-		manual: { title: 'Message from Manager', body: 'Please review the latest routing updates for this week.' },
-		corrective_warning: { title: 'Completion Rate Warning', body: 'Your completion rate dropped below 98%. Improve within 7 days to avoid further impact.' },
-		route_cancelled: { title: 'Route Cancelled', body: `${route.name} at ${route.warehouseName} has been cancelled.` },
-		stale_shift_reminder: { title: 'Incomplete Shift', body: `You have an incomplete shift from ${dateLabel}. Please close it out to start new shifts.` },
-		emergency_route_available: { title: 'Shift Available', body: `Urgent route ${route.name} at ${route.warehouseName} needs coverage on ${dateLabel}.` },
+		warning: {
+			title: 'Account Warning',
+			body: 'Your attendance has dipped below the expected threshold.'
+		},
+		manual: {
+			title: 'Message from Manager',
+			body: 'Please review the latest routing updates for this week.'
+		},
+		corrective_warning: {
+			title: 'Completion Rate Warning',
+			body: 'Your completion rate dropped below 98%. Improve within 7 days to avoid further impact.'
+		},
+		route_cancelled: {
+			title: 'Route Cancelled',
+			body: `${route.name} at ${route.warehouseName} has been cancelled.`
+		},
+		stale_shift_reminder: {
+			title: 'Incomplete Shift',
+			body: `You have an incomplete shift from ${dateLabel}. Please close it out to start new shifts.`
+		},
+		emergency_route_available: {
+			title: 'Shift Available',
+			body: `Urgent route ${route.name} at ${route.warehouseName} needs coverage on ${dateLabel}.`
+		},
 		shift_reminder: { title: 'Shift Reminder', body: `Your shift for ${route.name} starts today.` },
 		bid_open: { title: 'Shift Available', body: `A shift on ${route.name} is open for bidding.` },
 		bid_won: { title: 'Bid Won', body: `You've won the bid for ${route.name} on ${dateLabel}.` },
 		bid_lost: { title: 'Bid Not Won', body: `${route.name} was assigned to another driver.` },
-		shift_cancelled: { title: 'Shift Cancelled', body: `Your shift for ${route.name} has been removed.` },
-		schedule_locked: { title: 'Preferences Locked', body: 'Next week preferences are now locked in.' },
+		shift_cancelled: {
+			title: 'Shift Cancelled',
+			body: `Your shift for ${route.name} has been removed.`
+		},
+		schedule_locked: {
+			title: 'Preferences Locked',
+			body: 'Next week preferences are now locked in.'
+		},
 		assignment_confirmed: { title: 'Shift Assigned', body: `You are now assigned ${route.name}.` },
-		confirmation_reminder: { title: 'Confirm Your Shift', body: `Please confirm your shift for ${route.name}.` },
-		shift_auto_dropped: { title: 'Shift Dropped', body: `${route.name} was removed — not confirmed in time.` },
+		confirmation_reminder: {
+			title: 'Confirm Your Shift',
+			body: `Please confirm your shift for ${route.name}.`
+		},
+		shift_auto_dropped: {
+			title: 'Shift Dropped',
+			body: `${route.name} was removed — not confirmed in time.`
+		},
 		streak_advanced: { title: 'Streak Milestone', body: 'Your weekly streak advanced.' },
 		streak_reset: { title: 'Streak Reset', body: 'Your streak has been reset.' },
-		bonus_eligible: { title: 'Bonus Eligible', body: 'You reached 4 stars and qualify for a bonus preview.' },
+		bonus_eligible: {
+			title: 'Bonus Eligible',
+			body: 'You reached 4 stars and qualify for a bonus preview.'
+		},
 		route_unfilled: { title: 'Route Unfilled', body: `${route.name} has no driver assigned.` },
-		driver_no_show: { title: 'Driver No-Show', body: `${driver.name} did not show up for ${route.name}.` },
-		return_exception: { title: 'Return Exception Filed', body: `${driver.name} filed return exceptions on ${route.name}.` }
+		driver_no_show: {
+			title: 'Driver No-Show',
+			body: `${driver.name} did not show up for ${route.name}.`
+		},
+		return_exception: {
+			title: 'Return Exception Filed',
+			body: `${driver.name} filed return exceptions on ${route.name}.`
+		}
 	};
 
 	const copy = copyMap[type];
 	if (!copy) return null;
 
-	const noContextTypes = ['schedule_locked', 'warning', 'manual', 'streak_advanced', 'streak_reset', 'bonus_eligible', 'corrective_warning'];
+	const noContextTypes = [
+		'schedule_locked',
+		'warning',
+		'manual',
+		'streak_advanced',
+		'streak_reset',
+		'bonus_eligible',
+		'corrective_warning'
+	];
 
 	return {
 		userId: targetUser.id,

@@ -111,9 +111,7 @@ export async function generateUsers(
 				: null;
 		const email = emailPrefix
 			? `${emailPrefix}@${managerDomain}`
-			: faker.internet
-					.email({ firstName, lastName, provider: managerDomain })
-					.toLowerCase();
+			: faker.internet.email({ firstName, lastName, provider: managerDomain }).toLowerCase();
 		const createdAt = deterministic ? createdAtDate(i) : faker.date.past({ years: 1 });
 
 		users.push({
@@ -151,9 +149,7 @@ export async function generateUsers(
 				: null;
 		const email = emailPrefix
 			? `${emailPrefix}@${driverDomain}`
-			: faker.internet
-					.email({ firstName, lastName, provider: driverDomain })
-					.toLowerCase();
+			: faker.internet.email({ firstName, lastName, provider: driverDomain }).toLowerCase();
 		const createdAt = deterministic
 			? createdAtDate(config.managers + i)
 			: faker.date.past({ years: 1 });
