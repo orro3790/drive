@@ -295,6 +295,10 @@ Runtime budgets:
 
 ## 9) Diagnostics and Failure Contract
 
+Operational runbook:
+
+- `documentation/testing/integration-triage-runbook.md` (how to reproduce, download artifacts, classify failures, and route ownership)
+
 Every failing scenario must output:
 
 1. `scenarioId`
