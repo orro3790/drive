@@ -24,6 +24,8 @@ export const allowedOperationalIdFields = [
 	'userId',
 	'driverId',
 	'managerId',
+	'organizationId',
+	'reservationId',
 	'assignmentId',
 	'bidWindowId',
 	'routeId',

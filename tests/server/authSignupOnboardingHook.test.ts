@@ -51,6 +51,12 @@ describe('signup onboarding auth hooks', () => {
 			mode: 'join',
 			organizationCode: 'ORG-CODE-123'
 		});
+		expect(context.signupOrganizationAssignment).toEqual({
+			organizationId: 'org-1',
+			role: 'driver',
+			source: 'join_reservation',
+			reservationId
+		});
 	});
 
 	it('accepts create mode without reserving onboarding approval', async () => {
@@ -159,11 +165,11 @@ describe('signup onboarding auth hooks', () => {
 	});
 
 	it('finalizes organization creation after successful signup', async () => {
+		const createOrganizationId = '44444444-4444-4444-8444-444444444444';
 		const finalizeJoinReservation = vi.fn(async () => null);
 		const finalizeCreateOrganization = vi.fn(async () => ({
-			organizationId: 'org-created',
-			organizationSlug: 'acme-logistics',
-			organizationJoinCode: 'A1B2C3D4E5F6'
+			organizationId: createOrganizationId,
+			ownerUserId: 'owner-1'
 		}));
 		const releaseReservation = vi.fn(async () => null);
 
@@ -178,6 +184,11 @@ describe('signup onboarding auth hooks', () => {
 				path: '/sign-up/email',
 				headers: new Headers(),
 				context: {
+					signupOrganizationAssignment: {
+						organizationId: createOrganizationId,
+						role: 'manager',
+						source: 'create_provision'
+					},
 					signupOrganization: {
 						mode: 'create',
 						organizationName: 'Acme Logistics'
@@ -194,13 +205,14 @@ describe('signup onboarding auth hooks', () => {
 
 		expect(finalizeCreateOrganization).toHaveBeenCalledWith({
 			userId: 'owner-1',
-			organizationName: 'Acme Logistics'
+			organizationId: createOrganizationId
 		});
 		expect(finalizeJoinReservation).not.toHaveBeenCalled();
 		expect(releaseReservation).not.toHaveBeenCalled();
 	});
 
 	it('records reconciliation when create finalization fails after signup success', async () => {
+		const createOrganizationId = '55555555-5555-4555-8555-555555555555';
 		const finalizeCreateError = new Error('create finalize failed');
 		const finalizeJoinReservation = vi.fn(async () => null);
 		const finalizeCreateOrganization = vi.fn(async () => {
@@ -221,6 +233,11 @@ describe('signup onboarding auth hooks', () => {
 				path: '/sign-up/email',
 				headers: new Headers(),
 				context: {
+					signupOrganizationAssignment: {
+						organizationId: createOrganizationId,
+						role: 'manager',
+						source: 'create_provision'
+					},
 					signupOrganization: {
 						mode: 'create',
 						organizationName: 'Acme Logistics'
