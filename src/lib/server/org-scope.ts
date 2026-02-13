@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
-import { db } from './db';
+import { db } from '$lib/server/db';
 import { user as authUser, warehouses } from './db/schema';
 
 type AuthenticatedUser = NonNullable<App.Locals['user']>;
