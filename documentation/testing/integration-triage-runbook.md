@@ -117,17 +117,27 @@ Where these commands live:
 ### GitHub CLI
 
 ```bash
-# 1) Find the run (adjust workflow name once integration jobs land)
-gh run list --limit 20
+# PR smoke runs in workflow `ci`, job `integration smoke` (check name: `ci / integration smoke`).
+
+# 1) Find the run
+gh run list --workflow ci --limit 20
 
 # 2) Inspect artifact names
 gh run view <run-id> --json artifacts -q '.artifacts[].name'
 
-# 3) Download everything
-gh run download <run-id> --dir logs/nightly/<YYYY-MM-DD>/ci-artifacts
+# 3) Download smoke artifacts
+gh run download <run-id> -n integration-smoke-runtime --dir logs/nightly/<YYYY-MM-DD>/ci-artifacts
+gh run download <run-id> -n integration-smoke-artifacts --dir logs/nightly/<YYYY-MM-DD>/ci-artifacts
 ```
 
-Expected artifact contents (contract):
+PR smoke artifacts (available today):
+
+- `integration-smoke-runtime` (always): `logs/ci/integration-smoke/runtime.json`
+- `integration-smoke-artifacts` (on failure):
+  - `logs/ci/integration-smoke/vitest.log`
+  - `tests/integration/.evidence/**` (if produced)
+
+Target artifact contents (nightly/full, tracked by DRV-b1l.10):
 
 - Machine-readable report JSON containing `scenarioId`, `invariantId`, `keyEntityIds`, and evidence pointers.
 - Human-readable summary markdown.
