@@ -4,23 +4,25 @@ Task: DRV-b1l.9
 
 ## Steps
 
-1. Confirm the current integration harness emits `scenarioId` + `invariantId` in failure output and that CI artifacts contain the referenced diagnostics.
-   - If missing, document the interim workaround in the runbook and file a follow-up defect bead to make the outputs/artifacts conform.
-2. Extract the authoritative triage contract from `documentation/plans/DRV-b1l-multi-tenant-e2e-testing-program.md`: scenario taxonomy (prefixes), invariant glossary (`invariantId` meanings), and required diagnostics/artifacts.
-   - Avoid hardcoding taxonomy/invariants until extracted from the source contract.
-3. Inventory current repo entrypoints (scripts/configs/directories) for integration smoke/full runs and CI artifact retrieval.
-   - Capture a table in the runbook: command, where defined, required env vars, expected runtime, produced artifact paths.
-   - Include concrete `gh run list` / `gh run download` examples with placeholders + expected artifact names.
-4. Write `documentation/testing/integration-triage-runbook.md` including:
-   - Scenario taxonomy table (from Step 2) and what each class implies.
-   - Invariant glossary: `invariantId` -> meaning, common failure modes, and what evidence to capture.
-   - Failure classes + first-response workflow/decision tree + required artifacts.
-   - CI artifacts section with exact download commands + expected artifact names/paths.
-   - Environment contract (toolchain, required env vars, safety/sanitization notes).
-   - Ownership + escalation routing (rules + RACI-style table) + defect bead template with required fields.
-5. Validate the runbook from a fresh session with an explicit checklist and "done when" bar.
-   - Checklist: clean clone/install, run smoke locally, confirm outputs include IDs, download artifacts from a CI run, file a defect bead using the template, and verify discoverability links (program plan + docs index).
-   - Done when: a new contributor can reproduce/download artifacts + route ownership in under 30 minutes.
+1. Gate on prerequisites + current reality.
+   - Confirm the spec source exists/usable: `documentation/plans/DRV-b1l-multi-tenant-e2e-testing-program.md`.
+   - Identify the CI workflow(s) that run integration suites and confirm they upload artifacts (note workflow file paths + artifact names).
+   - Confirm required tooling for a "fresh session" exists: node/pnpm (or whatever the repo uses), docker/postgres (if required), `gh` authenticated, and `bd` available for defect filing.
+   - If any prerequisite is missing, explicitly document the limitation in the runbook and file a follow-up bead to close the gap.
+2. Make the failure output contract explicit (IDs + where they appear).
+   - Run the integration smoke suite locally (use the repo-defined command) and capture a representative failing output that includes `scenarioId` and `invariantId`.
+   - Record where IDs appear (stdout/stderr vs junit XML vs JSON artifact) and the exact format.
+   - If IDs are missing/unstable, document the interim extraction workaround (e.g., exact grep/file path) and file a follow-up bead to fix harness outputs.
+3. Extract taxonomy/invariants from the spec, then reconcile with implementation.
+   - From `documentation/plans/DRV-b1l-multi-tenant-e2e-testing-program.md`, extract scenario taxonomy (prefixes) + invariant glossary (`invariantId` meanings) + required diagnostics/artifacts.
+   - Cross-check against what the harness actually emits (Step 2). If mismatched, document the discrepancy and file a follow-up bead (do not silently pick a side).
+4. Inventory local/CI entrypoints and artifact retrieval.
+   - List exact commands for smoke and full runs; for each: where defined, required env vars (and which are secrets), expected runtime bands, produced output paths.
+   - Document CI artifact retrieval with copy-pastable `gh` examples (`gh run list`, `gh run view`, `gh run download`) and the exact artifact names + internal paths to the diagnostics.
+5. Update the runbook + validate from a fresh session.
+   - Write/update `documentation/testing/integration-triage-runbook.md` to include: quick-start triage, taxonomy table, invariant glossary (with evidence-to-capture), first-response workflow/decision tree, CI artifact download + permissions notes, environment contract, ownership/escalation routing (with concrete owner targets + fallback), and a defect bead template with exact `bd` commands.
+   - Ensure discoverability by linking the runbook from the program plan and the docs index/front door.
+   - Fresh-session validation checklist (objective pass/fail): setup succeeds using only the runbook; local smoke run executes; IDs appear where documented; CI artifacts download works against a real run; artifacts contain the documented diagnostics paths; defect template is usable.
 
 ## Acceptance Criteria
 
