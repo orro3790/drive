@@ -52,6 +52,7 @@ function createContributions(overrides: Partial<HealthContributions> = {}): Heal
 		bidPickups: { count: 2, points: 4 },
 		urgentPickups: { count: 1, points: 4 },
 		autoDrops: { count: 0, points: 0 },
+		earlyCancellations: { count: 0, points: 0 },
 		lateCancellations: { count: 0, points: 0 },
 		...overrides
 	};

@@ -13,6 +13,7 @@
 	let fieldError = $state<string | null>(null);
 	let isLoading = $state(false);
 	let isSaving = $state(false);
+	let canEditEmergencyBonusPercent = $state(false);
 
 	const hasChanges = $derived(emergencyBonusPercent.trim() !== baselineBonusPercent.trim());
 
@@ -45,6 +46,7 @@
 	async function loadSettings() {
 		isLoading = true;
 		fieldError = null;
+		canEditEmergencyBonusPercent = false;
 
 		try {
 			const response = await fetch('/api/settings/dispatch');
@@ -54,6 +56,7 @@
 
 			const payload = (await response.json()) as {
 				settings?: { emergencyBonusPercent?: unknown };
+				permissions?: { canEditEmergencyBonusPercent?: unknown };
 			};
 
 			const parsed = dispatchSettingsSchema.safeParse({
@@ -64,6 +67,7 @@
 				throw new Error('invalid_payload');
 			}
 
+			canEditEmergencyBonusPercent = payload.permissions?.canEditEmergencyBonusPercent === true;
 			const nextValue = String(parsed.data.emergencyBonusPercent);
 			emergencyBonusPercent = nextValue;
 			baselineBonusPercent = nextValue;
@@ -79,7 +83,7 @@
 			emergencyBonusPercent = nextValue;
 		}
 
-		if (isSaving || isLoading || !hasChanges) {
+		if (!canEditEmergencyBonusPercent || isSaving || isLoading || !hasChanges) {
 			return;
 		}
 
@@ -146,33 +150,37 @@
 					<div class="desc">{m.settings_dispatch_bonus_description()}</div>
 				{/snippet}
 				{#snippet control()}
-					<div class="dispatch-control-row">
-						<InlineEditor
-							id="settings-dispatch-urgent-bonus"
-							name="settings-dispatch-urgent-bonus"
-							size="small"
-							value={emergencyBonusPercent}
-							inputType="number"
-							inputmode="numeric"
-							min={0}
-							max={100}
-							placeholder="20"
-							ariaLabel={m.settings_dispatch_bonus_label()}
-							disabled={isLoading || isSaving}
-							hasError={Boolean(fieldError)}
-							onInput={(value) => {
-								emergencyBonusPercent = value;
-								fieldError = null;
-							}}
-							onSave={(value) => {
-								void saveSettings(value);
-							}}
-						/>
-						<span class="percent-symbol">%</span>
+					<div class="dispatch-control-row" class:readonly={!canEditEmergencyBonusPercent}>
+						{#if canEditEmergencyBonusPercent}
+							<InlineEditor
+								id="settings-dispatch-urgent-bonus"
+								name="settings-dispatch-urgent-bonus"
+								size="small"
+								value={emergencyBonusPercent}
+								inputType="number"
+								inputmode="numeric"
+								min={0}
+								max={100}
+								placeholder="20"
+								ariaLabel={m.settings_dispatch_bonus_label()}
+								disabled={isLoading || isSaving}
+								hasError={Boolean(fieldError)}
+								onInput={(value) => {
+									emergencyBonusPercent = value;
+									fieldError = null;
+								}}
+								onSave={(value) => {
+									void saveSettings(value);
+								}}
+							/>
+							<span class="percent-symbol">%</span>
+						{:else}
+							<div class="dispatch-readonly-value">{emergencyBonusPercent}%</div>
+						{/if}
 					</div>
 				{/snippet}
 				{#snippet children()}
-					{#if fieldError}
+					{#if canEditEmergencyBonusPercent && fieldError}
 						<p class="field-error" role="alert">{fieldError}</p>
 					{/if}
 				{/snippet}
@@ -196,12 +204,25 @@
 		width: auto;
 	}
 
+	.dispatch-control-row.readonly {
+		display: flex;
+		justify-content: flex-end;
+		width: 100%;
+	}
+
 	.percent-symbol {
 		display: inline-flex;
 		align-items: center;
 		justify-self: start;
 		font-size: var(--font-size-base);
 		color: var(--text-muted);
+	}
+
+	.dispatch-readonly-value {
+		font-size: var(--font-size-base);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-normal);
+		text-align: right;
 	}
 
 	.field-error {

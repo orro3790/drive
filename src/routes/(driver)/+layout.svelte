@@ -16,7 +16,7 @@
 <div class="app-shell">
 	<AppSidebar role="driver" />
 	<div class="main-area">
-		<PageHeader />
+		<PageHeader showUnconfirmedShiftsButton={true} showOpenBidsButton={true} />
 		<OfflineBanner />
 		<main class="content" data-scroll-root>
 			{@render children()}

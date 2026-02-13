@@ -21,9 +21,20 @@ type PaginationState = {
 	pageCount: number;
 };
 
+const emergencyNotificationTypes = new Set<Notification['type']>([
+	'route_unfilled',
+	'driver_no_show',
+	'emergency_route_available'
+]);
+
+function isEmergencyNotification(notification: Pick<Notification, 'type'>): boolean {
+	return emergencyNotificationTypes.has(notification.type);
+}
+
 const state = $state<{
 	notifications: Notification[];
 	unreadCount: number;
+	emergencyUnreadCount: number;
 	pagination: PaginationState;
 	hasMore: boolean;
 	isLoading: boolean;
@@ -33,6 +44,7 @@ const state = $state<{
 }>({
 	notifications: [],
 	unreadCount: 0,
+	emergencyUnreadCount: 0,
 	pagination: {
 		pageIndex: 0,
 		pageSize: 20,
@@ -64,6 +76,9 @@ export const notificationsStore = {
 	},
 	get unreadCount() {
 		return state.unreadCount;
+	},
+	get emergencyUnreadCount() {
+		return state.emergencyUnreadCount;
 	},
 	get pagination() {
 		return state.pagination;
@@ -104,13 +119,14 @@ export const notificationsStore = {
 				throw new Error('Invalid notifications response');
 			}
 
-			const { notifications, unreadCount, pagination } = parsed.data;
+			const { notifications, unreadCount, emergencyUnreadCount, pagination } = parsed.data;
 			const pageIndex = Math.min(
 				Math.max(0, pagination.page - 1),
 				Math.max(0, pagination.totalPages - 1)
 			);
 			state.notifications = notifications;
 			state.unreadCount = unreadCount;
+			state.emergencyUnreadCount = emergencyUnreadCount;
 			state.pagination = {
 				pageIndex,
 				pageSize: pagination.pageSize,
@@ -136,11 +152,14 @@ export const notificationsStore = {
 
 		const previousNotifications = state.notifications;
 		const previousUnreadCount = state.unreadCount;
+		const previousEmergencyUnreadCount = state.emergencyUnreadCount;
+		const wasEmergency = isEmergencyNotification(target);
 
 		state.notifications = previousNotifications.map((item) =>
 			item.id === notificationId ? { ...item, read: true } : item
 		);
 		state.unreadCount = Math.max(0, previousUnreadCount - 1);
+		state.emergencyUnreadCount = Math.max(0, previousEmergencyUnreadCount - (wasEmergency ? 1 : 0));
 
 		try {
 			const res = await fetch(`/api/notifications/${notificationId}/read`, {
@@ -159,6 +178,7 @@ export const notificationsStore = {
 			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
 				state.notifications = previousNotifications;
 				state.unreadCount = previousUnreadCount;
+				state.emergencyUnreadCount = previousEmergencyUnreadCount;
 				toastStore.error(m.notifications_mark_read_error());
 			}
 		}
@@ -174,8 +194,10 @@ export const notificationsStore = {
 
 		const previousNotifications = state.notifications;
 		const previousUnreadCount = state.unreadCount;
+		const previousEmergencyUnreadCount = state.emergencyUnreadCount;
 		state.notifications = previousNotifications.map((item) => ({ ...item, read: true }));
 		state.unreadCount = 0;
+		state.emergencyUnreadCount = 0;
 
 		try {
 			const res = await fetch('/api/notifications/mark-all-read', {
@@ -194,6 +216,7 @@ export const notificationsStore = {
 			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
 				state.notifications = previousNotifications;
 				state.unreadCount = previousUnreadCount;
+				state.emergencyUnreadCount = previousEmergencyUnreadCount;
 				toastStore.error(m.notifications_mark_all_error());
 			}
 		} finally {
@@ -222,7 +245,12 @@ export const notificationsStore = {
 				throw new Error('Invalid notifications response');
 			}
 
-			const { notifications: newNotifications, unreadCount, pagination } = parsed.data;
+			const {
+				notifications: newNotifications,
+				unreadCount,
+				emergencyUnreadCount,
+				pagination
+			} = parsed.data;
 			const newPageIndex = Math.min(
 				Math.max(0, pagination.page - 1),
 				Math.max(0, pagination.totalPages - 1)
@@ -230,6 +258,7 @@ export const notificationsStore = {
 
 			state.notifications = [...state.notifications, ...newNotifications];
 			state.unreadCount = unreadCount;
+			state.emergencyUnreadCount = emergencyUnreadCount;
 			state.pagination = {
 				pageIndex: newPageIndex,
 				pageSize: pagination.pageSize,

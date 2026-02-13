@@ -83,7 +83,7 @@
 		{:else}
 			<div class="bids-sections">
 				<!-- Available Bids Section -->
-				<section class="bids-section">
+				<section class="bids-section" id="available-bids">
 					<div class="section-header">
 						<h2>{m.bids_available_section()}</h2>
 					</div>

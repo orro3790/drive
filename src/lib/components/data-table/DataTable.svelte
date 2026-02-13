@@ -270,7 +270,10 @@ Designed to work with the Driver Ops design system.
 	}
 
 	// Stack if content + safety gap (40px) exceeds container
-	const shouldStack = $derived(tabsWidth + actionsWidth + 40 > containerWidth);
+	// Avoid stacking before we have a real container measurement to reduce first-paint jank.
+	const shouldStack = $derived(
+		containerWidth > 0 && tabsWidth + actionsWidth + 40 > containerWidth
+	);
 	const tabsOverflowing = $derived(tabsScrollWidth > tabsClientWidth);
 
 	$effect(() => {
@@ -337,6 +340,17 @@ Designed to work with the Driver Ops design system.
 			(showIndex ? 1 : 0) +
 			(isResizingEnabled ? 1 : 0)
 	);
+
+	const LOADING_ROW_COUNT = 8;
+	const loadingRows = Array.from({ length: LOADING_ROW_COUNT }, (_, index) => index);
+	const loadingColumns = $derived.by(() =>
+		Array.from({ length: Math.max(1, colSpan) }, (_, index) => index)
+	);
+	const loadingBarWidths = ['30%', '42%', '56%', '38%', '64%', '48%'] as const;
+
+	function getLoadingBarWidth(rowIndex: number, columnIndex: number): string {
+		return loadingBarWidths[(rowIndex + columnIndex) % loadingBarWidths.length];
+	}
 
 	// Calculate table width from column sizes
 	// Performance: This derived recalculates on table state changes, but the
@@ -526,6 +540,7 @@ Designed to work with the Driver Ops design system.
 				class="data-table"
 				class:table-fixed={isResizingEnabled}
 				style:width={resolvedTableWidth ? `${resolvedTableWidth}px` : undefined}
+				aria-busy={loading}
 			>
 				<DataTableHeader
 					{table}
@@ -535,13 +550,20 @@ Designed to work with the Driver Ops design system.
 					{headers}
 					showFiller={isResizingEnabled}
 				/>
-				{#if loading}
-					<tbody>
-						<tr>
-							<td colspan={colSpan} class="state-cell">
-								<DataTableEmpty variant="loading" />
-							</td>
-						</tr>
+				{#if loading && !hasData}
+					<tbody class="loading-body" aria-label={m.table_loading()}>
+						{#each loadingRows as rowIndex (rowIndex)}
+							<tr class="loading-row">
+								{#each loadingColumns as columnIndex (`${rowIndex}-${columnIndex}`)}
+									<td class="loading-cell">
+										<span
+											class="loading-bar"
+											style:width={getLoadingBarWidth(rowIndex, columnIndex)}
+										></span>
+									</td>
+								{/each}
+							</tr>
+						{/each}
 					</tbody>
 				{:else if error}
 					<tbody>
@@ -826,5 +848,43 @@ Designed to work with the Driver Ops design system.
 	.state-cell {
 		padding: 0;
 		border-bottom: none;
+	}
+
+	.loading-cell {
+		height: var(--data-table-row-min-height, 40px);
+		padding: var(--spacing-2) var(--spacing-3);
+		border-bottom: var(--border-width-thin) solid var(--border-primary);
+		background: var(--surface-primary);
+		vertical-align: middle;
+		box-sizing: border-box;
+	}
+
+	.loading-bar {
+		display: block;
+		height: 10px;
+		border-radius: 999px;
+		background: linear-gradient(
+			90deg,
+			var(--interactive-hover) 0%,
+			var(--border-primary) 50%,
+			var(--interactive-hover) 100%
+		);
+		background-size: 220% 100%;
+		animation: table-loading-shimmer 1.3s ease-in-out infinite;
+	}
+
+	@keyframes table-loading-shimmer {
+		from {
+			background-position: 200% 0;
+		}
+		to {
+			background-position: -20% 0;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.loading-bar {
+			animation: none;
+		}
 	}
 </style>

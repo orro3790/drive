@@ -3,6 +3,7 @@
  * Seed Script
  *
  * Generates realistic test data for the Drive app.
+ * Creates two organizations (org-a primary, org-b secondary) for multi-tenant testing.
  *
  * Usage:
  *   pnpm seed           # Dev mode: 10 drivers
@@ -12,7 +13,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq, ne, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { config } from 'dotenv';
 import { faker } from '@faker-js/faker';
 
@@ -40,7 +41,7 @@ import {
 } from '../src/lib/server/db/schema';
 
 // Seed modules
-import { getConfig, type SeedConfig } from './seed/config';
+import { getOrgConfigs, type OrgSeedConfig, type SeedConfig } from './seed/config';
 import { generateWarehouses } from './seed/generators/warehouses';
 import { generateRoutes } from './seed/generators/routes';
 import { generateUsers, getSeedPassword, type GeneratedUser } from './seed/generators/users';
@@ -61,39 +62,49 @@ if (!DATABASE_URL) {
 	process.exit(1);
 }
 
-const sql = neon(DATABASE_URL);
-const db = drizzle(sql);
+const sqlClient = neon(DATABASE_URL);
+const db = drizzle(sqlClient);
 
-const SEED_ORG_SLUG = 'seed-test-org';
+const SEED_ORG_SLUGS = ['seed-org-a', 'seed-org-b'];
 
 function hashJoinCode(code: string): string {
 	return createHash('sha256').update(code.trim().toUpperCase()).digest('hex');
 }
 
-async function createSeedOrganization(): Promise<string> {
+async function createSeedOrganization(
+	slug: string,
+	name: string
+): Promise<string> {
 	const joinCode = randomBytes(6).toString('hex').toUpperCase();
 	const [org] = await db
 		.insert(organizations)
 		.values({
-			name: 'Seed Test Org',
-			slug: SEED_ORG_SLUG,
+			name,
+			slug,
 			joinCodeHash: hashJoinCode(joinCode),
 			ownerUserId: null
 		})
+		.onConflictDoUpdate({
+			target: organizations.slug,
+			set: {
+				name,
+				joinCodeHash: hashJoinCode(joinCode)
+			}
+		})
 		.returning({ id: organizations.id });
 
-	if (!org) throw new Error('Failed to create seed organization');
+	if (!org) throw new Error(`Failed to create seed organization: ${slug}`);
 
 	await db
 		.insert(organizationDispatchSettings)
 		.values({ organizationId: org.id, updatedBy: null })
 		.onConflictDoNothing();
 
-	console.log(`   Created seed org: ${org.id} (join code: ${joinCode})`);
+	console.log(`   Created org "${name}" (${slug}): ${org.id} (join code: ${joinCode})`);
 	return org.id;
 }
 
-async function clearData() {
+async function clearData(): Promise<Map<string, string>> {
 	console.log('Clearing existing data...');
 
 	// Delete in reverse dependency order
@@ -112,8 +123,7 @@ async function clearData() {
 	await db.delete(routes);
 	await db.delete(warehouses);
 
-	// Delete driver/manager accounts but keep existing managers if they have a different email domain
-	// For simplicity, we'll delete all seeded users (test domains)
+	// Delete seeded driver accounts
 	const seededUsers = await db.select({ id: user.id }).from(user).where(eq(user.role, 'driver'));
 
 	if (seededUsers.length > 0) {
@@ -122,10 +132,14 @@ async function clearData() {
 		await db.delete(user).where(inArray(user.id, userIds));
 	}
 
-	// Also delete seeded managers (those with test domain)
+	// Delete seeded managers (test domains)
 	const testManagers = await db.select({ id: user.id, email: user.email }).from(user);
 	const seedManagerIds = testManagers
-		.filter((u) => u.email.includes('@drivermanager.test'))
+		.filter(
+			(u) =>
+				u.email.includes('@drivermanager.test') ||
+				u.email.includes('@hamiltonmanager.test')
+		)
 		.map((u) => u.id);
 
 	if (seedManagerIds.length > 0) {
@@ -133,41 +147,59 @@ async function clearData() {
 		await db.delete(user).where(inArray(user.id, seedManagerIds));
 	}
 
-	// Delete signup_onboarding entries (references organizations with onDelete: restrict)
+	// Delete signup_onboarding entries
 	await db.delete(signupOnboarding);
 
-	// Create new seed org before deleting old orgs (remaining users need a valid org ref)
-	console.log('\n   Creating seed organization...');
-	const seedOrgId = await createSeedOrganization();
+	// Create seed orgs
+	console.log('\n   Creating seed organizations...');
+	const orgIds = new Map<string, string>();
 
-	// Point any remaining users (e.g. real test user) to the new seed org
+	// Delete old orgs first — create new ones, reassign remaining users
+	// We need to create at least one org before deleting old ones so remaining users can be reassigned
+	const orgAId = await createSeedOrganization('seed-org-a', 'Toronto Metro Logistics');
+	const orgBId = await createSeedOrganization('seed-org-b', 'Hamilton Delivery Co');
+	orgIds.set('seed-org-a', orgAId);
+	orgIds.set('seed-org-b', orgBId);
+
+	// Point any remaining users (e.g. real test user) to org-a
 	const remainingUsers = await db.select({ id: user.id }).from(user);
 	if (remainingUsers.length > 0) {
-		await db.update(user).set({ organizationId: seedOrgId, updatedAt: new Date() });
-		console.log(`   Reassigned ${remainingUsers.length} remaining user(s) to seed org`);
+		await db.update(user).set({ organizationId: orgAId, updatedAt: new Date() });
+		console.log(`   Reassigned ${remainingUsers.length} remaining user(s) to org-a`);
 	}
 
-	// Now safe to delete old organizations (no more references)
-	await db
-		.delete(organizationDispatchSettings)
-		.where(ne(organizationDispatchSettings.organizationId, seedOrgId));
-	await db.delete(organizations).where(ne(organizations.id, seedOrgId));
+	// Delete old organizations that aren't our seed orgs
+	await db.execute(
+		sql`DELETE FROM organization_dispatch_settings WHERE organization_id NOT IN (${sql.raw(`'${orgAId}', '${orgBId}'`)})`
+	);
+	await db.execute(
+		sql`DELETE FROM organizations WHERE id NOT IN (${sql.raw(`'${orgAId}', '${orgBId}'`)})`
+	);
 
 	console.log('Data cleared.');
-	return seedOrgId;
+	return orgIds;
 }
 
-async function seed(seedConfig: SeedConfig, seedOrgId: string) {
-	console.log(`\nSeeding with config:`, seedConfig);
-	console.log(`Using seed org: ${seedOrgId}`);
+async function seedOrg(
+	orgConfig: OrgSeedConfig,
+	orgId: string,
+	isPrimary: boolean
+): Promise<void> {
+	const seedConfig = orgConfig.config;
+	const label = orgConfig.slug;
+
+	console.log(`\n${'='.repeat(50)}`);
+	console.log(`Seeding ${orgConfig.name} (${label})`);
+	console.log(`Config: ${seedConfig.drivers} drivers, ${seedConfig.managers} managers, ${seedConfig.routes} routes`);
+	console.log(`${'='.repeat(50)}`);
 
 	// 1. Generate warehouses
 	console.log('\n1. Creating warehouses...');
-	const warehouseData = generateWarehouses(seedConfig);
+	const warehouseData = generateWarehouses(seedConfig, orgConfig.warehouseOffset);
 	const insertedWarehouses = await db
 		.insert(warehouses)
 		.values(
-			warehouseData.map((w) => ({ name: w.name, address: w.address, organizationId: seedOrgId }))
+			warehouseData.map((w) => ({ name: w.name, address: w.address, organizationId: orgId }))
 		)
 		.returning({ id: warehouses.id, name: warehouses.name });
 	console.log(`   Created ${insertedWarehouses.length} warehouses`);
@@ -182,10 +214,16 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 		.values(
 			routeData.map((r) => ({
 				name: r.name,
-				warehouseId: insertedWarehouses[r.warehouseIndex].id
+				warehouseId: insertedWarehouses[r.warehouseIndex].id,
+				startTime: r.startTime
 			}))
 		)
-		.returning({ id: routes.id, name: routes.name, warehouseId: routes.warehouseId });
+		.returning({
+			id: routes.id,
+			name: routes.name,
+			warehouseId: routes.warehouseId,
+			startTime: routes.startTime
+		});
 	console.log(`   Created ${insertedRoutes.length} routes`);
 	const routesWithWarehouses = insertedRoutes.map((route) => ({
 		id: route.id,
@@ -194,12 +232,17 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 		warehouseName: warehouseNameById.get(route.warehouseId) ?? 'Warehouse'
 	}));
 
-	// Build warehouse lookup by route
+	// Build warehouse and start time lookups by route
 	const warehouseIdByRoute = new Map(insertedRoutes.map((r) => [r.id, r.warehouseId]));
+	const routeStartTimeById = new Map(insertedRoutes.map((r) => [r.id, r.startTime]));
 
 	// 3. Generate users
 	console.log('\n3. Creating users...');
-	const userData = await generateUsers(seedConfig);
+	const userData = await generateUsers(seedConfig, {
+		driverEmailDomain: orgConfig.driverEmailDomain,
+		managerEmailDomain: orgConfig.managerEmailDomain,
+		idPrefix: isPrimary ? '' : 'orgb'
+	});
 	await db.insert(user).values(
 		userData.users.map((u) => ({
 			id: u.id,
@@ -210,7 +253,7 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 			weeklyCap: u.weeklyCap,
 			isFlagged: u.isFlagged,
 			flagWarningDate: u.flagWarningDate,
-			organizationId: seedOrgId,
+			organizationId: orgId,
 			createdAt: u.createdAt,
 			updatedAt: u.createdAt
 		}))
@@ -237,14 +280,12 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 
 	// Assign each seeded manager to 1-2 warehouses
 	managers.forEach((manager, idx) => {
-		// Assign to primary warehouse (round-robin)
 		const primaryWarehouseIdx = idx % insertedWarehouses.length;
 		warehouseManagerAssignments.push({
 			warehouseId: insertedWarehouses[primaryWarehouseIdx].id,
 			userId: manager.id
 		});
 
-		// Some managers get a second warehouse
 		if (idx % 3 === 0 && insertedWarehouses.length > 1) {
 			const secondaryIdx = (primaryWarehouseIdx + 1) % insertedWarehouses.length;
 			warehouseManagerAssignments.push({
@@ -254,51 +295,52 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 		}
 	});
 
-	// Also add the test user (from .env) to all warehouses if they exist
-	const testUserEmail = process.env.TEST_USER_EMAIL;
-	if (testUserEmail) {
-		const [testUser] = await db
-			.select({
-				id: user.id,
-				name: user.name,
-				email: user.email,
-				phone: user.phone,
-				role: user.role,
-				weeklyCap: user.weeklyCap,
-				isFlagged: user.isFlagged,
-				flagWarningDate: user.flagWarningDate,
-				createdAt: user.createdAt
-			})
-			.from(user)
-			.where(eq(user.email, testUserEmail));
+	// For primary org, add the test user to all warehouses
+	if (isPrimary) {
+		const testUserEmail = process.env.TEST_USER_EMAIL;
+		if (testUserEmail) {
+			const [testUser] = await db
+				.select({
+					id: user.id,
+					name: user.name,
+					email: user.email,
+					phone: user.phone,
+					role: user.role,
+					weeklyCap: user.weeklyCap,
+					isFlagged: user.isFlagged,
+					flagWarningDate: user.flagWarningDate,
+					createdAt: user.createdAt
+				})
+				.from(user)
+				.where(eq(user.email, testUserEmail));
 
-		if (testUser) {
-			// Add test user to all warehouses so they can see everything
-			for (const warehouse of insertedWarehouses) {
-				warehouseManagerAssignments.push({
-					warehouseId: warehouse.id,
-					userId: testUser.id
-				});
+			if (testUser) {
+				for (const warehouse of insertedWarehouses) {
+					warehouseManagerAssignments.push({
+						warehouseId: warehouse.id,
+						userId: testUser.id
+					});
+				}
+				// Set test user as org owner
+				await db
+					.update(organizations)
+					.set({ ownerUserId: testUser.id, updatedAt: new Date() })
+					.where(eq(organizations.id, orgId));
+				testUserForNotifications = {
+					id: testUser.id,
+					name: testUser.name,
+					email: testUser.email,
+					phone: testUser.phone ?? '',
+					role: testUser.role === 'manager' ? 'manager' : 'driver',
+					weeklyCap: testUser.weeklyCap ?? 4,
+					isFlagged: testUser.isFlagged ?? false,
+					flagWarningDate: testUser.flagWarningDate ?? null,
+					createdAt: testUser.createdAt ?? new Date()
+				};
+				console.log(
+					`   Added test user ${testUserEmail} to all ${insertedWarehouses.length} warehouses`
+				);
 			}
-			// Set test user as org owner
-			await db
-				.update(organizations)
-				.set({ ownerUserId: testUser.id, updatedAt: new Date() })
-				.where(eq(organizations.id, seedOrgId));
-			testUserForNotifications = {
-				id: testUser.id,
-				name: testUser.name,
-				email: testUser.email,
-				phone: testUser.phone ?? '',
-				role: testUser.role === 'manager' ? 'manager' : 'driver',
-				weeklyCap: testUser.weeklyCap ?? 4,
-				isFlagged: testUser.isFlagged ?? false,
-				flagWarningDate: testUser.flagWarningDate ?? null,
-				createdAt: testUser.createdAt ?? new Date()
-			};
-			console.log(
-				`   Added test user ${testUserEmail} to all ${insertedWarehouses.length} warehouses`
-			);
 		}
 	}
 
@@ -328,7 +370,8 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 		drivers,
 		prefsData,
 		routeIds,
-		warehouseIdByRoute
+		warehouseIdByRoute,
+		routeStartTimeById
 	);
 
 	const insertedAssignments = await db
@@ -359,6 +402,9 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 				parcelsReturned: s.parcelsReturned,
 				startedAt: s.startedAt,
 				completedAt: s.completedAt,
+				editableUntil: s.editableUntil,
+				exceptedReturns: s.exceptedReturns,
+				exceptionNotes: s.exceptionNotes,
 				cancelledAt: s.cancelledAt,
 				cancelReason: s.cancelReason as
 					| 'vehicle_breakdown'
@@ -383,6 +429,8 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 	);
 	console.log(`   Created ${insertedAssignments.length} assignments:`, statusCounts);
 	console.log(`   Created ${assignmentData.shifts.length} shifts`);
+	console.log(`   No-show assignments: ${assignmentData.noShowIndices.length}`);
+	console.log(`   Personas: exemplary=${assignmentData.personas.exemplary.length}, good=${assignmentData.personas.good.length}, unreliable=${assignmentData.personas.unreliable.length}, new=${assignmentData.personas.new.length}`);
 
 	// 6. Generate route completions
 	console.log('\n6. Creating route completions...');
@@ -399,7 +447,7 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 	}
 	console.log(`   Created ${completionsData.length} route completion records`);
 
-	// 7. Generate metrics (derived from actual assignments/shifts)
+	// 7. Generate metrics
 	console.log('\n7. Creating metrics...');
 	const metricsData = generateMetrics(drivers, assignmentData.assignments, assignmentData.shifts);
 	await db.insert(driverMetrics).values(
@@ -470,9 +518,32 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 	console.log(`   Created ${healthData.snapshots.length} health snapshots`);
 	console.log(`   Created ${healthData.states.length} health state records`);
 
+	// Log star distribution
+	const starDist = healthData.states.reduce(
+		(acc, s) => {
+			acc[s.stars] = (acc[s.stars] || 0) + 1;
+			return acc;
+		},
+		{} as Record<number, number>
+	);
+	console.log(`   Star distribution:`, starDist);
+	const hardStopCount = healthData.states.filter((s) => !s.assignmentPoolEligible).length;
+	if (hardStopCount > 0) {
+		console.log(`   Hard-stop drivers: ${hardStopCount}`);
+	}
+
 	// 9. Generate bidding
 	console.log('\n9. Creating bid windows and bids...');
-	const biddingData = generateBidding(assignmentData.assignments, drivers);
+	const biddingData = generateBidding(
+		assignmentData.assignments,
+		drivers,
+		assignmentData.noShowIndices,
+		{
+			healthStates: healthData.states,
+			routeCompletions: completionsData,
+			preferences: prefsData
+		}
+	);
 	const bidWindowIdsByAssignmentId = new Map<string, string>();
 
 	if (biddingData.bidWindows.length > 0) {
@@ -481,7 +552,10 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 			opensAt: w.opensAt,
 			closesAt: w.closesAt,
 			status: w.status,
-			winnerId: w.winnerId
+			winnerId: w.winnerId,
+			mode: w.mode,
+			trigger: w.trigger,
+			payBonusPercent: w.payBonusPercent
 		}));
 
 		const insertedBidWindows = await db
@@ -520,7 +594,14 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 		);
 	}
 
-	console.log(`   Created ${biddingData.bidWindows.length} bid windows`);
+	const modeCounts = biddingData.bidWindows.reduce(
+		(acc, w) => {
+			acc[w.mode] = (acc[w.mode] || 0) + 1;
+			return acc;
+		},
+		{} as Record<string, number>
+	);
+	console.log(`   Created ${biddingData.bidWindows.length} bid windows:`, modeCounts);
 	console.log(`   Created ${biddingData.bids.length} bids`);
 
 	// 10. Generate notifications
@@ -530,16 +611,31 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 			? userData.users
 			: [...userData.users, testUserForNotifications]
 		: userData.users;
+	// Build assignment ID lookup for notifications
+	const assignmentIdByIndex = new Map<number, string>();
+	for (let i = 0; i < insertedAssignments.length; i++) {
+		assignmentIdByIndex.set(i, insertedAssignments[i].id);
+	}
+
 	const notificationData = generateNotifications(
-		assignmentData.assignments,
 		notificationUsers,
-		routesWithWarehouses
+		routesWithWarehouses,
+		{
+			assignments: assignmentData.assignments,
+			shifts: assignmentData.shifts,
+			bidWindows: biddingData.bidWindows,
+			bids: biddingData.bids,
+			healthStates: healthData.states,
+			personas: assignmentData.personas,
+			noShowIndices: assignmentData.noShowIndices,
+			assignmentIdByIndex
+		}
 	);
 	if (notificationData.length > 0) {
 		await db.insert(notifications).values(
 			notificationData.map((notification) => ({
 				userId: notification.userId,
-				organizationId: seedOrgId,
+				organizationId: orgId,
 				type: notification.type,
 				title: notification.title,
 				body: notification.body,
@@ -551,16 +647,12 @@ async function seed(seedConfig: SeedConfig, seedOrgId: string) {
 	}
 	console.log(`   Created ${notificationData.length} notifications`);
 
-	// Summary
-	console.log('\n========================================');
-	console.log('Seed complete!');
-	console.log('========================================');
-	console.log(`\nTest credentials:`);
-	console.log(`  Password for all users: ${getSeedPassword()}`);
-	console.log(`\nSample driver emails:`);
-	drivers.slice(0, 3).forEach((d) => console.log(`  - ${d.email}`));
-	console.log(`\nSample manager emails:`);
-	managers.slice(0, 2).forEach((m) => console.log(`  - ${m.email}`));
+	// Summary for this org
+	console.log(`\n   ${orgConfig.name} seeding complete.`);
+	console.log(`   Sample driver emails:`);
+	drivers.slice(0, 3).forEach((d) => console.log(`     - ${d.email}`));
+	console.log(`   Sample manager emails:`);
+	managers.slice(0, 2).forEach((m) => console.log(`     - ${m.email}`));
 }
 
 async function main() {
@@ -599,7 +691,7 @@ async function main() {
 		faker.setDefaultRefDate(new Date(`${anchorDate}T12:00:00.000Z`));
 	}
 
-	const seedConfig = getConfig(isStaging, {
+	const orgConfigs = getOrgConfigs(isStaging, {
 		deterministic,
 		seed: seedValue ?? null,
 		anchorDate: anchorDate ?? null
@@ -607,6 +699,7 @@ async function main() {
 
 	console.log(`\n🌱 Drive Seed Script`);
 	console.log(`Mode: ${isStaging ? 'STAGING' : 'DEV'}`);
+	console.log(`Organizations: ${orgConfigs.length}`);
 	if (deterministic) {
 		console.log(`Deterministic mode: ON${seedValue !== null ? ` (seed=${seedValue})` : ''}`);
 		if (anchorDate) {
@@ -614,8 +707,25 @@ async function main() {
 		}
 	}
 
-	const seedOrgId = await clearData();
-	await seed(seedConfig, seedOrgId);
+	const orgIds = await clearData();
+
+	for (let i = 0; i < orgConfigs.length; i++) {
+		const orgConfig = orgConfigs[i];
+		const orgId = orgIds.get(orgConfig.slug);
+		if (!orgId) throw new Error(`Missing org ID for ${orgConfig.slug}`);
+		await seedOrg(orgConfig, orgId, i === 0);
+	}
+
+	// Final summary
+	console.log('\n========================================');
+	console.log('Seed complete!');
+	console.log('========================================');
+	console.log(`\nTest credentials:`);
+	console.log(`  Password for all users: ${getSeedPassword()}`);
+	console.log(`\nOrganizations:`);
+	for (const oc of orgConfigs) {
+		console.log(`  - ${oc.name} (${oc.slug}): ${oc.config.drivers} drivers, ${oc.config.managers} managers`);
+	}
 }
 
 main().catch((err) => {

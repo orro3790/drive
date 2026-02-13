@@ -2,9 +2,15 @@
  * Assignments and Shifts Generator
  *
  * Creates assignments with realistic status distribution based on timeline:
- * - Past dates: 85% completed, 10% cancelled, 5% unfilled
- * - Today: In progress or completed (morning) / scheduled (afternoon)
- * - Future: scheduled or unfilled
+ * - Past dates: completed or cancelled only (never active/scheduled)
+ * - Today: deterministic lifecycle stages for the first 6 drivers
+ * - Future: scheduled (confirmed or unconfirmed)
+ *
+ * Driver personas control completion rates:
+ * - Exemplary: 100% completion (star progression, bonus simulation)
+ * - Good: ~95% completion (normal drivers)
+ * - Unreliable: ~70% completion (flagging, hard-stop testing)
+ * - New: 0 past shifts (onboarding empty state)
  *
  * Also generates shift records for active/completed/cancelled assignments.
  */
@@ -12,6 +18,7 @@
 import type { SeedConfig } from '../config';
 import type { GeneratedUser } from './users';
 import type { GeneratedPreference } from './preferences';
+import { dispatchPolicy, parseRouteStartTime } from '../../../src/lib/config/dispatchPolicy';
 import {
 	getWeekRange,
 	getWeekDates,
@@ -44,6 +51,9 @@ export interface GeneratedShift {
 	parcelsReturned: number | null;
 	startedAt: Date | null;
 	completedAt: Date | null;
+	editableUntil: Date | null;
+	exceptedReturns: number;
+	exceptionNotes: string | null;
 	cancelledAt: Date | null;
 	cancelReason: string | null;
 	cancelNotes: string | null;
@@ -52,7 +62,78 @@ export interface GeneratedShift {
 export interface GeneratedAssignmentsResult {
 	assignments: GeneratedAssignment[];
 	shifts: GeneratedShift[];
+	/** Driver persona assignments for downstream generators */
+	personas: DriverPersonas;
+	/** Assignment indices that represent no-shows (for bidding generator) */
+	noShowIndices: number[];
 }
+
+// --- Driver Personas ---
+
+export type PersonaType = 'exemplary' | 'good' | 'unreliable' | 'new';
+
+export interface DriverPersonas {
+	exemplary: string[]; // user IDs
+	good: string[];
+	unreliable: string[];
+	new: string[];
+	/** Look up persona for a user ID */
+	getPersona(userId: string): PersonaType;
+}
+
+function partitionDriverPersonas(drivers: GeneratedUser[]): DriverPersonas {
+	const activeDrivers = drivers.filter((d) => d.role === 'driver');
+
+	// Reserve last driver as "new" (no past shifts)
+	const newDrivers = activeDrivers.length >= 4 ? [activeDrivers[activeDrivers.length - 1]] : [];
+	const remaining = activeDrivers.length >= 4 ? activeDrivers.slice(0, -1) : [...activeDrivers];
+
+	// Unreliable: 1-2 drivers (indices 0-1 from remaining for deterministic ordering)
+	const unreliableCount = Math.min(2, Math.max(1, Math.floor(remaining.length * 0.15)));
+	const unreliable = remaining.slice(0, unreliableCount);
+
+	// Exemplary: 2-3 drivers
+	const exemplaryCount = Math.min(3, Math.max(2, Math.floor(remaining.length * 0.25)));
+	const exemplary = remaining.slice(unreliableCount, unreliableCount + exemplaryCount);
+
+	// Good: everyone else
+	const good = remaining.slice(unreliableCount + exemplaryCount);
+
+	const personaMap = new Map<string, PersonaType>();
+	for (const d of exemplary) personaMap.set(d.id, 'exemplary');
+	for (const d of good) personaMap.set(d.id, 'good');
+	for (const d of unreliable) personaMap.set(d.id, 'unreliable');
+	for (const d of newDrivers) personaMap.set(d.id, 'new');
+
+	return {
+		exemplary: exemplary.map((d) => d.id),
+		good: good.map((d) => d.id),
+		unreliable: unreliable.map((d) => d.id),
+		new: newDrivers.map((d) => d.id),
+		getPersona(userId: string): PersonaType {
+			return personaMap.get(userId) ?? 'good';
+		}
+	};
+}
+
+// --- Today Lifecycle Stages ---
+
+type TodayStage =
+	| 'awaiting_confirm'
+	| 'confirmed_arrivable'
+	| 'arrived_startable'
+	| 'started_completable'
+	| 'completed_editable'
+	| 'completed_locked';
+
+const TODAY_STAGES: TodayStage[] = [
+	'awaiting_confirm',
+	'confirmed_arrivable',
+	'arrived_startable',
+	'started_completable',
+	'completed_editable',
+	'completed_locked'
+];
 
 const CANCEL_REASONS = [
 	'vehicle_breakdown',
@@ -64,6 +145,14 @@ const CANCEL_REASONS = [
 	'other'
 ] as const;
 
+const EXCEPTION_NOTES = [
+	'Holiday closure',
+	'Business closed permanently',
+	'Customer refused delivery',
+	'Address not found',
+	'Building access denied'
+];
+
 /**
  * Generate assignments and shifts for all weeks in the configured range.
  */
@@ -72,10 +161,12 @@ export function generateAssignments(
 	drivers: GeneratedUser[],
 	preferences: GeneratedPreference[],
 	routeIds: string[],
-	warehouseIdByRoute: Map<string, string>
+	warehouseIdByRoute: Map<string, string>,
+	routeStartTimeById?: Map<string, string>
 ): GeneratedAssignmentsResult {
 	const assignments: GeneratedAssignment[] = [];
-	const shifts: GeneratedShift[] = [];
+	const shiftsList: GeneratedShift[] = [];
+	const personas = partitionDriverPersonas(drivers);
 
 	const weeks = getWeekRange(config.pastWeeks, config.futureWeeks);
 
@@ -86,6 +177,14 @@ export function generateAssignments(
 	const weeklyCount = new Map<string, Map<string, number>>(); // weekKey -> userId -> count
 	// Track daily assignments to enforce 1 route per driver per day
 	const dailyAssigned = new Map<string, Set<string>>(); // dateString -> Set<userId>
+
+	// Track today stage assignment for deterministic lifecycle
+	let todayStageIndex = 0;
+	const todayDriverStages = new Map<string, TodayStage>();
+
+	// Track future assignments per driver for confirmation guarantees
+	const futureUnconfirmedByDriver = new Map<string, number>();
+	const futureConfirmedByDriver = new Map<string, number>();
 
 	for (const weekStart of weeks) {
 		const weekKey = toTorontoDateString(weekStart);
@@ -102,7 +201,7 @@ export function generateAssignments(
 			for (const routeId of routeIds) {
 				const warehouseId = warehouseIdByRoute.get(routeId)!;
 
-				// Find eligible driver for this route/day
+				// Find eligible driver for this route/day (skip 'new' drivers for past dates)
 				const eligibleDriverId = findEligibleDriver(
 					drivers,
 					prefByUser,
@@ -110,13 +209,40 @@ export function generateAssignments(
 					dayOfWeek,
 					weekKey,
 					weeklyCount,
-					dailyAssigned.get(dateString)!
+					dailyAssigned.get(dateString)!,
+					dateString,
+					personas
 				);
 
-				// Determine status based on date
-				const status = determineStatus(dateString, eligibleDriverId);
+				// Determine status based on date and persona
+				let status: GeneratedAssignment['status'];
+				let todayStage: TodayStage | null = null;
+
+				if (!eligibleDriverId) {
+					status = 'unfilled';
+				} else if (isPastDate(dateString)) {
+					status = determineStatusPast(personas.getPersona(eligibleDriverId));
+				} else if (isToday(dateString)) {
+					// Deterministic today lifecycle: assign stages to first 6 today-assigned drivers
+					if (todayStageIndex < TODAY_STAGES.length) {
+						todayStage = TODAY_STAGES[todayStageIndex];
+						todayStageIndex++;
+						todayDriverStages.set(eligibleDriverId, todayStage);
+						status = todayStageToAssignmentStatus(todayStage);
+					} else {
+						// Remaining today assignments: completed or active
+						const roll = random();
+						if (roll < 0.6) status = 'completed';
+						else if (roll < 0.9) status = 'active';
+						else status = 'scheduled';
+					}
+				} else {
+					// Future: always scheduled
+					status = 'scheduled';
+				}
+
 				const assignedBy = eligibleDriverId ? 'algorithm' : null;
-				const confirmedAt = generateConfirmedAt(dateString, status);
+				const confirmedAt = generateConfirmedAt(dateString, status, todayStage);
 
 				const cancelType = determineCancelType(status, confirmedAt);
 
@@ -142,16 +268,111 @@ export function generateAssignments(
 					dailyAssigned.get(dateString)!.add(eligibleDriverId);
 				}
 
+				// Track future assignments for confirmation guarantees
+				if (eligibleDriverId && isFutureDate(dateString)) {
+					if (confirmedAt) {
+						futureConfirmedByDriver.set(
+							eligibleDriverId,
+							(futureConfirmedByDriver.get(eligibleDriverId) ?? 0) + 1
+						);
+					} else {
+						futureUnconfirmedByDriver.set(
+							eligibleDriverId,
+							(futureUnconfirmedByDriver.get(eligibleDriverId) ?? 0) + 1
+						);
+					}
+				}
+
 				// Create shift record for completed/cancelled/active assignments
 				if (status === 'completed' || status === 'cancelled' || status === 'active') {
-					const shift = createShiftForStatus(assignmentIndex, dateString, status);
-					shifts.push(shift);
+					const routeStart = routeStartTimeById?.get(routeId) ?? null;
+					const shift = createShiftForStatus(
+						assignmentIndex,
+						dateString,
+						status,
+						todayStage,
+						eligibleDriverId ? personas.getPersona(eligibleDriverId) : 'good',
+						routeStart
+					);
+					shiftsList.push(shift);
 				}
 			}
 		}
 	}
 
-	return { assignments, shifts };
+	// --- Phase 1g: Guarantee confirmable future assignments ---
+	guaranteeFutureConfirmations(
+		assignments,
+		futureUnconfirmedByDriver,
+		futureConfirmedByDriver,
+		drivers,
+		personas
+	);
+
+	// --- Phase 2a: Mark ~15% of past completed assignments as bid-assigned ---
+	const pastCompletedIndices: number[] = [];
+	for (let i = 0; i < assignments.length; i++) {
+		if (
+			assignments[i].status === 'completed' &&
+			isPastDate(assignments[i].date) &&
+			assignments[i].userId
+		) {
+			pastCompletedIndices.push(i);
+		}
+	}
+	const bidAssignedCount = Math.max(1, Math.floor(pastCompletedIndices.length * 0.15));
+	// Shuffle and pick
+	for (let i = pastCompletedIndices.length - 1; i > 0; i--) {
+		const j = randomInt(0, i + 1);
+		[pastCompletedIndices[i], pastCompletedIndices[j]] = [
+			pastCompletedIndices[j],
+			pastCompletedIndices[i]
+		];
+	}
+	for (let i = 0; i < bidAssignedCount && i < pastCompletedIndices.length; i++) {
+		assignments[pastCompletedIndices[i]].assignedBy = 'bid';
+	}
+
+	// --- Phase 2b: Generate no-show assignments for unreliable drivers ---
+	const noShowIndices: number[] = [];
+	for (const unreliableId of personas.unreliable) {
+		// Find 1-2 past dates where this driver had completed assignments to create no-shows
+		const driverPastCompleted: number[] = [];
+		for (let i = 0; i < assignments.length; i++) {
+			if (
+				assignments[i].userId === unreliableId &&
+				assignments[i].status === 'completed' &&
+				isPastDate(assignments[i].date)
+			) {
+				driverPastCompleted.push(i);
+			}
+		}
+
+		const noShowCount = Math.min(1 + randomInt(0, 2), driverPastCompleted.length);
+		for (let n = 0; n < noShowCount; n++) {
+			// Pick a completed assignment and convert it to a no-show:
+			// status: 'scheduled' (pre-cron state), confirmedAt: set, no shift
+			const idx = driverPastCompleted[n];
+			assignments[idx].status = 'scheduled';
+			assignments[idx].confirmedAt = (() => {
+				const daysBeforeShift = 3 + randomInt(0, 3);
+				const assignmentDate = new Date(`${assignments[idx].date}T12:00:00`);
+				assignmentDate.setDate(assignmentDate.getDate() - daysBeforeShift);
+				return randomTimeOnDate(toTorontoDateString(assignmentDate), 8, 22);
+			})();
+			assignments[idx].cancelType = null;
+
+			// Remove the associated shift
+			const shiftIdx = shiftsList.findIndex((s) => s.assignmentIndex === idx);
+			if (shiftIdx !== -1) {
+				shiftsList.splice(shiftIdx, 1);
+			}
+
+			noShowIndices.push(idx);
+		}
+	}
+
+	return { assignments, shifts: shiftsList, personas, noShowIndices };
 }
 
 function findEligibleDriver(
@@ -161,11 +382,16 @@ function findEligibleDriver(
 	dayOfWeek: number,
 	weekKey: string,
 	weeklyCount: Map<string, Map<string, number>>,
-	dailyAssignedForDate: Set<string>
+	dailyAssignedForDate: Set<string>,
+	dateString: string,
+	personas: DriverPersonas
 ): string | null {
 	const eligibleDrivers = drivers.filter((d) => {
 		if (d.role !== 'driver') return false;
 		if (d.isFlagged) return false;
+
+		// 'new' persona drivers don't get past assignments
+		if (isPastDate(dateString) && personas.getPersona(d.id) === 'new') return false;
 
 		const pref = prefByUser.get(d.id);
 		if (!pref) return false;
@@ -193,52 +419,110 @@ function findEligibleDriver(
 	return eligibleDrivers[randomInt(0, eligibleDrivers.length)].id;
 }
 
-function determineStatus(
-	dateString: string,
-	hasDriver: string | null
-): 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled' {
-	if (!hasDriver) return 'unfilled';
+/**
+ * Past dates: only completed or cancelled. Never active or scheduled.
+ * Persona controls completion rate.
+ */
+function determineStatusPast(
+	persona: PersonaType
+): 'completed' | 'cancelled' {
+	const roll = random();
 
-	if (isPastDate(dateString)) {
-		// Past: 85% completed, 10% cancelled, 5% unfilled
-		const roll = random();
-		if (roll < 0.85) return 'completed';
-		if (roll < 0.95) return 'cancelled';
-		return 'unfilled';
+	switch (persona) {
+		case 'exemplary':
+			// 100% completed — no cancellations
+			return 'completed';
+		case 'good':
+			// ~95% completed, ~5% cancelled
+			return roll < 0.95 ? 'completed' : 'cancelled';
+		case 'unreliable':
+			// ~70% completed, ~30% cancelled
+			return roll < 0.70 ? 'completed' : 'cancelled';
+		default:
+			return 'completed';
 	}
+}
 
-	if (isToday(dateString)) {
-		// Today: 50% active, 30% completed (morning shifts done), 20% scheduled (afternoon)
-		const roll = random();
-		if (roll < 0.5) return 'active';
-		if (roll < 0.8) return 'completed';
-		return 'scheduled';
+/**
+ * Map today lifecycle stage to assignment status.
+ */
+function todayStageToAssignmentStatus(
+	stage: TodayStage
+): 'scheduled' | 'active' | 'completed' {
+	switch (stage) {
+		case 'awaiting_confirm':
+		case 'confirmed_arrivable':
+			return 'scheduled';
+		case 'arrived_startable':
+		case 'started_completable':
+			return 'active';
+		case 'completed_editable':
+		case 'completed_locked':
+			return 'completed';
 	}
-
-	// Future: always scheduled
-	return 'scheduled';
 }
 
 function createShiftForStatus(
 	assignmentIndex: number,
 	dateString: string,
-	status: 'completed' | 'cancelled' | 'active'
+	status: 'completed' | 'cancelled' | 'active',
+	todayStage: TodayStage | null,
+	persona: PersonaType,
+	routeStartTime: string | null
 ): GeneratedShift {
+	const now = getSeedNow();
+	const todayStr = toTorontoDateString(getTorontoToday());
+	const editWindowHours = dispatchPolicy.shifts.completionEditWindowHours;
+
+	// Parse route start time for arrival generation
+	const { hours: startHour } = parseRouteStartTime(routeStartTime);
+	// Arrivals should be between startTime-2h and startTime
+	const arrivalStartHour = Math.max(5, startHour - 2);
+	const arrivalEndHour = startHour;
+
+	// Handle deterministic today lifecycle stages
+	if (todayStage) {
+		return createTodayStageShift(assignmentIndex, todayStr, todayStage, now, editWindowHours);
+	}
+
 	const parcelsStart = 100 + randomInt(0, 100); // 100-200
 
 	if (status === 'completed') {
-		const deliveryRate = 0.9 + random() * 0.1; // 90-100%
+		// Persona-aware delivery rates
+		let deliveryRate: number;
+		if (persona === 'exemplary') {
+			deliveryRate = 0.96 + random() * 0.04; // 96-100%
+		} else if (persona === 'unreliable') {
+			deliveryRate = 0.82 + random() * 0.13; // 82-95%
+		} else {
+			deliveryRate = 0.90 + random() * 0.10; // 90-100%
+		}
 		const parcelsDelivered = Math.floor(parcelsStart * deliveryRate);
 		const parcelsReturned = parcelsStart - parcelsDelivered;
 
+		// ~20% of completed shifts get excepted returns
+		let exceptedReturns = 0;
+		let exceptionNotes: string | null = null;
+		if (random() < 0.20) {
+			exceptedReturns = 1 + randomInt(0, 3); // 1-3
+			exceptionNotes = EXCEPTION_NOTES[randomInt(0, EXCEPTION_NOTES.length)];
+		}
+
+		// editableUntil: past completed shifts always have expired edit windows
+		const completedAt = randomTimeOnDate(dateString, 14, 20);
+		const editableUntil = new Date(completedAt.getTime() + editWindowHours * 60 * 60 * 1000);
+
 		return {
 			assignmentIndex,
-			arrivedAt: randomTimeOnDate(dateString, 6, 8),
+			arrivedAt: randomTimeOnDate(dateString, arrivalStartHour, arrivalEndHour || arrivalStartHour + 1),
 			parcelsStart,
 			parcelsDelivered,
 			parcelsReturned,
-			startedAt: randomTimeOnDate(dateString, 6, 10),
-			completedAt: randomTimeOnDate(dateString, 14, 20),
+			startedAt: randomTimeOnDate(dateString, arrivalStartHour, startHour + 1),
+			completedAt,
+			editableUntil,
+			exceptedReturns,
+			exceptionNotes,
 			cancelledAt: null,
 			cancelReason: null,
 			cancelNotes: null
@@ -256,25 +540,135 @@ function createShiftForStatus(
 			parcelsReturned: null,
 			startedAt: null,
 			completedAt: null,
+			editableUntil: null,
+			exceptedReturns: 0,
+			exceptionNotes: null,
 			cancelledAt: randomTimeOnDate(dateString, 5, 12),
 			cancelReason,
 			cancelNotes: cancelReason === 'other' ? 'Unexpected circumstances' : null
 		};
 	}
 
-	// Active - shift started but not completed
+	// Active - shift started but not completed (non-stage today assignments)
 	return {
 		assignmentIndex,
-		arrivedAt: randomTimeOnDate(toTorontoDateString(getTorontoToday()), 6, 8),
+		arrivedAt: randomTimeOnDate(todayStr, arrivalStartHour, arrivalEndHour || arrivalStartHour + 1),
 		parcelsStart,
 		parcelsDelivered: null,
 		parcelsReturned: null,
-		startedAt: randomTimeOnDate(toTorontoDateString(getTorontoToday()), 6, 10),
+		startedAt: randomTimeOnDate(todayStr, arrivalStartHour, startHour + 1),
 		completedAt: null,
+		editableUntil: null,
+		exceptedReturns: 0,
+		exceptionNotes: null,
 		cancelledAt: null,
 		cancelReason: null,
 		cancelNotes: null
 	};
+}
+
+/**
+ * Create a shift record for a deterministic today lifecycle stage.
+ */
+function createTodayStageShift(
+	assignmentIndex: number,
+	todayStr: string,
+	stage: TodayStage,
+	now: Date,
+	editWindowHours: number
+): GeneratedShift {
+	const baseShift: GeneratedShift = {
+		assignmentIndex,
+		arrivedAt: null,
+		parcelsStart: null,
+		parcelsDelivered: null,
+		parcelsReturned: null,
+		startedAt: null,
+		completedAt: null,
+		editableUntil: null,
+		exceptedReturns: 0,
+		exceptionNotes: null,
+		cancelledAt: null,
+		cancelReason: null,
+		cancelNotes: null
+	};
+
+	const parcelsStart = 150 + randomInt(0, 50); // 150-200
+
+	switch (stage) {
+		case 'awaiting_confirm':
+			// No shift record needed — assignment status is 'scheduled', no confirmedAt
+			// But we still create a minimal shift entry for linking
+			// Actually: awaiting_confirm should NOT have a shift. Return base.
+			// However the caller only calls us for completed/active/cancelled.
+			// For 'scheduled' status stages, the caller won't call us.
+			// This shouldn't be reached, but return base for safety.
+			return baseShift;
+
+		case 'confirmed_arrivable':
+			// No shift record — assignment is 'scheduled' + confirmed
+			return baseShift;
+
+		case 'arrived_startable':
+			// arrivedAt set, parcelsStart: null (haven't scanned yet)
+			return {
+				...baseShift,
+				arrivedAt: randomTimeOnDate(todayStr, 6, 8)
+			};
+
+		case 'started_completable':
+			// arrivedAt + startedAt + parcelsStart set
+			return {
+				...baseShift,
+				arrivedAt: randomTimeOnDate(todayStr, 6, 7),
+				parcelsStart,
+				startedAt: randomTimeOnDate(todayStr, 7, 9)
+			};
+
+		case 'completed_editable': {
+			// All fields set, editableUntil in the future (55min from now)
+			const deliveryRate = 0.94 + random() * 0.06;
+			const parcelsDelivered = Math.floor(parcelsStart * deliveryRate);
+			const parcelsReturned = parcelsStart - parcelsDelivered;
+			const completedAt = new Date(now.getTime() - 5 * 60 * 1000); // 5 min ago
+			const editableUntil = new Date(
+				completedAt.getTime() + editWindowHours * 60 * 60 * 1000
+			); // ~55 min remaining
+
+			return {
+				...baseShift,
+				arrivedAt: randomTimeOnDate(todayStr, 6, 7),
+				parcelsStart,
+				parcelsDelivered,
+				parcelsReturned,
+				startedAt: randomTimeOnDate(todayStr, 7, 8),
+				completedAt,
+				editableUntil
+			};
+		}
+
+		case 'completed_locked': {
+			// All fields set, editableUntil in the past
+			const deliveryRate2 = 0.92 + random() * 0.08;
+			const parcelsDelivered2 = Math.floor(parcelsStart * deliveryRate2);
+			const parcelsReturned2 = parcelsStart - parcelsDelivered2;
+			const completedAt2 = randomTimeOnDate(todayStr, 8, 12);
+			const editableUntil2 = new Date(
+				completedAt2.getTime() + editWindowHours * 60 * 60 * 1000
+			);
+
+			return {
+				...baseShift,
+				arrivedAt: randomTimeOnDate(todayStr, 6, 7),
+				parcelsStart,
+				parcelsDelivered: parcelsDelivered2,
+				parcelsReturned: parcelsReturned2,
+				startedAt: randomTimeOnDate(todayStr, 7, 8),
+				completedAt: completedAt2,
+				editableUntil: editableUntil2
+			};
+		}
+	}
 }
 
 /**
@@ -302,17 +696,29 @@ function determineCancelType(
 }
 
 /**
- * Generate confirmedAt timestamp based on assignment status.
+ * Generate confirmedAt timestamp based on assignment status and today stage.
  * - completed/active: always confirmed (3-5 days before assignment date)
  * - cancelled: 30% confirmed (late cancellations), 70% null (pre-confirmation drops)
  * - scheduled (future): 60% confirmed, 40% null (haven't confirmed yet)
  * - unfilled: null
+ * - Today stages override: awaiting_confirm → null, all others → set
  */
 function generateConfirmedAt(
 	dateString: string,
-	status: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled'
+	status: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled',
+	todayStage: TodayStage | null
 ): Date | null {
 	if (status === 'unfilled') return null;
+
+	// Today stage override
+	if (todayStage === 'awaiting_confirm') return null;
+	if (todayStage) {
+		// All other today stages are confirmed
+		const daysBeforeShift = 3 + randomInt(0, 3);
+		const assignmentDate = new Date(`${dateString}T12:00:00`);
+		assignmentDate.setDate(assignmentDate.getDate() - daysBeforeShift);
+		return randomTimeOnDate(toTorontoDateString(assignmentDate), 8, 22);
+	}
 
 	if (status === 'completed' || status === 'active') {
 		// Always confirmed — 3-5 days before assignment date
@@ -345,4 +751,64 @@ function generateConfirmedAt(
 	}
 
 	return null;
+}
+
+/**
+ * Ensure at least 1 unconfirmed + 1 confirmed future assignment per active driver.
+ * Mutates the assignments array in place.
+ */
+function guaranteeFutureConfirmations(
+	assignments: GeneratedAssignment[],
+	futureUnconfirmedByDriver: Map<string, number>,
+	futureConfirmedByDriver: Map<string, number>,
+	drivers: GeneratedUser[],
+	personas: DriverPersonas
+): void {
+	const activeDriverIds = drivers
+		.filter((d) => d.role === 'driver' && personas.getPersona(d.id) !== 'new')
+		.map((d) => d.id);
+
+	for (const driverId of activeDriverIds) {
+		const unconfirmedCount = futureUnconfirmedByDriver.get(driverId) ?? 0;
+		const confirmedCount = futureConfirmedByDriver.get(driverId) ?? 0;
+
+		if (unconfirmedCount === 0 || confirmedCount === 0) {
+			// Find future assignments for this driver
+			const futureIndices: number[] = [];
+			for (let i = 0; i < assignments.length; i++) {
+				if (
+					assignments[i].userId === driverId &&
+					isFutureDate(assignments[i].date) &&
+					assignments[i].status === 'scheduled'
+				) {
+					futureIndices.push(i);
+				}
+			}
+
+			if (futureIndices.length < 2) continue;
+
+			// Ensure at least 1 unconfirmed
+			if (unconfirmedCount === 0) {
+				const idx = futureIndices.find((i) => assignments[i].confirmedAt !== null);
+				if (idx !== undefined) {
+					assignments[idx].confirmedAt = null;
+				}
+			}
+
+			// Ensure at least 1 confirmed
+			if (confirmedCount === 0) {
+				const idx = futureIndices.find((i) => assignments[i].confirmedAt === null);
+				if (idx !== undefined) {
+					const daysBeforeShift = 3 + randomInt(0, 3);
+					const assignmentDate = new Date(`${assignments[idx].date}T12:00:00`);
+					assignmentDate.setDate(assignmentDate.getDate() - daysBeforeShift);
+					assignments[idx].confirmedAt = randomTimeOnDate(
+						toTorontoDateString(assignmentDate),
+						8,
+						22
+					);
+				}
+			}
+		}
+	}
 }

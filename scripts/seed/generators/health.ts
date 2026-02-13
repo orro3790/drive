@@ -3,6 +3,11 @@
  *
  * Produces driverHealthSnapshots (daily scores) and driverHealthState (current state)
  * derived from actual assignment/shift/metrics data using the additive point system.
+ *
+ * With persona-driven assignment data:
+ * - Exemplary drivers (100% completion, 4 weeks) reach 4 stars organically
+ * - Unreliable drivers with no-shows trigger hard-stop
+ * - Good drivers get realistic mid-range scores
  */
 
 import type { GeneratedUser } from './users';
@@ -41,6 +46,22 @@ export interface GeneratedHealthState {
 export interface GeneratedHealthResult {
 	snapshots: GeneratedHealthSnapshot[];
 	states: GeneratedHealthState[];
+}
+
+/**
+ * Detect no-show: past + scheduled + confirmed + no shift arrival.
+ * This is the state before the no-show detection cron cancels them.
+ */
+function isNoShow(
+	assignment: GeneratedAssignment,
+	shift: GeneratedShift | undefined
+): boolean {
+	return (
+		isPastDate(assignment.date) &&
+		assignment.status === 'scheduled' &&
+		assignment.confirmedAt !== null &&
+		(!shift || !shift.arrivedAt)
+	);
 }
 
 /**
@@ -99,8 +120,6 @@ export function generateHealth(
 		const sortedDates = [...pastDates].sort();
 
 		// Compute cumulative additive score for each snapshot date.
-		// For simplicity, we compute contributions cumulatively up to each date.
-		// Since seed doesn't have no-shows, lastScoreResetAt is always null.
 		for (const dateString of sortedDates) {
 			// Count events up to this date
 			const upToDate = driverAssignments.filter(
@@ -113,10 +132,21 @@ export function generateHealth(
 			let arrivedOnTime = 0;
 			let completed = 0;
 			let highDelivery = 0;
+			let bidPickups = 0;
 			let autoDrops = 0;
+			let earlyCancels = 0;
 			let lateCancels = 0;
+			let noShows = 0;
 
 			for (const { assignment, index } of upToDate) {
+				const shift = shiftByAssignmentIndex.get(index);
+
+				// No-show detection
+				if (isNoShow(assignment, shift)) {
+					noShows++;
+					continue; // Don't count as confirmed/arrived/completed
+				}
+
 				// Confirmed on time
 				if (
 					assignment.confirmedAt !== null &&
@@ -128,7 +158,6 @@ export function generateHealth(
 				}
 
 				// Arrived on time
-				const shift = shiftByAssignmentIndex.get(index);
 				if (shift?.arrivedAt) {
 					const hours = shift.arrivedAt.getHours();
 					if (hours < 9) {
@@ -152,9 +181,19 @@ export function generateHealth(
 					highDelivery++;
 				}
 
+				// Bid pickups
+				if (assignment.assignedBy === 'bid' && assignment.status === 'completed') {
+					bidPickups++;
+				}
+
 				// Auto-drops
 				if (assignment.cancelType === 'auto_drop') {
 					autoDrops++;
+				}
+
+				// Early cancellations (driver-initiated, not late)
+				if (assignment.cancelType === 'driver') {
+					earlyCancels++;
 				}
 
 				// Late cancellations
@@ -168,9 +207,10 @@ export function generateHealth(
 				arrivedOnTime: { count: arrivedOnTime, points: arrivedOnTime * pts.arrivedOnTime },
 				completedShifts: { count: completed, points: completed * pts.completedShift },
 				highDelivery: { count: highDelivery, points: highDelivery * pts.highDelivery },
-				bidPickups: { count: 0, points: 0 },
+				bidPickups: { count: bidPickups, points: bidPickups * pts.bidPickup },
 				urgentPickups: { count: 0, points: 0 },
 				autoDrops: { count: autoDrops, points: autoDrops * pts.autoDrop },
+				earlyCancellations: { count: earlyCancels, points: earlyCancels * pts.earlyCancel },
 				lateCancellations: { count: lateCancels, points: lateCancels * pts.lateCancel }
 			};
 
@@ -182,21 +222,25 @@ export function generateHealth(
 				subDays(new Date(`${dateString}T12:00:00`), health.lateCancelRollingDays)
 			);
 			let lateCancelCount30d = 0;
-			for (const { assignment } of driverAssignments) {
-				if (
-					assignment.date >= windowStart &&
-					assignment.date <= dateString &&
-					assignment.cancelType === 'late'
-				) {
-					lateCancelCount30d++;
+			let noShowCount30d = 0;
+			for (const { assignment, index: aIdx } of driverAssignments) {
+				if (assignment.date >= windowStart && assignment.date <= dateString) {
+					if (assignment.cancelType === 'late') {
+						lateCancelCount30d++;
+					}
+					if (isNoShow(assignment, shiftByAssignmentIndex.get(aIdx))) {
+						noShowCount30d++;
+					}
 				}
 			}
-			const noShowCount30d = 0;
 			const hardStopTriggered =
 				noShowCount30d > 0 || lateCancelCount30d >= health.lateCancelThreshold;
 
 			const reasons: string[] = [];
-			if (hardStopTriggered) {
+			if (noShowCount30d > 0) {
+				reasons.push(`${noShowCount30d} no-show(s) in last 30 days`);
+			}
+			if (lateCancelCount30d >= health.lateCancelThreshold) {
 				reasons.push(`${lateCancelCount30d} late cancellation(s) in last 30 days`);
 			}
 
@@ -240,21 +284,24 @@ export function generateHealth(
 
 			if (weekAssignments.length === 0) continue;
 
-			// Hard-stop check
+			// Hard-stop check for this week
 			const hardStopWindowStart = toTorontoDateString(
 				subDays(new Date(`${weekEndStr}T12:00:00`), health.lateCancelRollingDays)
 			);
 			let weekLateCancels = 0;
-			for (const { assignment } of driverAssignments) {
-				if (
-					assignment.date >= hardStopWindowStart &&
-					assignment.date <= weekEndStr &&
-					assignment.cancelType === 'late'
-				) {
-					weekLateCancels++;
+			let weekNoShows = 0;
+			for (const { assignment, index: aIdx } of driverAssignments) {
+				if (assignment.date >= hardStopWindowStart && assignment.date <= weekEndStr) {
+					if (assignment.cancelType === 'late') {
+						weekLateCancels++;
+					}
+					if (isNoShow(assignment, shiftByAssignmentIndex.get(aIdx))) {
+						weekNoShows++;
+					}
 				}
 			}
-			const weekHardStop = weekLateCancels >= health.lateCancelThreshold;
+			const weekHardStop =
+				weekNoShows > 0 || weekLateCancels >= health.lateCancelThreshold;
 
 			if (weekHardStop) {
 				stars = 0;
@@ -267,9 +314,19 @@ export function generateHealth(
 			const nonCancelledAssignments = weekAssignments.filter(
 				(d) => d.assignment.status !== 'cancelled' && d.assignment.status !== 'unfilled'
 			);
+
+			// Count no-shows separately — they look like 'scheduled' assignments
+			let weekNoShowCount = 0;
+			for (const { assignment, index: aIdx } of weekAssignments) {
+				if (isNoShow(assignment, shiftByAssignmentIndex.get(aIdx))) {
+					weekNoShowCount++;
+				}
+			}
+
 			const completedInWeek = weekAssignments.filter(
 				(d) => d.assignment.status === 'completed'
 			).length;
+			// For attendance: total includes non-cancelled but also no-shows count against
 			const totalInWeek = nonCancelledAssignments.length;
 
 			const weekAttendance = totalInWeek > 0 ? completedInWeek / totalInWeek : 0;
@@ -293,6 +350,7 @@ export function generateHealth(
 			const qualifies =
 				weekAttendance >= health.qualifyingWeek.minAttendanceRate &&
 				weekCompletion >= health.qualifyingWeek.minCompletionRate &&
+				weekNoShowCount <= health.qualifyingWeek.maxNoShows &&
 				weekLateCancellations <= health.qualifyingWeek.maxLateCancellations;
 
 			if (qualifies) {
@@ -309,14 +367,16 @@ export function generateHealth(
 
 		states.push({
 			userId: driver.id,
-			currentScore: latestSnapshot?.score ?? 0,
+			currentScore: anyHardStop
+				? Math.min(latestSnapshot?.score ?? 0, health.tierThreshold - 1)
+				: latestSnapshot?.score ?? 0,
 			streakWeeks,
 			stars,
 			lastQualifiedWeekStart,
 			assignmentPoolEligible: !anyHardStop,
 			requiresManagerIntervention: anyHardStop,
 			nextMilestoneStars: Math.min(stars + 1, health.maxStars),
-			lastScoreResetAt: null
+			lastScoreResetAt: anyHardStop ? new Date() : null
 		});
 	}
 

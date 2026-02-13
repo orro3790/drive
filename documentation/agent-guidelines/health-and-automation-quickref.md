@@ -31,7 +31,8 @@ The health system is an **additive point-based model** — not a weighted averag
 | Event                         | Points | Trigger                                       |
 | ----------------------------- | ------ | --------------------------------------------- |
 | Auto-drop (failed to confirm) | -12    | 48h deadline passed without confirmation      |
-| Late cancellation             | -48    | Confirmed shift cancelled within 48h of start |
+| Early cancellation            | -8     | Driver-initiated cancel (>48h before start)   |
+| Late cancellation             | -32    | Confirmed shift cancelled within 48h of start |
 
 ### No-Show (special)
 
@@ -204,7 +205,7 @@ Weekly health evaluation (08:00 Mon) ← uses daily snapshots
 
 - **Endpoint**: `GET /api/cron/health-daily`
 - **Does**: Computes health score for all drivers, persists snapshots, detects hard-stops
-- **Sends**: `corrective_warning` if completion rate < 80%
+- **Sends**: `corrective_warning` if completion rate < 98%
 - **Skips**: New drivers with 0 shifts
 
 #### 3. Weekly Health Evaluation
@@ -218,7 +219,7 @@ Weekly health evaluation (08:00 Mon) ← uses daily snapshots
 
 - **Endpoint**: `GET /api/cron/lock-preferences`
 - **Does**: Locks driver preferences, generates assignments for week N+2
-- **Sends**: `assignment_confirmed` to assigned drivers
+- **Sends**: `schedule_locked` to drivers whose preferences were locked, `assignment_confirmed` to assigned drivers
 
 #### 5. Shift Reminders
 
@@ -283,12 +284,14 @@ ASSIGN → CONFIRM → ARRIVE → START → COMPLETE → EDIT WINDOW
 
 | Event                                | Cancel Type     | Health Impact  | Creates Bid Window?        |
 | ------------------------------------ | --------------- | -------------- | -------------------------- |
-| Driver early cancel (>48h)           | `driver`        | None currently | Yes (competitive)          |
-| Driver late cancel (≤48h, confirmed) | `late`          | -48 points     | Yes (instant)              |
+| Driver early cancel (>48h)           | `driver`        | -8 points      | Yes (competitive)          |
+| Driver late cancel (≤48h, confirmed) | `late`          | -32 points     | Yes (instant)              |
 | Auto-drop (unconfirmed at deadline)  | `auto_drop`     | -12 points     | Yes (auto-determined)      |
 | No-show (confirmed, didn't arrive)   | N/A (emergency) | Full reset     | Yes (emergency, 20% bonus) |
 
 **Late cancellation definition**: Assignment was `confirmed` AND cancelled within 48 hours of shift start.
+
+**Late start = no-show**: The no-show cron checks for confirmed assignments where driver hasn't arrived by route start time. The system does not distinguish between "didn't show up" and "showed up but didn't mark arrival" — both are treated as no-shows.
 
 ---
 
@@ -321,13 +324,14 @@ Tiebreaker: earliest bid wins.
 
 ## Notification Types
 
-### System-Triggered (19 implemented)
+### System-Triggered (20 implemented)
 
 | Type                        | Trigger                               | Recipient        |
 | --------------------------- | ------------------------------------- | ---------------- |
 | `shift_reminder`            | Morning cron (day of shift)           | Driver           |
 | `confirmation_reminder`     | 3 days before unconfirmed shift       | Driver           |
 | `assignment_confirmed`      | Schedule generation                   | Driver           |
+| `schedule_locked`           | Preferences locked by lock cron       | Driver           |
 | `shift_auto_dropped`        | Auto-drop cron                        | Driver           |
 | `bid_open`                  | Bid window created                    | Eligible drivers |
 | `bid_won`                   | Bid resolved (winner)                 | Driver           |
@@ -345,12 +349,11 @@ Tiebreaker: earliest bid wins.
 | `driver_no_show`            | No-show detected                      | Manager          |
 | `return_exception`          | Driver filed return exceptions        | Manager          |
 
-### Unimplemented (2 — seed data only)
+### Reserved (1 — not yet triggered)
 
-| Type              | Why Fake                                               |
-| ----------------- | ------------------------------------------------------ |
-| `manual`          | "Message from Manager" — no messaging system exists    |
-| `schedule_locked` | "Preferences locked" — lock cron sends no notification |
+| Type     | Status                                                      |
+| -------- | ----------------------------------------------------------- |
+| `manual` | Reserved for future manager messaging feature (enum exists) |
 
 ---
 
@@ -366,12 +369,13 @@ health.points.highDelivery:        1
 health.points.bidPickup:           2
 health.points.urgentPickup:        4
 health.points.autoDrop:           -12
-health.points.lateCancel:         -48
+health.points.earlyCancel:        -8
+health.points.lateCancel:         -32
 
 health.tierThreshold:              96    // Tier II entry
 health.lateCancelRollingDays:      30    // Hard-stop window
 health.lateCancelThreshold:        2     // Late cancels for hard-stop
-health.correctiveCompletionThreshold: 0.8  // Warning sent below this
+health.correctiveCompletionThreshold: 0.98 // Warning sent below this
 health.correctiveRecoveryDays:     7     // Cooldown between warnings
 health.maxStars:                   4
 health.simulationBonus.fourStarBonusPercent: 10

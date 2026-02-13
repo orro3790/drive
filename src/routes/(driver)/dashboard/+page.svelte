@@ -618,7 +618,14 @@
 										})}
 									</span>
 								{:else}
-									<span class="today-status">Status: {statusLabels[todayShift.status]}</span>
+									<span class="today-status">
+										<span class="today-status-label">Status:</span>
+										{#if todayShift.status === 'completed'}
+											<span class="day-chip completed">{statusLabels[todayShift.status]}</span>
+										{:else}
+											{statusLabels[todayShift.status]}
+										{/if}
+									</span>
 								{/if}
 								<div class="assignment-meta">
 									<Chip
@@ -1004,7 +1011,7 @@
 
 				<!-- Needs Confirmation -->
 				{#if sortedUnconfirmedShifts.length > 0}
-					<section class="dashboard-section">
+					<section class="dashboard-section" id="needs-confirmation">
 						<div class="section-header">
 							<h2>{m.dashboard_confirm_section()} ({sortedUnconfirmedShifts.length})</h2>
 						</div>
@@ -1453,7 +1460,14 @@
 	}
 
 	.today-status {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-1);
 		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+	}
+
+	.today-status-label {
 		color: var(--text-muted);
 	}
 

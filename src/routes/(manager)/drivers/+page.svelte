@@ -62,6 +62,8 @@
 	// Table state
 	let sorting = $state<SortingState>([]);
 	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
+	let hasLoadedDrivers = $state(false);
+	const driversTableLoading = $derived(!hasLoadedDrivers || driverStore.isLoading);
 
 	// Tab state
 	type DriverTab = { driverId: string; driverName: string };
@@ -421,7 +423,9 @@
 
 	// Load data on mount + restore persisted tabs
 	onMount(() => {
-		driverStore.load();
+		void driverStore.load().finally(() => {
+			hasLoadedDrivers = true;
+		});
 		const stored = localStorage.getItem(TABS_STORAGE_KEY);
 		if (stored) {
 			try {
@@ -575,6 +579,8 @@
 {/snippet}
 
 {#snippet driverDetailList(driver: Driver)}
+	<HealthCard healthUrl={`/api/drivers/${driver.id}/health`} />
+
 	<dl class="detail-list">
 		<div class="detail-row">
 			<dt>{m.common_name()}</dt>
@@ -671,11 +677,11 @@
 			<dd>{formatDate(driver.createdAt)}</dd>
 		</div>
 	</dl>
-
-	<HealthCard healthUrl={`/api/drivers/${driver.id}/health`} />
 {/snippet}
 
 {#snippet driverDetailEditList(driver: Driver)}
+	<HealthCard healthUrl={`/api/drivers/${driver.id}/health`} />
+
 	<dl class="detail-list">
 		<div class="detail-row">
 			<dt>{m.common_name()}</dt>
@@ -778,8 +784,6 @@
 			<dd>{formatDate(driver.createdAt)}</dd>
 		</div>
 	</dl>
-
-	<HealthCard healthUrl={`/api/drivers/${driver.id}/health`} />
 {/snippet}
 
 {#snippet driverDetailView(driver: Driver)}
@@ -856,7 +860,7 @@
 	{#if activeTabId === 'drivers'}
 		<DataTable
 			{table}
-			loading={driverStore.isLoading}
+			loading={driversTableLoading}
 			emptyTitle={m.drivers_empty_state()}
 			emptyMessage={m.drivers_empty_state_message()}
 			showPagination

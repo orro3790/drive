@@ -14,11 +14,8 @@ import { updateDriverMetrics } from '$lib/server/services/metrics';
 import { sendNotification } from '$lib/server/services/notifications';
 import { broadcastDriverFlagged } from '$lib/server/realtime/managerSse';
 import { createAuditLog } from '$lib/server/services/audit';
-import {
-	dispatchPolicy,
-	getAttendanceThreshold,
-	isRewardEligible
-} from '$lib/config/dispatchPolicy';
+import { dispatchPolicy, getAttendanceThreshold } from '$lib/config/dispatchPolicy';
+import { getDriverHealthPolicyThresholds } from '$lib/server/services/dispatchSettings';
 
 export interface FlaggingResult {
 	userId: string;
@@ -88,8 +85,20 @@ export async function checkAndApplyFlag(
 
 	const totalShifts = metrics?.totalShifts ?? 0;
 	const attendanceRate = metrics?.attendanceRate ?? 0;
+	let rewardMinAttendanceRate: number = dispatchPolicy.flagging.reward.minAttendanceRate;
+	if (resolvedOrganizationId) {
+		try {
+			rewardMinAttendanceRate = (await getDriverHealthPolicyThresholds(resolvedOrganizationId))
+				.rewardMinAttendanceRate;
+		} catch {
+			rewardMinAttendanceRate = dispatchPolicy.flagging.reward.minAttendanceRate;
+		}
+	}
+
 	const threshold = getAttendanceThreshold(totalShifts);
-	const rewardEligible = isRewardEligible(totalShifts, attendanceRate);
+	const rewardEligible =
+		totalShifts >= dispatchPolicy.flagging.reward.minShifts &&
+		attendanceRate >= rewardMinAttendanceRate;
 	const shouldBeFlagged = totalShifts > 0 && attendanceRate < threshold;
 	const baseWeeklyCap = rewardEligible
 		? dispatchPolicy.flagging.weeklyCap.reward

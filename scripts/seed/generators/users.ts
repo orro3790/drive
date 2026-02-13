@@ -3,6 +3,7 @@
  *
  * Creates drivers with both user and account records.
  * Account records are required for Better Auth login.
+ * Supports configurable email domains for multi-org seeding.
  */
 
 import { faker } from '@faker-js/faker';
@@ -43,6 +44,12 @@ export interface GeneratedUsers {
 	accounts: GeneratedAccount[];
 }
 
+export interface UserGeneratorOptions {
+	driverEmailDomain?: string;
+	managerEmailDomain?: string;
+	idPrefix?: string;
+}
+
 // Default password for all seeded users
 const SEED_PASSWORD = 'test1234';
 
@@ -66,10 +73,16 @@ function createdAtDate(index: number): Date {
 /**
  * Generate drivers and managers with their account records.
  */
-export async function generateUsers(config: SeedConfig): Promise<GeneratedUsers> {
+export async function generateUsers(
+	config: SeedConfig,
+	options: UserGeneratorOptions = {}
+): Promise<GeneratedUsers> {
 	const users: GeneratedUser[] = [];
 	const accounts: GeneratedAccount[] = [];
 	const deterministic = config.deterministic || isDeterministicSeedRun();
+	const driverDomain = options.driverEmailDomain ?? 'driver.test';
+	const managerDomain = options.managerEmailDomain ?? 'drivermanager.test';
+	const idPrefix = options.idPrefix ?? '';
 
 	if (config.seed !== null) {
 		faker.seed(config.seed);
@@ -87,12 +100,20 @@ export async function generateUsers(config: SeedConfig): Promise<GeneratedUsers>
 
 	// Generate managers
 	for (let i = 0; i < config.managers; i++) {
-		const id = deterministic ? stableId('manager', i) : nanoid(21);
+		const stablePrefix = idPrefix ? `${idPrefix}_manager` : 'manager';
+		const id = deterministic ? stableId(stablePrefix, i) : nanoid(21);
 		const firstName = deterministic ? 'Manager' : faker.person.firstName();
 		const lastName = deterministic ? String(i + 1).padStart(3, '0') : faker.person.lastName();
-		const email = deterministic
-			? `manager${String(i + 1).padStart(3, '0')}@drivermanager.test`
-			: faker.internet.email({ firstName, lastName, provider: 'drivermanager.test' }).toLowerCase();
+		const emailPrefix = idPrefix
+			? `${idPrefix}_manager${String(i + 1).padStart(3, '0')}`
+			: deterministic
+				? `manager${String(i + 1).padStart(3, '0')}`
+				: null;
+		const email = emailPrefix
+			? `${emailPrefix}@${managerDomain}`
+			: faker.internet
+					.email({ firstName, lastName, provider: managerDomain })
+					.toLowerCase();
 		const createdAt = deterministic ? createdAtDate(i) : faker.date.past({ years: 1 });
 
 		users.push({
@@ -101,14 +122,14 @@ export async function generateUsers(config: SeedConfig): Promise<GeneratedUsers>
 			email,
 			phone: deterministic ? stablePhone(i) : faker.phone.number({ style: 'national' }),
 			role: 'manager',
-			weeklyCap: 5, // Managers don't use cap, but set a value
+			weeklyCap: 5,
 			isFlagged: false,
 			flagWarningDate: null,
 			createdAt
 		});
 
 		accounts.push({
-			id: deterministic ? stableId('account_manager', i) : nanoid(21),
+			id: deterministic ? stableId(`${stablePrefix}_acct`, i) : nanoid(21),
 			userId: id,
 			accountId: email,
 			providerId: 'credential',
@@ -119,12 +140,20 @@ export async function generateUsers(config: SeedConfig): Promise<GeneratedUsers>
 
 	// Generate drivers
 	for (let i = 0; i < config.drivers; i++) {
-		const id = deterministic ? stableId('driver', i) : nanoid(21);
+		const stablePrefix = idPrefix ? `${idPrefix}_driver` : 'driver';
+		const id = deterministic ? stableId(stablePrefix, i) : nanoid(21);
 		const firstName = deterministic ? 'Driver' : faker.person.firstName();
 		const lastName = deterministic ? String(i + 1).padStart(3, '0') : faker.person.lastName();
-		const email = deterministic
-			? `driver${String(i + 1).padStart(3, '0')}@driver.test`
-			: faker.internet.email({ firstName, lastName, provider: 'driver.test' }).toLowerCase();
+		const emailPrefix = idPrefix
+			? `${idPrefix}_driver${String(i + 1).padStart(3, '0')}`
+			: deterministic
+				? `driver${String(i + 1).padStart(3, '0')}`
+				: null;
+		const email = emailPrefix
+			? `${emailPrefix}@${driverDomain}`
+			: faker.internet
+					.email({ firstName, lastName, provider: driverDomain })
+					.toLowerCase();
 		const createdAt = deterministic
 			? createdAtDate(config.managers + i)
 			: faker.date.past({ years: 1 });
@@ -134,9 +163,9 @@ export async function generateUsers(config: SeedConfig): Promise<GeneratedUsers>
 		let weeklyCap = 4;
 		const capRoll = random();
 		if (capRoll < 0.1) {
-			weeklyCap = 3; // Reduced due to flagging
+			weeklyCap = 3;
 		} else if (capRoll < 0.3) {
-			weeklyCap = 6; // Elevated for high performers
+			weeklyCap = 6;
 		}
 
 		// 10% of drivers are flagged
@@ -166,7 +195,7 @@ export async function generateUsers(config: SeedConfig): Promise<GeneratedUsers>
 		});
 
 		accounts.push({
-			id: deterministic ? stableId('account_driver', i) : nanoid(21),
+			id: deterministic ? stableId(`${stablePrefix}_acct`, i) : nanoid(21),
 			userId: id,
 			accountId: email,
 			providerId: 'credential',

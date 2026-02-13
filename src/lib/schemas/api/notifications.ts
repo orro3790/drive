@@ -52,6 +52,7 @@ export const notificationListParamsSchema = z.object({
 export const notificationListResponseSchema = z.object({
 	notifications: z.array(notificationSchema),
 	unreadCount: z.number().int().min(0),
+	emergencyUnreadCount: z.number().int().min(0),
 	pagination: z.object({
 		page: z.number().int().min(1),
 		pageSize: z.number().int().min(1),

@@ -87,16 +87,17 @@ describe('driver health policy regression coverage', () => {
 		setSelectResults([
 			[{ totalShifts: 12 }],
 			[{ lastScoreResetAt: null }],
-			[{ count: 10 }],
-			[{ count: 10 }],
-			[{ count: 10 }],
-			[{ count: 10 }],
-			[{ count: 0 }],
-			[{ count: 0 }],
-			[{ count: 10 }],
-			[{ count: 0 }],
-			[{ count: 1 }],
-			[{ count: 0 }]
+			[{ count: 10 }], // confirmedOnTime
+			[{ count: 10 }], // arrivedOnTime
+			[{ count: 10 }], // completed
+			[{ count: 10 }], // highDelivery
+			[{ count: 0 }], // autoDrop
+			[{ count: 0 }], // earlyCancel
+			[{ count: 0 }], // lateCancel
+			[{ count: 10 }], // bidPickup
+			[{ count: 0 }], // urgentPickup
+			[{ count: 1 }], // noShowCount30d
+			[{ count: 0 }] // lateCancelCount30d
 		]);
 
 		const result = await computeDailyScore('driver-hard-stop');

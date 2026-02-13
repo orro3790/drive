@@ -59,12 +59,13 @@ export const dispatchPolicy = {
 			bidPickup: 2,
 			urgentPickup: 4,
 			autoDrop: -12,
-			lateCancel: -48
+			earlyCancel: -8,
+			lateCancel: -32
 		},
 		tierThreshold: 96,
 		lateCancelRollingDays: 30,
 		lateCancelThreshold: 2,
-		correctiveCompletionThreshold: 0.8,
+		correctiveCompletionThreshold: 0.98,
 		correctiveRecoveryDays: 7,
 		qualifyingWeek: {
 			minAttendanceRate: 1.0,
@@ -81,7 +82,8 @@ export const dispatchPolicy = {
 		displayDeltas: {
 			confirmedOnTime: 1,
 			unconfirmed: -12,
-			lateCancel: -48
+			earlyCancel: -8,
+			lateCancel: -32
 		}
 	},
 	jobs: {

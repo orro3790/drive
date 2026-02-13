@@ -57,6 +57,8 @@
 	// Table state
 	let sorting = $state<SortingState>([]);
 	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
+	let hasLoadedWhitelist = $state(false);
+	const whitelistTableLoading = $derived(!hasLoadedWhitelist || whitelistStore.isLoading);
 
 	const dateFormatter = new Intl.DateTimeFormat(undefined, {
 		dateStyle: 'medium',
@@ -200,7 +202,9 @@
 	}));
 
 	onMount(() => {
-		whitelistStore.load();
+		void whitelistStore.load().finally(() => {
+			hasLoadedWhitelist = true;
+		});
 	});
 
 	function resetFilters() {
@@ -425,7 +429,7 @@
 })}
 	<DataTable
 		{table}
-		loading={whitelistStore.isLoading}
+		loading={whitelistTableLoading}
 		emptyTitle={m.whitelist_empty_state()}
 		emptyMessage={m.whitelist_empty_state_message()}
 		showPagination

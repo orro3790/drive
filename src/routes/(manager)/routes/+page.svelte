@@ -11,7 +11,9 @@
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
+	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
+	import { page } from '$app/stores';
 	import {
 		DataTable,
 		createSvelteTable,
@@ -40,6 +42,7 @@
 	import Reset from '$lib/components/icons/Reset.svelte';
 	import Pencil from '$lib/components/icons/Pencil.svelte';
 	import Trash from '$lib/components/icons/Trash.svelte';
+	import AlertCircleIcon from '$lib/components/icons/AlertCircleIcon.svelte';
 	import { routeStore, type RouteWithWarehouse } from '$lib/stores/routeStore.svelte';
 	import { warehouseStore } from '$lib/stores/warehouseStore.svelte';
 	import { bidWindowStore, type BidWindow } from '$lib/stores/bidWindowStore.svelte';
@@ -53,10 +56,9 @@
 	import type { SelectOption } from '$lib/schemas/ui/select';
 	import { ensureOnlineForWrite } from '$lib/stores/helpers/connectivity';
 	import { debounce } from '$lib/stores/helpers/debounce';
-	import AttentionBanner from '$lib/components/AttentionBanner.svelte';
 
 	// Tab state
-	type TabId = 'routes' | 'bidWindows';
+	type TabId = 'routes' | 'unfilled' | 'bidWindows';
 	type RouteOverrideAction = 'open_bidding' | 'open_urgent_bidding';
 	let activeTab = $state<TabId>('routes');
 
@@ -100,20 +102,41 @@
 	// Table state
 	let sorting = $state<SortingState>([]);
 	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
+	let hasLoadedRoutes = $state(false);
+	const routesTableLoading = $derived(!hasLoadedRoutes || routeStore.isLoading);
+
+	function isUnfilledRoute(route: RouteWithWarehouse): boolean {
+		return route.status === 'unfilled' || route.status === 'bidding';
+	}
 
 	const filteredRoutes = $derived.by(() => {
-		if (!progressFilter) return routeStore.routes;
+		const tabFilteredRoutes =
+			activeTab === 'unfilled' ? routeStore.routes.filter(isUnfilledRoute) : routeStore.routes;
+
+		if (!progressFilter) return tabFilteredRoutes;
 		switch (progressFilter) {
 			case 'not_arrived':
-				return routeStore.routes.filter((r) => r.shiftProgress === 'no_show');
+				return tabFilteredRoutes.filter((r) => r.shiftProgress === 'no_show');
 			case 'unfilled':
-				return routeStore.routes.filter((r) => r.status === 'unfilled' || r.status === 'bidding');
+				return tabFilteredRoutes.filter(isUnfilledRoute);
 			case 'in_progress':
-				return routeStore.routes.filter(
+				return tabFilteredRoutes.filter(
 					(r) => r.shiftProgress === 'arrived' || r.shiftProgress === 'started'
 				);
 			default:
-				return routeStore.routes.filter((r) => r.shiftProgress === progressFilter);
+				return tabFilteredRoutes.filter((r) => r.shiftProgress === progressFilter);
+		}
+	});
+
+	const unfilledRouteCount = $derived(routeStore.routes.filter(isUnfilledRoute).length);
+	const requestedTab = $derived.by(() => {
+		switch ($page.url.searchParams.get('tab')) {
+			case 'routes':
+			case 'unfilled':
+			case 'bidWindows':
+				return $page.url.searchParams.get('tab') as TabId;
+			default:
+				return null;
 		}
 	});
 
@@ -148,18 +171,58 @@
 			mobileVisible: true,
 			mobilePriority: 3
 		}),
-		helper.display({
-			id: 'driver',
-			header: m.manager_dashboard_driver_header(),
-			sizing: 'fixed',
-			width: 220
-		}),
-		helper.display({
-			id: 'status',
-			header: m.route_status_header(),
-			sizing: 'fixed',
-			width: 160
-		})
+		helper.accessor(
+			'driver',
+			(row) => {
+				if (row.driverName) {
+					return `assigned:${row.driverName.toLowerCase()}`;
+				}
+
+				if (row.bidWindowClosesAt) {
+					return `bidding:${row.bidWindowClosesAt}`;
+				}
+
+				return `unassigned:${row.name.toLowerCase()}`;
+			},
+			{
+				header: m.manager_dashboard_driver_header(),
+				sortable: true,
+				sizing: 'fixed',
+				width: 220
+			}
+		),
+		helper.accessor(
+			'status',
+			(row) => {
+				if (row.shiftProgress) {
+					const shiftProgressSortOrder: Record<ShiftProgress, number> = {
+						unconfirmed: 1,
+						confirmed: 2,
+						arrived: 3,
+						started: 4,
+						completed: 5,
+						no_show: 6,
+						cancelled: 7
+					};
+
+					return shiftProgressSortOrder[row.shiftProgress];
+				}
+
+				const statusSortOrder: Record<RouteStatus, number> = {
+					assigned: 20,
+					bidding: 21,
+					unfilled: 22
+				};
+
+				return statusSortOrder[row.status];
+			},
+			{
+				header: m.route_status_header(),
+				sortable: true,
+				sizing: 'fixed',
+				width: 160
+			}
+		)
 	];
 
 	const table = createSvelteTable<RouteWithWarehouse>(() => ({
@@ -189,9 +252,9 @@
 		bidding: m.route_status_bidding()
 	};
 
-	const statusChip: Record<RouteStatus, 'success' | 'warning' | 'info'> = {
+	const statusChip: Record<RouteStatus, 'success' | 'error' | 'info'> = {
 		assigned: 'success',
-		unfilled: 'warning',
+		unfilled: 'error',
 		bidding: 'info'
 	};
 
@@ -208,7 +271,7 @@
 	const progressChip: Record<ShiftProgress, 'warning' | 'neutral' | 'info' | 'success' | 'error'> =
 		{
 			unconfirmed: 'warning',
-			confirmed: 'neutral',
+			confirmed: 'success',
 			arrived: 'info',
 			started: 'info',
 			completed: 'success',
@@ -237,10 +300,6 @@
 
 	const progressFilterSelectValue = $derived(progressFilter ?? '');
 
-	function setProgressFilter(key: string | null) {
-		progressFilter = key;
-	}
-
 	function clearProgressFilter() {
 		progressFilter = null;
 	}
@@ -253,7 +312,7 @@
 	}
 
 	function applyFilters() {
-		routeStore.load({
+		return routeStore.load({
 			warehouseId: warehouseFilter || undefined,
 			status: statusFilter || undefined,
 			date: dateFilter || undefined
@@ -494,12 +553,20 @@
 	// Tab switching logic
 	function switchTab(tab: TabId) {
 		if (tab === activeTab) return;
+		const wasRouteTab = activeTab !== 'bidWindows';
+		const isRouteTab = tab !== 'bidWindows';
 
 		// Clear selections when switching
-		if (activeTab === 'routes') {
+		if (wasRouteTab && !isRouteTab) {
 			clearSelection();
-		} else {
+		}
+
+		if (!wasRouteTab && isRouteTab) {
 			clearBidWindowSelection();
+		}
+
+		if (tab === 'unfilled' && selectedRoute && !isUnfilledRoute(selectedRoute)) {
+			clearSelection();
 		}
 
 		// Stop/start polling based on tab
@@ -511,6 +578,22 @@
 
 		activeTab = tab;
 	}
+
+	$effect(() => {
+		if (!requestedTab) {
+			return;
+		}
+
+		if (requestedTab !== activeTab) {
+			switchTab(requestedTab);
+		}
+
+		const nextParams = new URLSearchParams($page.url.searchParams);
+		nextParams.delete('tab');
+		const query = nextParams.toString();
+		const target = query ? `${$page.url.pathname}?${query}` : $page.url.pathname;
+		void goto(target, { replaceState: true, noScroll: true, keepFocus: true });
+	});
 
 	// Bid window selection
 	function syncSelectedBidWindow(window: BidWindow) {
@@ -794,7 +877,9 @@
 	// Load data on mount
 	onMount(() => {
 		warehouseStore.load();
-		applyFilters();
+		void applyFilters().finally(() => {
+			hasLoadedRoutes = true;
+		});
 		startRealtime();
 		void loadDispatchSettingsBonus();
 	});
@@ -849,6 +934,26 @@
 			onclick={() => switchTab('routes')}
 		>
 			{m.route_page_title()}
+		</button>
+		<button
+			type="button"
+			class="tab tab-unfilled"
+			class:active={activeTab === 'unfilled'}
+			class:has-alert={unfilledRouteCount > 0}
+			role="tab"
+			aria-selected={activeTab === 'unfilled'}
+			tabindex={activeTab === 'unfilled' ? 0 : -1}
+			onclick={() => switchTab('unfilled')}
+		>
+			<span class="tab-content">
+				<span>{m.manager_attention_unfilled()}</span>
+				<span class="tab-alert-badge" aria-live="polite">
+					<span class="tab-alert-icon" aria-hidden="true">
+						<AlertCircleIcon />
+					</span>
+					<span>{unfilledRouteCount}</span>
+				</span>
+			</span>
 		</button>
 		<button
 			type="button"
@@ -1255,6 +1360,26 @@
 		</button>
 		<button
 			type="button"
+			class="tab tab-unfilled"
+			class:active={activeTab === 'unfilled'}
+			class:has-alert={unfilledRouteCount > 0}
+			role="tab"
+			aria-selected={activeTab === 'unfilled'}
+			tabindex={activeTab === 'unfilled' ? 0 : -1}
+			onclick={() => switchTab('unfilled')}
+		>
+			<span class="tab-content">
+				<span>{m.manager_attention_unfilled()}</span>
+				<span class="tab-alert-badge" aria-live="polite">
+					<span class="tab-alert-icon" aria-hidden="true">
+						<AlertCircleIcon />
+					</span>
+					<span>{unfilledRouteCount}</span>
+				</span>
+			</span>
+		</button>
+		<button
+			type="button"
 			class="tab"
 			class:active={activeTab === 'bidWindows'}
 			role="tab"
@@ -1272,16 +1397,10 @@
 	onWideModeChange: (value: boolean) => void;
 	isMobile: boolean;
 })}
-	{#if activeTab === 'routes'}
-		<AttentionBanner
-			routes={routeStore.routes}
-			date={dateFilter}
-			activeFilter={progressFilter}
-			onSelect={setProgressFilter}
-		/>
+	{#if activeTab !== 'bidWindows'}
 		<DataTable
 			{table}
-			loading={routeStore.isLoading}
+			loading={routesTableLoading}
 			emptyTitle={m.route_empty_state()}
 			emptyMessage={m.route_empty_state_message()}
 			showPagination
@@ -1325,7 +1444,7 @@
 </svelte:head>
 
 <div class="page-surface">
-	{#if activeTab === 'routes'}
+	{#if activeTab !== 'bidWindows'}
 		<PageWithDetailPanel
 			item={selectedRoute}
 			title={m.manager_dashboard_detail_title()}
@@ -1737,6 +1856,50 @@
 		color: var(--text-normal);
 	}
 
+	.tab-content {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-2);
+	}
+
+	.tab-alert-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		height: 20px;
+		padding: 0 8px;
+		border-radius: 999px;
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-semibold);
+		color: var(--status-warning);
+		background: color-mix(in srgb, var(--status-warning) 16%, transparent);
+		line-height: 1;
+	}
+
+	.tab-alert-icon {
+		display: inline-flex;
+		width: 12px;
+		height: 12px;
+	}
+
+	.tab-alert-icon :global(svg) {
+		width: 100%;
+		height: 100%;
+	}
+
+	.tab:not(.active):hover .tab-alert-badge {
+		background: color-mix(in srgb, var(--status-warning) 24%, transparent);
+	}
+
+	.tab.tab-unfilled.has-alert .tab-alert-badge {
+		color: var(--status-error);
+		background: color-mix(in srgb, var(--status-error) 16%, transparent);
+	}
+
+	.tab.tab-unfilled.has-alert:not(.active):hover .tab-alert-badge {
+		background: color-mix(in srgb, var(--status-error) 24%, transparent);
+	}
+
 	.tab.active {
 		align-self: flex-end;
 		height: 48px;
@@ -1745,6 +1908,16 @@
 		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 		margin-bottom: -1px;
 		z-index: 10;
+	}
+
+	.tab.active .tab-alert-badge {
+		color: var(--status-warning);
+		background: color-mix(in srgb, var(--status-warning) 22%, transparent);
+	}
+
+	.tab.active.tab-unfilled.has-alert .tab-alert-badge {
+		color: var(--status-error);
+		background: color-mix(in srgb, var(--status-error) 28%, transparent);
 	}
 
 	.tab.active::before,

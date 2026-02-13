@@ -73,6 +73,7 @@ afterEach(() => {
 	vi.doUnmock('$lib/server/services/notifications');
 	vi.doUnmock('$lib/server/services/audit');
 	vi.doUnmock('$lib/server/realtime/managerSse');
+	vi.doUnmock('$lib/server/services/dispatchSettings');
 	vi.doUnmock('$lib/config/dispatchPolicy');
 	vi.doUnmock('date-fns');
 	vi.clearAllMocks();
@@ -252,11 +253,20 @@ describe('checkAndApplyFlag org forwarding', () => {
 			dispatchPolicy: {
 				flagging: {
 					gracePeriodDays: 7,
+					reward: { minShifts: 20, minAttendanceRate: 0.95 },
 					weeklyCap: { base: 4, reward: 6, min: 2 }
 				}
 			},
 			getAttendanceThreshold: vi.fn(() => 0.7),
 			isRewardEligible: vi.fn(() => false)
+		}));
+		vi.doMock('$lib/server/services/dispatchSettings', () => ({
+			getDriverHealthPolicyThresholds: vi.fn(async () => ({
+				rewardMinAttendancePercent: 95,
+				rewardMinAttendanceRate: 0.95,
+				correctiveCompletionThresholdPercent: 98,
+				correctiveCompletionThresholdRate: 0.98
+			}))
 		}));
 		vi.doMock('date-fns', () => ({
 			addDays: vi.fn((date: Date, days: number) => new Date(date.getTime() + days * 86400000))

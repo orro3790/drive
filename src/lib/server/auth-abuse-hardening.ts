@@ -1,6 +1,10 @@
 import { env } from '$env/dynamic/private';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
+import { randomUUID } from 'node:crypto';
+import { eq, sql } from 'drizzle-orm';
 import logger from './logger';
+import { db } from './db';
+import { rateLimit as authRateLimit } from './db/auth-schema';
 import { releaseProductionSignupAuthorizationReservation } from './services/onboarding';
 import {
 	prepareOrganizationCreateSignup,
@@ -78,9 +82,97 @@ type SignupDecision =
 
 type RateLimitRule = { window: number; max: number };
 
-export const AUTH_RATE_LIMIT_RULES: Record<string, RateLimitRule> = {
+type AuthRateLimitCustomRule = RateLimitRule | false;
+
+const SIGN_IN_PATH = '/sign-in/email';
+const SIGN_IN_FAILURE_EMAIL_RULE: RateLimitRule = { window: 5 * 60, max: 20 };
+
+function createSignInFailureEmailKey(normalizedEmail: string): string {
+	return `email:${normalizedEmail}|${SIGN_IN_PATH}`;
+}
+
+function isRateLimitActive(entry: { lastRequest: number }, rule: RateLimitRule): boolean {
+	return Date.now() - entry.lastRequest < rule.window * 1000;
+}
+
+function getRetryAfterSeconds(entry: { lastRequest: number }, rule: RateLimitRule): number {
+	const windowMs = rule.window * 1000;
+	const remainingMs = entry.lastRequest + windowMs - Date.now();
+	return Math.max(1, Math.ceil(remainingMs / 1000));
+}
+
+async function getAuthRateLimitEntry(
+	key: string
+): Promise<{ count: number; lastRequest: number } | null> {
+	const [row] = await db
+		.select({
+			count: authRateLimit.count,
+			lastRequest: authRateLimit.lastRequest
+		})
+		.from(authRateLimit)
+		.where(eq(authRateLimit.key, key));
+
+	if (!row) {
+		return null;
+	}
+
+	return {
+		count: row.count,
+		lastRequest: Number(row.lastRequest)
+	};
+}
+
+async function clearAuthRateLimitEntry(key: string): Promise<void> {
+	await db.delete(authRateLimit).where(eq(authRateLimit.key, key));
+}
+
+async function recordAuthRateLimitHit(key: string, rule: RateLimitRule): Promise<void> {
+	const now = Date.now();
+	const windowMs = rule.window * 1000;
+
+	await db
+		.insert(authRateLimit)
+		.values({
+			id: randomUUID(),
+			key,
+			count: 1,
+			lastRequest: now
+		})
+		.onConflictDoUpdate({
+			target: authRateLimit.key,
+			set: {
+				count: sql`CASE WHEN (${now} - ${authRateLimit.lastRequest}) > ${windowMs} THEN 1 ELSE ${authRateLimit.count} + 1 END`,
+				lastRequest: now
+			}
+		});
+}
+
+function isSignInSuccess(returned: unknown): boolean {
+	if (!returned) {
+		return false;
+	}
+
+	if (returned instanceof Response) {
+		return returned.status === 200;
+	}
+
+	if (returned instanceof APIError) {
+		return false;
+	}
+
+	if (typeof returned === 'object') {
+		const token = (returned as { token?: unknown }).token;
+		return typeof token === 'string' && token.trim().length > 0;
+	}
+
+	return false;
+}
+
+export const AUTH_RATE_LIMIT_RULES: Record<string, AuthRateLimitCustomRule> = {
 	'/sign-up/*': { window: 15 * 60, max: 3 },
-	'/sign-in/*': { window: 5 * 60, max: 5 },
+	// Better Auth rate limiting is keyed by IP + path (not email).
+	// For sign-in, we enforce a per-email failure throttle below to avoid cross-user lockouts on shared IPs.
+	'/sign-in/*': false,
 	'/request-password-reset': { window: 10 * 60, max: 3 }
 };
 
@@ -680,6 +772,33 @@ export function createSignupAbuseGuard(
 		dependencies.reserveOrganizationJoinSignup ?? reserveOrganizationJoinSignup;
 
 	return createAuthMiddleware(async (ctx) => {
+		if (ctx.path === SIGN_IN_PATH) {
+			const email = typeof ctx.body?.email === 'string' ? ctx.body.email : null;
+			if (!email) {
+				return;
+			}
+
+			const normalizedEmail = normalizeEmail(email);
+			const key = createSignInFailureEmailKey(normalizedEmail);
+			const existing = await getAuthRateLimitEntry(key);
+			if (!existing) {
+				return;
+			}
+
+			if (
+				isRateLimitActive(existing, SIGN_IN_FAILURE_EMAIL_RULE) &&
+				existing.count >= SIGN_IN_FAILURE_EMAIL_RULE.max
+			) {
+				throw new APIError(
+					'TOO_MANY_REQUESTS',
+					{ message: 'Too many requests. Please try again later.' },
+					{ 'X-Retry-After': String(getRetryAfterSeconds(existing, SIGN_IN_FAILURE_EMAIL_RULE)) }
+				);
+			}
+
+			return;
+		}
+
 		if (ctx.path !== SIGN_UP_PATH) {
 			return;
 		}
@@ -809,6 +928,26 @@ export function createSignupOnboardingConsumer(
 	};
 
 	return createAuthMiddleware(async (ctx) => {
+		if (ctx.path === SIGN_IN_PATH) {
+			const email = typeof ctx.body?.email === 'string' ? ctx.body.email : null;
+			if (!email) {
+				return;
+			}
+
+			const normalizedEmail = normalizeEmail(email);
+			const key = createSignInFailureEmailKey(normalizedEmail);
+			const returned = getReturnedHookValue(ctx);
+
+			if (isSignInSuccess(returned)) {
+				await clearAuthRateLimitEntry(key);
+				return;
+			}
+
+			// Only count failures for the per-email throttle.
+			await recordAuthRateLimitHit(key, SIGN_IN_FAILURE_EMAIL_RULE);
+			return;
+		}
+
 		if (ctx.path !== SIGN_UP_PATH) {
 			return;
 		}

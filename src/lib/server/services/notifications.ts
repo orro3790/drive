@@ -139,7 +139,7 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 	},
 	corrective_warning: {
 		title: 'Completion Rate Warning',
-		body: 'Your completion rate has dropped below 80%. Improve within 7 days to avoid further impact.'
+		body: 'Your completion rate has dropped below 98%. Improve within 7 days to avoid further impact.'
 	},
 	return_exception: {
 		title: 'Return Exception Filed',

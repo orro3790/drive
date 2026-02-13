@@ -1,46 +1,64 @@
 /**
  * Date Utilities for Seed Script
  *
- * Toronto timezone helpers for generating realistic date data.
+ * All seed dates use UTC Dates where the UTC date components match Toronto's
+ * local date. This avoids the double-timezone-conversion bug where
+ * toZonedTime() was called on already-zoned dates.
+ *
+ * The single timezone conversion happens in getTorontoTodayString(), which
+ * determines "what date is it right now in Toronto?" Everything else works
+ * with plain UTC arithmetic.
  */
 
 import { toZonedTime, format } from 'date-fns-tz';
-import { addDays, addWeeks, startOfDay, subWeeks } from 'date-fns';
+import { addDays, addWeeks, subWeeks } from 'date-fns';
 import { getSeedNow, randomInt } from './runtime';
 
 export const TORONTO_TZ = 'America/Toronto';
 
 /**
- * Get the start of a week (Monday) in Toronto timezone
+ * Get today's date string in Toronto timezone (YYYY-MM-DD).
+ * This is the ONLY function that performs timezone conversion.
  */
-export function getWeekStart(date: Date): Date {
-	const zonedDate = toZonedTime(date, TORONTO_TZ);
-	const day = zonedDate.getDay();
-	// Adjust to Monday (day 1). If Sunday (0), go back 6 days
-	const diff = day === 0 ? -6 : 1 - day;
-	const monday = addDays(zonedDate, diff);
-	return startOfDay(monday);
+export function getTorontoTodayString(): string {
+	return format(toZonedTime(getSeedNow(), TORONTO_TZ), 'yyyy-MM-dd');
 }
 
 /**
- * Convert a date to Toronto date string (YYYY-MM-DD)
- */
-export function toTorontoDateString(date: Date): string {
-	return format(toZonedTime(date, TORONTO_TZ), 'yyyy-MM-dd');
-}
-
-/**
- * Get day of week (0=Sunday, 1=Monday, ..., 6=Saturday) in Toronto timezone
- */
-export function getTorontoDayOfWeek(date: Date): number {
-	return toZonedTime(date, TORONTO_TZ).getDay();
-}
-
-/**
- * Get today's date in Toronto timezone (start of day)
+ * Get today as a UTC Date whose date components match Toronto's current date.
+ * Uses noon UTC to avoid DST edge cases with addDays/subWeeks arithmetic.
  */
 export function getTorontoToday(): Date {
-	return startOfDay(toZonedTime(getSeedNow(), TORONTO_TZ));
+	const [y, m, d] = getTorontoTodayString().split('-').map(Number);
+	return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+}
+
+/**
+ * Convert a seed Date to YYYY-MM-DD string.
+ * Reads the UTC date components directly (no timezone conversion).
+ */
+export function toTorontoDateString(date: Date): string {
+	const y = date.getUTCFullYear();
+	const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+	const d = String(date.getUTCDate()).padStart(2, '0');
+	return `${y}-${m}-${d}`;
+}
+
+/**
+ * Get day of week from UTC date components (0=Sunday, 1=Monday, ..., 6=Saturday)
+ */
+export function getTorontoDayOfWeek(date: Date): number {
+	return date.getUTCDay();
+}
+
+/**
+ * Get the start of a week (Monday) from a seed Date.
+ */
+export function getWeekStart(date: Date): Date {
+	const day = date.getUTCDay();
+	const diff = day === 0 ? -6 : 1 - day;
+	const monday = addDays(date, diff);
+	return new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate(), 12, 0, 0));
 }
 
 /**
@@ -71,15 +89,12 @@ export function getWeekRange(pastWeeks: number, futureWeeks: number): Date[] {
 	const currentWeekStart = getWeekStart(getTorontoToday());
 	const weeks: Date[] = [];
 
-	// Past weeks (oldest first)
 	for (let i = pastWeeks; i > 0; i--) {
 		weeks.push(subWeeks(currentWeekStart, i));
 	}
 
-	// Current week
 	weeks.push(currentWeekStart);
 
-	// Future weeks
 	for (let i = 1; i <= futureWeeks; i++) {
 		weeks.push(addWeeks(currentWeekStart, i));
 	}
@@ -91,33 +106,30 @@ export function getWeekRange(pastWeeks: number, futureWeeks: number): Date[] {
  * Check if a date is in the past relative to today (Toronto time)
  */
 export function isPastDate(dateString: string): boolean {
-	const today = toTorontoDateString(getTorontoToday());
-	return dateString < today;
+	return dateString < getTorontoTodayString();
 }
 
 /**
  * Check if a date is today (Toronto time)
  */
 export function isToday(dateString: string): boolean {
-	const today = toTorontoDateString(getTorontoToday());
-	return dateString === today;
+	return dateString === getTorontoTodayString();
 }
 
 /**
  * Check if a date is in the future relative to today (Toronto time)
  */
 export function isFutureDate(dateString: string): boolean {
-	const today = toTorontoDateString(getTorontoToday());
-	return dateString > today;
+	return dateString > getTorontoTodayString();
 }
 
 /**
  * Generate a random time on a specific date for timestamps.
- * Useful for creating realistic startedAt, completedAt times.
+ * Creates a UTC Date at the given hour/minute on the date.
  */
 export function randomTimeOnDate(dateString: string, startHour = 6, endHour = 20): Date {
 	const [year, month, day] = dateString.split('-').map(Number);
 	const hour = randomInt(startHour, endHour);
 	const minute = randomInt(0, 60);
-	return new Date(year, month - 1, day, hour, minute);
+	return new Date(Date.UTC(year, month - 1, day, hour, minute));
 }

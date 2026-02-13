@@ -529,6 +529,7 @@
 	"dashboard_health_contribution_bid_pickup": "競標接單",
 	"dashboard_health_contribution_urgent_pickup": "緊急接單",
 	"dashboard_health_contribution_auto_drop": "自動退出",
+	"dashboard_health_contribution_early_cancel": "早期取消",
 	"dashboard_health_contribution_late_cancel": "遲取消",
 	"dashboard_health_contributions_total": "淨總分",
 	"dashboard_health_buff_tooltip": "{threshold}+ 分可獲 +{percent}% 薪金",

@@ -38,13 +38,13 @@ const warehouseWithRouteCountSchema = z.object({
 	createdBy: z.string().min(1).nullable(),
 	createdAt: z.coerce.date(),
 	updatedAt: z.coerce.date(),
-	routeCount: z.number().int().nonnegative(),
-	assignedDriversNext7: z.number().int(),
-	assignedDriversDelta7: z.number().int(),
-	unfilledRoutesNext7: z.number().int(),
-	unfilledRoutesDelta7: z.number().int(),
-	openBidWindows: z.number().int().nonnegative(),
-	managerCount: z.number().int().nonnegative()
+	routeCount: z.coerce.number().int().nonnegative(),
+	assignedDriversNext7: z.coerce.number().int(),
+	assignedDriversDelta7: z.coerce.number().int(),
+	unfilledRoutesNext7: z.coerce.number().int(),
+	unfilledRoutesDelta7: z.coerce.number().int(),
+	openBidWindows: z.coerce.number().int().nonnegative(),
+	managerCount: z.coerce.number().int().nonnegative()
 });
 
 const warehouseListResponseSchema = z.object({
@@ -97,7 +97,7 @@ export const warehouseStore = {
 			state.warehouses = parsed.data.warehouses;
 		} catch (err) {
 			state.error = err instanceof Error ? err.message : 'Unknown error';
-			toastStore.error(m.warehouse_create_error());
+			toastStore.error(state.error);
 		} finally {
 			state.isLoading = false;
 		}

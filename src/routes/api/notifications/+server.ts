@@ -8,15 +8,21 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { notifications } from '$lib/server/db/schema';
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import {
 	notificationListParamsSchema,
 	notificationListResponseSchema
 } from '$lib/schemas/api/notifications';
 import { requireAuthenticatedWithOrg } from '$lib/server/org-scope';
 
+const emergencyNotificationTypes = [
+	'route_unfilled',
+	'driver_no_show',
+	'emergency_route_available'
+] as const;
+
 export const GET: RequestHandler = async ({ locals, url }) => {
-	const { user } = requireAuthenticatedWithOrg(locals);
+	const { user, organizationId } = requireAuthenticatedWithOrg(locals);
 
 	const paramsResult = notificationListParamsSchema.safeParse({
 		page: url.searchParams.get('page') ?? undefined,
@@ -30,7 +36,12 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	const { page, pageSize } = paramsResult.data;
 	const offset = (page - 1) * pageSize;
 
-	const [rows, totalResult, unreadResult] = await Promise.all([
+	const userOrgFilter = and(
+		eq(notifications.userId, user.id),
+		eq(notifications.organizationId, organizationId)
+	);
+
+	const [rows, totalResult, unreadResult, emergencyUnreadResult] = await Promise.all([
 		db
 			.select({
 				id: notifications.id,
@@ -42,19 +53,30 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 				data: notifications.data
 			})
 			.from(notifications)
-			.where(eq(notifications.userId, user.id))
+			.where(userOrgFilter)
 			.orderBy(desc(notifications.createdAt))
 			.limit(pageSize)
 			.offset(offset),
-		db.select({ count: count() }).from(notifications).where(eq(notifications.userId, user.id)),
+		db.select({ count: count() }).from(notifications).where(userOrgFilter),
 		db
 			.select({ count: count() })
 			.from(notifications)
-			.where(and(eq(notifications.userId, user.id), eq(notifications.read, false)))
+			.where(and(userOrgFilter, eq(notifications.read, false))),
+		db
+			.select({ count: count() })
+			.from(notifications)
+			.where(
+				and(
+					userOrgFilter,
+					eq(notifications.read, false),
+					inArray(notifications.type, emergencyNotificationTypes)
+				)
+			)
 	]);
 
 	const total = Number(totalResult[0]?.count ?? 0);
 	const unreadCount = Number(unreadResult[0]?.count ?? 0);
+	const emergencyUnreadCount = Number(emergencyUnreadResult[0]?.count ?? 0);
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
 	const mapped = rows.map((row) => ({
@@ -70,6 +92,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	const response = {
 		notifications: mapped,
 		unreadCount,
+		emergencyUnreadCount,
 		pagination: {
 			page,
 			pageSize,

@@ -15,7 +15,7 @@
 <div class="app-shell">
 	<AppSidebar role="manager" />
 	<div class="main-area">
-		<PageHeader />
+		<PageHeader showUnfilledWindowsButton={true} />
 		<main class="content" data-scroll-root>
 			{@render children()}
 		</main>

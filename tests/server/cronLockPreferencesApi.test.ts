@@ -8,6 +8,7 @@ type LockPreferencesRouteModule =
 
 interface LockedPreferenceRow {
 	id: string;
+	userId: string;
 }
 
 interface AssignmentUserRow {
@@ -37,6 +38,7 @@ const CRON_TOKEN = 'cron-secret-test-token';
 
 const driverPreferencesTable = {
 	id: 'driver_preferences.id',
+	userId: 'driver_preferences.userId',
 	lockedAt: 'driver_preferences.lockedAt'
 };
 
@@ -111,13 +113,8 @@ let sendBulkNotificationsMock: ReturnType<
 	typeof vi.fn<
 		(
 			userIds: string[],
-			type: 'assignment_confirmed',
-			payload: {
-				organizationId: string;
-				data: {
-					weekStart: string;
-				};
-			}
+			type: string,
+			payload: Record<string, unknown>
 		) => Promise<Map<string, unknown>>
 	>
 >;
@@ -280,7 +277,10 @@ describe('GET /api/cron/lock-preferences contract', () => {
 			errors: []
 		};
 
-		updateReturningMock.mockResolvedValueOnce([{ id: 'pref-1' }, { id: 'pref-2' }]);
+		updateReturningMock.mockResolvedValueOnce([
+			{ id: 'pref-1', userId: 'driver-1' },
+			{ id: 'pref-2', userId: 'driver-2' }
+		]);
 		generateWeekScheduleMock.mockResolvedValueOnce(schedule);
 		selectWhereMock
 			.mockResolvedValueOnce([{ id: 'driver-1' }, { id: 'driver-2' }] as DriverRow[])
@@ -290,6 +290,14 @@ describe('GET /api/cron/lock-preferences contract', () => {
 				{ userId: 'driver-1' }
 			] as AssignmentUserRow[])
 			.mockResolvedValueOnce([] as ExistingNotificationRow[]);
+		// First call: schedule_locked for locked drivers
+		sendBulkNotificationsMock.mockResolvedValueOnce(
+			new Map<string, unknown>([
+				['driver-1', { sent: true }],
+				['driver-2', { sent: true }]
+			])
+		);
+		// Second call: assignment_confirmed for assigned drivers
 		sendBulkNotificationsMock.mockResolvedValueOnce(
 			new Map<string, unknown>([
 				['driver-1', { sent: true }],
@@ -304,14 +312,15 @@ describe('GET /api/cron/lock-preferences contract', () => {
 			success: true,
 			lockedCount: 2,
 			schedule,
-			notifiedCount: 2
+			notifiedCount: 2,
+			scheduleLockNotifiedCount: 2
 		});
-		expect(sendBulkNotificationsMock).toHaveBeenCalledTimes(1);
+		expect(sendBulkNotificationsMock).toHaveBeenCalledTimes(2);
 	});
 
 	it('deduplicates already-notified users from notification recipients', async () => {
 		freezeTime('2026-02-10T05:00:00.000Z');
-		updateReturningMock.mockResolvedValueOnce([{ id: 'pref-1' }]);
+		updateReturningMock.mockResolvedValueOnce([{ id: 'pref-1', userId: 'driver-1' }]);
 		generateWeekScheduleMock.mockResolvedValueOnce({
 			created: 1,
 			skipped: 0,
@@ -330,6 +339,11 @@ describe('GET /api/cron/lock-preferences contract', () => {
 				{ userId: 'driver-3' }
 			] as AssignmentUserRow[])
 			.mockResolvedValueOnce([{ userId: 'driver-2' }] as ExistingNotificationRow[]);
+		// schedule_locked
+		sendBulkNotificationsMock.mockResolvedValueOnce(
+			new Map<string, unknown>([['driver-1', { sent: true }]])
+		);
+		// assignment_confirmed
 		sendBulkNotificationsMock.mockResolvedValueOnce(
 			new Map<string, unknown>([
 				['driver-1', { sent: true }],
@@ -352,9 +366,9 @@ describe('GET /api/cron/lock-preferences contract', () => {
 		);
 	});
 
-	it('skips notification send when there are no recipients', async () => {
+	it('skips assignment notification when there are no recipients but sends schedule_locked', async () => {
 		freezeTime('2026-02-10T05:00:00.000Z');
-		updateReturningMock.mockResolvedValueOnce([{ id: 'pref-1' }]);
+		updateReturningMock.mockResolvedValueOnce([{ id: 'pref-1', userId: 'driver-1' }]);
 		generateWeekScheduleMock.mockResolvedValueOnce({
 			created: 1,
 			skipped: 0,
@@ -371,14 +385,21 @@ describe('GET /api/cron/lock-preferences contract', () => {
 		expect(response.status).toBe(200);
 		await expect(response.json()).resolves.toMatchObject({
 			success: true,
-			notifiedCount: 0
+			notifiedCount: 0,
+			scheduleLockNotifiedCount: 0
 		});
-		expect(sendBulkNotificationsMock).not.toHaveBeenCalled();
+		// Only schedule_locked sent, no assignment_confirmed
+		expect(sendBulkNotificationsMock).toHaveBeenCalledTimes(1);
+		expect(sendBulkNotificationsMock).toHaveBeenCalledWith(
+			['driver-1'],
+			'schedule_locked',
+			expect.objectContaining({ organizationId: 'org-1' })
+		);
 	});
 
 	it('returns 500 when schedule generation fails', async () => {
 		freezeTime('2026-02-10T05:00:00.000Z');
-		updateReturningMock.mockResolvedValueOnce([{ id: 'pref-1' }]);
+		updateReturningMock.mockResolvedValueOnce([{ id: 'pref-1', userId: 'driver-1' }]);
 		generateWeekScheduleMock.mockRejectedValueOnce(new Error('scheduler unavailable'));
 
 		const response = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);

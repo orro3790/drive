@@ -14,7 +14,6 @@
 	import StarEmpty from '$lib/components/icons/StarEmpty.svelte';
 	import StarFilled from '$lib/components/icons/StarFilled.svelte';
 	import Dollar from '$lib/components/icons/Dollar.svelte';
-	import Lightning from '$lib/components/icons/Lightning.svelte';
 	import HealthLine from '$lib/components/icons/HealthLine.svelte';
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
@@ -49,6 +48,7 @@
 	const isPastThreshold = $derived.by(() => deriveThresholdFlags(health).isPastThreshold);
 	const isBuffActive = $derived.by(() => deriveThresholdFlags(health).isBuffActive);
 	const isCharging = $derived.by(() => deriveThresholdFlags(health).isCharging);
+	const isThresholdEnergized = $derived(isPastThreshold && animateHealthIn);
 
 	const buffTooltipText = $derived(
 		health
@@ -123,12 +123,21 @@
 				total: c.autoDrops.points
 			},
 			{
+				label: m.dashboard_health_contribution_early_cancel(),
+				count: c.earlyCancellations.count,
+				perPoint:
+					c.earlyCancellations.count > 0
+						? c.earlyCancellations.points / c.earlyCancellations.count
+						: -8,
+				total: c.earlyCancellations.points
+			},
+			{
 				label: m.dashboard_health_contribution_late_cancel(),
 				count: c.lateCancellations.count,
 				perPoint:
 					c.lateCancellations.count > 0
 						? c.lateCancellations.points / c.lateCancellations.count
-						: -48,
+						: -32,
 				total: c.lateCancellations.points
 			}
 		];
@@ -198,8 +207,8 @@
 			</div>
 			<div class="score-bar-track" aria-hidden="true">
 				<div class="score-bar-fill score-bar-fill-loading" style:width="36%"></div>
-				<div class="elite-marker" style:left="{thresholdPosition}%">
-					<Dollar stroke="var(--text-muted)" />
+				<div class="elite-marker elite-marker-loading" style:left="{thresholdPosition}%">
+					<Dollar stroke="var(--text-normal)" />
 				</div>
 			</div>
 			<span class="sr-only">{m.dashboard_health_loading()}</span>
@@ -254,13 +263,7 @@
 					class:charging={isCharging && animateHealthIn}
 					style:width="{animateHealthIn ? scorePercent : 0}%"
 					style:background={animateHealthIn ? scoreColor : 'var(--interactive-hover)'}
-				>
-					{#if isPastThreshold && animateHealthIn}
-						<span class="bar-tip-icon" class:tip-charging={isCharging}>
-							<Lightning stroke={isBuffActive ? 'var(--status-success)' : 'var(--text-muted)'} />
-						</span>
-					{/if}
-				</div>
+				></div>
 				<Tooltip tooltip={true} position="bottom" delay={300} focusable={false} touchable>
 					{#snippet content()}
 						<div class="buff-tooltip">
@@ -272,8 +275,15 @@
 							{/if}
 						</div>
 					{/snippet}
-					<div class="elite-marker" style:left="{thresholdPosition}%">
-						<Dollar stroke="var(--text-muted)" />
+					<div
+						class="elite-marker"
+						class:elite-marker-active={isThresholdEnergized}
+						class:elite-marker-charging={isThresholdEnergized && isCharging}
+						style:left="{thresholdPosition}%"
+					>
+						<Dollar
+							stroke={isThresholdEnergized ? 'var(--text-on-accent)' : 'var(--text-normal)'}
+						/>
 					</div>
 				</Tooltip>
 			</div>
@@ -544,37 +554,39 @@
 		}
 	}
 
-	/* Lightning bolt at bar tip */
-	.bar-tip-icon {
-		position: absolute;
-		right: 0;
-		top: 50%;
-		transform: translate(50%, -50%);
-		display: flex;
-	}
-
-	.bar-tip-icon :global(svg) {
-		width: 20px;
-		height: 20px;
-	}
-
-	.bar-tip-icon.tip-charging {
-		animation: chargePulse 2s ease-in-out infinite;
-	}
-
-	/* Dollar marker */
+	/* Dollar threshold marker */
 	.elite-marker {
 		position: absolute;
 		top: 50%;
 		transform: translate(-50%, -50%);
 		display: flex;
 		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		border-radius: var(--radius-full);
+		background: var(--interactive-normal);
+		box-shadow:
+			0 0 0 1px color-mix(in oklab, var(--surface-primary) 80%, transparent),
+			0 1px 3px rgba(0, 0, 0, 0.24);
 		cursor: default;
 	}
 
+	.elite-marker.elite-marker-active {
+		background: var(--status-success);
+	}
+
+	.elite-marker.elite-marker-loading {
+		background: color-mix(in srgb, var(--interactive-hover) 78%, transparent);
+	}
+
+	.elite-marker.elite-marker-charging {
+		animation: chargePulse 2s ease-in-out infinite;
+	}
+
 	.elite-marker :global(svg) {
-		width: 24px;
-		height: 24px;
+		width: 100%;
+		height: 100%;
 	}
 
 	/* Buff tooltip */

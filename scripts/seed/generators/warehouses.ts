@@ -23,11 +23,11 @@ export interface GeneratedWarehouse {
 	address: string;
 }
 
-export function generateWarehouses(config: SeedConfig): GeneratedWarehouse[] {
+export function generateWarehouses(config: SeedConfig, offset = 0): GeneratedWarehouse[] {
 	const warehouses: GeneratedWarehouse[] = [];
 
 	for (let i = 0; i < config.warehouses; i++) {
-		const data = WAREHOUSE_DATA[i % WAREHOUSE_DATA.length];
+		const data = WAREHOUSE_DATA[(i + offset) % WAREHOUSE_DATA.length];
 		warehouses.push({
 			name: data.name,
 			address: data.address

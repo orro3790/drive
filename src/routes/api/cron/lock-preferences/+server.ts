@@ -87,6 +87,7 @@ export const GET: RequestHandler = async ({ request }) => {
 
 		let lockedCount = 0;
 		let notifiedCount = 0;
+		let scheduleLockNotifiedCount = 0;
 		const schedule = {
 			created: 0,
 			skipped: 0,
@@ -116,10 +117,19 @@ export const GET: RequestHandler = async ({ request }) => {
 									or(isNull(driverPreferences.lockedAt), ne(driverPreferences.lockedAt, lockAt))
 								)
 							)
-							.returning({ id: driverPreferences.id });
+							.returning({ id: driverPreferences.id, userId: driverPreferences.userId });
 
 			lockedCount += lockedRows.length;
 			orgLog.info({ lockedCount: lockedRows.length }, 'Preferences locked for organization');
+
+			// Send schedule_locked notification to drivers whose preferences were locked
+			if (lockedRows.length > 0) {
+				const lockedUserIds = lockedRows.map((row) => row.userId);
+				const lockResults = await sendBulkNotifications(lockedUserIds, 'schedule_locked', {
+					organizationId
+				});
+				scheduleLockNotifiedCount += lockResults.size;
+			}
 
 			const scheduleResult = await generateWeekSchedule(targetWeekStart, organizationId);
 			schedule.created += scheduleResult.created;
@@ -208,6 +218,7 @@ export const GET: RequestHandler = async ({ request }) => {
 			{
 				lockedCount,
 				notifiedCount,
+				scheduleLockNotifiedCount,
 				scheduleCreated: schedule.created,
 				scheduleSkipped: schedule.skipped,
 				scheduleUnfilled: schedule.unfilled,
@@ -220,7 +231,8 @@ export const GET: RequestHandler = async ({ request }) => {
 			success: true,
 			lockedCount,
 			schedule,
-			notifiedCount
+			notifiedCount,
+			scheduleLockNotifiedCount
 		});
 	} catch (error) {
 		log.error({ error }, 'Preference lock cron job failed');

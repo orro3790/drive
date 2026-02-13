@@ -8,11 +8,11 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { bids, assignments, routes, warehouses } from '$lib/server/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const GET: RequestHandler = async ({ locals }) => {
-	const { user } = requireDriverWithOrg(locals);
+	const { user, organizationId } = requireDriverWithOrg(locals);
 
 	// Get all bids for this driver with assignment details
 	const driverBids = await db
@@ -32,7 +32,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.innerJoin(assignments, eq(bids.assignmentId, assignments.id))
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
-		.where(eq(bids.userId, user.id))
+		.where(and(eq(bids.userId, user.id), eq(warehouses.organizationId, organizationId)))
 		.orderBy(desc(bids.bidAt));
 
 	const formattedBids = driverBids.map((bid) => ({

@@ -54,6 +54,8 @@
 	// Table state
 	let sorting = $state<SortingState>([]);
 	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
+	let hasLoadedWarehouses = $state(false);
+	const warehousesTableLoading = $derived(!hasLoadedWarehouses || warehouseStore.isLoading);
 
 	// Column definitions
 	const helper = createColumnHelper<WarehouseWithRouteCount>();
@@ -152,7 +154,9 @@
 
 	// Load data on mount
 	onMount(() => {
-		warehouseStore.load();
+		void warehouseStore.load().finally(() => {
+			hasLoadedWarehouses = true;
+		});
 	});
 
 	function resetFilters() {
@@ -455,7 +459,7 @@
 })}
 	<DataTable
 		{table}
-		loading={warehouseStore.isLoading}
+		loading={warehousesTableLoading}
 		emptyTitle={m.warehouse_empty_state()}
 		emptyMessage={m.warehouse_empty_state_message()}
 		showPagination

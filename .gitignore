@@ -44,3 +44,6 @@ android/**/build/
 
 .vercel
 .env*.local
+
+# Local temp artifacts
+tmp/*.cookie

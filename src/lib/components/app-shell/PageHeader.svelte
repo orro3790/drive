@@ -13,12 +13,28 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 	import SidebarToggle from '$lib/components/icons/SidebarToggle.svelte';
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte';
 	import BellRinging from '$lib/components/icons/BellRinging.svelte';
+	import CalendarExclamation from '$lib/components/icons/CalendarExclamation.svelte';
+	import Gavel from '$lib/components/icons/Gavel.svelte';
 	import { appSidebarStore } from '$lib/stores/app-shell/appSidebarStore.svelte';
 	import { pageHeaderStore } from '$lib/stores/app-shell/pageHeaderStore.svelte';
 	import { notificationsStore } from '$lib/stores/notificationsStore.svelte';
+	import { routeStore } from '$lib/stores/routeStore.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
-	let { showSidebarToggle = true }: { showSidebarToggle?: boolean } = $props();
+	let {
+		showSidebarToggle = true,
+		showUnfilledWindowsButton = false,
+		showUnconfirmedShiftsButton = false,
+		showOpenBidsButton = false
+	}: {
+		showSidebarToggle?: boolean;
+		showUnfilledWindowsButton?: boolean;
+		showUnconfirmedShiftsButton?: boolean;
+		showOpenBidsButton?: boolean;
+	} = $props();
+
+	let unconfirmedShiftCount = $state(0);
+	let openBidsCount = $state(0);
 
 	const isSidebarExpanded = $derived(appSidebarStore.state.state === 'expanded');
 	const isMobile = $derived(appSidebarStore.state.isMobile);
@@ -29,6 +45,37 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 	const actionsSnippet = $derived(pageHeaderStore.state.actionsSnippet);
 	const currentPath = $derived($page.url.pathname);
 	const unreadCount = $derived(notificationsStore.unreadCount);
+	const hasEmergencyNotifications = $derived(notificationsStore.emergencyUnreadCount > 0);
+	const unfilledRouteCount = $derived.by(() => {
+		if (!showUnfilledWindowsButton) {
+			return 0;
+		}
+		return routeStore.routes.filter(
+			(route) => route.status === 'unfilled' || route.status === 'bidding'
+		).length;
+	});
+	const unfilledRouteBadgeLabel = $derived(
+		unfilledRouteCount > 0 ? formatBadgeCount(unfilledRouteCount) : null
+	);
+	const unfilledAriaLabel = $derived(
+		unfilledRouteCount > 0
+			? `${m.manager_attention_unfilled()} (${unfilledRouteCount})`
+			: m.manager_attention_unfilled()
+	);
+	const unconfirmedShiftBadgeLabel = $derived(
+		unconfirmedShiftCount > 0 ? formatBadgeCount(unconfirmedShiftCount) : null
+	);
+	const unconfirmedShiftAriaLabel = $derived(
+		unconfirmedShiftCount > 0
+			? `${m.dashboard_confirm_section()} (${unconfirmedShiftCount})`
+			: m.dashboard_confirm_section()
+	);
+	const openBidsBadgeLabel = $derived(openBidsCount > 0 ? formatBadgeCount(openBidsCount) : null);
+	const openBidsAriaLabel = $derived(
+		openBidsCount > 0
+			? `${m.bids_available_section()} (${openBidsCount})`
+			: m.bids_available_section()
+	);
 
 	// Derived breadcrumb parts
 	const hasBreadcrumbs = $derived(breadcrumbs.length > 0);
@@ -55,8 +102,102 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 		goto('/notifications');
 	}
 
+	function handleUnfilledWindowsClick() {
+		goto('/routes?tab=unfilled');
+	}
+
+	function handleUnconfirmedShiftsClick() {
+		goto('/dashboard#needs-confirmation');
+	}
+
+	function handleOpenBidsClick() {
+		goto('/bids#available-bids');
+	}
+
+	async function loadUnconfirmedShiftCount() {
+		try {
+			const response = await fetch('/api/dashboard');
+			if (!response.ok) {
+				return;
+			}
+
+			const payload = (await response.json()) as {
+				unconfirmedShifts?: Array<{ isConfirmable?: boolean }>;
+			};
+
+			const unconfirmed = Array.isArray(payload.unconfirmedShifts)
+				? payload.unconfirmedShifts.filter((shift) => shift?.isConfirmable === true).length
+				: 0;
+
+			unconfirmedShiftCount = unconfirmed;
+		} catch {
+			unconfirmedShiftCount = 0;
+		}
+	}
+
+	async function loadOpenBidsCount() {
+		try {
+			const response = await fetch('/api/bids/available');
+			if (!response.ok) {
+				return;
+			}
+
+			const payload = (await response.json()) as {
+				bidWindows?: unknown[];
+			};
+
+			openBidsCount = Array.isArray(payload.bidWindows) ? payload.bidWindows.length : 0;
+		} catch {
+			openBidsCount = 0;
+		}
+	}
+
+	async function loadDriverAttentionCounts() {
+		const requests: Promise<void>[] = [];
+
+		if (showUnconfirmedShiftsButton) {
+			requests.push(loadUnconfirmedShiftCount());
+		}
+
+		if (showOpenBidsButton) {
+			requests.push(loadOpenBidsCount());
+		}
+
+		if (requests.length === 0) {
+			return;
+		}
+
+		await Promise.all(requests);
+	}
+
+	$effect(() => {
+		if (!showUnconfirmedShiftsButton && !showOpenBidsButton) {
+			return;
+		}
+
+		currentPath;
+		void loadDriverAttentionCounts();
+	});
+
+	$effect(() => {
+		if (!showUnconfirmedShiftsButton && !showOpenBidsButton) {
+			return;
+		}
+
+		const refreshIntervalId = setInterval(() => {
+			void loadDriverAttentionCounts();
+		}, 30000);
+
+		return () => {
+			clearInterval(refreshIntervalId);
+		};
+	});
+
 	onMount(() => {
 		void notificationsStore.loadPage(0);
+		if (showUnfilledWindowsButton) {
+			void routeStore.load();
+		}
 	});
 </script>
 
@@ -113,6 +254,51 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 		{#if actionsSnippet}
 			{@render actionsSnippet()}
 		{/if}
+		{#if showUnfilledWindowsButton}
+			<div class="header-notification header-route-notification">
+				<IconButton
+					tooltip={m.manager_attention_unfilled()}
+					aria-label={unfilledAriaLabel}
+					isActive={currentPath.startsWith('/routes')}
+					onclick={handleUnfilledWindowsClick}
+				>
+					<Icon><CalendarExclamation /></Icon>
+				</IconButton>
+				{#if unfilledRouteBadgeLabel}
+					<span class="header-badge error" aria-hidden="true">{unfilledRouteBadgeLabel}</span>
+				{/if}
+			</div>
+		{/if}
+		{#if showUnconfirmedShiftsButton}
+			<div class="header-notification header-driver-unconfirmed">
+				<IconButton
+					tooltip={m.dashboard_confirm_section()}
+					aria-label={unconfirmedShiftAriaLabel}
+					isActive={currentPath.startsWith('/dashboard')}
+					onclick={handleUnconfirmedShiftsClick}
+				>
+					<Icon><CalendarExclamation /></Icon>
+				</IconButton>
+				{#if unconfirmedShiftBadgeLabel}
+					<span class="header-badge warning" aria-hidden="true">{unconfirmedShiftBadgeLabel}</span>
+				{/if}
+			</div>
+		{/if}
+		{#if showOpenBidsButton}
+			<div class="header-notification header-driver-bids">
+				<IconButton
+					tooltip={m.bids_available_section()}
+					aria-label={openBidsAriaLabel}
+					isActive={currentPath.startsWith('/bids')}
+					onclick={handleOpenBidsClick}
+				>
+					<Icon><Gavel /></Icon>
+				</IconButton>
+				{#if openBidsBadgeLabel}
+					<span class="header-badge info" aria-hidden="true">{openBidsBadgeLabel}</span>
+				{/if}
+			</div>
+		{/if}
 		<div class="header-notification">
 			<IconButton
 				tooltip={m.nav_notifications()}
@@ -123,7 +309,11 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 				<Icon><BellRinging /></Icon>
 			</IconButton>
 			{#if unreadBadgeLabel}
-				<span class="notification-badge" aria-hidden="true">{unreadBadgeLabel}</span>
+				<span
+					class="notification-badge header-badge"
+					class:emergency={hasEmergencyNotifications}
+					aria-hidden="true">{unreadBadgeLabel}</span
+				>
 			{/if}
 		</div>
 	</div>
@@ -165,7 +355,7 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 		justify-content: center;
 	}
 
-	.notification-badge {
+	.header-badge {
 		position: absolute;
 		top: -2px;
 		right: -4px;
@@ -183,6 +373,31 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 		justify-content: center;
 		pointer-events: none;
 		box-sizing: border-box;
+	}
+
+	.notification-badge {
+		background: var(--interactive-accent);
+	}
+
+	.notification-badge.emergency {
+		background: var(--status-error);
+	}
+
+	.notification-badge,
+	.header-badge {
+		color: var(--text-on-accent);
+	}
+
+	.header-badge.error {
+		background: var(--status-error);
+	}
+
+	.header-badge.warning {
+		background: var(--status-warning);
+	}
+
+	.header-badge.info {
+		background: var(--status-info);
 	}
 
 	#page-title {

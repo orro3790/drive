@@ -9,11 +9,11 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { routes, warehouses } from '$lib/server/db/schema';
-import { eq, ilike, or } from 'drizzle-orm';
+import { and, eq, ilike, or } from 'drizzle-orm';
 import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const GET: RequestHandler = async ({ locals, url }) => {
-	requireDriverWithOrg(locals);
+	const { organizationId } = requireDriverWithOrg(locals);
 
 	const query = url.searchParams.get('q')?.trim() || '';
 
@@ -30,9 +30,12 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 	const routeRows = query
 		? await baseQuery.where(
-				or(ilike(routes.name, `%${query}%`), ilike(warehouses.name, `%${query}%`))
+				and(
+					eq(warehouses.organizationId, organizationId),
+					or(ilike(routes.name, `%${query}%`), ilike(warehouses.name, `%${query}%`))
+				)
 			)
-		: await baseQuery;
+		: await baseQuery.where(eq(warehouses.organizationId, organizationId));
 
 	return json({ routes: routeRows });
 };

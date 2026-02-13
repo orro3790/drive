@@ -28,6 +28,7 @@ import { subDays, startOfWeek, endOfWeek } from 'date-fns';
 import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { createAuditLog } from '$lib/server/services/audit';
+import { getDriverHealthPolicyThresholds } from '$lib/server/services/dispatchSettings';
 import { sendNotification } from '$lib/server/services/notifications';
 import type { HealthContributions } from '$lib/schemas/health';
 
@@ -173,6 +174,7 @@ export async function computeContributions(userId: string): Promise<{
 		completedResult,
 		highDeliveryResult,
 		autoDropResult,
+		earlyCancelResult,
 		lateCancelResult,
 		bidPickupResult,
 		urgentPickupResult
@@ -252,6 +254,20 @@ export async function computeContributions(userId: string): Promise<{
 				)
 			),
 
+		// Early cancellations (driver-initiated, not late, not auto-drop)
+		db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(assignments)
+			.where(
+				and(
+					eq(assignments.userId, userId),
+					eq(assignments.status, 'cancelled'),
+					sql`${assignments.cancelType} = 'driver'`,
+					gte(assignments.date, sinceDate),
+					lte(assignments.date, todayStr)
+				)
+			),
+
 		// Late cancellations
 		db
 			.select({ count: sql<number>`count(*)::int` })
@@ -299,6 +315,7 @@ export async function computeContributions(userId: string): Promise<{
 	const completedCount = completedResult[0]?.count ?? 0;
 	const highDeliveryCount = highDeliveryResult[0]?.count ?? 0;
 	const autoDropCount = autoDropResult[0]?.count ?? 0;
+	const earlyCancelCount = earlyCancelResult[0]?.count ?? 0;
 	const lateCancelCount = lateCancelResult[0]?.count ?? 0;
 	const bidPickupCount = bidPickupResult[0]?.count ?? 0;
 	const urgentPickupCount = urgentPickupResult[0]?.count ?? 0;
@@ -311,6 +328,7 @@ export async function computeContributions(userId: string): Promise<{
 		bidPickups: { count: bidPickupCount, points: bidPickupCount * pts.bidPickup },
 		urgentPickups: { count: urgentPickupCount, points: urgentPickupCount * pts.urgentPickup },
 		autoDrops: { count: autoDropCount, points: autoDropCount * pts.autoDrop },
+		earlyCancellations: { count: earlyCancelCount, points: earlyCancelCount * pts.earlyCancel },
 		lateCancellations: { count: lateCancelCount, points: lateCancelCount * pts.lateCancel }
 	};
 
@@ -889,6 +907,23 @@ export async function runDailyHealthEvaluation(
 
 	for (const orgId of organizationIds) {
 		const orgLog = log.child({ organizationId: orgId });
+		let correctiveCompletionThresholdRate: number =
+			dispatchPolicy.health.correctiveCompletionThreshold;
+		let correctiveCompletionThresholdPercent = Math.round(
+			dispatchPolicy.health.correctiveCompletionThreshold * 100
+		);
+
+		try {
+			const thresholds = await getDriverHealthPolicyThresholds(orgId);
+			correctiveCompletionThresholdRate = thresholds.correctiveCompletionThresholdRate;
+			correctiveCompletionThresholdPercent = thresholds.correctiveCompletionThresholdPercent;
+		} catch {
+			correctiveCompletionThresholdRate = dispatchPolicy.health.correctiveCompletionThreshold;
+			correctiveCompletionThresholdPercent = Math.round(
+				dispatchPolicy.health.correctiveCompletionThreshold * 100
+			);
+		}
+
 		const drivers = await db
 			.select({ id: user.id })
 			.from(user)
@@ -935,7 +970,7 @@ export async function runDailyHealthEvaluation(
 
 						const completionRate = dailyResult.completionRate;
 
-						if (completionRate < dispatchPolicy.health.correctiveCompletionThreshold) {
+						if (completionRate < correctiveCompletionThresholdRate) {
 							const recoveryCutoff = subDays(
 								new Date(),
 								dispatchPolicy.health.correctiveRecoveryDays
@@ -955,6 +990,7 @@ export async function runDailyHealthEvaluation(
 
 							if (!recentWarning) {
 								await sendNotification(driver.id, 'corrective_warning', {
+									customBody: `Your completion rate has dropped below ${correctiveCompletionThresholdPercent}%. Improve within 7 days to avoid further impact.`,
 									organizationId: orgId
 								});
 								correctiveWarnings++;

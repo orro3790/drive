@@ -525,6 +525,7 @@
 	"shift_complete_summary_started": "Started with: {count} parcels",
 	"shift_complete_summary_returning": "Returning: {count} parcels",
 	"shift_complete_summary_delivered": "Delivered: {count} parcels",
+	"shift_complete_summary_excepted": "Excepted: {count} parcels",
 
 	"shift_edit_button": "Edit",
 	"shift_edit_success": "Shift updated.",
@@ -596,6 +597,7 @@
 	"dashboard_health_contribution_bid_pickup": "Bid pickup",
 	"dashboard_health_contribution_urgent_pickup": "Urgent pickup",
 	"dashboard_health_contribution_auto_drop": "Auto-dropped",
+	"dashboard_health_contribution_early_cancel": "Early cancellation",
 	"dashboard_health_contribution_late_cancel": "Late cancellation",
 	"dashboard_health_contributions_total": "Net total",
 	"dashboard_health_buff_tooltip": "+{percent}% wages at {threshold}+ pts",

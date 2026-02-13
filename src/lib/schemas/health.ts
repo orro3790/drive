@@ -13,6 +13,7 @@ export type HealthContributions = {
 	bidPickups: ContributionLine;
 	urgentPickups: ContributionLine;
 	autoDrops: ContributionLine;
+	earlyCancellations: ContributionLine;
 	lateCancellations: ContributionLine;
 };
 

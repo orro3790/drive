@@ -295,6 +295,10 @@ export const organizationDispatchSettings = pgTable('organization_dispatch_setti
 		.primaryKey()
 		.references(() => organizations.id, { onDelete: 'cascade' }),
 	emergencyBonusPercent: integer('emergency_bonus_percent').notNull().default(20),
+	rewardMinAttendancePercent: integer('reward_min_attendance_percent').notNull().default(95),
+	correctiveCompletionThresholdPercent: integer('corrective_completion_threshold_percent')
+		.notNull()
+		.default(98),
 	updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
