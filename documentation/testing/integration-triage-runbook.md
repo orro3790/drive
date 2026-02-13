@@ -108,6 +108,11 @@ Where these commands live:
 
 ## Download CI Artifacts
 
+### Prereqs
+
+- Install + authenticate the GitHub CLI: `gh auth status` (if needed: `gh auth login`).
+- Ensure you have permission to view workflow runs and download artifacts for this repo.
+
 ### GitHub UI
 
 1. Open the failing workflow run.
@@ -210,6 +215,29 @@ Escalate when:
 ## Defect Bead Template (copy/paste)
 
 Title: `Integration failure: <scenarioId> / <invariantId> (<short symptom>)`
+
+Create the bead (CLI):
+
+```bash
+bd create \
+  --type bug \
+  --labels e2e,nightly \
+  --title "Integration failure: <scenarioId> / <invariantId> (<short symptom>)" \
+  --body-file - <<'EOF'
+scenarioId: <BID-001>
+invariantId: <NOTIF-001>
+CI run: <url>
+Artifacts:
+- CI: logs/nightly/<YYYY-MM-DD>/ci-artifacts/...
+- Local evidence (if present): tests/integration/.evidence/<scenarioId>.<label>.<timestamp>.json
+Git SHA: <sha>
+Expected: <what should have happened>
+Observed: <what happened>
+Repro (local): <exact commands + env>
+Key entity ids: <orgId, driverId, assignmentId, bidWindowId, ...>
+Owner guess: <infra | harness | algorithm | schema>
+EOF
+```
 
 Include:
 
