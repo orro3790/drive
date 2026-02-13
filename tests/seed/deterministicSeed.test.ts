@@ -6,6 +6,7 @@ import { generatePreferences } from '../../scripts/seed/generators/preferences';
 import { generateMetrics } from '../../scripts/seed/generators/metrics';
 import { generateAssignments } from '../../scripts/seed/generators/assignments';
 import { generateBidding } from '../../scripts/seed/generators/bidding';
+import { generateHealth } from '../../scripts/seed/generators/health';
 import { generateNotifications } from '../../scripts/seed/generators/notifications';
 import { configureSeedRuntime } from '../../scripts/seed/utils/runtime';
 
@@ -61,25 +62,43 @@ async function buildSeedSnapshot(seed: number) {
 	);
 	const metrics = generateMetrics(drivers, assignments.assignments, assignments.shifts);
 	const bidding = generateBidding(assignments.assignments, drivers);
-	const notifications = generateNotifications(
-		assignments.assignments,
-		users.users,
-		routeIds.map((id) => ({
-			id,
-			name: id.toUpperCase(),
-			warehouseId: warehouseIdByRoute.get(id) ?? 'warehouse_1',
-			warehouseName: 'Warehouse'
-		}))
-	);
+	const health = generateHealth(drivers, assignments.assignments, assignments.shifts, metrics);
 
-	return normalizeDates({
-		users,
-		preferences,
-		metrics,
-		assignments,
-		bidding,
-		notifications
+	const routes = routeIds.map((id) => ({
+		id,
+		name: id.toUpperCase(),
+		warehouseId: warehouseIdByRoute.get(id) ?? 'warehouse_1',
+		warehouseName: 'Warehouse'
+	}));
+
+	const assignmentIdByIndex = new Map<number, string>();
+	for (let i = 0; i < assignments.assignments.length; i++) {
+		assignmentIdByIndex.set(i, `assignment_${i + 1}`);
+	}
+
+	const notifications = generateNotifications(users.users, routes, {
+		assignments: assignments.assignments,
+		shifts: assignments.shifts,
+		bidWindows: bidding.bidWindows,
+		bids: bidding.bids,
+		healthStates: health.states,
+		personas: assignments.personas,
+		noShowIndices: assignments.noShowIndices,
+		assignmentIdByIndex
 	});
+
+	return JSON.parse(
+		JSON.stringify(
+			normalizeDates({
+				users,
+				preferences,
+				metrics,
+				assignments,
+				bidding,
+				notifications
+			})
+		)
+	);
 }
 
 describe('deterministic seed mode', () => {

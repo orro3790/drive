@@ -38,6 +38,7 @@ Process:
 - `documentation/agent-guidelines/code-review-standards.md`
 - `documentation/agent-guidelines/documentation-standards.md`
 - `documentation/agent-guidelines/utils-catalog.md` (re-use helpers before adding new)
+- `documentation/testing/integration-triage-runbook.md` (multi-tenant integration smoke/nightly failure triage)
 
 Legacy (copied from a previous project; not yet applicable to Drive):
 

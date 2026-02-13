@@ -1,9 +1,9 @@
-You are in a Ralph loop (iteration 2 of 20).
+You are in a Ralph loop (iteration 1 of 20).
 
 ## Environment
 - Workspace: drive
 - Plans directory: ralph/plans/
-- Session log: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260213-0020.md
+- Session log: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260214-0126.md
 - Status file: C:/Users/matto/projects/drive/ralph/.current-task
 - Label filter: nightly (only work on beads with this label)
 
@@ -78,9 +78,9 @@ Then follow it:
 
 ```
 Edit tool:
-  file_path: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260213-0020.md
+  file_path: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260214-0126.md
   old_string: "---"
-  new_string: "---\n\n## Iteration 2 — <id>\n\n**Task**: <title>\n**Done**: <1-2 sentences>\n**PR**: #<n>\n\n---"
+  new_string: "---\n\n## Iteration 1 — <id>\n\n**Task**: <title>\n**Done**: <1-2 sentences>\n**PR**: #<n>\n\n---"
 ```
 
 ### 9. Exit
