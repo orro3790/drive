@@ -2,9 +2,51 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
+import type { PoolClient } from 'pg';
+
 import { pool } from './db';
 
 let migrated = false;
+
+const MIGRATION_LOCK_ID = 614001;
+const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
+const LOCK_POLL_INTERVAL_MS = 250;
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseLockTimeoutMs(): number {
+	const raw = process.env.INTEGRATION_MIGRATION_LOCK_TIMEOUT_MS;
+	if (!raw) {
+		return DEFAULT_LOCK_TIMEOUT_MS;
+	}
+
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_LOCK_TIMEOUT_MS;
+}
+
+async function acquireMigrationLock(client: PoolClient): Promise<void> {
+	const timeoutMs = parseLockTimeoutMs();
+	const startedAt = Date.now();
+
+	while (Date.now() - startedAt < timeoutMs) {
+		const result = await client.query<{ locked: boolean }>(
+			'SELECT pg_try_advisory_lock($1::bigint) AS locked;',
+			[MIGRATION_LOCK_ID]
+		);
+
+		if (result.rows[0]?.locked) {
+			return;
+		}
+
+		await sleep(LOCK_POLL_INTERVAL_MS);
+	}
+
+	throw new Error(
+		`Integration migration refused to start: could not acquire advisory lock ${MIGRATION_LOCK_ID} within ${timeoutMs}ms. Another integration run may still be migrating this database.`
+	);
+}
 
 function runCommand(params: {
 	command: string;
@@ -55,7 +97,7 @@ export async function ensureMigrated(): Promise<void> {
 	// Advisory locks are session-scoped, so we must lock/unlock on the same client.
 	const client = await pool.connect();
 	try {
-		await client.query('SELECT pg_advisory_lock(614001);');
+		await acquireMigrationLock(client);
 		try {
 			await client.query('DROP SCHEMA IF EXISTS public CASCADE;');
 			await client.query('CREATE SCHEMA public;');
@@ -66,7 +108,7 @@ export async function ensureMigrated(): Promise<void> {
 			await pushSchema();
 			migrated = true;
 		} finally {
-			await client.query('SELECT pg_advisory_unlock(614001);');
+			await client.query('SELECT pg_advisory_unlock($1::bigint);', [MIGRATION_LOCK_ID]);
 		}
 	} finally {
 		client.release();

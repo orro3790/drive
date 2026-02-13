@@ -36,7 +36,7 @@ If a failure does not include `scenarioId` + `invariantId`, treat it as a harnes
 Required env vars (minimum set; mirrors CI defaults):
 
 - `INTEGRATION_TEST=1`
-- `DATABASE_URL=postgresql://test:test@localhost:5432/test`
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/drive_integration`
 - `CRON_SECRET=test-cron-secret`
 - `BETTER_AUTH_SECRET=test-better-auth-secret`
 
@@ -44,7 +44,7 @@ PowerShell example:
 
 ```powershell
 $env:INTEGRATION_TEST = "1"
-$env:DATABASE_URL = "postgresql://test:test@localhost:5432/test"
+$env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/drive_integration"
 $env:CRON_SECRET = "test-cron-secret"
 $env:BETTER_AUTH_SECRET = "test-better-auth-secret"
 ```

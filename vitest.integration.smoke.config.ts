@@ -4,6 +4,8 @@ import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
 
+const testClientPath = path.resolve(process.cwd(), 'src/lib/server/db/test-client.ts');
+
 export default defineConfig({
 	plugins: [
 		paraglideVitePlugin({
@@ -17,11 +19,11 @@ export default defineConfig({
 			// Redirect all app DB access to a Node Postgres client for integration tests.
 			{
 				find: '$lib/server/db',
-				replacement: path.resolve(__dirname, './src/lib/server/db/test-client.ts')
+				replacement: testClientPath
 			},
 			{
 				find: /[\\/]src[\\/]lib[\\/]server[\\/]db(?:[\\/]index\.(?:ts|js))?(?:\?.*)?$/,
-				replacement: path.resolve(__dirname, './src/lib/server/db/test-client.ts')
+				replacement: testClientPath
 			}
 		]
 	},

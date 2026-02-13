@@ -78,5 +78,7 @@ function assertSafeIntegrationDbUrl(): string {
 
 const databaseUrl = assertSafeIntegrationDbUrl();
 
+export const __integrationTestClient = true as const;
+
 export const pool = new Pool({ connectionString: databaseUrl });
 export const db = drizzle(pool, { schema });
