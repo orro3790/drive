@@ -1,4 +1,4 @@
-You are in a Ralph loop (iteration 7 of 20).
+You are in a Ralph loop (iteration 6 of 20).
 
 ## Environment
 - Workspace: drive
@@ -80,7 +80,7 @@ Then follow it:
 Edit tool:
   file_path: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260214-0126.md
   old_string: "---"
-  new_string: "---\n\n## Iteration 7 — <id>\n\n**Task**: <title>\n**Done**: <1-2 sentences>\n**PR**: #<n>\n\n---"
+  new_string: "---\n\n## Iteration 6 — <id>\n\n**Task**: <title>\n**Done**: <1-2 sentences>\n**PR**: #<n>\n\n---"
 ```
 
 ### 9. Exit

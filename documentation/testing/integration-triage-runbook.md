@@ -285,7 +285,6 @@ $body | bd.exe create `
 ```
 
 If piping to `--body-file -` is not supported in your shell, write the body to a temp file (e.g. `bead.md`) and pass `--body-file bead.md`.
-
 Include:
 
 - `scenarioId`: <BID-001>

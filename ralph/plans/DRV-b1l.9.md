@@ -2,45 +2,29 @@
 
 Task: DRV-b1l.9
 
-## Steps (<= 5)
+## Steps
 
-1. Define the runbook deliverable + scope boundaries.
-   - Primary deliverable: update `documentation/testing/integration-triage-runbook.md`.
-   - Supporting link: add a prominent link from `documentation/plans/DRV-b1l-multi-tenant-e2e-testing-program.md` (and one additional obvious entry point if it exists; otherwise skip).
-   - Explicitly out of scope for this bead: fixing harness/CI/artifacts; instead file follow-up bead(s) with evidence.
+1. Gate on prerequisites + current reality.
+   - Confirm the spec source exists/usable: `documentation/plans/DRV-b1l-multi-tenant-e2e-testing-program.md`.
+   - Identify the CI workflow(s) that run integration suites and confirm they upload artifacts (note workflow file paths + artifact names).
+   - Confirm required tooling for a "fresh session" exists: node/pnpm (or whatever the repo uses), docker/postgres (if required), `gh` authenticated, and `bd` available for defect filing.
+   - If any prerequisite is missing, explicitly document the limitation in the runbook and file a follow-up bead to close the gap.
+2. Make the failure output contract explicit (IDs + where they appear).
+   - Run the integration smoke suite locally (use the repo-defined command) and capture a representative failing output that includes `scenarioId` and `invariantId`.
+   - Record where IDs appear (stdout/stderr vs junit XML vs JSON artifact) and the exact format.
+   - If IDs are missing/unstable, document the interim extraction workaround (e.g., exact grep/file path) and file a follow-up bead to fix harness outputs.
+3. Extract taxonomy/invariants from the spec, then reconcile with implementation.
+   - From `documentation/plans/DRV-b1l-multi-tenant-e2e-testing-program.md`, extract scenario taxonomy (prefixes) + invariant glossary (`invariantId` meanings) + required diagnostics/artifacts.
+   - Cross-check against what the harness actually emits (Step 2). If mismatched, document the discrepancy and file a follow-up bead (do not silently pick a side).
+4. Inventory local/CI entrypoints and artifact retrieval.
+   - List exact commands for smoke and full runs; for each: where defined, required env vars (and which are secrets), expected runtime bands, produced output paths.
+   - Document CI artifact retrieval with copy-pastable `gh` examples (`gh run list`, `gh run view`, `gh run download`) and the exact artifact names + internal paths to the diagnostics.
+5. Update the runbook + validate from a fresh session.
+   - Write/update `documentation/testing/integration-triage-runbook.md` to include: quick-start triage, taxonomy table, invariant glossary (with evidence-to-capture), first-response workflow/decision tree, CI artifact download + permissions notes, environment contract, ownership/escalation routing (with concrete owner targets + fallback), and a defect bead template with exact `bd` commands.
+   - Ensure discoverability by linking the runbook from the program plan and the docs index/front door.
+   - Fresh-session validation checklist (objective pass/fail): setup succeeds using only the runbook; local smoke run executes; IDs appear where documented; CI artifacts download works against a real run; artifacts contain the documented diagnostics paths; defect template is usable.
 
-2. Document how to reproduce locally (smoke + full) with a clean environment contract.
-   - Add copy/paste commands for:
-     - Smoke: `pnpm test:integration:smoke`
-     - Full: `pnpm test:integration:full`
-   - Include required env vars, non-secret defaults for local, and guardrails (e.g., disposable DB only).
-   - Include "single scenario" guidance (filter by `scenarioId`) if supported.
-   - If any command/env requirement is unclear, locate the canonical definition (e.g., `package.json`, vitest config) and cite it in the runbook.
-
-3. Specify failure classes + required diagnostics ("what to capture") with an explicit ID contract.
-   - Add a failure-class taxonomy table (infra/CI, harness/diagnostics, algorithm regression, schema/data drift, flake/timing) and the minimum evidence required for each.
-   - Define the invariant meaning contract:
-     - `scenarioId` format + where it appears.
-     - `invariantId` format + where it appears.
-     - What to do when IDs are missing (treat as harness/diagnostics defect; file a follow-up bead).
-   - Do NOT require generating a new local failure; use either (a) CI log examples, or (b) the produced test report/junit/json artifacts from a normal run to show where IDs live.
-
-4. Add a first-response workflow + ownership/escalation routing that is executable.
-   - Provide a 10-20 minute first-response checklist (triage -> classify -> reproduce -> route).
-   - Define ownership rules that separate:
-     - Core algorithm regressions vs harness/diagnostics failures (explicit decision points).
-     - Escalation triggers + fallback owner when classification is unclear.
-   - Add a defect template with working commands for creating a bead (include both `bd` and `bd.exe` forms if needed) and required fields (scenarioId, invariantId, CI run URL, artifact paths, repro steps, owner guess).
-
-5. Validate "fresh session" end-to-end and close verification gaps.
-   - Perform a clean-room validation using only the runbook:
-     - Fresh clone or equivalent (no prior setup assumptions), install deps, set env, run smoke.
-     - Confirm IDs are discoverable as documented (logs and/or artifacts).
-     - Confirm CI artifact retrieval steps work (either `gh` commands or documented UI fallback).
-   - Record an objective pass/fail checklist at the bottom of the runbook.
-   - If any step fails due to missing infra/artifacts/permissions, document the limitation in the runbook and file a follow-up bead (do not patch around it silently).
-
-## Acceptance Criteria (from bead)
+## Acceptance Criteria
 
 - Runbook explains failure classes, required diagnostics, and first-response workflow.
 - Ownership is defined for core algorithm regressions vs harness failures.
