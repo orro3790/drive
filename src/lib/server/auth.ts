@@ -18,6 +18,7 @@ import { resolveTrustedOrigins } from './auth-trusted-origins';
 import {
 	buildAuthRateLimitConfig,
 	createSignupAbuseGuard,
+	createSignupOrganizationAssignmentDbHook,
 	createSignupOnboardingConsumer
 } from './auth-abuse-hardening';
 
@@ -42,6 +43,7 @@ function getAuthBaseUrl(): string | undefined {
 }
 
 const signupAbuseGuard = createSignupAbuseGuard();
+const signupOrganizationAssignmentDbHook = createSignupOrganizationAssignmentDbHook();
 const signupOnboardingConsumer = createSignupOnboardingConsumer();
 const trustedOriginsResolution = resolveTrustedOrigins(env);
 
@@ -127,6 +129,13 @@ export const auth = betterAuth({
 	hooks: {
 		before: signupAbuseGuard,
 		after: signupOnboardingConsumer
+	},
+	databaseHooks: {
+		user: {
+			create: {
+				before: signupOrganizationAssignmentDbHook
+			}
+		}
 	},
 	plugins: [
 		sveltekitCookies(getRequestEvent),

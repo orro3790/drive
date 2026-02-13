@@ -3,20 +3,25 @@ import { APIError, createAuthMiddleware } from 'better-auth/api';
 import logger from './logger';
 import { releaseProductionSignupAuthorizationReservation } from './services/onboarding';
 import {
+	prepareOrganizationCreateSignup,
 	finalizeOrganizationCreateSignup,
 	finalizeOrganizationJoinSignup,
 	reserveOrganizationJoinSignup
 } from './services/organizationSignup';
 import {
+	applicationUserRoleSchema,
 	authSignupReturnedPayloadSchema,
+	signupOrganizationIdSchema,
 	signupOrganizationMetadataSchema,
 	signupOnboardingReservationIdSchema,
 	type SignupCreateOrganizationFinalizeReconciliationInput,
+	type ApplicationUserRole,
 	type SignupOrganizationMetadata,
 	type SignupFinalizeReconciliationInput
 } from '$lib/schemas/onboarding';
 
 const SIGN_UP_PATH = '/sign-up/email';
+const ADMIN_CREATE_USER_PATH = '/admin/create-user';
 const ALLOWLIST_POLICY = 'allowlist';
 const OPEN_POLICY = 'open';
 const SIGNUP_POLICY_VALUES = new Set([ALLOWLIST_POLICY, OPEN_POLICY]);
@@ -25,6 +30,9 @@ const SIGN_UP_BLOCKED_MESSAGE = 'Signup is restricted. Please contact a manager 
 const INVALID_INVITE_CODE_MESSAGE = 'Invalid invite code';
 const INVALID_ORGANIZATION_CODE_MESSAGE = 'Invalid organization code';
 const INVALID_ORGANIZATION_SIGNUP_MESSAGE = 'Invalid organization signup details';
+const MISSING_SIGNUP_ASSIGNMENT_MESSAGE = 'Missing signup organization assignment';
+const UNSUPPORTED_USER_CREATION_PATH_MESSAGE =
+	'User creation requires explicit organization assignment';
 const SIGNUP_ORGANIZATION_MODE_HEADER = 'x-signup-org-mode';
 const SIGNUP_ORGANIZATION_NAME_HEADER = 'x-signup-org-name';
 const SIGNUP_ORGANIZATION_CODE_HEADER = 'x-signup-org-code';
@@ -42,6 +50,7 @@ export interface SignupAbusePolicyConfig {
 
 export interface SignupAbuseGuardDependencies {
 	reserveOrganizationJoinSignup?: typeof reserveOrganizationJoinSignup;
+	prepareOrganizationCreateSignup?: typeof prepareOrganizationCreateSignup;
 	finalizeOrganizationJoinSignup?: typeof finalizeOrganizationJoinSignup;
 	finalizeOrganizationCreateSignup?: typeof finalizeOrganizationCreateSignup;
 	releaseProductionSignupAuthorizationReservation?: typeof releaseProductionSignupAuthorizationReservation;
@@ -281,36 +290,94 @@ function extractSignedUpUser(
 	return parsed.success ? parsed.data.user : null;
 }
 
+type SignupAssignmentSource = 'join_reservation' | 'create_provision' | 'explicit_non_signup';
+
+export interface SignupOrganizationAssignmentContext {
+	organizationId: string;
+	role: ApplicationUserRole;
+	source: SignupAssignmentSource;
+	reservationId?: string;
+}
+
 interface SignupHookContext {
 	returned?: unknown;
 	signupOnboardingReservationId?: string;
 	signupOrganization?: SignupOrganizationMetadata;
+	signupOrganizationAssignment?: SignupOrganizationAssignmentContext;
+}
+
+function getMutableSignupHookContext(ctx: { context?: unknown }): SignupHookContext {
+	const context =
+		typeof ctx.context === 'object' && ctx.context
+			? (ctx.context as SignupHookContext)
+			: ({} as SignupHookContext);
+
+	(ctx as { context?: SignupHookContext }).context = context;
+	return context;
+}
+
+function normalizeApplicationUserRole(value: unknown): ApplicationUserRole | null {
+	if (typeof value !== 'string') {
+		return null;
+	}
+
+	const normalizedRole = value.trim().toLowerCase();
+	if (normalizedRole === 'user') {
+		return 'driver';
+	}
+
+	const parsedRole = applicationUserRoleSchema.safeParse(normalizedRole);
+	return parsedRole.success ? parsedRole.data : null;
+}
+
+function normalizeOrganizationId(value: unknown): string | null {
+	if (typeof value !== 'string') {
+		return null;
+	}
+
+	const normalizedOrganizationId = value.trim();
+	const parsedOrganizationId = signupOrganizationIdSchema.safeParse(normalizedOrganizationId);
+	return parsedOrganizationId.success ? parsedOrganizationId.data : null;
 }
 
 function setSignupReservationIdOnContext(ctx: { context?: unknown }, reservationId: string): void {
-	const context =
-		typeof ctx.context === 'object' && ctx.context
-			? (ctx.context as SignupHookContext)
-			: ({} as SignupHookContext);
-
+	const context = getMutableSignupHookContext(ctx);
 	context.signupOnboardingReservationId = reservationId;
-	(ctx as { context?: SignupHookContext }).context = context;
 }
 
-function setSignupOrganizationOnContext(
+export function setSignupOrganizationOnContext(
 	ctx: { context?: unknown },
 	signupOrganization: SignupOrganizationMetadata
 ): void {
-	const context =
-		typeof ctx.context === 'object' && ctx.context
-			? (ctx.context as SignupHookContext)
-			: ({} as SignupHookContext);
-
+	const context = getMutableSignupHookContext(ctx);
 	context.signupOrganization = signupOrganization;
-	(ctx as { context?: SignupHookContext }).context = context;
 }
 
-function getSignupReservationIdFromContext(ctx: { context?: unknown }): string | null {
+export function setSignupOrganizationAssignmentOnContext(
+	ctx: { context?: unknown },
+	assignment: SignupOrganizationAssignmentContext
+): void {
+	const context = getMutableSignupHookContext(ctx);
+	context.signupOrganizationAssignment = assignment;
+}
+
+export function resolveExplicitOrganizationAssignment(
+	userData: Record<string, unknown>
+): SignupOrganizationAssignmentContext | null {
+	const organizationId = normalizeOrganizationId(userData.organizationId);
+	if (!organizationId) {
+		return null;
+	}
+
+	const resolvedRole = normalizeApplicationUserRole(userData.role) ?? 'driver';
+	return {
+		organizationId,
+		role: resolvedRole,
+		source: 'explicit_non_signup'
+	};
+}
+
+export function getSignupReservationIdFromContext(ctx: { context?: unknown }): string | null {
 	const reservationId =
 		typeof ctx.context === 'object' && ctx.context
 			? (ctx.context as SignupHookContext).signupOnboardingReservationId
@@ -325,7 +392,7 @@ function getSignupReservationIdFromContext(ctx: { context?: unknown }): string |
 	return parsed.success ? parsed.data : null;
 }
 
-function getSignupOrganizationFromContext(ctx: {
+export function getSignupOrganizationFromContext(ctx: {
 	context?: unknown;
 }): SignupOrganizationMetadata | null {
 	const signupOrganization =
@@ -335,6 +402,47 @@ function getSignupOrganizationFromContext(ctx: {
 
 	const parsed = signupOrganizationMetadataSchema.safeParse(signupOrganization);
 	return parsed.success ? parsed.data : null;
+}
+
+export function getSignupOrganizationAssignmentFromContext(ctx: {
+	context?: unknown;
+}): SignupOrganizationAssignmentContext | null {
+	const assignment =
+		typeof ctx.context === 'object' && ctx.context
+			? (ctx.context as SignupHookContext).signupOrganizationAssignment
+			: null;
+
+	if (!assignment || typeof assignment !== 'object') {
+		return null;
+	}
+
+	const organizationId = normalizeOrganizationId(
+		(assignment as { organizationId?: unknown }).organizationId
+	);
+	const role = normalizeApplicationUserRole((assignment as { role?: unknown }).role);
+	const source = (assignment as { source?: unknown }).source;
+
+	if (
+		!organizationId ||
+		!role ||
+		(source !== 'join_reservation' &&
+			source !== 'create_provision' &&
+			source !== 'explicit_non_signup')
+	) {
+		return null;
+	}
+
+	const reservationId =
+		typeof (assignment as { reservationId?: unknown }).reservationId === 'string'
+			? (assignment as { reservationId: string }).reservationId
+			: undefined;
+
+	return {
+		organizationId,
+		role,
+		source,
+		...(reservationId ? { reservationId } : {})
+	};
 }
 
 function getReturnedHookValue(ctx: { context?: unknown }): unknown {
@@ -350,6 +458,7 @@ async function logSignupFinalizeNeedsReconciliation(
 ): Promise<void> {
 	logger.error(
 		{
+			event: 'auth.signup.finalize.join.needs_reconciliation',
 			reservationId: input.reservationId,
 			emailDomain: emailDomain(input.email),
 			userId: input.userId,
@@ -368,6 +477,7 @@ async function reportFinalizeReconciliation(
 	} catch (error) {
 		logger.error(
 			{
+				event: 'auth.signup.finalize.join.reconciliation_report_failed',
 				reservationId: input.reservationId,
 				emailDomain: emailDomain(input.email),
 				userId: input.userId,
@@ -383,6 +493,7 @@ async function logSignupCreateOrganizationFinalizeNeedsReconciliation(
 ): Promise<void> {
 	logger.error(
 		{
+			event: 'auth.signup.finalize.create.needs_reconciliation',
 			emailDomain: emailDomain(input.email),
 			userId: input.userId,
 			organizationName: input.organizationName,
@@ -403,6 +514,7 @@ async function reportCreateOrganizationFinalizeReconciliation(
 	} catch (error) {
 		logger.error(
 			{
+				event: 'auth.signup.finalize.create.reconciliation_report_failed',
 				emailDomain: emailDomain(input.email),
 				userId: input.userId,
 				organizationName: input.organizationName,
@@ -411,6 +523,153 @@ async function reportCreateOrganizationFinalizeReconciliation(
 			'auth_signup_organization_create_reconciliation_report_failed'
 		);
 	}
+}
+
+type SignupDatabaseHookContext = {
+	path?: string;
+	body?: unknown;
+	context?: unknown;
+};
+
+function resolveUserCreationPath(ctx: SignupDatabaseHookContext | null): string | null {
+	if (!ctx || typeof ctx.path !== 'string') {
+		return null;
+	}
+
+	return ctx.path;
+}
+
+function resolveUserCreateFailureMessage(path: string | null): string {
+	if (path === ADMIN_CREATE_USER_PATH) {
+		return `${UNSUPPORTED_USER_CREATION_PATH_MESSAGE}: include data.organizationId`;
+	}
+
+	return UNSUPPORTED_USER_CREATION_PATH_MESSAGE;
+}
+
+export function createSignupOrganizationAssignmentDbHook(
+	dependencies: SignupAbuseGuardDependencies = {}
+) {
+	const provisionCreateOrganization =
+		dependencies.prepareOrganizationCreateSignup ?? prepareOrganizationCreateSignup;
+
+	return async (
+		userData: Record<string, unknown>,
+		ctx: SignupDatabaseHookContext | null
+	): Promise<{ data: { organizationId: string; role: ApplicationUserRole } }> => {
+		const path = resolveUserCreationPath(ctx);
+
+		if (path === SIGN_UP_PATH) {
+			const signupOrganization = ctx ? getSignupOrganizationFromContext(ctx) : null;
+			if (!signupOrganization) {
+				logger.error(
+					{ event: 'auth.signup.assignment.before_hook_context_missing', path },
+					'auth_signup_assignment_before_hook_context_missing'
+				);
+				throw new APIError('BAD_REQUEST', { message: INVALID_ORGANIZATION_SIGNUP_MESSAGE });
+			}
+
+			if (signupOrganization.mode === 'join') {
+				const reservationId = ctx ? getSignupReservationIdFromContext(ctx) : null;
+				const assignment = ctx ? getSignupOrganizationAssignmentFromContext(ctx) : null;
+
+				if (
+					!reservationId ||
+					!assignment ||
+					assignment.source !== 'join_reservation' ||
+					assignment.reservationId !== reservationId
+				) {
+					logger.error(
+						{ event: 'auth.signup.assignment.join_context_missing', path },
+						'auth_signup_assignment_join_context_missing'
+					);
+					throw new APIError('BAD_REQUEST', { message: MISSING_SIGNUP_ASSIGNMENT_MESSAGE });
+				}
+
+				return {
+					data: {
+						organizationId: assignment.organizationId,
+						role: assignment.role
+					}
+				};
+			}
+
+			const existingAssignment = ctx ? getSignupOrganizationAssignmentFromContext(ctx) : null;
+			if (existingAssignment?.source === 'create_provision') {
+				return {
+					data: {
+						organizationId: existingAssignment.organizationId,
+						role: existingAssignment.role
+					}
+				};
+			}
+
+			let preparedOrganization: Awaited<ReturnType<typeof provisionCreateOrganization>> | null =
+				null;
+			try {
+				preparedOrganization = await provisionCreateOrganization({
+					organizationName: signupOrganization.organizationName
+				});
+			} catch (error) {
+				logger.error(
+					{
+						event: 'auth.signup.assignment.create_provision_failed',
+						error,
+						path
+					},
+					'auth_signup_create_org_provision_failed'
+				);
+				throw new APIError('BAD_REQUEST', { message: SIGN_UP_BLOCKED_MESSAGE });
+			}
+
+			if (!preparedOrganization?.organizationId) {
+				logger.error(
+					{ event: 'auth.signup.assignment.create_context_missing', path },
+					'auth_signup_assignment_create_context_missing'
+				);
+				throw new APIError('BAD_REQUEST', { message: MISSING_SIGNUP_ASSIGNMENT_MESSAGE });
+			}
+
+			const assignment: SignupOrganizationAssignmentContext = {
+				organizationId: preparedOrganization.organizationId,
+				role: 'manager',
+				source: 'create_provision'
+			};
+
+			if (ctx) {
+				setSignupOrganizationAssignmentOnContext(ctx, assignment);
+			}
+
+			return {
+				data: {
+					organizationId: assignment.organizationId,
+					role: assignment.role
+				}
+			};
+		}
+
+		const explicitAssignment = resolveExplicitOrganizationAssignment(userData);
+		if (explicitAssignment) {
+			if (ctx) {
+				setSignupOrganizationAssignmentOnContext(ctx, explicitAssignment);
+			}
+
+			return {
+				data: {
+					organizationId: explicitAssignment.organizationId,
+					role: explicitAssignment.role
+				}
+			};
+		}
+
+		logger.warn(
+			{ event: 'auth.signup.assignment.non_signup_missing', path: path ?? 'unknown' },
+			'auth_user_create_blocked_missing_org_assignment'
+		);
+		throw new APIError('BAD_REQUEST', {
+			message: resolveUserCreateFailureMessage(path)
+		});
+	};
 }
 
 export function createSignupAbuseGuard(
@@ -489,6 +748,12 @@ export function createSignupAbuseGuard(
 
 		if (reservation.allowed) {
 			setSignupReservationIdOnContext(ctx, reservation.reservationId);
+			setSignupOrganizationAssignmentOnContext(ctx, {
+				organizationId: reservation.organizationId,
+				role: reservation.targetRole,
+				source: 'join_reservation',
+				reservationId: reservation.reservationId
+			});
 			return;
 		}
 
@@ -559,10 +824,19 @@ export function createSignupOnboardingConsumer(
 			return;
 		}
 
+		const signupAssignment = getSignupOrganizationAssignmentFromContext(ctx);
+
 		const payload = await extractSuccessfulAuthPayload(getReturnedHookValue(ctx));
 		const signedUpUser = payload ? extractSignedUpUser(payload) : null;
 
 		if (!signedUpUser) {
+			if (signupOrganization.mode === 'create' && signupAssignment?.source === 'create_provision') {
+				logger.warn(
+					{ organizationId: signupAssignment.organizationId },
+					'auth_signup_create_org_provisioned_without_user'
+				);
+			}
+
 			if (signupOrganization.mode === 'join') {
 				const reservationId = getSignupReservationIdFromContext(ctx);
 				if (!reservationId) {
@@ -582,10 +856,23 @@ export function createSignupOnboardingConsumer(
 		}
 
 		if (signupOrganization.mode === 'create') {
+			if (!signupAssignment || signupAssignment.source !== 'create_provision') {
+				await reportCreateOrganizationFinalizeReconciliation(
+					recordCreateOrganizationFinalizeReconciliation,
+					{
+						userId: signedUpUser.id,
+						email: signedUpUser.email,
+						organizationName: signupOrganization.organizationName,
+						error: new Error('signup_create_assignment_missing')
+					}
+				);
+				return;
+			}
+
 			try {
 				const finalized = await finalizeCreateOrganization({
 					userId: signedUpUser.id,
-					organizationName: signupOrganization.organizationName
+					organizationId: signupAssignment.organizationId
 				});
 
 				if (!finalized) {

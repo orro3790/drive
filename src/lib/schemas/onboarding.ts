@@ -21,6 +21,12 @@ export type SignupOrganizationMode = z.infer<typeof signupOrganizationModeSchema
 export const signupOrganizationRoleSchema = z.enum(['driver', 'manager']);
 export type SignupOrganizationRole = z.infer<typeof signupOrganizationRoleSchema>;
 
+export const applicationUserRoleSchema = z.enum(['driver', 'manager', 'admin']);
+export type ApplicationUserRole = z.infer<typeof applicationUserRoleSchema>;
+
+export const signupOrganizationIdSchema = z.string().uuid();
+export type SignupOrganizationId = z.infer<typeof signupOrganizationIdSchema>;
+
 export const signupOrganizationNameSchema = z.string().trim().min(2).max(80);
 export const signupOrganizationCodeSchema = z.string().trim().min(4).max(64);
 
