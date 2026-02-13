@@ -155,9 +155,7 @@ export function generateBidding(
 				(new Date(assignment.date + 'T07:00:00').getTime() - getSeedNow().getTime()) /
 				(1000 * 60 * 60);
 			mode =
-				hoursToShift > dispatchPolicy.bidding.instantModeCutoffHours
-					? 'competitive'
-					: 'instant';
+				hoursToShift > dispatchPolicy.bidding.instantModeCutoffHours ? 'competitive' : 'instant';
 		} else {
 			mode = 'competitive';
 		}
@@ -230,9 +228,7 @@ export function generateBidding(
 		const closesAt = randomTimeOnDate(assignment.date, 18, 20);
 
 		const numBids = randomInt(1, 4);
-		const availableBidders = eligibleDrivers.filter(
-			(d) => d.id !== assignment.userId
-		);
+		const availableBidders = eligibleDrivers.filter((d) => d.id !== assignment.userId);
 		const bidders = selectRandomDrivers(availableBidders, numBids);
 
 		const bidScores: Array<{ userId: string; score: number }> = bidders.map((driver) => ({
@@ -304,8 +300,7 @@ function computeDriverBidScore(
 
 	const healthState = healthByUser.get(driverId);
 	const healthScore = healthState?.currentScore ?? 50;
-	const routeFamiliarityCount =
-		completionsByUserRoute.get(`${driverId}:${routeId}`) ?? 0;
+	const routeFamiliarityCount = completionsByUserRoute.get(`${driverId}:${routeId}`) ?? 0;
 	const tenureMonths = tenureByUser.get(driverId) ?? 0;
 	const pref = prefByUser.get(driverId);
 	const preferredRouteIds = pref?.preferredRoutes ?? [];

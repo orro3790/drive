@@ -58,7 +58,9 @@ export function getWeekStart(date: Date): Date {
 	const day = date.getUTCDay();
 	const diff = day === 0 ? -6 : 1 - day;
 	const monday = addDays(date, diff);
-	return new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate(), 12, 0, 0));
+	return new Date(
+		Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate(), 12, 0, 0)
+	);
 }
 
 /**

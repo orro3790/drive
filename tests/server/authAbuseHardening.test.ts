@@ -175,7 +175,7 @@ describe('auth rate limit config', () => {
 		});
 		expect(config.customRules).toEqual(AUTH_RATE_LIMIT_RULES);
 		expect(config.customRules['/sign-up/*']).toEqual({ window: 900, max: 3 });
-		expect(config.customRules['/sign-in/*']).toEqual({ window: 300, max: 5 });
+		expect(config.customRules['/sign-in/*']).toBe(false);
 		expect(config.customRules['/request-password-reset']).toEqual({ window: 600, max: 3 });
 		expect(config.customRules['/forget-password']).toBeUndefined();
 	});

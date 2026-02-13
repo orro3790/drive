@@ -18,20 +18,20 @@ Fixed Zod schema to use `z.coerce.number()` for PostgreSQL string counts.
 
 ### 1.3 Audit all API endpoints for org filter completeness ✅
 
-| Endpoint | Status | Action Taken |
-|---|---|---|
-| `GET /api/warehouses` | OK | Uses `getManagerWarehouseIds()` |
-| `GET /api/routes` | OK | Uses `getManagerWarehouseIds()` |
-| `GET /api/drivers` | OK | Filters `user.organizationId` |
-| `GET /api/preferences/routes` | **Fixed** | Added org filter via warehouse join |
-| `GET /api/dashboard` | OK | User-scoped (implicit org) |
-| `GET /api/assignments/mine` | OK | User-scoped (implicit org) |
-| `GET /api/bids/available` | OK | Explicitly filters `warehouses.organizationId` |
-| `GET /api/bids/mine` | **Fixed** | Added `warehouses.organizationId` filter |
-| `GET /api/driver-health` | OK | User-scoped (implicit org) |
-| `GET /api/notifications` | **Fixed** | Added `notifications.organizationId` filter |
-| `GET /api/weekly-reports` | OK | Uses `getManagerWarehouseIds()` |
-| `GET /api/drivers/[id]/shifts` | OK | Verifies driver in same org |
+| Endpoint                       | Status    | Action Taken                                   |
+| ------------------------------ | --------- | ---------------------------------------------- |
+| `GET /api/warehouses`          | OK        | Uses `getManagerWarehouseIds()`                |
+| `GET /api/routes`              | OK        | Uses `getManagerWarehouseIds()`                |
+| `GET /api/drivers`             | OK        | Filters `user.organizationId`                  |
+| `GET /api/preferences/routes`  | **Fixed** | Added org filter via warehouse join            |
+| `GET /api/dashboard`           | OK        | User-scoped (implicit org)                     |
+| `GET /api/assignments/mine`    | OK        | User-scoped (implicit org)                     |
+| `GET /api/bids/available`      | OK        | Explicitly filters `warehouses.organizationId` |
+| `GET /api/bids/mine`           | **Fixed** | Added `warehouses.organizationId` filter       |
+| `GET /api/driver-health`       | OK        | User-scoped (implicit org)                     |
+| `GET /api/notifications`       | **Fixed** | Added `notifications.organizationId` filter    |
+| `GET /api/weekly-reports`      | OK        | Uses `getManagerWarehouseIds()`                |
+| `GET /api/drivers/[id]/shifts` | OK        | Verifies driver in same org                    |
 
 ---
 
@@ -94,24 +94,24 @@ Full 7-phase overhaul completed. See `C:\Users\matto\.claude\plans\imperative-pe
 
 ### Driver Flows
 
-| # | Flow | Steps | Verified | Notes |
-|---|------|-------|----------|-------|
-| D1 | Sign in as driver | Login with `@driver.test` account | ✅ 2026-02-13 | judah_lueilwitz64, delta.schulist70, filiberto.rodriguez73, orgb_driver002 |
-| D2 | View dashboard | See today's shift, metrics, pending bids | ✅ 2026-02-13 | Today shift with "I'm On Site", week summary, pending bids, confirmations all render correctly |
-| D3 | View health card | Score, stars, streak, contributions visible | ✅ 2026-02-13 | 0★ hard-stop (score 0, Action Required), 2★ (score 78), 4★ (score 208, "Bonus active"), 4★ org-b (score 169, "Bonus active") |
-| D4 | Change day preferences | Toggle preferred days, save successfully | | |
-| D5 | Change route preferences | Select routes (from own org only), save | | |
-| D6 | View schedule | See upcoming assignments with correct dates | ✅ 2026-02-13 | This week/next week with day chips. Dates now aligned with CURRENT_DATE after timezone fix |
-| D7 | Confirm upcoming shift | Confirm a scheduled assignment within window | | Unblocked by timezone fix. Ready to test |
-| D8 | Arrive for shift | Mark arrival on day of shift | | Unblocked: `isArrivable: true`. "I'm On Site" button visible for judah (org-a) and orgb_driver002 (org-b) |
-| D9 | Start shift (parcel count) | Enter parcelsStart count | | Unblocked. Ready to test (depends on D8) |
-| D10 | Complete shift | Enter parcelsReturned, see edit window | | Unblocked. Ready to test (depends on D9) |
-| D11 | Edit shift within window | Modify parcel counts within 1-hour window | | Unblocked. Ready to test (depends on D10) |
-| D12 | Cancel a future shift | Cancel and see health impact | | Unblocked. Ready to test |
-| D13 | Browse available bids | See open bid windows for org routes | ✅ 2026-02-13 | Pending bids with countdown ("Closes in 1 day", "2 days"). Org-scoped routes confirmed |
-| D14 | Place a bid | Bid on an available shift | | |
-| D15 | View notifications | See notification inbox with correct types | ✅ 2026-02-13 | shift_reminder ("today"), bid_won/bid_lost with route data. Grouped by TODAY/YESTERDAY |
-| D16 | Mark notification read | Toggle read status | | |
+| #   | Flow                       | Steps                                        | Verified      | Notes                                                                                                                        |
+| --- | -------------------------- | -------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Sign in as driver          | Login with `@driver.test` account            | ✅ 2026-02-13 | judah_lueilwitz64, delta.schulist70, filiberto.rodriguez73, orgb_driver002                                                   |
+| D2  | View dashboard             | See today's shift, metrics, pending bids     | ✅ 2026-02-13 | Today shift with "I'm On Site", week summary, pending bids, confirmations all render correctly                               |
+| D3  | View health card           | Score, stars, streak, contributions visible  | ✅ 2026-02-13 | 0★ hard-stop (score 0, Action Required), 2★ (score 78), 4★ (score 208, "Bonus active"), 4★ org-b (score 169, "Bonus active") |
+| D4  | Change day preferences     | Toggle preferred days, save successfully     |               |                                                                                                                              |
+| D5  | Change route preferences   | Select routes (from own org only), save      |               |                                                                                                                              |
+| D6  | View schedule              | See upcoming assignments with correct dates  | ✅ 2026-02-13 | This week/next week with day chips. Dates now aligned with CURRENT_DATE after timezone fix                                   |
+| D7  | Confirm upcoming shift     | Confirm a scheduled assignment within window |               | Unblocked by timezone fix. Ready to test                                                                                     |
+| D8  | Arrive for shift           | Mark arrival on day of shift                 |               | Unblocked: `isArrivable: true`. "I'm On Site" button visible for judah (org-a) and orgb_driver002 (org-b)                    |
+| D9  | Start shift (parcel count) | Enter parcelsStart count                     |               | Unblocked. Ready to test (depends on D8)                                                                                     |
+| D10 | Complete shift             | Enter parcelsReturned, see edit window       |               | Unblocked. Ready to test (depends on D9)                                                                                     |
+| D11 | Edit shift within window   | Modify parcel counts within 1-hour window    |               | Unblocked. Ready to test (depends on D10)                                                                                    |
+| D12 | Cancel a future shift      | Cancel and see health impact                 |               | Unblocked. Ready to test                                                                                                     |
+| D13 | Browse available bids      | See open bid windows for org routes          | ✅ 2026-02-13 | Pending bids with countdown ("Closes in 1 day", "2 days"). Org-scoped routes confirmed                                       |
+| D14 | Place a bid                | Bid on an available shift                    |               |                                                                                                                              |
+| D15 | View notifications         | See notification inbox with correct types    | ✅ 2026-02-13 | shift_reminder ("today"), bid_won/bid_lost with route data. Grouped by TODAY/YESTERDAY                                       |
+| D16 | Mark notification read     | Toggle read status                           |               |                                                                                                                              |
 
 **Org isolation verified**: org-b driver (orgb_driver002@hamilton-driver.test) sees only BN routes / Brampton North. "I'm On Site" active. 4★ with "Bonus active".
 
@@ -119,36 +119,36 @@ Full 7-phase overhaul completed. See `C:\Users\matto\.claude\plans\imperative-pe
 
 ### Manager Flows
 
-| # | Flow | Steps | Verified | Notes |
-|---|------|-------|----------|-------|
-| M1 | Sign in as manager | Login with manager account | | |
-| M2 | View warehouses | See warehouses for assigned org | | |
-| M3 | Create warehouse | Create new warehouse (auto-assigned) | | |
-| M4 | View routes | See routes for accessible warehouses | | |
-| M5 | Create route | Create route under a warehouse | | |
-| M6 | View drivers list | See drivers in same org with metrics | | |
-| M7 | View driver shift history | Click driver → see completed shifts | | |
-| M8 | View weekly reports | See aggregated parcel totals | | |
-| M9 | View weekly report detail | Click week → see individual shifts | | |
-| M10 | Manage whitelist | Create approval, see entries, revoke | | |
-| M11 | View notifications | See manager-specific alerts | | |
-| M12 | Receive no-show alert | Verify driver_no_show notification arrives | | |
-| M13 | Receive return exception alert | Verify return_exception alert | | |
+| #   | Flow                           | Steps                                      | Verified | Notes |
+| --- | ------------------------------ | ------------------------------------------ | -------- | ----- |
+| M1  | Sign in as manager             | Login with manager account                 |          |       |
+| M2  | View warehouses                | See warehouses for assigned org            |          |       |
+| M3  | Create warehouse               | Create new warehouse (auto-assigned)       |          |       |
+| M4  | View routes                    | See routes for accessible warehouses       |          |       |
+| M5  | Create route                   | Create route under a warehouse             |          |       |
+| M6  | View drivers list              | See drivers in same org with metrics       |          |       |
+| M7  | View driver shift history      | Click driver → see completed shifts        |          |       |
+| M8  | View weekly reports            | See aggregated parcel totals               |          |       |
+| M9  | View weekly report detail      | Click week → see individual shifts         |          |       |
+| M10 | Manage whitelist               | Create approval, see entries, revoke       |          |       |
+| M11 | View notifications             | See manager-specific alerts                |          |       |
+| M12 | Receive no-show alert          | Verify driver_no_show notification arrives |          |       |
+| M13 | Receive return exception alert | Verify return_exception alert              |          |       |
 
 ### Automated System Flows
 
-| # | System | Expected Behavior | Verified | Notes |
-|---|--------|-------------------|----------|-------|
-| A1 | Schedule generation | Generates assignments 2 weeks out on Sunday lock | | |
-| A2 | Confirmation reminders | Sent 3 days before unconfirmed shift | | |
-| A3 | Auto-drop unconfirmed | Drops unconfirmed shifts at 48h deadline | | |
-| A4 | No-show detection | Drops driver at route start time, opens emergency bid | | |
-| A5 | Bid window closure | Resolves competitive bids, transitions instant | | |
-| A6 | Performance check | Recalculates metrics, applies flags | | |
-| A7 | Daily health eval | Computes scores, persists snapshots | | |
-| A8 | Weekly health eval | Evaluates star progression | | |
-| A9 | Shift reminders | Morning notification for today's shift | | |
-| A10 | Stale shift reminders | Reminds driver to close 12h+ open shift | | |
+| #   | System                 | Expected Behavior                                     | Verified | Notes |
+| --- | ---------------------- | ----------------------------------------------------- | -------- | ----- |
+| A1  | Schedule generation    | Generates assignments 2 weeks out on Sunday lock      |          |       |
+| A2  | Confirmation reminders | Sent 3 days before unconfirmed shift                  |          |       |
+| A3  | Auto-drop unconfirmed  | Drops unconfirmed shifts at 48h deadline              |          |       |
+| A4  | No-show detection      | Drops driver at route start time, opens emergency bid |          |       |
+| A5  | Bid window closure     | Resolves competitive bids, transitions instant        |          |       |
+| A6  | Performance check      | Recalculates metrics, applies flags                   |          |       |
+| A7  | Daily health eval      | Computes scores, persists snapshots                   |          |       |
+| A8  | Weekly health eval     | Evaluates star progression                            |          |       |
+| A9  | Shift reminders        | Morning notification for today's shift                |          |       |
+| A10 | Stale shift reminders  | Reminds driver to close 12h+ open shift               |          |       |
 
 ---
 
@@ -164,13 +164,13 @@ Full 7-phase overhaul completed. See `C:\Users\matto\.claude\plans\imperative-pe
 
 ## Files Touched (Summary)
 
-| File | Changes |
-|---|---|
-| `src/routes/api/preferences/routes/+server.ts` | Add org filter |
-| `src/lib/config/dispatchPolicy.ts` | Add earlyCancel, adjust lateCancel, raise corrective threshold |
-| `src/lib/server/services/health.ts` | Add earlyCancel contribution query |
-| `src/routes/api/cron/lock-preferences/+server.ts` | Send schedule_locked notifications |
-| `scripts/seed/generators/notifications.ts` | Remove manual from seed showcase |
-| `documentation/agent-guidelines/health-and-automation-quickref.md` | Update all changed values |
-| Various API endpoints | Verify org filters (audit) |
-| Manager warehouses page | Add empty state messaging |
+| File                                                               | Changes                                                        |
+| ------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `src/routes/api/preferences/routes/+server.ts`                     | Add org filter                                                 |
+| `src/lib/config/dispatchPolicy.ts`                                 | Add earlyCancel, adjust lateCancel, raise corrective threshold |
+| `src/lib/server/services/health.ts`                                | Add earlyCancel contribution query                             |
+| `src/routes/api/cron/lock-preferences/+server.ts`                  | Send schedule_locked notifications                             |
+| `scripts/seed/generators/notifications.ts`                         | Remove manual from seed showcase                               |
+| `documentation/agent-guidelines/health-and-automation-quickref.md` | Update all changed values                                      |
+| Various API endpoints                                              | Verify org filters (audit)                                     |
+| Manager warehouses page                                            | Add empty state messaging                                      |
