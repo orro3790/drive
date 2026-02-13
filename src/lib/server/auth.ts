@@ -7,7 +7,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { admin as adminPlugin } from 'better-auth/plugins';
 import { getRequestEvent } from '$app/server';
-import { db } from './db';
+import { db } from '$lib/server/db';
 import * as authSchema from './db/auth-schema';
 import { sendPasswordResetEmail } from './email';
 import logger from './logger';
