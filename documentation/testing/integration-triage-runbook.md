@@ -1,15 +1,20 @@
 # Integration Failure Triage Runbook (Real DB, Multi-Tenant)
 
-Status: draft until DRV-b1l Milestone A lands (integration harness + smoke scripts). This runbook defines the target triage contract so failures are diagnosable without tribal context.
+Status: active (Milestone A landed: real-DB integration harness + smoke/full scripts). This runbook defines the triage contract so failures are diagnosable without tribal context.
 
 ## Glossary (what CI must print)
 
 - `scenarioId`: stable id for the failing scenario (example: `BID-001`).
-- `invariantId`: stable id for the invariant that failed (example: `TENANT-001`).
+- `invariantId`: stable id for the invariant that failed (example: `NOTIF-001`).
 - `organizationUnderTest`: which org fixture the scenario operated on (example: `org-a`).
 - `keyEntityIds`: the entity ids needed to inspect evidence (orgId/driverId/assignmentId/bidWindowId/etc.).
 
-If a failure does not include `scenarioId` + `invariantId`, treat it as a harness/diagnostics defect and file it as such.
+Notes:
+
+- `scenarioId` should appear in Vitest output via the suite/test name (we encode it in `describe(...)`).
+- `invariantId` should appear in the thrown error message (prefix before `:`).
+
+If a failure does not include both `scenarioId` + `invariantId`, treat it as a harness/diagnostics defect and file it as such.
 
 ## First-Response Checklist (10 minutes)
 
@@ -29,31 +34,49 @@ If a failure does not include `scenarioId` + `invariantId`, treat it as a harnes
 ### Safety Guardrails
 
 - Only run real-DB integration tests against a disposable local DB.
-- Set `INTEGRATION_TEST=1` (the harness must refuse to run without it).
+- The integration harness will DROP + recreate the `public` schema and push the latest Drizzle schema. Never point `DATABASE_URL` at anything you care about.
+- Run via `pnpm test:integration:*` (configs set `INTEGRATION_TEST=1` and route `$lib/server/db` to the integration-safe client).
+- `DATABASE_URL` database name must end with `_integration` (enforced by `src/lib/server/db/test-client.ts`).
 
 ### Environment Contract
 
-Required env vars (minimum set; mirrors CI defaults):
+Required env vars (minimum set):
 
-- `INTEGRATION_TEST=1`
 - `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/drive_integration`
 - `CRON_SECRET=test-cron-secret`
 - `BETTER_AUTH_SECRET=test-better-auth-secret`
 
+Automatically set by the integration scripts/config:
+
+- `INTEGRATION_TEST=1`
+
+Optional overrides:
+
+- `ALLOW_NONLOCAL_INTEGRATION_DB=1` (allows non-local hosts; still blocks common managed DB domains)
+
 PowerShell example:
 
 ```powershell
-$env:INTEGRATION_TEST = "1"
 $env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/drive_integration"
 $env:CRON_SECRET = "test-cron-secret"
 $env:BETTER_AUTH_SECRET = "test-better-auth-secret"
+```
+
+### Create the integration database (one-time)
+
+The integration harness expects a dedicated local Postgres database whose name ends with `_integration` (example: `drive_integration`).
+
+```bash
+createdb drive_integration
+
+# or
+psql -c "CREATE DATABASE drive_integration;"
 ```
 
 ### Smoke Suite
 
 ```bash
 pnpm install
-pnpm db:push
 pnpm test:integration:smoke
 ```
 
@@ -65,11 +88,23 @@ pnpm test:integration:full
 
 ### Single Scenario (preferred)
 
-Once `vitest.integration.config.ts` exists, run just the failing scenario/test file:
+To run just the failing scenario/test (filter by `scenarioId`):
 
 ```bash
-pnpm exec vitest -c vitest.integration.config.ts tests/integration --run -t "BID-001"
+pnpm exec vitest run -c vitest.integration.smoke.config.ts -t "BID-001"
+
+# OR (full suite config)
+pnpm exec vitest run -c vitest.integration.config.ts -t "BID-001"
 ```
+
+Where these commands live:
+
+| Goal                       | Command                              | Defined in                                                                         |
+| -------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------- |
+| Integration smoke          | `pnpm test:integration:smoke`        | `package.json` + `vitest.integration.smoke.config.ts`                              |
+| Integration full           | `pnpm test:integration:full`         | `package.json` + `vitest.integration.config.ts`                                    |
+| Integration DB guardrails  | (enforced automatically)             | `src/lib/server/db/test-client.ts`                                                 |
+| Integration migration/push | (runs automatically in global setup) | `tests/integration/harness/globalSetup.ts`, `tests/integration/harness/migrate.ts` |
 
 ## Download CI Artifacts
 
@@ -99,6 +134,11 @@ Expected artifact contents (contract):
 - DB evidence snapshots (queries/rows) sufficient to confirm isolation + idempotency properties.
 - (If UI witness verification is part of the nightly pack) screenshots proving the UI matches DB outcomes.
 
+Local evidence bundles (available today):
+
+- Some scenarios may write JSON evidence bundles to `tests/integration/.evidence/*.json` via `tests/integration/harness/diagnostics.ts`.
+- If a scenario failure has no evidence bundle, treat that as a diagnostics gap and capture the minimal DB rows needed in your defect report.
+
 ## Scenario Taxonomy (`scenarioId` prefixes)
 
 | Prefix  | Meaning                                           | Typical failure surface                                       |
@@ -122,6 +162,16 @@ Invariant ids must be stable, searchable, and map to a single responsibility. Re
 | `NOTIF-*`  | Notification correctness + scoping                         | notification rows, types, dedupe behavior                        |
 | `ASSIGN-*` | Assignment integrity (single winner, no duplicates)        | assignment rows, unique constraints, assigned_by                 |
 | `STATE-*`  | State machine correctness                                  | status transitions, timeline evidence                            |
+
+### Current invariants (stable IDs)
+
+| invariantId  | Meaning                                                                       | Where thrown                                          |
+| ------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `NOTIF-001`  | Cross-org notification leakage (notification org must match user org)         | `tests/integration/invariants/tenantIsolation.ts`     |
+| `TENANT-002` | Assignment assigned to cross-org user (warehouse org must match user org)     | `tests/integration/invariants/tenantIsolation.ts`     |
+| `TENANT-003` | Bid window resolved to cross-org winner (warehouse org must match winner org) | `tests/integration/invariants/tenantIsolation.ts`     |
+| `ASSIGN-001` | Assignment missing or not scheduled/assigned to expected driver               | `tests/integration/invariants/assignmentIntegrity.ts` |
+| `ASSIGN-002` | Bid window missing or not resolved to expected winner                         | `tests/integration/invariants/assignmentIntegrity.ts` |
 
 If the invariant id is present but the meaning is unclear, treat that as a documentation gap and update this runbook (or the invariant itself) so the next responder does not have to reverse-engineer it.
 
@@ -154,10 +204,14 @@ Title: `Integration failure: <scenarioId> / <invariantId> (<short symptom>)`
 Include:
 
 - `scenarioId`: <BID-001>
-- `invariantId`: <TENANT-001>
+- `invariantId`: <NOTIF-001>
 - CI run: <url>
-- Artifacts: `logs/nightly/<YYYY-MM-DD>/ci-artifacts/...`
+- Artifacts:
+  - CI: `logs/nightly/<YYYY-MM-DD>/ci-artifacts/...`
+  - Local evidence (if present): `tests/integration/.evidence/<scenarioId>.<label>.<timestamp>.json`
+- Git SHA: <sha>
 - Expected: <what should have happened>
 - Observed: <what happened>
 - Repro (local): <exact commands + env>
 - Key entity ids: <orgId, driverId, assignmentId, bidWindowId, ...>
+- Owner guess: <infra | harness | algorithm | schema>
