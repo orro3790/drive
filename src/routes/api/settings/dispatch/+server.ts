@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { dispatchSettingsSchema } from '$lib/schemas/dispatch-settings';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import {
 	getDispatchSettings,
 	updateDispatchSettings,
@@ -16,23 +17,11 @@ function toDispatchSettingsResponse(settings: DispatchSettingsRecord) {
 	};
 }
 
-function requireManager(locals: App.Locals) {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
-
-	return locals.user;
-}
-
 export const GET: RequestHandler = async ({ locals }) => {
-	requireManager(locals);
+	const { organizationId } = requireManagerWithOrg(locals);
 
 	try {
-		const settings = await getDispatchSettings();
+		const settings = await getDispatchSettings(organizationId);
 		return json({ settings: toDispatchSettingsResponse(settings) });
 	} catch {
 		return json({
@@ -46,7 +35,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 };
 
 export const PATCH: RequestHandler = async ({ locals, request }) => {
-	const user = requireManager(locals);
+	const { user, organizationId } = requireManagerWithOrg(locals);
 
 	let body: unknown;
 	try {
@@ -62,6 +51,7 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 
 	try {
 		const settings = await updateDispatchSettings({
+			organizationId,
 			emergencyBonusPercent: parsed.data.emergencyBonusPercent,
 			actorId: user.id
 		});

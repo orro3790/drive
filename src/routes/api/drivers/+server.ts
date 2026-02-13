@@ -7,7 +7,7 @@
  * Only accessible by managers.
  */
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import {
@@ -23,6 +23,7 @@ import {
 	getAttendanceThreshold,
 	isRewardEligible
 } from '$lib/config/dispatchPolicy';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 
 type DriverHealthState = 'flagged' | 'at_risk' | 'watch' | 'healthy' | 'high_performer';
 
@@ -62,13 +63,7 @@ function deriveHealthState(driver: {
 }
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { organizationId } = requireManagerWithOrg(locals);
 
 	// Get all drivers with their metrics and health state
 	const drivers = await db
@@ -94,7 +89,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.from(user)
 		.leftJoin(driverMetrics, eq(user.id, driverMetrics.userId))
 		.leftJoin(driverHealthState, eq(user.id, driverHealthState.userId))
-		.where(eq(user.role, 'driver'))
+		.where(and(eq(user.role, 'driver'), eq(user.organizationId, organizationId)))
 		.orderBy(user.name);
 
 	const completedAssignmentCounts = await db
@@ -106,7 +101,13 @@ export const GET: RequestHandler = async ({ locals }) => {
 		})
 		.from(assignments)
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
-		.where(and(eq(assignments.status, 'completed'), isNotNull(assignments.userId)))
+		.where(
+			and(
+				eq(assignments.status, 'completed'),
+				isNotNull(assignments.userId),
+				eq(warehouses.organizationId, organizationId)
+			)
+		)
 		.groupBy(assignments.userId, assignments.warehouseId, warehouses.name);
 
 	const primaryWarehouseByDriver = new Map<string, PrimaryWarehouse>();

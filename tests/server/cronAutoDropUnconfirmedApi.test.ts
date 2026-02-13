@@ -11,6 +11,11 @@ type AutoDropCandidate = {
 	routeId: string;
 	date: string;
 	routeName: string;
+	organizationId: string;
+};
+
+type OrganizationRow = {
+	id: string;
 };
 
 type CreateBidWindowResult = {
@@ -27,6 +32,7 @@ let createBidWindowMock: ReturnType<
 		(
 			assignmentId: string,
 			options: {
+				organizationId: string;
 				trigger: 'auto_drop';
 			}
 		) => Promise<CreateBidWindowResult>
@@ -39,6 +45,7 @@ let sendNotificationMock: ReturnType<
 			type: 'shift_auto_dropped',
 			payload: {
 				customBody: string;
+				organizationId: string;
 				data: {
 					assignmentId: string;
 					routeName: string;
@@ -59,24 +66,14 @@ let selectInnerJoinMock: ReturnType<
 			joinTable: unknown,
 			joinCondition: unknown
 		) => {
+			innerJoin: (joinTable: unknown, joinCondition: unknown) => unknown;
 			where: typeof selectWhereMock;
 		}
 	>
 >;
-let selectFromMock: ReturnType<
-	typeof vi.fn<
-		(fromTable: unknown) => {
-			innerJoin: typeof selectInnerJoinMock;
-		}
-	>
->;
-let selectMock: ReturnType<
-	typeof vi.fn<
-		(selectShape: Record<string, unknown>) => {
-			from: typeof selectFromMock;
-		}
-	>
->;
+let selectFromMock: ReturnType<typeof vi.fn>;
+let selectOrgFromMock: ReturnType<typeof vi.fn<(fromTable: unknown) => Promise<OrganizationRow[]>>>;
+let selectMock: ReturnType<typeof vi.fn>;
 
 let updateWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
 let updateSetMock: ReturnType<
@@ -94,6 +91,7 @@ beforeEach(async () => {
 		(
 			assignmentId: string,
 			options: {
+				organizationId: string;
 				trigger: 'auto_drop';
 			}
 		) => Promise<CreateBidWindowResult>
@@ -105,6 +103,7 @@ beforeEach(async () => {
 			type: 'shift_auto_dropped',
 			payload: {
 				customBody: string;
+				organizationId: string;
 				data: {
 					assignmentId: string;
 					routeName: string;
@@ -124,15 +123,23 @@ beforeEach(async () => {
 			joinTable: unknown,
 			joinCondition: unknown
 		) => {
+			innerJoin: (joinTable: unknown, joinCondition: unknown) => unknown;
 			where: typeof selectWhereMock;
 		}
-	>(() => ({ where: selectWhereMock }));
+	>(() => ({ innerJoin: selectInnerJoinMock, where: selectWhereMock }));
+	selectOrgFromMock = vi.fn<(fromTable: unknown) => Promise<OrganizationRow[]>>(async () => [
+		{ id: 'org-1' }
+	]);
 	selectFromMock = vi.fn<(fromTable: unknown) => { innerJoin: typeof selectInnerJoinMock }>(() => ({
 		innerJoin: selectInnerJoinMock
 	}));
-	selectMock = vi.fn<(selectShape: Record<string, unknown>) => { from: typeof selectFromMock }>(
-		() => ({ from: selectFromMock })
-	);
+	selectMock = vi.fn((selectShape: Record<string, unknown>) => {
+		if (Object.keys(selectShape).length === 1 && 'id' in selectShape) {
+			return { from: selectOrgFromMock };
+		}
+
+		return { from: selectFromMock };
+	});
 
 	updateWhereMock = vi.fn<(whereClause: unknown) => Promise<unknown[]>>(async () => []);
 	updateSetMock = vi.fn<(setValues: Record<string, unknown>) => { where: typeof updateWhereMock }>(
@@ -147,6 +154,12 @@ beforeEach(async () => {
 
 	const loggerInfoMock = vi.fn();
 	const loggerErrorMock = vi.fn();
+	const childLogger = {
+		child: vi.fn(),
+		info: loggerInfoMock,
+		error: loggerErrorMock
+	};
+	childLogger.child.mockReturnValue(childLogger);
 
 	vi.doMock('$env/static/private', () => ({
 		CRON_SECRET: 'test-cron-secret'
@@ -178,10 +191,7 @@ beforeEach(async () => {
 
 	vi.doMock('$lib/server/logger', () => ({
 		default: {
-			child: vi.fn(() => ({
-				info: loggerInfoMock,
-				error: loggerErrorMock
-			}))
+			child: vi.fn(() => childLogger)
 		}
 	}));
 
@@ -225,28 +235,32 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 				userId: 'driver-ok',
 				routeId: 'route-a',
 				date: '2026-03-12',
-				routeName: 'Route A'
+				routeName: 'Route A',
+				organizationId: 'org-1'
 			},
 			{
 				id: 'assignment-72h',
 				userId: 'driver-skip',
 				routeId: 'route-b',
 				date: '2026-03-13',
-				routeName: 'Route B'
+				routeName: 'Route B',
+				organizationId: 'org-1'
 			},
 			{
 				id: 'assignment-24h-no-window',
 				userId: 'driver-no-window',
 				routeId: 'route-c',
 				date: '2026-03-11',
-				routeName: 'Route C'
+				routeName: 'Route C',
+				organizationId: 'org-1'
 			},
 			{
 				id: 'assignment-24h-error',
 				userId: 'driver-error',
 				routeId: 'route-c',
 				date: '2026-03-11',
-				routeName: 'Route C'
+				routeName: 'Route C',
+				organizationId: 'org-1'
 			}
 		]);
 
@@ -295,12 +309,15 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 
 		expect(createBidWindowMock).toHaveBeenCalledTimes(3);
 		expect(createBidWindowMock).toHaveBeenNthCalledWith(1, 'assignment-48h', {
+			organizationId: 'org-1',
 			trigger: 'auto_drop'
 		});
 		expect(createBidWindowMock).toHaveBeenNthCalledWith(2, 'assignment-24h-no-window', {
+			organizationId: 'org-1',
 			trigger: 'auto_drop'
 		});
 		expect(createBidWindowMock).toHaveBeenNthCalledWith(3, 'assignment-24h-error', {
+			organizationId: 'org-1',
 			trigger: 'auto_drop'
 		});
 
@@ -318,7 +335,8 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 			userId: 'driver-repeat',
 			routeId: 'route-repeat',
 			date: '2026-03-11',
-			routeName: 'Route Repeat'
+			routeName: 'Route Repeat',
+			organizationId: 'org-1'
 		};
 
 		selectWhereMock.mockResolvedValue([repeatedCandidate]);

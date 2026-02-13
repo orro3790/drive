@@ -106,9 +106,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const session = await auth.api.getSession({ headers: event.request.headers });
 
 	if (session) {
+		const organizationId =
+			typeof session.user?.organizationId === 'string' ? session.user.organizationId : undefined;
+
 		event.locals.session = session.session;
 		event.locals.user = session.user;
 		event.locals.userId = session.user?.id;
+		event.locals.organizationId = organizationId;
 	}
 
 	const isPublic = isPublicRoute(pathname);

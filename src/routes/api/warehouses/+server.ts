@@ -19,6 +19,7 @@ import { warehouseCreateSchema } from '$lib/schemas/warehouse';
 import { and, count, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import { getManagerWarehouseIds } from '$lib/server/services/managers';
 import { createAuditLog } from '$lib/server/services/audit';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import { addDays } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
 
@@ -35,16 +36,10 @@ function getTorontoDateRanges() {
 }
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	// Get warehouses this manager can access
-	const accessibleWarehouses = await getManagerWarehouseIds(locals.user.id);
+	const accessibleWarehouses = await getManagerWarehouseIds(manager.id, organizationId);
 	if (accessibleWarehouses.length === 0) {
 		return json({ warehouses: [] });
 	}
@@ -138,13 +133,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 };
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	let body: unknown;
 	try {
@@ -166,14 +155,15 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.values({
 			name,
 			address,
-			createdBy: locals.user.id
+			organizationId,
+			createdBy: manager.id
 		})
 		.returning();
 
 	// Auto-assign creator as warehouse manager
 	await db.insert(warehouseManagers).values({
 		warehouseId: created.id,
-		userId: locals.user.id
+		userId: manager.id
 	});
 
 	await createAuditLog({
@@ -181,9 +171,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		entityId: created.id,
 		action: 'create',
 		actorType: 'user',
-		actorId: locals.user.id,
+		actorId: manager.id,
 		changes: {
-			after: { name, address, createdBy: locals.user.id }
+			after: { name, address, createdBy: manager.id }
 		}
 	});
 

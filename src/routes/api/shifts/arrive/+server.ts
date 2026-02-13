@@ -18,15 +18,10 @@ import {
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
 import logger from '$lib/server/logger';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can signal arrival');
-	}
+	const { user, organizationId } = requireDriverWithOrg(locals);
 
 	const body = await request.json();
 	const result = shiftArriveSchema.safeParse(body);
@@ -56,7 +51,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	// Verify ownership
-	if (assignment.userId !== locals.user.id) {
+	if (assignment.userId !== user.id) {
 		throw error(403, 'Forbidden');
 	}
 
@@ -67,7 +62,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.innerJoin(assignments, eq(shifts.assignmentId, assignments.id))
 		.where(
 			and(
-				eq(assignments.userId, locals.user.id),
+				eq(assignments.userId, user.id),
 				inArray(assignments.status, ['active', 'scheduled']),
 				isNotNull(shifts.arrivedAt),
 				isNull(shifts.completedAt),
@@ -137,7 +132,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		throw error(409, 'Assignment is not ready for arrival');
 	}
 
-	const userId = locals.user.id;
+	const userId = user.id;
 	const log = logger.child({ operation: 'shiftArrive', assignmentId, userId });
 	log.info('Starting shift arrival');
 
@@ -200,11 +195,11 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	log.info({ shiftId: shift.id }, 'Shift arrival recorded');
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId,
 		status: 'active',
-		driverId: locals.user.id,
-		driverName: locals.user.name ?? null,
+		driverId: user.id,
+		driverName: user.name ?? null,
 		shiftProgress: 'arrived'
 	});
 

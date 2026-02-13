@@ -21,15 +21,10 @@ import {
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
 import logger from '$lib/server/logger';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can complete shifts');
-	}
+	const { user, organizationId } = requireDriverWithOrg(locals);
 
 	const body = await request.json();
 	const result = shiftCompleteSchema.safeParse(body);
@@ -65,7 +60,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	// Verify ownership
-	if (assignment.userId !== locals.user.id) {
+	if (assignment.userId !== user.id) {
 		throw error(403, 'Forbidden');
 	}
 
@@ -126,7 +121,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const completedAt = new Date();
 	const editableUntil = addHours(completedAt, dispatchPolicy.shifts.completionEditWindowHours);
 
-	const userId = locals.user.id;
+	const userId = user.id;
 	const log = logger.child({ operation: 'shiftComplete', assignmentId, userId });
 	log.info('Starting shift completion');
 
@@ -218,7 +213,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	log.info({ shiftId: updatedShift.id }, 'Shift completion recorded');
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId,
 		status: 'completed',
 		driverId: assignment.userId,
@@ -228,20 +223,26 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	// Best-effort notifications and async metrics
 	if (exceptedReturns > 0) {
-		await sendManagerAlert(assignment.routeId, 'return_exception', {
-			routeName: assignment.routeName ?? 'Unknown Route',
-			driverName: locals.user.name ?? 'A driver',
-			date: assignment.date
-		});
+		await sendManagerAlert(
+			assignment.routeId,
+			'return_exception',
+			{
+				routeName: assignment.routeName ?? 'Unknown Route',
+				driverName: user.name ?? 'A driver',
+				date: assignment.date
+			},
+			organizationId
+		);
 	}
 
 	await Promise.all([
 		recordRouteCompletion({
 			userId: assignment.userId,
 			routeId: assignment.routeId,
-			completedAt
+			completedAt,
+			organizationId
 		}),
-		updateDriverMetrics(assignment.userId)
+		updateDriverMetrics(assignment.userId, organizationId)
 	]);
 
 	return json({

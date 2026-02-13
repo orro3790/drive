@@ -8,15 +8,10 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { assignmentIdParamsSchema } from '$lib/schemas/assignment';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 
 export const POST: RequestHandler = async ({ locals, params, fetch }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Only managers can reopen routes');
-	}
+	requireManagerWithOrg(locals);
 
 	const paramsResult = assignmentIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {

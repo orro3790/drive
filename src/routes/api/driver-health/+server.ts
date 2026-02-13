@@ -14,7 +14,7 @@
  * Read-only, driver-scoped. New drivers receive a neutral onboarding state.
  */
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { driverHealthState, driverHealthSnapshots } from '$lib/server/db/schema';
@@ -22,17 +22,12 @@ import { eq, desc } from 'drizzle-orm';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { computeContributions } from '$lib/server/services/health';
 import type { HealthResponse } from '$lib/schemas/health';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user } = requireDriverWithOrg(locals);
 
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can access health data');
-	}
-
-	const userId = locals.user.id;
+	const userId = user.id;
 
 	const [healthState, recentSnapshots] = await Promise.all([
 		db.select().from(driverHealthState).where(eq(driverHealthState.userId, userId)).limit(1),

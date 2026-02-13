@@ -6,15 +6,10 @@ import {
 	broadcastAssignmentUpdated,
 	broadcastBidWindowClosed
 } from '$lib/server/realtime/managerSse';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = assignmentIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -36,7 +31,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const result = await manualAssignDriverToAssignment({
 		assignmentId: paramsResult.data.id,
 		driverId: parsed.data.userId,
-		actorId: locals.user.id
+		actorId: manager.id,
+		organizationId
 	});
 
 	if (!result.ok) {
@@ -62,7 +58,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	}
 
 	if (result.bidWindowId) {
-		broadcastBidWindowClosed({
+		broadcastBidWindowClosed(organizationId, {
 			assignmentId: result.assignmentId,
 			bidWindowId: result.bidWindowId,
 			winnerId: null,
@@ -70,7 +66,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		});
 	}
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId: result.assignmentId,
 		status: 'scheduled',
 		driverId: result.driverId,

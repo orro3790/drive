@@ -20,16 +20,11 @@ import { and, eq, gte, inArray, sql, or } from 'drizzle-orm';
 import { getManagerWarehouseIds } from '$lib/server/services/managers';
 import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
 import { bidWindowListQuerySchema } from '$lib/schemas/api/bidding';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import logger from '$lib/server/logger';
 
 export const GET: RequestHandler = async ({ locals, url }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const log = logger.child({ operation: 'listBidWindows' });
 
@@ -51,7 +46,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	} = paramsResult.data;
 
 	// Get manager's warehouse IDs for scoping
-	const managerWarehouseIds = await getManagerWarehouseIds(locals.user.id);
+	const managerWarehouseIds = await getManagerWarehouseIds(manager.id, organizationId);
 	if (managerWarehouseIds.length === 0) {
 		return json({ bidWindows: [], lastUpdated: new Date().toISOString() });
 	}
@@ -65,9 +60,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 	// Resolve any expired bid windows before returning (event-driven)
 	try {
-		const expiredWindows = await getExpiredBidWindows(warehouseIds);
+		const expiredWindows = await getExpiredBidWindows(warehouseIds, organizationId);
 		for (const window of expiredWindows) {
-			await resolveBidWindow(window.id);
+			await resolveBidWindow(window.id, { actorType: 'system', actorId: null }, organizationId);
 		}
 		if (expiredWindows.length > 0) {
 			log.info({ count: expiredWindows.length }, 'Resolved expired bid windows');

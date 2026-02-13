@@ -17,21 +17,16 @@ import {
 } from '$lib/server/services/bidding';
 import { bidWindowIdParamsSchema } from '$lib/schemas/api/bidding';
 import { createAuditLog } from '$lib/server/services/audit';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import {
 	broadcastAssignmentUpdated,
 	broadcastBidWindowClosed
 } from '$lib/server/realtime/managerSse';
 
 export const POST: RequestHandler = async ({ locals, params }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
-
-	const actorId = locals.user.id;
+	const actorId = manager.id;
 
 	const paramsResult = bidWindowIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -62,7 +57,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		throw error(404, 'Bid window not found');
 	}
 
-	const canAccess = await canManagerAccessWarehouse(actorId, window.warehouseId);
+	const canAccess = await canManagerAccessWarehouse(actorId, window.warehouseId, organizationId);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -118,23 +113,27 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 			);
 		});
 
-		broadcastBidWindowClosed({
+		broadcastBidWindowClosed(organizationId, {
 			assignmentId: window.assignmentId,
 			bidWindowId: window.id,
 			winnerId: null
 		});
 
-		broadcastAssignmentUpdated({
+		broadcastAssignmentUpdated(organizationId, {
 			assignmentId: window.assignmentId,
 			status: 'unfilled',
 			routeId: window.routeId,
 			bidWindowClosesAt: null
 		});
 	} else {
-		resolvedResult = await resolveBidWindow(window.id, {
-			actorType: 'user',
-			actorId
-		});
+		resolvedResult = await resolveBidWindow(
+			window.id,
+			{
+				actorType: 'user',
+				actorId
+			},
+			organizationId
+		);
 
 		if (resolvedResult.reason === 'not_open') {
 			throw error(409, 'Bid window already closed');
@@ -158,7 +157,7 @@ export const POST: RequestHandler = async ({ locals, params }) => {
 		}
 	});
 
-	const bidWindow = await getBidWindowDetail(window.id);
+	const bidWindow = await getBidWindowDetail(window.id, organizationId);
 
 	return json({ bidWindow });
 };

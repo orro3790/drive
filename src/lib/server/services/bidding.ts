@@ -55,6 +55,7 @@ export interface CreateBidWindowResult {
 }
 
 export interface CreateBidWindowOptions {
+	organizationId?: string;
 	mode?: BidWindowMode;
 	trigger?: BidWindowTrigger;
 	payBonusPercent?: number;
@@ -200,6 +201,10 @@ export async function createBidWindow(
 	options: CreateBidWindowOptions = {}
 ): Promise<CreateBidWindowResult> {
 	const log = logger.child({ operation: 'createBidWindow', ...options });
+	const assignmentConditions = [eq(assignments.id, assignmentId)];
+	if (options.organizationId) {
+		assignmentConditions.push(eq(warehouses.organizationId, options.organizationId));
+	}
 
 	const [assignment] = await db
 		.select({
@@ -207,15 +212,24 @@ export async function createBidWindow(
 			routeId: assignments.routeId,
 			date: assignments.date,
 			status: assignments.status,
-			userId: assignments.userId
+			userId: assignments.userId,
+			organizationId: warehouses.organizationId
 		})
 		.from(assignments)
-		.where(eq(assignments.id, assignmentId));
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.where(and(...assignmentConditions));
 
 	if (!assignment) {
 		log.warn('Assignment not found');
 		return { success: false, reason: 'Assignment not found' };
 	}
+
+	if (!assignment.organizationId) {
+		log.warn('Assignment has no organization scope');
+		return { success: false, reason: 'Assignment organization missing' };
+	}
+
+	const organizationId = assignment.organizationId;
 
 	// Check for existing OPEN bid window only (resolved/closed windows are fine)
 	const [existingWindow] = await db
@@ -239,7 +253,8 @@ export async function createBidWindow(
 	const [route] = await db
 		.select({ name: routes.name })
 		.from(routes)
-		.where(eq(routes.id, assignment.routeId));
+		.innerJoin(warehouses, eq(routes.warehouseId, warehouses.id))
+		.where(and(eq(routes.id, assignment.routeId), eq(warehouses.organizationId, organizationId)));
 	const routeName = route?.name ?? 'Unknown Route';
 
 	if (assignment.status !== 'unfilled' || assignment.userId !== null) {
@@ -299,6 +314,7 @@ export async function createBidWindow(
 	log.info({ mode, closesAt }, 'Bid window created');
 
 	const notifiedCount = await notifyEligibleDrivers({
+		organizationId,
 		assignmentId,
 		assignmentDate: assignment.date,
 		routeName,
@@ -307,7 +323,7 @@ export async function createBidWindow(
 		payBonusPercent: options.payBonusPercent ?? 0
 	});
 
-	broadcastBidWindowOpened({
+	broadcastBidWindowOpened(organizationId, {
 		assignmentId,
 		routeId: assignment.routeId,
 		routeName,
@@ -315,7 +331,7 @@ export async function createBidWindow(
 		closesAt: closesAt.toISOString()
 	});
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId,
 		status: 'unfilled',
 		driverId: null,
@@ -332,6 +348,7 @@ export async function createBidWindow(
 }
 
 interface NotifyEligibleDriversParams {
+	organizationId: string;
 	assignmentId: string;
 	assignmentDate: string;
 	routeName: string;
@@ -349,13 +366,31 @@ interface NotifyEligibleDriversParams {
  * - Under weekly cap for the assignment's week
  */
 async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promise<number> {
-	const { assignmentId, assignmentDate, routeName, closesAt, mode, payBonusPercent } = params;
+	const {
+		organizationId,
+		assignmentId,
+		assignmentDate,
+		routeName,
+		closesAt,
+		mode,
+		payBonusPercent
+	} = params;
 	const log = logger.child({ operation: 'notifyEligibleDrivers', mode });
+
+	if (!organizationId) {
+		return 0;
+	}
 
 	const drivers = await db
 		.select({ id: user.id })
 		.from(user)
-		.where(and(eq(user.role, 'driver'), eq(user.isFlagged, false)));
+		.where(
+			and(
+				eq(user.role, 'driver'),
+				eq(user.isFlagged, false),
+				eq(user.organizationId, organizationId)
+			)
+		);
 
 	if (drivers.length === 0) {
 		log.info('No eligible drivers found');
@@ -366,7 +401,7 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 
 	const eligibleDriverIds: string[] = [];
 	for (const driver of drivers) {
-		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart);
+		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart, organizationId);
 		if (canTake) {
 			eligibleDriverIds.push(driver.id);
 		}
@@ -403,6 +438,7 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 	const title = isEmergency ? 'Priority Route Available' : 'New Shift Available';
 
 	const notificationRecords = eligibleDriverIds.map((driverId) => ({
+		organizationId,
 		userId: driverId,
 		type: notificationType,
 		title,
@@ -417,7 +453,15 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 	return eligibleDriverIds.length;
 }
 
-async function calculateBidScore(userId: string, routeId: string): Promise<number> {
+async function calculateBidScore(
+	userId: string,
+	routeId: string,
+	organizationId: string
+): Promise<number> {
+	if (!organizationId) {
+		return 0;
+	}
+
 	const [healthState] = await db
 		.select({ currentScore: driverHealthState.currentScore })
 		.from(driverHealthState)
@@ -426,12 +470,20 @@ async function calculateBidScore(userId: string, routeId: string): Promise<numbe
 	const [driver] = await db
 		.select({ createdAt: user.createdAt })
 		.from(user)
-		.where(eq(user.id, userId));
+		.where(and(eq(user.id, userId), eq(user.organizationId, organizationId)));
 
 	const [routeFamiliarity] = await db
 		.select({ completionCount: routeCompletions.completionCount })
 		.from(routeCompletions)
-		.where(and(eq(routeCompletions.userId, userId), eq(routeCompletions.routeId, routeId)));
+		.innerJoin(routes, eq(routeCompletions.routeId, routes.id))
+		.innerJoin(warehouses, eq(routes.warehouseId, warehouses.id))
+		.where(
+			and(
+				eq(routeCompletions.userId, userId),
+				eq(routeCompletions.routeId, routeId),
+				eq(warehouses.organizationId, organizationId)
+			)
+		);
 
 	const [preferences] = await db
 		.select({ preferredRoutes: driverPreferences.preferredRoutes })
@@ -456,24 +508,34 @@ async function calculateBidScore(userId: string, routeId: string): Promise<numbe
  */
 export async function resolveBidWindow(
 	bidWindowId: string,
-	actor: AuditActor = { actorType: 'system', actorId: null }
+	actor: AuditActor = { actorType: 'system', actorId: null },
+	organizationId?: string
 ): Promise<ResolveBidWindowResult> {
 	const log = logger.child({ operation: 'resolveBidWindow' });
+	const windowConditions = [eq(bidWindows.id, bidWindowId)];
+	if (organizationId) {
+		windowConditions.push(eq(warehouses.organizationId, organizationId));
+	}
 
 	const [window] = await db
 		.select({
 			id: bidWindows.id,
 			assignmentId: bidWindows.assignmentId,
 			status: bidWindows.status,
-			mode: bidWindows.mode
+			mode: bidWindows.mode,
+			organizationId: warehouses.organizationId
 		})
 		.from(bidWindows)
-		.where(eq(bidWindows.id, bidWindowId));
+		.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.where(and(...windowConditions));
 
-	if (!window) {
+	if (!window || !window.organizationId) {
 		log.warn('Bid window not found');
 		return { resolved: false, bidCount: 0, reason: 'not_found' };
 	}
+
+	const windowOrganizationId = window.organizationId;
 
 	if (window.status !== 'open') {
 		log.info({ status: window.status }, 'Bid window not open');
@@ -487,23 +549,32 @@ export async function resolveBidWindow(
 			routeId: assignments.routeId,
 			routeName: routes.name,
 			status: assignments.status,
-			userId: assignments.userId
+			userId: assignments.userId,
+			organizationId: warehouses.organizationId
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
-		.where(eq(assignments.id, window.assignmentId));
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.where(
+			and(
+				eq(assignments.id, window.assignmentId),
+				eq(warehouses.organizationId, windowOrganizationId)
+			)
+		);
 
-	if (!assignment) {
+	if (!assignment || !assignment.organizationId) {
 		log.warn('Assignment not found');
 		return { resolved: false, bidCount: 0, reason: 'assignment_not_found' };
 	}
+
+	const assignmentOrganizationId = assignment.organizationId;
 
 	const finalizeWithoutWinner = async (
 		reason: 'no_bids' | 'all_bidders_conflicted',
 		bidCount: number
 	): Promise<ResolveBidWindowResult> => {
 		if (window.mode === 'competitive') {
-			const transitioned = await transitionToInstantMode(bidWindowId);
+			const transitioned = await transitionToInstantMode(bidWindowId, assignmentOrganizationId);
 			if (transitioned) {
 				return {
 					resolved: false,
@@ -527,10 +598,15 @@ export async function resolveBidWindow(
 		}
 
 		try {
-			await sendManagerAlert(assignment.routeId, 'route_unfilled', {
-				routeName: assignment.routeName,
-				date: assignment.date
-			});
+			await sendManagerAlert(
+				assignment.routeId,
+				'route_unfilled',
+				{
+					routeName: assignment.routeName,
+					date: assignment.date
+				},
+				assignmentOrganizationId
+			);
 		} catch (err) {
 			log.warn(getErrorLogContext(err), 'Manager alert failed after closing bid window');
 		}
@@ -555,7 +631,7 @@ export async function resolveBidWindow(
 	const scoredBids = await Promise.all(
 		pendingBids.map(async (bid) => ({
 			...bid,
-			score: await calculateBidScore(bid.userId, assignment.routeId)
+			score: await calculateBidScore(bid.userId, assignment.routeId, assignmentOrganizationId)
 		}))
 	);
 
@@ -577,12 +653,14 @@ export async function resolveBidWindow(
 	const conflicts = await db
 		.select({ userId: assignments.userId })
 		.from(assignments)
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.where(
 			and(
 				inArray(assignments.userId, bidderIds),
 				eq(assignments.date, assignment.date),
 				ne(assignments.id, assignment.id),
-				ne(assignments.status, 'cancelled')
+				ne(assignments.status, 'cancelled'),
+				eq(warehouses.organizationId, assignmentOrganizationId)
 			)
 		);
 	const conflictSet = new Set(conflicts.map((c) => c.userId));
@@ -698,7 +776,8 @@ export async function resolveBidWindow(
 		try {
 			await sendNotification(transactionResult.winnerId, 'bid_won', {
 				customBody: winnerBody,
-				data: notificationData
+				data: notificationData,
+				organizationId: assignmentOrganizationId
 			});
 		} catch (err) {
 			log.warn(getErrorLogContext(err), 'Winner notification failed');
@@ -709,7 +788,8 @@ export async function resolveBidWindow(
 			try {
 				await sendBulkNotifications(loserIds, 'bid_lost', {
 					customBody: loserBody,
-					data: notificationData
+					data: notificationData,
+					organizationId: assignmentOrganizationId
 				});
 			} catch (err) {
 				log.warn(getErrorLogContext(err), 'Loser notifications failed');
@@ -717,7 +797,7 @@ export async function resolveBidWindow(
 		}
 
 		try {
-			broadcastBidWindowClosed({
+			broadcastBidWindowClosed(assignmentOrganizationId, {
 				assignmentId: assignment.id,
 				bidWindowId,
 				winnerId: transactionResult.winnerId
@@ -727,7 +807,7 @@ export async function resolveBidWindow(
 		}
 
 		try {
-			broadcastAssignmentUpdated({
+			broadcastAssignmentUpdated(assignmentOrganizationId, {
 				assignmentId: assignment.id,
 				status: 'scheduled',
 				driverId: transactionResult.winnerId,
@@ -752,11 +832,26 @@ export async function resolveBidWindow(
  * Used by the cron job to resolve expired windows.
  */
 export async function getExpiredBidWindows(
-	warehouseIds?: string[]
+	warehouseIds?: string[],
+	organizationId?: string
 ): Promise<Array<{ id: string; assignmentId: string; mode: BidWindowMode }>> {
 	const now = new Date();
 
+	if ((!warehouseIds || warehouseIds.length === 0) && !organizationId) {
+		return [];
+	}
+
 	if (warehouseIds && warehouseIds.length > 0) {
+		const scopedConditions = [
+			eq(bidWindows.status, 'open'),
+			lt(bidWindows.closesAt, now),
+			inArray(assignments.warehouseId, warehouseIds)
+		];
+
+		if (organizationId) {
+			scopedConditions.push(eq(warehouses.organizationId, organizationId));
+		}
+
 		return db
 			.select({
 				id: bidWindows.id,
@@ -765,13 +860,8 @@ export async function getExpiredBidWindows(
 			})
 			.from(bidWindows)
 			.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
-			.where(
-				and(
-					eq(bidWindows.status, 'open'),
-					lt(bidWindows.closesAt, now),
-					inArray(assignments.warehouseId, warehouseIds)
-				)
-			);
+			.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+			.where(and(...scopedConditions));
 	}
 
 	return db
@@ -781,15 +871,30 @@ export async function getExpiredBidWindows(
 			mode: bidWindows.mode
 		})
 		.from(bidWindows)
-		.where(and(eq(bidWindows.status, 'open'), lt(bidWindows.closesAt, now)));
+		.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.where(
+			and(
+				eq(bidWindows.status, 'open'),
+				lt(bidWindows.closesAt, now),
+				eq(warehouses.organizationId, organizationId ?? '')
+			)
+		);
 }
 
 /**
  * Transition a competitive bid window to instant mode.
  * Called when a competitive window expires with no bids.
  */
-export async function transitionToInstantMode(bidWindowId: string): Promise<boolean> {
+export async function transitionToInstantMode(
+	bidWindowId: string,
+	organizationId?: string
+): Promise<boolean> {
 	const log = logger.child({ operation: 'transitionToInstantMode' });
+
+	if (!organizationId) {
+		return false;
+	}
 
 	const transitionResult = await db.transaction(async (tx) => {
 		const lockResult = await tx.execute(
@@ -814,12 +919,14 @@ export async function transitionToInstantMode(bidWindowId: string): Promise<bool
 		const [assignment] = await tx
 			.select({
 				date: assignments.date,
-				routeId: assignments.routeId
+				routeId: assignments.routeId,
+				organizationId: warehouses.organizationId
 			})
 			.from(assignments)
-			.where(eq(assignments.id, assignmentId));
+			.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+			.where(and(eq(assignments.id, assignmentId), eq(warehouses.organizationId, organizationId)));
 
-		if (!assignment) {
+		if (!assignment || !assignment.organizationId) {
 			return { outcome: 'assignment_not_found' as const };
 		}
 
@@ -860,6 +967,7 @@ export async function transitionToInstantMode(bidWindowId: string): Promise<bool
 			assignmentId,
 			assignmentDate: assignment.date,
 			routeId: assignment.routeId,
+			organizationId: assignment.organizationId,
 			shiftStart
 		};
 	});
@@ -886,10 +994,17 @@ export async function transitionToInstantMode(bidWindowId: string): Promise<bool
 	const [route] = await db
 		.select({ name: routes.name })
 		.from(routes)
-		.where(eq(routes.id, transitionResult.routeId));
+		.innerJoin(warehouses, eq(routes.warehouseId, warehouses.id))
+		.where(
+			and(
+				eq(routes.id, transitionResult.routeId),
+				eq(warehouses.organizationId, transitionResult.organizationId)
+			)
+		);
 	const routeName = route?.name ?? 'Unknown Route';
 
 	await notifyEligibleDrivers({
+		organizationId: transitionResult.organizationId,
 		assignmentId: transitionResult.assignmentId,
 		assignmentDate: transitionResult.assignmentDate,
 		routeName,
@@ -909,11 +1024,25 @@ export async function transitionToInstantMode(bidWindowId: string): Promise<bool
 export async function instantAssign(
 	assignmentId: string,
 	userId: string,
-	bidWindowId: string
+	bidWindowId: string,
+	organizationId?: string
 ): Promise<InstantAssignResult> {
 	const log = logger.child({ operation: 'instantAssign' });
 
 	try {
+		if (organizationId) {
+			const [scopedAssignment] = await db
+				.select({ id: assignments.id })
+				.from(assignments)
+				.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+				.where(and(eq(assignments.id, assignmentId), eq(warehouses.organizationId, organizationId)))
+				.limit(1);
+
+			if (!scopedAssignment) {
+				return { instantlyAssigned: false, error: 'Route already assigned' };
+			}
+		}
+
 		const transactionResult = await db.transaction(async (tx) => {
 			// Lock the bid window row with FOR UPDATE to serialize concurrent requests
 			const lockResult = await tx.execute(
@@ -927,11 +1056,17 @@ export async function instantAssign(
 
 			const resolvedAt = new Date();
 
+			const assignmentConditions = [eq(assignments.id, assignmentId)];
+			if (organizationId) {
+				assignmentConditions.push(eq(warehouses.organizationId, organizationId));
+			}
+
 			// Create winning bid
 			const [assignment] = await tx
 				.select({ date: assignments.date })
 				.from(assignments)
-				.where(eq(assignments.id, assignmentId));
+				.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+				.where(and(...assignmentConditions));
 
 			if (!assignment) {
 				return { instantlyAssigned: false, error: 'Route already assigned' };
@@ -1083,7 +1218,12 @@ export async function instantAssign(
 	}
 }
 
-export async function getBidWindowDetail(windowId: string) {
+export async function getBidWindowDetail(windowId: string, organizationId?: string) {
+	const detailConditions = [eq(bidWindows.id, windowId)];
+	if (organizationId) {
+		detailConditions.push(eq(warehouses.organizationId, organizationId));
+	}
+
 	const bidCountSubquery = db
 		.select({
 			bidWindowId: bids.bidWindowId,
@@ -1113,7 +1253,7 @@ export async function getBidWindowDetail(windowId: string) {
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.leftJoin(user, eq(bidWindows.winnerId, user.id))
 		.leftJoin(bidCountSubquery, eq(bidCountSubquery.bidWindowId, bidWindows.id))
-		.where(eq(bidWindows.id, windowId));
+		.where(and(...detailConditions));
 
 	if (!row) return null;
 

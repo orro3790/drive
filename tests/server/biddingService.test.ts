@@ -173,7 +173,8 @@ describe('bidding service boundaries', () => {
 					id: 'assignment-1',
 					routeId: 'route-1',
 					date: '2026-02-20',
-					status: 'unfilled'
+					status: 'unfilled',
+					organizationId: 'org-a'
 				}
 			],
 			[{ id: 'window-existing' }]
@@ -194,7 +195,8 @@ describe('bidding service boundaries', () => {
 					id: 'assignment-2',
 					routeId: 'route-2',
 					date: '2026-02-20',
-					status: 'unfilled'
+					status: 'unfilled',
+					organizationId: 'org-a'
 				}
 			],
 			[]
@@ -207,14 +209,14 @@ describe('bidding service boundaries', () => {
 		expect(insertMock).not.toHaveBeenCalled();
 	});
 
-	it('supports scoped and unscoped expired-window lookups', async () => {
+	it('supports warehouse-scoped and organization-scoped expired-window lookups', async () => {
 		setSelectResults([
 			[{ id: 'window-scoped', assignmentId: 'assignment-a', mode: 'competitive' }],
 			[{ id: 'window-global', assignmentId: 'assignment-b', mode: 'instant' }]
 		]);
 
-		const scoped = await getExpiredBidWindows(['warehouse-1']);
-		const global = await getExpiredBidWindows();
+		const scoped = await getExpiredBidWindows(['warehouse-1'], 'org-a');
+		const global = await getExpiredBidWindows(undefined, 'org-b');
 
 		expect(scoped).toEqual([
 			{ id: 'window-scoped', assignmentId: 'assignment-a', mode: 'competitive' }
@@ -238,6 +240,7 @@ describe('bidding service boundaries', () => {
 		const txSelectMock = vi.fn((_shape?: unknown) => {
 			const chain = {
 				from: vi.fn(() => chain),
+				innerJoin: vi.fn((_table: unknown, _on: unknown) => chain),
 				where: vi.fn(async (_condition: unknown) => {
 					if (txSelectQueue.length === 0) {
 						throw new Error('No tx select result available');
@@ -300,7 +303,8 @@ describe('bidding service boundaries', () => {
 					id: 'window-1',
 					assignmentId: 'assignment-1',
 					status: 'open',
-					mode: 'competitive'
+					mode: 'competitive',
+					organizationId: 'org-a'
 				}
 			],
 			[
@@ -310,7 +314,8 @@ describe('bidding service boundaries', () => {
 					routeId: 'route-1',
 					routeName: 'Route One',
 					status: 'unfilled',
-					userId: null
+					userId: null,
+					organizationId: 'org-a'
 				}
 			],
 			[{ id: 'bid-only', userId: 'driver-only', bidAt: new Date('2026-02-10T10:01:00.000Z') }],
@@ -353,7 +358,8 @@ describe('bidding service boundaries', () => {
 					id: 'window-1',
 					assignmentId: 'assignment-1',
 					status: 'open',
-					mode: 'competitive'
+					mode: 'competitive',
+					organizationId: 'org-a'
 				}
 			],
 			[
@@ -363,7 +369,8 @@ describe('bidding service boundaries', () => {
 					routeId: 'route-1',
 					routeName: 'Route One',
 					status: 'unfilled',
-					userId: null
+					userId: null,
+					organizationId: 'org-a'
 				}
 			],
 			[
@@ -405,7 +412,8 @@ describe('bidding service boundaries', () => {
 					id: 'window-1',
 					assignmentId: 'assignment-1',
 					status: 'open',
-					mode: 'competitive'
+					mode: 'competitive',
+					organizationId: 'org-a'
 				}
 			],
 			[
@@ -415,7 +423,8 @@ describe('bidding service boundaries', () => {
 					routeId: 'route-1',
 					routeName: 'Route One',
 					status: 'unfilled',
-					userId: null
+					userId: null,
+					organizationId: 'org-a'
 				}
 			],
 			[

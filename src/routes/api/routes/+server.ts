@@ -13,6 +13,7 @@ import { routeCreateSchema, type RouteStatus } from '$lib/schemas/route';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getManagerWarehouseIds, canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { createAuditLog } from '$lib/server/services/audit';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import {
 	toLocalYmd,
 	isValidDate,
@@ -46,15 +47,9 @@ function resolveStatus(assignment?: AssignmentInfo): RouteStatus {
 }
 
 export const GET: RequestHandler = async ({ locals, url }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
-
-	const currentUserId = locals.user.id;
+	const currentUserId = manager.id;
 	const warehouseId = url.searchParams.get('warehouseId');
 	const statusFilter = url.searchParams.get('status');
 	const dateParam = url.searchParams.get('date');
@@ -73,7 +68,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	}
 
 	// Get warehouses this manager can access
-	const accessibleWarehouses = await getManagerWarehouseIds(currentUserId);
+	const accessibleWarehouses = await getManagerWarehouseIds(currentUserId, organizationId);
 	if (accessibleWarehouses.length === 0) {
 		return json({ routes: [], date });
 	}
@@ -188,13 +183,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 };
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	let body: unknown;
 	try {
@@ -212,7 +201,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const { name, warehouseId, managerId, startTime } = result.data;
 
 	// Validate manager has access to this warehouse
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, warehouseId);
+	const canAccess = await canManagerAccessWarehouse(manager.id, warehouseId, organizationId);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -240,7 +229,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		.values({
 			name,
 			warehouseId,
-			managerId: managerId ?? locals.user.id,
+			managerId: managerId ?? manager.id,
 			startTime
 		})
 		.returning();
@@ -250,7 +239,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		entityId: created.id,
 		action: 'create',
 		actorType: 'user',
-		actorId: locals.user.id,
+		actorId: manager.id,
 		changes: {
 			after: { name, warehouseId, managerId: created.managerId, startTime }
 		}

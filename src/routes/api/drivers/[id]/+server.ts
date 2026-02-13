@@ -15,17 +15,12 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { driverHealthState, driverMetrics, user } from '$lib/server/db/schema';
 import { driverUpdateSchema } from '$lib/schemas/driver';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 
 export const PATCH: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const { id } = params;
 	const body = await request.json();
@@ -49,7 +44,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 			createdAt: user.createdAt
 		})
 		.from(user)
-		.where(eq(user.id, id));
+		.where(and(eq(user.id, id), eq(user.organizationId, organizationId)));
 
 	if (!existing) {
 		throw error(404, 'Driver not found');
@@ -107,7 +102,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 				entityId: id,
 				action: 'reinstate',
 				actorType: 'user',
-				actorId: locals.user.id,
+				actorId: manager.id,
 				changes: {
 					assignmentPoolEligible: { from: false, to: true },
 					requiresManagerIntervention: { from: true, to: false }
@@ -165,7 +160,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 			entityId: id,
 			action: updates.unflag ? 'unflag' : 'update',
 			actorType: 'user',
-			actorId: locals.user.id,
+			actorId: manager.id,
 			changes: {
 				before: {
 					weeklyCap: existing.weeklyCap,

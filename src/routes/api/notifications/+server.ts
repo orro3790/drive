@@ -13,11 +13,10 @@ import {
 	notificationListParamsSchema,
 	notificationListResponseSchema
 } from '$lib/schemas/api/notifications';
+import { requireAuthenticatedWithOrg } from '$lib/server/org-scope';
 
 export const GET: RequestHandler = async ({ locals, url }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user } = requireAuthenticatedWithOrg(locals);
 
 	const paramsResult = notificationListParamsSchema.safeParse({
 		page: url.searchParams.get('page') ?? undefined,
@@ -43,18 +42,15 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 				data: notifications.data
 			})
 			.from(notifications)
-			.where(eq(notifications.userId, locals.user.id))
+			.where(eq(notifications.userId, user.id))
 			.orderBy(desc(notifications.createdAt))
 			.limit(pageSize)
 			.offset(offset),
+		db.select({ count: count() }).from(notifications).where(eq(notifications.userId, user.id)),
 		db
 			.select({ count: count() })
 			.from(notifications)
-			.where(eq(notifications.userId, locals.user.id)),
-		db
-			.select({ count: count() })
-			.from(notifications)
-			.where(and(eq(notifications.userId, locals.user.id), eq(notifications.read, false)))
+			.where(and(eq(notifications.userId, user.id), eq(notifications.read, false)))
 	]);
 
 	const total = Number(totalResult[0]?.count ?? 0);

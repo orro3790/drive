@@ -2,3 +2,8 @@
 ralph/sessions/
 project.inlang/.meta.json
 project.inlang/README.md
+src/paraglide/
+src/lib/paraglide/
+android/.gradle/
+android/.gradle-local/
+android/**/build/

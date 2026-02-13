@@ -7,7 +7,9 @@ type OnboardingRevokeRouteModule =
 
 let PATCH: OnboardingRevokeRouteModule['PATCH'];
 let revokeOnboardingEntryMock: ReturnType<
-	typeof vi.fn<(entryId: string, revokedByUserId: string) => Promise<unknown>>
+	typeof vi.fn<
+		(entryId: string, organizationId: string, revokedByUserId: string) => Promise<unknown>
+	>
 >;
 
 function createUser(role: 'manager' | 'driver', id: string): App.Locals['user'] {
@@ -15,7 +17,8 @@ function createUser(role: 'manager' | 'driver', id: string): App.Locals['user'] 
 		id,
 		role,
 		name: `${role}-${id}`,
-		email: `${id}@example.test`
+		email: `${id}@example.test`,
+		organizationId: 'org-test'
 	} as App.Locals['user'];
 }
 
@@ -89,6 +92,7 @@ describe('PATCH /api/onboarding/[id]/revoke route contract', () => {
 		});
 		expect(revokeOnboardingEntryMock).toHaveBeenCalledWith(
 			'5f19728a-94b6-4db9-95fa-ce1dc60922a0',
+			'org-test',
 			'manager-1'
 		);
 	});

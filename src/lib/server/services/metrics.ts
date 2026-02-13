@@ -5,14 +5,47 @@
  */
 
 import { db } from '$lib/server/db';
-import { assignments, driverMetrics, routeCompletions, shifts } from '$lib/server/db/schema';
+import {
+	assignments,
+	driverMetrics,
+	routeCompletions,
+	routes,
+	shifts,
+	user,
+	warehouses
+} from '$lib/server/db/schema';
 import { and, eq, isNotNull, ne, sql } from 'drizzle-orm';
 
-export async function updateDriverMetrics(userId: string): Promise<void> {
+async function resolveMetricsOrganizationId(
+	userId: string,
+	organizationId?: string
+): Promise<string | null> {
+	if (organizationId) {
+		return organizationId;
+	}
+
+	const [driver] = await db
+		.select({ organizationId: user.organizationId })
+		.from(user)
+		.where(eq(user.id, userId))
+		.limit(1);
+
+	return driver?.organizationId ?? null;
+}
+
+export async function updateDriverMetrics(userId: string, organizationId?: string): Promise<void> {
+	const resolvedOrganizationId = await resolveMetricsOrganizationId(userId, organizationId);
+	if (!resolvedOrganizationId) {
+		return;
+	}
+
 	const [totalResult] = await db
 		.select({ count: sql<number>`count(*)::int` })
 		.from(assignments)
-		.where(eq(assignments.userId, userId));
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.where(
+			and(eq(assignments.userId, userId), eq(warehouses.organizationId, resolvedOrganizationId))
+		);
 
 	const totalShifts = totalResult?.count ?? 0;
 
@@ -20,7 +53,14 @@ export async function updateDriverMetrics(userId: string): Promise<void> {
 		.select({ count: sql<number>`count(*)::int` })
 		.from(shifts)
 		.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
-		.where(and(eq(assignments.userId, userId), isNotNull(shifts.completedAt)));
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
+		.where(
+			and(
+				eq(assignments.userId, userId),
+				eq(warehouses.organizationId, resolvedOrganizationId),
+				isNotNull(shifts.completedAt)
+			)
+		);
 
 	const completedShifts = completedResult?.count ?? 0;
 
@@ -31,9 +71,11 @@ export async function updateDriverMetrics(userId: string): Promise<void> {
 		})
 		.from(shifts)
 		.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.where(
 			and(
 				eq(assignments.userId, userId),
+				eq(warehouses.organizationId, resolvedOrganizationId),
 				isNotNull(shifts.completedAt),
 				isNotNull(shifts.parcelsStart),
 				ne(shifts.parcelsStart, 0)
@@ -46,9 +88,11 @@ export async function updateDriverMetrics(userId: string): Promise<void> {
 		})
 		.from(shifts)
 		.innerJoin(assignments, eq(assignments.id, shifts.assignmentId))
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.where(
 			and(
 				eq(assignments.userId, userId),
+				eq(warehouses.organizationId, resolvedOrganizationId),
 				isNotNull(shifts.completedAt),
 				isNotNull(shifts.parcelsDelivered)
 			)
@@ -87,13 +131,31 @@ interface RouteCompletionInput {
 	userId: string;
 	routeId: string;
 	completedAt: Date;
+	organizationId?: string;
 }
 
 export async function recordRouteCompletion({
 	userId,
 	routeId,
-	completedAt
+	completedAt,
+	organizationId
 }: RouteCompletionInput): Promise<void> {
+	const resolvedOrganizationId = await resolveMetricsOrganizationId(userId, organizationId);
+	if (!resolvedOrganizationId) {
+		return;
+	}
+
+	const [scopedRoute] = await db
+		.select({ id: routes.id })
+		.from(routes)
+		.innerJoin(warehouses, eq(routes.warehouseId, warehouses.id))
+		.where(and(eq(routes.id, routeId), eq(warehouses.organizationId, resolvedOrganizationId)))
+		.limit(1);
+
+	if (!scopedRoute) {
+		return;
+	}
+
 	await db
 		.insert(routeCompletions)
 		.values({

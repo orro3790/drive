@@ -1,4 +1,4 @@
-import { error, json } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { parseRouteStartTime } from '$lib/config/dispatchPolicy';
 import { assignmentIdParamsSchema, assignmentOverrideSchema } from '$lib/schemas/assignment';
@@ -13,6 +13,7 @@ import { manualAssignDriverToAssignment } from '$lib/server/services/assignments
 import { createBidWindow } from '$lib/server/services/bidding';
 import { getEmergencyBonusPercent } from '$lib/server/services/dispatchSettings';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
 import { and, desc, eq } from 'drizzle-orm';
 
@@ -134,6 +135,7 @@ async function closeOpenWindowForUrgentEscalation(params: {
 	assignmentId: string;
 	bidWindowId: string;
 	actorId: string;
+	organizationId: string;
 	assignmentStatusBefore: AssignmentSnapshot['status'];
 }) {
 	const resolvedAt = new Date();
@@ -185,7 +187,7 @@ async function closeOpenWindowForUrgentEscalation(params: {
 	});
 
 	if (closedWindow) {
-		broadcastBidWindowClosed({
+		broadcastBidWindowClosed(params.organizationId, {
 			assignmentId: params.assignmentId,
 			bidWindowId: closedWindow.id,
 			winnerId: null,
@@ -197,13 +199,7 @@ async function closeOpenWindowForUrgentEscalation(params: {
 }
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		return overrideError(403, 'forbidden', 'Only managers can override assignments');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = assignmentIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -229,8 +225,9 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	}
 
 	const hasWarehouseAccess = await canManagerAccessWarehouse(
-		locals.user.id,
-		assignment.warehouseId
+		manager.id,
+		assignment.warehouseId,
+		organizationId
 	);
 	if (!hasWarehouseAccess) {
 		return overrideError(403, 'forbidden', 'No access to this warehouse');
@@ -250,7 +247,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		const result = await manualAssignDriverToAssignment({
 			assignmentId,
 			driverId: parsed.data.driverId,
-			actorId: locals.user.id,
+			actorId: manager.id,
+			organizationId,
 			allowedStatuses: ['scheduled', 'unfilled']
 		});
 
@@ -287,7 +285,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		}
 
 		if (result.bidWindowId) {
-			broadcastBidWindowClosed({
+			broadcastBidWindowClosed(organizationId, {
 				assignmentId: result.assignmentId,
 				bidWindowId: result.bidWindowId,
 				winnerId: null,
@@ -295,7 +293,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			});
 		}
 
-		broadcastAssignmentUpdated({
+		broadcastAssignmentUpdated(organizationId, {
 			assignmentId: result.assignmentId,
 			status: 'scheduled',
 			driverId: result.driverId,
@@ -340,6 +338,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		}
 
 		const result = await createBidWindow(assignmentId, {
+			organizationId,
 			trigger: 'manager'
 		});
 
@@ -398,7 +397,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		const closed = await closeOpenWindowForUrgentEscalation({
 			assignmentId,
 			bidWindowId: openWindow.id,
-			actorId: locals.user.id,
+			actorId: manager.id,
+			organizationId,
 			assignmentStatusBefore: assignment.status
 		});
 
@@ -425,8 +425,9 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		}
 	}
 
-	const emergencyBonusPercent = await getEmergencyBonusPercent();
+	const emergencyBonusPercent = await getEmergencyBonusPercent(organizationId);
 	const urgentResult = await createBidWindow(assignmentId, {
+		organizationId,
 		mode: 'emergency',
 		trigger: 'manager',
 		payBonusPercent: emergencyBonusPercent

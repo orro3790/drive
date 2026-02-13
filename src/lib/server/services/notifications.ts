@@ -6,7 +6,7 @@
  */
 
 import { db } from '$lib/server/db';
-import { assignments, notifications, shifts, user } from '$lib/server/db/schema';
+import { assignments, notifications, shifts, user, warehouses } from '$lib/server/db/schema';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { toZonedTime, format } from 'date-fns-tz';
 import { parseISO } from 'date-fns';
@@ -201,6 +201,8 @@ export interface SendNotificationOptions {
 	customTitle?: string;
 	/** Custom body (overrides template) */
 	customBody?: string;
+	/** Organization scope for recipient verification */
+	organizationId?: string;
 }
 
 export interface SendNotificationResult {
@@ -237,9 +239,28 @@ export async function sendNotification(
 	const title = options.customTitle || template.title;
 	const body = options.customBody || template.body;
 
+	const [recipient] = await db
+		.select({ fcmToken: user.fcmToken, organizationId: user.organizationId })
+		.from(user)
+		.where(eq(user.id, userId))
+		.limit(1);
+
+	if (!recipient) {
+		log.warn({ userId }, 'Recipient not found, skipping notification');
+		return result;
+	}
+
+	if (options.organizationId && recipient.organizationId !== options.organizationId) {
+		log.warn({ userId }, 'Recipient org mismatch, skipping notification');
+		return result;
+	}
+
+	const notificationOrganizationId = options.organizationId ?? recipient.organizationId ?? null;
+
 	// Create in-app notification record
 	try {
 		await db.insert(notifications).values({
+			organizationId: notificationOrganizationId,
 			userId,
 			type,
 			title,
@@ -253,13 +274,7 @@ export async function sendNotification(
 		// Continue to try push notification
 	}
 
-	// Get user's FCM token
-	const [userData] = await db
-		.select({ fcmToken: user.fcmToken })
-		.from(user)
-		.where(eq(user.id, userId));
-
-	if (!userData?.fcmToken) {
+	if (!recipient.fcmToken) {
 		log.debug('User has no FCM token, skipping push notification');
 		return result;
 	}
@@ -273,7 +288,7 @@ export async function sendNotification(
 
 	try {
 		await messaging.send({
-			token: userData.fcmToken,
+			token: recipient.fcmToken,
 			notification: {
 				title,
 				body
@@ -364,11 +379,16 @@ export interface ManagerAlertDetails {
 export async function sendManagerAlert(
 	routeId: string,
 	alertType: ManagerAlertType,
-	details: ManagerAlertDetails = {}
+	details: ManagerAlertDetails = {},
+	organizationId?: string
 ): Promise<boolean> {
 	const log = logger.child({ operation: 'sendManagerAlert', alertType });
+	if (!organizationId) {
+		log.warn('Missing organization id, skipping manager alert');
+		return false;
+	}
 
-	const managerId = await getRouteManager(routeId);
+	const managerId = await getRouteManager(routeId, organizationId);
 	if (!managerId) {
 		log.warn('No manager assigned to route, skipping alert');
 		return false;
@@ -391,7 +411,8 @@ export async function sendManagerAlert(
 
 	await sendNotification(managerId, alertType, {
 		customBody: body,
-		data: { routeId, ...details }
+		data: { routeId, ...details },
+		organizationId
 	});
 
 	log.info('Manager alert sent');
@@ -403,6 +424,7 @@ export async function sendManagerAlert(
 // ---------------------------------------------------------------------------
 
 export interface EmergencyNotifyParams {
+	organizationId: string;
 	assignmentId: string;
 	routeName: string;
 	warehouseName: string;
@@ -426,8 +448,12 @@ export interface EmergencyNotifyParams {
 export async function notifyAvailableDriversForEmergency(
 	params: EmergencyNotifyParams
 ): Promise<number> {
-	const { assignmentId, routeName, warehouseName, date, payBonusPercent } = params;
+	const { organizationId, assignmentId, routeName, warehouseName, date, payBonusPercent } = params;
 	const log = logger.child({ operation: 'notifyAvailableDriversForEmergency' });
+
+	if (!organizationId) {
+		return 0;
+	}
 
 	const today = format(toZonedTime(new Date(), TORONTO_TZ), 'yyyy-MM-dd');
 
@@ -436,11 +462,13 @@ export async function notifyAvailableDriversForEmergency(
 		.select({ userId: assignments.userId })
 		.from(assignments)
 		.innerJoin(shifts, eq(assignments.id, shifts.assignmentId))
+		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.where(
 			and(
 				eq(assignments.date, today),
 				eq(assignments.status, 'active'),
-				isNotNull(assignments.userId)
+				isNotNull(assignments.userId),
+				eq(warehouses.organizationId, organizationId)
 			)
 		);
 
@@ -452,6 +480,7 @@ export async function notifyAvailableDriversForEmergency(
 			and(
 				eq(user.role, 'driver'),
 				eq(user.isFlagged, false),
+				eq(user.organizationId, organizationId),
 				sql`${user.id} NOT IN (${driversOnShiftToday})`
 			)
 		);
@@ -465,7 +494,7 @@ export async function notifyAvailableDriversForEmergency(
 	const assignmentWeekStart = getWeekStart(parseISO(date));
 	const eligibleDriverIds: string[] = [];
 	for (const driver of drivers) {
-		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart);
+		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart, organizationId);
 		if (canTake) {
 			eligibleDriverIds.push(driver.id);
 		}
@@ -481,6 +510,7 @@ export async function notifyAvailableDriversForEmergency(
 	const body = `${routeName} at ${warehouseName} needs a driver on ${dateLabel}.${bonusText} First to accept gets it.`;
 
 	const notificationRecords = eligibleDriverIds.map((driverId) => ({
+		organizationId,
 		userId: driverId,
 		type: 'emergency_route_available' as const,
 		title: 'Shift Available',
@@ -509,7 +539,7 @@ export async function notifyAvailableDriversForEmergency(
 					const [userData] = await db
 						.select({ fcmToken: user.fcmToken })
 						.from(user)
-						.where(eq(user.id, driverId));
+						.where(and(eq(user.id, driverId), eq(user.organizationId, organizationId)));
 
 					if (!userData?.fcmToken) return;
 

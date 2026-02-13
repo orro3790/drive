@@ -29,6 +29,10 @@ Backend:
 - `documentation/agent-guidelines/schema-type-patterns.md` (Zod at boundaries; when local TS types are OK)
 - `documentation/agent-guidelines/logging-strategy.md` (Pino + Axiom; no secrets/PII)
 
+Health, Scoring & Automation:
+
+- `documentation/agent-guidelines/health-and-automation-quickref.md` (point values, cron timeline, shift lifecycle, bid scoring, flagging thresholds — **start here** for any health/scoring/automation work)
+
 Process:
 
 - `documentation/agent-guidelines/code-review-standards.md`

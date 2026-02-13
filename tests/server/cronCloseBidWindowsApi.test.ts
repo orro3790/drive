@@ -21,10 +21,13 @@ interface ResolveBidWindowResult {
 type CloseBidWindowsRouteModule =
 	typeof import('../../src/routes/api/cron/close-bid-windows/+server');
 type GetExpiredBidWindowsMock = ReturnType<
-	typeof createBoundaryMock<[], Promise<ExpiredBidWindow[]>>
+	typeof createBoundaryMock<[cutoff?: Date, organizationId?: string], Promise<ExpiredBidWindow[]>>
 >;
 type ResolveBidWindowMock = ReturnType<
-	typeof createBoundaryMock<[windowId: string], Promise<ResolveBidWindowResult>>
+	typeof createBoundaryMock<
+		[windowId: string, actor: { actorType: 'system'; actorId: null }, organizationId: string],
+		Promise<ResolveBidWindowResult>
+	>
 >;
 
 const CRON_TOKEN = 'cron-secret-test-token';
@@ -35,6 +38,8 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 let GET: CloseBidWindowsRouteModule['GET'];
 let getExpiredBidWindowsMock: GetExpiredBidWindowsMock;
 let resolveBidWindowMock: ResolveBidWindowMock;
+let dbSelectMock: ReturnType<typeof vi.fn>;
+let selectFromMock: ReturnType<typeof vi.fn>;
 let dbUpdateMock: ReturnType<typeof vi.fn>;
 let updateSetMock: ReturnType<typeof vi.fn>;
 let updateWhereMock: ReturnType<typeof vi.fn>;
@@ -51,8 +56,17 @@ function createAuthorizedCronEvent() {
 beforeEach(async () => {
 	vi.resetModules();
 
-	getExpiredBidWindowsMock = createBoundaryMock<[], Promise<ExpiredBidWindow[]>>();
-	resolveBidWindowMock = createBoundaryMock<[string], Promise<ResolveBidWindowResult>>();
+	getExpiredBidWindowsMock = createBoundaryMock<
+		[cutoff?: Date, organizationId?: string],
+		Promise<ExpiredBidWindow[]>
+	>();
+	resolveBidWindowMock = createBoundaryMock<
+		[windowId: string, actor: { actorType: 'system'; actorId: null }, organizationId: string],
+		Promise<ResolveBidWindowResult>
+	>();
+
+	selectFromMock = vi.fn(async (_table: unknown) => [{ id: 'org-1' }]);
+	dbSelectMock = vi.fn((_shape: Record<string, unknown>) => ({ from: selectFromMock }));
 
 	updateWhereMock = vi.fn(async (_condition: unknown) => []);
 	updateSetMock = vi.fn((_values: Record<string, unknown>) => ({
@@ -63,9 +77,11 @@ beforeEach(async () => {
 	}));
 
 	const childLogger = {
+		child: vi.fn(),
 		info: vi.fn(),
 		error: vi.fn()
 	};
+	childLogger.child.mockReturnValue(childLogger);
 
 	vi.doMock('$lib/server/services/bidding', () => ({
 		getExpiredBidWindows: getExpiredBidWindowsMock,
@@ -74,11 +90,15 @@ beforeEach(async () => {
 
 	vi.doMock('$lib/server/db', () => ({
 		db: {
+			select: dbSelectMock,
 			update: dbUpdateMock
 		}
 	}));
 
 	vi.doMock('$lib/server/db/schema', () => ({
+		organizations: {
+			id: 'organizations.id'
+		},
 		bidWindows: {
 			id: 'bid_windows.id'
 		}
@@ -127,6 +147,7 @@ describe('LC-05 cron decision logic: GET /api/cron/close-bid-windows', () => {
 			errors: 0
 		});
 		expect(resolveBidWindowMock).not.toHaveBeenCalled();
+		expect(getExpiredBidWindowsMock).toHaveBeenCalledWith(undefined, 'org-1');
 		expect(dbUpdateMock).not.toHaveBeenCalled();
 	});
 

@@ -20,6 +20,7 @@ import { warehouseUpdateSchema } from '$lib/schemas/warehouse';
 import { and, count, eq, gte, lt, ne, sql } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import { addDays } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
 import { z } from 'zod';
@@ -93,13 +94,7 @@ async function getWarehouseMetrics(warehouseId: string) {
 }
 
 export const GET: RequestHandler = async ({ locals, params }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = warehouseIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -107,7 +102,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 	}
 
 	const { id } = paramsResult.data;
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, id);
+	const canAccess = await canManagerAccessWarehouse(manager.id, id, organizationId);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -137,13 +132,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 };
 
 export const PATCH: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = warehouseIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -151,7 +140,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 	}
 
 	const { id } = paramsResult.data;
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, id);
+	const canAccess = await canManagerAccessWarehouse(manager.id, id, organizationId);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -198,7 +187,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		entityId: id,
 		action: 'update',
 		actorType: 'user',
-		actorId: locals.user.id,
+		actorId: manager.id,
 		changes: {
 			before: { name: existing.name, address: existing.address },
 			after: { name: updated.name, address: updated.address }
@@ -211,13 +200,7 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 };
 
 export const DELETE: RequestHandler = async ({ locals, params }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const paramsResult = warehouseIdParamsSchema.safeParse(params);
 	if (!paramsResult.success) {
@@ -225,7 +208,7 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 	}
 
 	const { id } = paramsResult.data;
-	const canAccess = await canManagerAccessWarehouse(locals.user.id, id);
+	const canAccess = await canManagerAccessWarehouse(manager.id, id, organizationId);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -254,7 +237,7 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 		entityId: id,
 		action: 'delete',
 		actorType: 'user',
-		actorId: locals.user.id,
+		actorId: manager.id,
 		changes: {
 			before: { name: existing.name, address: existing.address }
 		}

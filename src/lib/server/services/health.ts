@@ -17,6 +17,7 @@ import {
 	driverHealthState,
 	driverMetrics,
 	notifications,
+	organizations,
 	routes,
 	shifts,
 	user
@@ -39,6 +40,15 @@ function sameTimestamp(a: Date | null | undefined, b: Date | null | undefined): 
 
 function torontoToday(): string {
 	return format(toZonedTime(new Date(), TORONTO_TZ), 'yyyy-MM-dd');
+}
+
+async function resolveHealthOrganizationIds(organizationId?: string): Promise<string[]> {
+	if (organizationId) {
+		return [organizationId];
+	}
+
+	const rows = await db.select({ id: organizations.id }).from(organizations);
+	return rows.map((row) => row.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -736,7 +746,7 @@ export async function evaluateWeek(userId: string, weekStart: Date): Promise<Wee
 /**
  * Persist weekly evaluation result and send notifications.
  */
-async function persistWeeklyEval(result: WeeklyEvalResult): Promise<void> {
+async function persistWeeklyEval(result: WeeklyEvalResult, organizationId: string): Promise<void> {
 	if (result.neutral) {
 		return;
 	}
@@ -795,16 +805,19 @@ async function persistWeeklyEval(result: WeeklyEvalResult): Promise<void> {
 	// Send notifications
 	if (result.hardStopReset && result.previousStars > 0) {
 		await sendNotification(result.userId, 'streak_reset', {
-			customBody: `Your streak has been reset to 0 stars. ${result.reasons[0]}`
+			customBody: `Your streak has been reset to 0 stars. ${result.reasons[0]}`,
+			organizationId
 		});
 	} else if (result.qualified && result.newStars > result.previousStars) {
 		await sendNotification(result.userId, 'streak_advanced', {
-			customBody: `Great work! You earned star ${result.newStars} of ${dispatchPolicy.health.maxStars}.`
+			customBody: `Great work! You earned star ${result.newStars} of ${dispatchPolicy.health.maxStars}.`,
+			organizationId
 		});
 
 		if (result.newStars === dispatchPolicy.health.maxStars) {
 			await sendNotification(result.userId, 'bonus_eligible', {
-				customBody: `Congratulations! You reached ${dispatchPolicy.health.maxStars} stars and qualify for a +${dispatchPolicy.health.simulationBonus.fourStarBonusPercent}% bonus preview.`
+				customBody: `Congratulations! You reached ${dispatchPolicy.health.maxStars} stars and qualify for a +${dispatchPolicy.health.simulationBonus.fourStarBonusPercent}% bonus preview.`,
+				organizationId
 			});
 		}
 	}
@@ -849,95 +862,121 @@ export interface DailyHealthRunResult {
  * Run daily health evaluation for all active drivers.
  * Computes score, persists snapshot, and sends corrective warnings.
  */
-export async function runDailyHealthEvaluation(): Promise<DailyHealthRunResult> {
+export async function runDailyHealthEvaluation(
+	organizationId?: string
+): Promise<DailyHealthRunResult> {
 	const log = logger.child({ operation: 'runDailyHealthEvaluation' });
 	const start = Date.now();
 	const today = torontoToday();
+	const organizationIds = await resolveHealthOrganizationIds(organizationId);
 
-	const drivers = await db.select({ id: user.id }).from(user).where(eq(user.role, 'driver'));
+	if (organizationIds.length === 0) {
+		return {
+			evaluated: 0,
+			scored: 0,
+			skippedNewDrivers: 0,
+			correctiveWarnings: 0,
+			errors: 0,
+			elapsedMs: Date.now() - start
+		};
+	}
 
+	let evaluated = 0;
 	let scored = 0;
 	let skippedNewDrivers = 0;
 	let correctiveWarnings = 0;
 	let errors = 0;
 
-	const batchSize = dispatchPolicy.jobs.performanceCheckBatchSize;
-	for (let i = 0; i < drivers.length; i += batchSize) {
-		const batch = drivers.slice(i, i + batchSize);
-		await Promise.all(
-			batch.map(async (driver) => {
-				try {
-					let dailyResult = await computeDailyScore(driver.id);
+	for (const orgId of organizationIds) {
+		const orgLog = log.child({ organizationId: orgId });
+		const drivers = await db
+			.select({ id: user.id })
+			.from(user)
+			.where(and(eq(user.role, 'driver'), eq(user.organizationId, orgId)));
 
-					if (!dailyResult) {
-						skippedNewDrivers++;
-						return;
-					}
+		evaluated += drivers.length;
 
+		const batchSize = dispatchPolicy.jobs.performanceCheckBatchSize;
+		for (let i = 0; i < drivers.length; i += batchSize) {
+			const batch = drivers.slice(i, i + batchSize);
+			await Promise.all(
+				batch.map(async (driver) => {
 					try {
-						await persistDailyScore(dailyResult, today);
-					} catch (error) {
-						if (!(error instanceof Error) || error.message !== 'STALE_DAILY_HEALTH_WRITE') {
-							throw error;
-						}
-
-						log.warn(
-							{ userId: driver.id },
-							'Retrying daily health evaluation after stale-write guard'
-						);
-
-						dailyResult = await computeDailyScore(driver.id);
+						let dailyResult = await computeDailyScore(driver.id);
 
 						if (!dailyResult) {
 							skippedNewDrivers++;
 							return;
 						}
 
-						await persistDailyScore(dailyResult, today);
-					}
+						try {
+							await persistDailyScore(dailyResult, today);
+						} catch (error) {
+							if (!(error instanceof Error) || error.message !== 'STALE_DAILY_HEALTH_WRITE') {
+								throw error;
+							}
 
-					scored++;
+							orgLog.warn(
+								{ userId: driver.id },
+								'Retrying daily health evaluation after stale-write guard'
+							);
 
-					const completionRate = dailyResult.completionRate;
+							dailyResult = await computeDailyScore(driver.id);
 
-					if (completionRate < dispatchPolicy.health.correctiveCompletionThreshold) {
-						const recoveryCutoff = subDays(
-							new Date(),
-							dispatchPolicy.health.correctiveRecoveryDays
-						);
-						const [recentWarning] = await db
-							.select({ id: notifications.id })
-							.from(notifications)
-							.where(
-								and(
-									eq(notifications.userId, driver.id),
-									eq(notifications.type, 'corrective_warning'),
-									gte(notifications.createdAt, recoveryCutoff)
-								)
-							)
-							.limit(1);
+							if (!dailyResult) {
+								skippedNewDrivers++;
+								return;
+							}
 
-						if (!recentWarning) {
-							await sendNotification(driver.id, 'corrective_warning');
-							correctiveWarnings++;
+							await persistDailyScore(dailyResult, today);
 						}
+
+						scored++;
+
+						const completionRate = dailyResult.completionRate;
+
+						if (completionRate < dispatchPolicy.health.correctiveCompletionThreshold) {
+							const recoveryCutoff = subDays(
+								new Date(),
+								dispatchPolicy.health.correctiveRecoveryDays
+							);
+							const [recentWarning] = await db
+								.select({ id: notifications.id })
+								.from(notifications)
+								.where(
+									and(
+										eq(notifications.userId, driver.id),
+										eq(notifications.organizationId, orgId),
+										eq(notifications.type, 'corrective_warning'),
+										gte(notifications.createdAt, recoveryCutoff)
+									)
+								)
+								.limit(1);
+
+							if (!recentWarning) {
+								await sendNotification(driver.id, 'corrective_warning', {
+									organizationId: orgId
+								});
+								correctiveWarnings++;
+							}
+						}
+					} catch (error) {
+						errors++;
+						orgLog.error({ userId: driver.id, error }, 'Failed to evaluate driver health');
 					}
-				} catch (error) {
-					errors++;
-					log.error({ userId: driver.id, error }, 'Failed to evaluate driver health');
-				}
-			})
-		);
+				})
+			);
+		}
 	}
 
 	const elapsedMs = Date.now() - start;
 	log.info(
-		{ evaluated: drivers.length, scored, skippedNewDrivers, correctiveWarnings, errors, elapsedMs },
+		{ evaluated, scored, skippedNewDrivers, correctiveWarnings, errors, elapsedMs },
 		'Daily health evaluation completed'
 	);
 
 	return {
-		evaluated: drivers.length,
+		evaluated,
 		scored,
 		skippedNewDrivers,
 		correctiveWarnings,
@@ -961,9 +1000,23 @@ export interface WeeklyHealthRunResult {
  *
  * Should be called early Monday after the week closes.
  */
-export async function runWeeklyHealthEvaluation(): Promise<WeeklyHealthRunResult> {
+export async function runWeeklyHealthEvaluation(
+	organizationId?: string
+): Promise<WeeklyHealthRunResult> {
 	const log = logger.child({ operation: 'runWeeklyHealthEvaluation' });
 	const start = Date.now();
+	const organizationIds = await resolveHealthOrganizationIds(organizationId);
+
+	if (organizationIds.length === 0) {
+		return {
+			evaluated: 0,
+			qualified: 0,
+			hardStopResets: 0,
+			neutral: 0,
+			errors: 0,
+			elapsedMs: Date.now() - start
+		};
+	}
 
 	const nowToronto = toZonedTime(new Date(), TORONTO_TZ);
 	const thisMonday = startOfWeek(nowToronto, { weekStartsOn: 1 });
@@ -977,41 +1030,50 @@ export async function runWeeklyHealthEvaluation(): Promise<WeeklyHealthRunResult
 		'Evaluating week'
 	);
 
-	const drivers = await db.select({ id: user.id }).from(user).where(eq(user.role, 'driver'));
-
+	let evaluated = 0;
 	let qualified = 0;
 	let hardStopResets = 0;
 	let neutral = 0;
 	let errors = 0;
 
-	const batchSize = dispatchPolicy.jobs.performanceCheckBatchSize;
-	for (let i = 0; i < drivers.length; i += batchSize) {
-		const batch = drivers.slice(i, i + batchSize);
-		await Promise.all(
-			batch.map(async (driver) => {
-				try {
-					const result = await evaluateWeek(driver.id, lastMonday);
-					await persistWeeklyEval(result);
+	for (const orgId of organizationIds) {
+		const orgLog = log.child({ organizationId: orgId });
+		const drivers = await db
+			.select({ id: user.id })
+			.from(user)
+			.where(and(eq(user.role, 'driver'), eq(user.organizationId, orgId)));
 
-					if (result.neutral) neutral++;
-					else if (result.hardStopReset) hardStopResets++;
-					else if (result.qualified) qualified++;
-				} catch (error) {
-					errors++;
-					log.error({ userId: driver.id, error }, 'Failed to evaluate weekly health');
-				}
-			})
-		);
+		evaluated += drivers.length;
+
+		const batchSize = dispatchPolicy.jobs.performanceCheckBatchSize;
+		for (let i = 0; i < drivers.length; i += batchSize) {
+			const batch = drivers.slice(i, i + batchSize);
+			await Promise.all(
+				batch.map(async (driver) => {
+					try {
+						const result = await evaluateWeek(driver.id, lastMonday);
+						await persistWeeklyEval(result, orgId);
+
+						if (result.neutral) neutral++;
+						else if (result.hardStopReset) hardStopResets++;
+						else if (result.qualified) qualified++;
+					} catch (error) {
+						errors++;
+						orgLog.error({ userId: driver.id, error }, 'Failed to evaluate weekly health');
+					}
+				})
+			);
+		}
 	}
 
 	const elapsedMs = Date.now() - start;
 	log.info(
-		{ evaluated: drivers.length, qualified, hardStopResets, neutral, errors, elapsedMs },
+		{ evaluated, qualified, hardStopResets, neutral, errors, elapsedMs },
 		'Weekly health evaluation completed'
 	);
 
 	return {
-		evaluated: drivers.length,
+		evaluated,
 		qualified,
 		hardStopResets,
 		neutral,

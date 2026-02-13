@@ -11,11 +11,10 @@ import { user } from '$lib/server/db/schema';
 import { fcmTokenSchema } from '$lib/schemas/fcm-token';
 import { eq } from 'drizzle-orm';
 import logger, { toSafeErrorMessage } from '$lib/server/logger';
+import { requireAuthenticatedWithOrg } from '$lib/server/org-scope';
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user: authedUser } = requireAuthenticatedWithOrg(locals);
 
 	let body: unknown;
 	try {
@@ -40,7 +39,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 				fcmToken: token,
 				updatedAt: new Date()
 			})
-			.where(eq(user.id, locals.user.id));
+			.where(eq(user.id, authedUser.id));
 
 		log.info('FCM token registered');
 
@@ -55,9 +54,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
  * DELETE /api/users/fcm-token - Remove user's FCM token
  */
 export const DELETE: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user: authedUser } = requireAuthenticatedWithOrg(locals);
 
 	const log = logger.child({ operation: 'unregisterFcmToken' });
 
@@ -68,7 +65,7 @@ export const DELETE: RequestHandler = async ({ locals }) => {
 				fcmToken: null,
 				updatedAt: new Date()
 			})
-			.where(eq(user.id, locals.user.id));
+			.where(eq(user.id, authedUser.id));
 
 		log.info('FCM token removed');
 

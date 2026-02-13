@@ -15,6 +15,7 @@ import { sendBulkNotifications, sendNotification } from '$lib/server/services/no
 import { getBidWindowDetail } from '$lib/server/services/bidding';
 import { bidWindowIdParamsSchema } from '$lib/schemas/api/bidding';
 import { createAuditLog } from '$lib/server/services/audit';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import {
 	broadcastAssignmentUpdated,
 	broadcastBidWindowClosed
@@ -46,15 +47,9 @@ function isActiveAssignmentConflict(err: unknown): boolean {
 }
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
-
-	const actorId = locals.user.id;
+	const actorId = manager.id;
 
 	let body: unknown;
 	try {
@@ -98,7 +93,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(404, 'Bid window not found');
 	}
 
-	const canAccess = await canManagerAccessWarehouse(actorId, window.warehouseId);
+	const canAccess = await canManagerAccessWarehouse(actorId, window.warehouseId, organizationId);
 	if (!canAccess) {
 		throw error(403, 'No access to this warehouse');
 	}
@@ -227,7 +222,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	await sendNotification(driver.id, 'assignment_confirmed', {
 		customBody: `You were assigned ${window.routeName} for ${window.assignmentDate}.`,
-		data: notificationData
+		data: notificationData,
+		organizationId
 	});
 
 	const loserIds = pendingBids.filter((bid) => bid.userId !== driver.id).map((bid) => bid.userId);
@@ -235,18 +231,19 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (loserIds.length > 0) {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
 			customBody: `${window.routeName} for ${window.assignmentDate} was assigned by a manager.`,
-			data: notificationData
+			data: notificationData,
+			organizationId
 		});
 	}
 
-	broadcastBidWindowClosed({
+	broadcastBidWindowClosed(organizationId, {
 		assignmentId: window.assignmentId,
 		bidWindowId: window.id,
 		winnerId: driver.id,
 		winnerName: driver.name
 	});
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId: window.assignmentId,
 		status: 'scheduled',
 		driverId: driver.id,
@@ -254,7 +251,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		routeId: window.routeId
 	});
 
-	const bidWindow = await getBidWindowDetail(window.id);
+	const bidWindow = await getBidWindowDetail(window.id, organizationId);
 
 	return json({ bidWindow });
 };

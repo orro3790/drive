@@ -23,15 +23,10 @@ import {
 	deriveAssignmentLifecycle
 } from '$lib/server/services/assignmentLifecycle';
 import logger from '$lib/server/logger';
+import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'driver') {
-		throw error(403, 'Only drivers can cancel assignments');
-	}
+	const { user, organizationId } = requireDriverWithOrg(locals);
 
 	const { id } = params;
 	const body = await request.json();
@@ -57,7 +52,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		throw error(404, 'Assignment not found');
 	}
 
-	if (existing.userId !== locals.user.id) {
+	if (existing.userId !== user.id) {
 		throw error(403, 'Forbidden');
 	}
 
@@ -86,7 +81,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const isLateCancellation = existing.confirmedAt !== null && lifecycle.isLateCancel;
 	const cancelledAt = new Date();
 
-	const userId = locals.user.id;
+	const userId = user.id;
 	const log = logger.child({ operation: 'assignmentCancel', assignmentId: id, userId });
 	log.info({ isLateCancellation }, 'Starting assignment cancellation');
 
@@ -152,22 +147,30 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	// Send alert to route manager (best-effort)
 	try {
-		await sendManagerAlert(existing.routeId, 'route_cancelled', {
-			driverName: locals.user.name ?? 'A driver',
-			date: existing.date
-		});
+		await sendManagerAlert(
+			existing.routeId,
+			'route_cancelled',
+			{
+				driverName: user.name ?? 'A driver',
+				date: existing.date
+			},
+			organizationId
+		);
 	} catch {
 		// Manager alert is best-effort
 	}
 
 	// Create bid window via service (handles mode selection automatically)
-	await createBidWindow(existing.id, { trigger: 'cancellation' });
+	await createBidWindow(existing.id, {
+		organizationId,
+		trigger: 'cancellation'
+	});
 
-	broadcastAssignmentUpdated({
+	broadcastAssignmentUpdated(organizationId, {
 		assignmentId: existing.id,
 		status: 'cancelled',
-		driverId: locals.user.id,
-		driverName: locals.user.name ?? null,
+		driverId: user.id,
+		driverName: user.name ?? null,
 		routeId: existing.routeId
 	});
 

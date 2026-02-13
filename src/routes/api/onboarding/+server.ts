@@ -2,32 +2,21 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 import { onboardingCreateSchema } from '$lib/schemas/onboarding';
+import { requireManagerWithOrg } from '$lib/server/org-scope';
 import {
 	createOnboardingApproval,
 	listSignupOnboardingEntries
 } from '$lib/server/services/onboarding';
 
 export const GET: RequestHandler = async ({ locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
+	const { organizationId } = requireManagerWithOrg(locals);
 
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
-
-	const entries = await listSignupOnboardingEntries();
+	const entries = await listSignupOnboardingEntries(organizationId);
 	return json({ entries });
 };
 
 export const POST: RequestHandler = async ({ locals, request }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
-	if (locals.user.role !== 'manager') {
-		throw error(403, 'Forbidden');
-	}
+	const { user, organizationId } = requireManagerWithOrg(locals);
 
 	const body = await request.json().catch(() => null);
 	if (body === null) {
@@ -41,7 +30,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	const result = await createOnboardingApproval({
 		email: parsed.data.email,
-		createdBy: locals.user.id
+		organizationId,
+		createdBy: user.id
 	});
 
 	if (result.alreadyExists) {
