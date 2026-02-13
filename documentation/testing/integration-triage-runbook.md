@@ -2,6 +2,12 @@
 
 Status: active (Milestone A landed: real-DB integration harness + smoke/full scripts). This runbook defines the triage contract so failures are diagnosable without tribal context.
 
+## Scope (what this runbook is for)
+
+- Audience: first responder to a failing integration suite in CI or locally.
+- Applies to: `pnpm test:integration:smoke` and `pnpm test:integration:full` (real DB, multi-tenant harness).
+- Non-goals: fixing missing artifacts/diagnostics/CI wiring during triage; document the gap and file a follow-up bead with evidence.
+
 ## Glossary (what CI must print)
 
 - `scenarioId`: stable id for the failing scenario (example: `BID-001`).
@@ -28,6 +34,16 @@ If a failure does not include both `scenarioId` + `invariantId`, treat it as a h
    - Flake/concurrency timing (must be fixed deterministically; do not accept "rerun until green")
 4. Reproduce locally (prefer running the single failing scenario, else run smoke).
 5. If it reproduces, fix or file a defect bead with evidence pointers (template at the end of this doc).
+
+### Failure Classes (fast signals + minimum evidence)
+
+| Class                | Fast signal                                                        | Minimum evidence to capture                                                                 | Route to (owner model)                               |
+| -------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Infra/CI             | Postgres service unhealthy, missing env, `pnpm install`/node error | workflow run URL, job name, full logs (plus service logs), runner OS, missing var _names_   | `.github/workflows/**` maintainers                   |
+| Harness/diagnostics  | seed/reset/migrate fails; IDs/evidence missing; bad clock control  | stack trace, harness logs, evidence bundle paths, `scenarioId`/`invariantId` if present     | `tests/integration/harness/**` maintainers           |
+| Algorithm regression | deterministic invariant failure that reproduces locally            | `scenarioId`, `invariantId`, repro command, key entity ids, relevant DB rows/state snapshot | `src/lib/server/services/**` (domain/service owners) |
+| Data/schema drift    | migration/schema mismatch, seed assumes old columns/constraints    | drizzle/migrate output, failing SQL/errors, schema/migration SHA, key tables involved       | `drizzle/**`, seed scripts (`scripts/seed.ts`)       |
+| Flake/timing         | reruns change outcome; concurrency ordering issues                 | run-to-run diff, seed anchors, timing assumptions, any concurrency logs, evidence snapshots | treat as harness/algorithm defect; do not "rerun"    |
 
 ## Reproduce Locally
 
@@ -218,6 +234,10 @@ Title: `Integration failure: <scenarioId> / <invariantId> (<short symptom>)`
 
 Create the bead (CLI):
 
+If you're on Windows and `bd` is not available on your PATH as `bd`, use `bd.exe`.
+
+### Bash (macOS/Linux/Git Bash)
+
 ```bash
 bd create \
   --type bug \
@@ -239,6 +259,33 @@ Owner guess: <infra | harness | algorithm | schema>
 EOF
 ```
 
+### PowerShell (Windows)
+
+```powershell
+$body = @"
+scenarioId: <BID-001>
+invariantId: <NOTIF-001>
+CI run: <url>
+Artifacts:
+- CI: logs/nightly/<YYYY-MM-DD>/ci-artifacts/...
+- Local evidence (if present): tests/integration/.evidence/<scenarioId>.<label>.<timestamp>.json
+Git SHA: <sha>
+Expected: <what should have happened>
+Observed: <what happened>
+Repro (local): <exact commands + env>
+Key entity ids: <orgId, driverId, assignmentId, bidWindowId, ...>
+Owner guess: <infra | harness | algorithm | schema>
+"@
+
+$body | bd.exe create `
+  --type bug `
+  --labels e2e,nightly `
+  --title "Integration failure: <scenarioId> / <invariantId> (<short symptom>)" `
+  --body-file -
+```
+
+If piping to `--body-file -` is not supported in your shell, write the body to a temp file (e.g. `bead.md`) and pass `--body-file bead.md`.
+
 Include:
 
 - `scenarioId`: <BID-001>
@@ -253,3 +300,17 @@ Include:
 - Repro (local): <exact commands + env>
 - Key entity ids: <orgId, driverId, assignmentId, bidWindowId, ...>
 - Owner guess: <infra | harness | algorithm | schema>
+
+## Fresh Session Validation Checklist
+
+This runbook is usable when a responder can complete the following without tribal context:
+
+- [ ] Create a disposable local Postgres DB ending in `_integration`.
+- [ ] Set required env vars and run `pnpm test:integration:smoke` successfully.
+- [ ] When a failure occurs, locate `scenarioId` + `invariantId` (from logs or artifacts) as documented.
+- [ ] Download CI artifacts using either GitHub UI or `gh run download`.
+- [ ] Create a defect bead using the template and include the required fields.
+
+Last validated:
+
+- YYYY-MM-DD (OS): PASS/FAIL - notes
