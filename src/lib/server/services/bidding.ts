@@ -27,8 +27,7 @@ import {
 } from '$lib/server/services/notifications';
 import { createAuditLog, type AuditActor } from '$lib/server/services/audit';
 import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
-import { toZonedTime } from 'date-fns-tz';
-import { addHours, differenceInMonths, parseISO, set, startOfDay } from 'date-fns';
+import { addHours, differenceInMonths, parseISO } from 'date-fns';
 import logger, { toSafeErrorMessage } from '$lib/server/logger';
 import { getWeekStart, canDriverTakeAssignment } from './scheduling';
 import {
@@ -37,6 +36,7 @@ import {
 	broadcastBidWindowOpened
 } from '$lib/server/realtime/managerSse';
 import { calculateBidScoreParts, dispatchPolicy } from '$lib/config/dispatchPolicy';
+import { getTorontoDateTimeInstant, toTorontoDateString } from '$lib/server/time/toronto';
 
 const INSTANT_MODE_CUTOFF_MS = dispatchPolicy.bidding.instantModeCutoffHours * 60 * 60 * 1000;
 const PG_UNIQUE_VIOLATION = '23505';
@@ -78,24 +78,31 @@ export interface InstantAssignResult {
 }
 
 /**
- * Get the current time in Toronto timezone
+ * Get the current time instant.
+ *
+ * Important: this is an instant used for comparisons against other instants.
+ * Do NOT use date-fns-tz's toZonedTime for comparisons; it changes the instant.
  */
 function getNowToronto(): Date {
-	return toZonedTime(new Date(), dispatchPolicy.timezone.toronto);
+	return new Date();
 }
 
 /**
- * Convert an assignment date string to shift start (07:00 Toronto)
+ * Convert an assignment date string to the shift start instant.
+ *
+ * Shift start is defined as 07:00 Toronto local time.
  */
 function getShiftStartTime(dateString: string): Date {
-	const parsed = parseISO(dateString);
-	const toronto = toZonedTime(parsed, dispatchPolicy.timezone.toronto);
-	return set(startOfDay(toronto), {
+	return getTorontoDateTimeInstant(dateString, {
 		hours: dispatchPolicy.shifts.startHourLocal,
 		minutes: 0,
-		seconds: 0,
-		milliseconds: 0
+		seconds: 0
 	});
+}
+
+function getTorontoEndOfDayInstant(instant: Date): Date {
+	const torontoDate = toTorontoDateString(instant);
+	return getTorontoDateTimeInstant(torontoDate, { hours: 23, minutes: 59, seconds: 0 });
 }
 
 function getErrorLogContext(error: unknown): {
@@ -164,14 +171,14 @@ function determineModeAndClosesAt(
 
 	// If explicitly set, use it
 	if (options.mode === 'emergency') {
-		const closesAt = shiftStart > now ? shiftStart : set(now, { hours: 23, minutes: 59 });
+		const closesAt = shiftStart > now ? shiftStart : getTorontoEndOfDayInstant(now);
 		return { mode: 'emergency', closesAt };
 	}
 
 	// If shift already passed
 	if (shiftStart <= now) {
 		if (options.allowPastShift) {
-			return { mode: 'instant', closesAt: set(now, { hours: 23, minutes: 59 }) };
+			return { mode: 'instant', closesAt: getTorontoEndOfDayInstant(now) };
 		}
 		return null;
 	}
