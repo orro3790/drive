@@ -366,7 +366,8 @@ describe('nightly cron E2E drill (dev DB)', () => {
 			throw new Error('Invalid CRON_E2E_SEED (expected a number)');
 		}
 
-		const anchorDate = (process.env.CRON_E2E_ANCHOR_DATE ?? '2026-03-02').trim();
+		const defaultAnchor = new Date().toISOString().slice(0, 10);
+		const anchorDate = (process.env.CRON_E2E_ANCHOR_DATE ?? defaultAnchor).trim();
 		if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) {
 			throw new Error('Invalid CRON_E2E_ANCHOR_DATE (expected YYYY-MM-DD)');
 		}
@@ -376,7 +377,9 @@ describe('nightly cron E2E drill (dev DB)', () => {
 			);
 		}
 
-		const frozenNow = new Date(`${anchorDate}T15:00:00.000Z`);
+		// 18:00 UTC = 1 PM EST (Feb) / 2 PM EDT — ensures ALL route start times
+		// (up to 11:00 local) have passed for the no-show-detection scenario.
+		const frozenNow = new Date(`${anchorDate}T18:00:00.000Z`);
 
 		const report: CronE2EReport = {
 			run: {
