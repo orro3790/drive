@@ -213,6 +213,22 @@ function redactEmail(email: string): string {
 	return `${email[0]}***${email.slice(at)}`;
 }
 
+/** Resolve the full path to the agent-browser native executable (avoids cmd.exe shell). */
+function resolveAgentBrowserExe(): string {
+	// The npm global prefix puts the native exe here.
+	const npmPrefix = process.env.APPDATA
+		? path.join(process.env.APPDATA, 'npm')
+		: path.join(process.env.HOME ?? '', '.npm-global');
+	const nativeExe = path.join(
+		npmPrefix,
+		'node_modules',
+		'agent-browser',
+		'bin',
+		`agent-browser-${process.platform}-x64.exe`
+	);
+	return nativeExe;
+}
+
 async function runProcess(params: {
 	command: string;
 	args: string[];
@@ -220,9 +236,16 @@ async function runProcess(params: {
 }): Promise<{ stdout: string; stderr: string }> {
 	const { command, args, timeoutMs } = params;
 
+	// On Windows, avoid shell: true to prevent cmd.exe from mangling quotes and
+	// special characters in arguments (JS expressions, URLs with %xx, etc.).
+	// Use the native exe path directly instead.
+	const resolvedCommand =
+		process.platform === 'win32' && command === 'agent-browser'
+			? resolveAgentBrowserExe()
+			: command;
+
 	return await new Promise((resolve, reject) => {
-		const child = spawn(command, args, {
-			shell: process.platform === 'win32',
+		const child = spawn(resolvedCommand, args, {
 			windowsHide: true
 		});
 
@@ -260,15 +283,38 @@ async function runAgentBrowser(
 	args: string[],
 	timeoutMs?: number
 ): Promise<string> {
+	const fullArgs = ['--session', session, ...args];
 	const { stdout } = await runProcess({
 		command: 'agent-browser',
-		args: ['--session', session, ...args],
+		args: fullArgs,
 		timeoutMs
 	});
 	return stdout.trim();
 }
 
 async function cleanupWitnessSessions(): Promise<void> {
+	// Close any stale witness sessions still registered in the daemon.
+	try {
+		const { stdout } = await runProcess({
+			command: 'agent-browser',
+			args: ['session', 'list'],
+			timeoutMs: 10_000
+		});
+		const lines = stdout.split('\n');
+		for (const line of lines) {
+			const name = line.trim();
+			if (name && (name.startsWith('witness-') || name.startsWith('w-'))) {
+				await runProcess({
+					command: 'agent-browser',
+					args: ['--session', name, 'close'],
+					timeoutMs: 15_000
+				}).catch(() => {});
+			}
+		}
+	} catch {
+		// Daemon may not be running; ignore.
+	}
+
 	// Remove stale PID/port files for witness sessions from prior failed runs.
 	const agentBrowserDir = path.join(
 		process.env.USERPROFILE ?? process.env.HOME ?? '',
@@ -290,43 +336,50 @@ async function cleanupWitnessSessions(): Promise<void> {
 }
 
 async function killAgentBrowserDaemon(): Promise<void> {
-	const cmd =
-		"Get-Process node | Where-Object {$_.CommandLine -like '*agent-browser*daemon*'} | Stop-Process -Force";
-
-	try {
-		await runProcess({ command: 'pwsh', args: ['-Command', cmd], timeoutMs: 20_000 });
-		return;
-	} catch {
-		// Fallback for environments without pwsh
-		try {
-			await runProcess({ command: 'powershell', args: ['-Command', cmd], timeoutMs: 20_000 });
-		} catch {
-			// ignore
-		}
-	}
-
-	// Also clean up stale PID/port files.
+	// Close all witness sessions gracefully first.
 	await cleanupWitnessSessions();
+
+	// Read daemon PID files and kill the processes directly (no PowerShell needed).
+	const agentBrowserDir = path.join(
+		process.env.USERPROFILE ?? process.env.HOME ?? '',
+		'.agent-browser'
+	);
+	try {
+		const entries = await fs.readdir(agentBrowserDir);
+		for (const entry of entries) {
+			if (entry.endsWith('.pid')) {
+				const pidPath = path.join(agentBrowserDir, entry);
+				try {
+					const pidStr = (await fs.readFile(pidPath, 'utf8')).trim();
+					const pid = Number(pidStr);
+					if (pid > 0) {
+						process.kill(pid, 'SIGTERM');
+					}
+				} catch {
+					// Process may already be dead; ignore.
+				}
+				await fs.unlink(pidPath).catch(() => {});
+			}
+			if (entry.endsWith('.port')) {
+				await fs.unlink(path.join(agentBrowserDir, entry)).catch(() => {});
+			}
+		}
+	} catch {
+		// Directory might not exist; ignore.
+	}
 }
 
-function quoteForJsSelector(value: string): string {
-	return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+/** Check if a CSS selector matches any elements on the page. Uses `get count`. */
+async function elementExists(session: string, selector: string): Promise<boolean> {
+	const out = await runAgentBrowser(session, ['get', 'count', selector], 30_000);
+	return Number(out) > 0;
 }
 
-async function evalBoolean(session: string, expression: string): Promise<boolean> {
-	const out = await runAgentBrowser(session, ['eval', expression], 30_000);
-	return out === 'true' || out === '1' || out.toLowerCase() === 'truthy';
-}
-
-async function evalString(session: string, expression: string): Promise<string> {
-	return await runAgentBrowser(session, ['eval', expression], 30_000);
-}
-
+/** Wait for a data-loaded attribute to become "true" on the root testid element. */
 async function waitForLoaded(params: { session: string; rootTestId: string; timeoutMs?: number }) {
 	const { session, rootTestId, timeoutMs } = params;
-	const selector = `[data-testid=\"${quoteForJsSelector(rootTestId)}\"]`;
-	const fn = `(() => { const el = document.querySelector('${selector}'); return !!el && el.getAttribute('data-loaded') === 'true'; })()`;
-	await runAgentBrowser(session, ['wait', '--fn', fn], timeoutMs ?? 60_000);
+	const selector = `[data-testid="${rootTestId}"][data-loaded="true"]`;
+	await runAgentBrowser(session, ['wait', selector], timeoutMs ?? 60_000);
 }
 
 async function scrollUntilFound(params: {
@@ -335,10 +388,7 @@ async function scrollUntilFound(params: {
 	maxScrolls: number;
 }): Promise<{ found: boolean; scrolls: number }> {
 	for (let i = 0; i <= params.maxScrolls; i++) {
-		const found = await evalBoolean(
-			params.session,
-			`Boolean(document.querySelector("${quoteForJsSelector(params.selector)}"))`
-		);
+		const found = await elementExists(params.session, params.selector);
 		if (found) return { found: true, scrolls: i };
 
 		if (i < params.maxScrolls) {
@@ -399,13 +449,19 @@ async function login(params: {
 	);
 	await runAgentBrowser(params.session, ['find', 'first', 'button[type=submit]', 'click'], 30_000);
 
-	// Redirect can be role-gated; we only care that auth succeeded and we left /sign-in.
-	await runAgentBrowser(params.session, ['wait', '--url', '**/'], 60_000);
-
-	const currentUrl = await runAgentBrowser(params.session, ['get', 'url'], 15_000);
-	if (currentUrl.includes('/sign-in')) {
-		throw new Error('Login failed: still on /sign-in after submit');
+	// Wait for the redirect to complete after login.
+	// NOTE: Do NOT use `wait --url **/` — on Windows this pattern hangs/times out
+	// because `**/` doesn't match URLs that don't end with `/`.
+	// Instead, poll `get url` until we leave /sign-in.
+	const loginDeadline = Date.now() + 30_000;
+	while (Date.now() < loginDeadline) {
+		const currentUrl = await runAgentBrowser(params.session, ['get', 'url'], 15_000);
+		if (!currentUrl.includes('/sign-in')) {
+			return;
+		}
+		await runAgentBrowser(params.session, ['wait', '1000'], 5_000);
 	}
+	throw new Error('Login failed: still on /sign-in after 30s');
 }
 
 async function dbLookupUser(params: {
@@ -560,9 +616,6 @@ async function run(): Promise<void> {
 			const actorUserId = witnesses.scheduleAssigned.driverId;
 			const actor = await dbLookupUser({ client: dbClient, userId: actorUserId });
 			const session = sessionName(artifactDate, flowId, actorUserId);
-			console.log(`[witness-ui] DEBUG: session=${session} email=${redactEmail(actor.email)} baseUrl=${baseUrl}`);
-			console.log(`[witness-ui] DEBUG: launching agent-browser...`);
-
 			await login({
 				session,
 				baseUrl,
@@ -576,11 +629,8 @@ async function run(): Promise<void> {
 			await runAgentBrowser(session, ['open', `${baseUrl}/schedule`], 60_000);
 			await waitForLoaded({ session, rootTestId: 'schedule-list', timeoutMs: 60_000 });
 			const assignmentId = witnesses.scheduleAssigned.assignmentId;
-			const assignmentSelector = `[data-testid="assignment-row"][data-assignment-id="${quoteForJsSelector(assignmentId)}"]`;
-			const assignmentFound = await evalBoolean(
-				session,
-				`Boolean(document.querySelector("${assignmentSelector}"))`
-			);
+			const assignmentSelector = `[data-testid="assignment-row"][data-assignment-id="${assignmentId}"]`;
+			const assignmentFound = await elementExists(session, assignmentSelector);
 			const scheduleShot = path.join(
 				screenshotsDir,
 				`${flowId}__${actorUserId}__schedule__${assignmentFound ? 'PASS' : 'FAIL'}.png`
@@ -608,16 +658,14 @@ async function run(): Promise<void> {
 
 			let notifFound = false;
 			if (assignmentConfirmedNotificationId) {
-				const notifSelector = `[data-testid="notification-row"][data-notification-id="${quoteForJsSelector(
-					assignmentConfirmedNotificationId
-				)}"]`;
+				const notifSelector = `[data-testid="notification-row"][data-notification-id="${assignmentConfirmedNotificationId}"]`;
 				notifFound = (await scrollUntilFound({ session, selector: notifSelector, maxScrolls: 8 }))
 					.found;
 			} else {
 				// Fallback to type-only existence.
-				notifFound = await evalBoolean(
+				notifFound = await elementExists(
 					session,
-					`Boolean(document.querySelector('[data-testid="notification-row"][data-notification-type="assignment_confirmed"]'))`
+					'[data-testid="notification-row"][data-notification-type="assignment_confirmed"]'
 				);
 			}
 
@@ -673,11 +721,8 @@ async function run(): Promise<void> {
 			await runAgentBrowser(session, ['open', `${baseUrl}/schedule`], 60_000);
 			await waitForLoaded({ session, rootTestId: 'schedule-list', timeoutMs: 60_000 });
 			const assignmentId = witnesses.autoDropped.assignmentId;
-			const assignmentSelector = `[data-testid="assignment-row"][data-assignment-id="${quoteForJsSelector(assignmentId)}"]`;
-			const assignmentPresent = await evalBoolean(
-				session,
-				`Boolean(document.querySelector("${assignmentSelector}"))`
-			);
+			const assignmentSelector = `[data-testid="assignment-row"][data-assignment-id="${assignmentId}"]`;
+			const assignmentPresent = await elementExists(session, assignmentSelector);
 			const scheduleShot = path.join(
 				screenshotsDir,
 				`${flowId}__${actorUserId}__schedule__${!assignmentPresent ? 'PASS' : 'FAIL'}.png`
@@ -698,14 +743,12 @@ async function run(): Promise<void> {
 			const droppedNotifId = witnesses.autoDropped.shiftAutoDroppedNotificationId;
 			let notifFound = false;
 			if (droppedNotifId) {
-				const selector = `[data-testid="notification-row"][data-notification-id="${quoteForJsSelector(
-					droppedNotifId
-				)}"]`;
+				const selector = `[data-testid="notification-row"][data-notification-id="${droppedNotifId}"]`;
 				notifFound = (await scrollUntilFound({ session, selector, maxScrolls: 8 })).found;
 			} else {
-				notifFound = await evalBoolean(
+				notifFound = await elementExists(
 					session,
-					`Boolean(document.querySelector('[data-testid="notification-row"][data-notification-type="shift_auto_dropped"]'))`
+					'[data-testid="notification-row"][data-notification-type="shift_auto_dropped"]'
 				);
 			}
 
@@ -758,11 +801,8 @@ async function run(): Promise<void> {
 				await runAgentBrowser(session, ['open', `${baseUrl}/schedule`], 60_000);
 				await waitForLoaded({ session, rootTestId: 'schedule-list', timeoutMs: 60_000 });
 				const assignmentId = witnesses.bidResolution.assignmentId;
-				const selector = `[data-testid="assignment-row"][data-assignment-id="${quoteForJsSelector(assignmentId)}"]`;
-				const assignmentFound = await evalBoolean(
-					session,
-					`Boolean(document.querySelector("${selector}"))`
-				);
+				const selector = `[data-testid="assignment-row"][data-assignment-id="${assignmentId}"]`;
+				const assignmentFound = await elementExists(session, selector);
 				const scheduleShot = path.join(
 					screenshotsDir,
 					`${flowId}__${actorUserId}__schedule__${assignmentFound ? 'PASS' : 'FAIL'}.png`
@@ -789,15 +829,13 @@ async function run(): Promise<void> {
 				await waitForLoaded({ session, rootTestId: 'notifications-list', timeoutMs: 60_000 });
 				let notifFound = false;
 				if (bidWonNotificationId) {
-					const notifSelector = `[data-testid="notification-row"][data-notification-id="${quoteForJsSelector(
-						bidWonNotificationId
-					)}"]`;
+					const notifSelector = `[data-testid="notification-row"][data-notification-id="${bidWonNotificationId}"]`;
 					notifFound = (await scrollUntilFound({ session, selector: notifSelector, maxScrolls: 8 }))
 						.found;
 				} else {
-					notifFound = await evalBoolean(
+					notifFound = await elementExists(
 						session,
-						`Boolean(document.querySelector('[data-testid="notification-row"][data-notification-type="bid_won"]'))`
+						'[data-testid="notification-row"][data-notification-type="bid_won"]'
 					);
 				}
 
@@ -854,14 +892,12 @@ async function run(): Promise<void> {
 
 				let notifFound = false;
 				if (bidLostNotificationId) {
-					const selector = `[data-testid="notification-row"][data-notification-id="${quoteForJsSelector(
-						bidLostNotificationId
-					)}"]`;
+					const selector = `[data-testid="notification-row"][data-notification-id="${bidLostNotificationId}"]`;
 					notifFound = (await scrollUntilFound({ session, selector, maxScrolls: 8 })).found;
 				} else {
-					notifFound = await evalBoolean(
+					notifFound = await elementExists(
 						session,
-						`Boolean(document.querySelector('[data-testid="notification-row"][data-notification-type="bid_lost"]'))`
+						'[data-testid="notification-row"][data-notification-type="bid_lost"]'
 					);
 				}
 
@@ -914,9 +950,7 @@ async function run(): Promise<void> {
 			await waitForLoaded({ session, rootTestId: 'notifications-list', timeoutMs: 60_000 });
 
 			const notifId = witnesses.noShowManager.notificationId;
-			const selector = `[data-testid="notification-row"][data-notification-id="${quoteForJsSelector(
-				notifId
-			)}"]`;
+			const selector = `[data-testid="notification-row"][data-notification-id="${notifId}"]`;
 			const notifFound = (await scrollUntilFound({ session, selector, maxScrolls: 10 })).found;
 			const notifShot = path.join(
 				screenshotsDir,
