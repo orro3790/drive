@@ -314,6 +314,65 @@ agent-browser snapshot -i --json
 agent-browser get text @e1 --json
 ```
 
+## Windows Scripting Rules (CRITICAL for Node.js automation)
+
+When calling agent-browser from Node.js scripts (`child_process.spawn`), these rules prevent hours of debugging:
+
+### 1. NEVER use shell: true
+
+cmd.exe mangles JS expressions, URLs with `%xx`, and glob patterns. Use the native exe directly:
+
+```typescript
+import path from 'node:path';
+
+// Resolve the native exe — bypasses cmd.exe entirely
+const exe = path.join(process.env.APPDATA!, 'npm', 'node_modules',
+  'agent-browser', 'bin', 'agent-browser-win32-x64.exe');
+spawn(exe, ['--session', name, 'open', url], { windowsHide: true });
+// NOT: spawn('agent-browser', args, { shell: true })  // BROKEN
+```
+
+### 2. Use get count / wait CSS selectors, NOT eval
+
+`eval` and `wait --fn` pass JS expressions as arguments — these break across platforms due to quoting.
+
+```bash
+# BAD — JS expression gets mangled
+agent-browser eval "Boolean(document.querySelector('[data-testid=\"foo\"]'))"
+
+# GOOD — CSS selector as a plain string
+agent-browser get count "[data-testid=foo]"                    # returns number
+agent-browser wait "[data-testid=foo][data-loaded=true]"       # waits for match
+```
+
+### 3. Do NOT use wait --url with broad globs
+
+`wait --url "**/"`  hangs on Windows. Use specific patterns or poll `get url`:
+
+```bash
+# BAD — hangs
+agent-browser wait --url "**/"
+# GOOD
+agent-browser wait --url "**/schedule"
+```
+
+### 4. Clean up stale sessions before reuse
+
+Crashed scripts leave sessions registered in the daemon. Always close before restarting:
+
+```bash
+agent-browser session list                    # check what's active
+agent-browser --session <name> close          # close each stale one
+```
+
+### 5. Clear stale daemon files if daemon won't start
+
+If you see `Daemon failed to start (socket: *.sock)`:
+
+```bash
+rm -f "$USERPROFILE/.agent-browser/"*.pid "$USERPROFILE/.agent-browser/"*.port "$USERPROFILE/.agent-browser/"*.sock
+```
+
 ## Debugging
 
 ```bash
@@ -322,11 +381,8 @@ agent-browser console                                # View console messages
 agent-browser errors                                 # View page errors
 agent-browser record start ./debug.webm   # Record from current page
 agent-browser record stop                            # Save recording
-agent-browser open example.com --headed  # Show browser window
 agent-browser --cdp 9222 snapshot        # Connect via CDP
-agent-browser console                    # View console messages
 agent-browser console --clear            # Clear console
-agent-browser errors                     # View page errors
 agent-browser errors --clear             # Clear errors
 agent-browser highlight @e1              # Highlight element
 agent-browser trace start                # Start recording trace
