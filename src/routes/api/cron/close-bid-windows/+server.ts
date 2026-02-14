@@ -20,6 +20,9 @@ export const GET: RequestHandler = async ({ request }) => {
 	const authError = verifyCronAuth(request);
 	if (authError) return authError;
 
+	const includeDebugErrors = process.env.NIGHTLY_CRON_E2E === '1';
+	const debugErrors: string[] = [];
+
 	const log = logger.child({ cron: 'close-bid-windows' });
 	log.info('Starting bid window closure cron job');
 
@@ -80,6 +83,9 @@ export const GET: RequestHandler = async ({ request }) => {
 				}
 			} catch (err) {
 				errors++;
+				if (includeDebugErrors) {
+					debugErrors.push(`windowId=${window.id}: ${String(err)}`);
+				}
 				orgLog.error({ windowId: window.id, error: err }, 'Failed to process bid window');
 			}
 		}
@@ -96,6 +102,7 @@ export const GET: RequestHandler = async ({ request }) => {
 		resolved,
 		transitioned,
 		closed,
-		errors
+		errors,
+		...(includeDebugErrors ? { debugErrors: debugErrors.slice(0, 10) } : {})
 	});
 };

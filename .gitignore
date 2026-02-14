@@ -47,3 +47,6 @@ android/**/build/
 
 # Local temp artifacts
 tmp/*.cookie
+
+# Nightly cron drill artifacts (generated at runtime)
+logs/nightly/**

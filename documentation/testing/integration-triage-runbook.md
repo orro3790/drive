@@ -1,0 +1,329 @@
+# Integration Failure Triage Runbook (Real DB, Multi-Tenant)
+
+Status: active (Milestone A landed: real-DB integration harness + smoke/full scripts). This runbook defines the triage contract so failures are diagnosable without tribal context.
+
+## Scope (what this runbook is for)
+
+- Audience: first responder to a failing integration suite in CI or locally.
+- Applies to: `pnpm test:integration:smoke` and `pnpm test:integration:full` (real DB, multi-tenant harness).
+- Non-goals: fixing missing artifacts/diagnostics/CI wiring during triage; document the gap and file a follow-up bead with evidence.
+
+## Glossary (what CI must print)
+
+- `scenarioId`: stable id for the failing scenario (example: `BID-001`).
+- `invariantId`: stable id for the invariant that failed (example: `NOTIF-001`).
+- `organizationUnderTest`: which org fixture the scenario operated on (example: `org-a`).
+- `keyEntityIds`: the entity ids needed to inspect evidence (orgId/driverId/assignmentId/bidWindowId/etc.).
+
+Notes:
+
+- `scenarioId` should appear in Vitest output via the suite/test name (we encode it in `describe(...)`).
+- `invariantId` should appear in the thrown error message (prefix before `:`).
+
+If a failure does not include both `scenarioId` + `invariantId`, treat it as a harness/diagnostics defect and file it as such.
+
+## First-Response Checklist (10 minutes)
+
+1. Identify the failing `scenarioId` + `invariantId` from the CI logs.
+2. Download CI artifacts (logs + JSON report + DB evidence snapshots). Keep them local and link them in your defect/fix.
+3. Classify the failure:
+   - Infra/CI (Postgres unavailable, env missing)
+   - Harness/diagnostics (reset/seed/clock/invariant wiring)
+   - Deterministic algorithm regression (business logic changed)
+   - Data/schema drift (migration/seed mismatch)
+   - Flake/concurrency timing (must be fixed deterministically; do not accept "rerun until green")
+4. Reproduce locally (prefer running the single failing scenario, else run smoke).
+5. If it reproduces, fix or file a defect bead with evidence pointers (template at the end of this doc).
+
+### Failure Classes (fast signals + minimum evidence)
+
+| Class                | Fast signal                                                        | Minimum evidence to capture                                                                 | Route to (owner model)                               |
+| -------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Infra/CI             | Postgres service unhealthy, missing env, `pnpm install`/node error | workflow run URL, job name, full logs (plus service logs), runner OS, missing var _names_   | `.github/workflows/**` maintainers                   |
+| Harness/diagnostics  | seed/reset/migrate fails; IDs/evidence missing; bad clock control  | stack trace, harness logs, evidence bundle paths, `scenarioId`/`invariantId` if present     | `tests/integration/harness/**` maintainers           |
+| Algorithm regression | deterministic invariant failure that reproduces locally            | `scenarioId`, `invariantId`, repro command, key entity ids, relevant DB rows/state snapshot | `src/lib/server/services/**` (domain/service owners) |
+| Data/schema drift    | migration/schema mismatch, seed assumes old columns/constraints    | drizzle/migrate output, failing SQL/errors, schema/migration SHA, key tables involved       | `drizzle/**`, seed scripts (`scripts/seed.ts`)       |
+| Flake/timing         | reruns change outcome; concurrency ordering issues                 | run-to-run diff, seed anchors, timing assumptions, any concurrency logs, evidence snapshots | treat as harness/algorithm defect; do not "rerun"    |
+
+## Reproduce Locally
+
+### Safety Guardrails
+
+- Only run real-DB integration tests against a disposable local DB.
+- The integration harness will DROP + recreate the `public` schema and push the latest Drizzle schema. Never point `DATABASE_URL` at anything you care about.
+- Run via `pnpm test:integration:*` (configs set `INTEGRATION_TEST=1` and route `$lib/server/db` to the integration-safe client).
+- `DATABASE_URL` database name must end with `_integration` (enforced by `src/lib/server/db/test-client.ts`).
+
+### Environment Contract
+
+Required env vars (minimum set):
+
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/drive_integration`
+- `CRON_SECRET=test-cron-secret`
+- `BETTER_AUTH_SECRET=test-better-auth-secret`
+
+Automatically set by the integration scripts/config:
+
+- `INTEGRATION_TEST=1`
+
+Optional overrides:
+
+- `ALLOW_NONLOCAL_INTEGRATION_DB=1` (allows non-local hosts; still blocks common managed DB domains)
+
+PowerShell example:
+
+```powershell
+$env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/drive_integration"
+$env:CRON_SECRET = "test-cron-secret"
+$env:BETTER_AUTH_SECRET = "test-better-auth-secret"
+```
+
+### Create the integration database (one-time)
+
+The integration harness expects a dedicated local Postgres database whose name ends with `_integration` (example: `drive_integration`).
+
+```bash
+createdb drive_integration
+
+# or
+psql -c "CREATE DATABASE drive_integration;"
+```
+
+### Smoke Suite
+
+```bash
+pnpm install
+pnpm test:integration:smoke
+```
+
+### Full Suite
+
+```bash
+pnpm test:integration:full
+```
+
+### Single Scenario (preferred)
+
+To run just the failing scenario/test (filter by `scenarioId`):
+
+```bash
+pnpm exec vitest run -c vitest.integration.smoke.config.ts -t "BID-001"
+
+# OR (full suite config)
+pnpm exec vitest run -c vitest.integration.config.ts -t "BID-001"
+```
+
+Where these commands live:
+
+| Goal                       | Command                              | Defined in                                                                         |
+| -------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------- |
+| Integration smoke          | `pnpm test:integration:smoke`        | `package.json` + `vitest.integration.smoke.config.ts`                              |
+| Integration full           | `pnpm test:integration:full`         | `package.json` + `vitest.integration.config.ts`                                    |
+| Integration DB guardrails  | (enforced automatically)             | `src/lib/server/db/test-client.ts`                                                 |
+| Integration migration/push | (runs automatically in global setup) | `tests/integration/harness/globalSetup.ts`, `tests/integration/harness/migrate.ts` |
+
+## Download CI Artifacts
+
+### Prereqs
+
+- Install + authenticate the GitHub CLI: `gh auth status` (if needed: `gh auth login`).
+- Ensure you have permission to view workflow runs and download artifacts for this repo.
+
+### GitHub UI
+
+1. Open the failing workflow run.
+2. Download artifacts.
+3. Extract into a local folder and keep paths stable for linking from defects.
+
+### GitHub CLI
+
+```bash
+# PR smoke runs in workflow `ci`, job `integration smoke` (check name: `ci / integration smoke`).
+
+# 1) Find the run
+gh run list --workflow ci --limit 20
+
+# 2) Inspect artifact names
+gh run view <run-id> --json artifacts -q '.artifacts[].name'
+
+# 3) Download smoke artifacts
+gh run download <run-id> -n integration-smoke-runtime --dir logs/nightly/<YYYY-MM-DD>/ci-artifacts
+gh run download <run-id> -n integration-smoke-artifacts --dir logs/nightly/<YYYY-MM-DD>/ci-artifacts
+```
+
+PR smoke artifacts (available today):
+
+- `integration-smoke-runtime` (always): `logs/ci/integration-smoke/runtime.json`
+- `integration-smoke-artifacts` (on failure):
+  - `logs/ci/integration-smoke/vitest.log`
+  - `tests/integration/.evidence/**` (if produced)
+
+Target artifact contents (nightly/full, tracked by DRV-b1l.10):
+
+- Machine-readable report JSON containing `scenarioId`, `invariantId`, `keyEntityIds`, and evidence pointers.
+- Human-readable summary markdown.
+- DB evidence snapshots (queries/rows) sufficient to confirm isolation + idempotency properties.
+- (If UI witness verification is part of the nightly pack) screenshots proving the UI matches DB outcomes.
+
+Current UI witness runner (local, DRV-b1l.12):
+
+```bash
+# Requires a running web server at BASE_URL (default http://localhost:5173)
+# and the same DATABASE_URL used by the cron drill.
+BASE_URL=http://localhost:5173 DATABASE_URL=... pnpm nightly:witness-ui
+```
+
+Outputs (under the cron drill artifact date directory):
+
+- `logs/nightly/<YYYY-MM-DD>/witness-ui-report.json`
+- `logs/nightly/<YYYY-MM-DD>/screenshots/**`
+- Updates `logs/nightly/<YYYY-MM-DD>/cron-e2e-report.md` with a UI witness PASS/FAIL section
+
+Local evidence bundles (available today):
+
+- Some scenarios may write JSON evidence bundles to `tests/integration/.evidence/*.json` via `tests/integration/harness/diagnostics.ts`.
+- If a scenario failure has no evidence bundle, treat that as a diagnostics gap and capture the minimal DB rows needed in your defect report.
+
+## Scenario Taxonomy (`scenarioId` prefixes)
+
+| Prefix  | Meaning                                           | Typical failure surface                                       |
+| ------- | ------------------------------------------------- | ------------------------------------------------------------- |
+| `SCH-*` | Scheduling / eligibility / caps / DST             | schedule generation, eligibility filters, week-boundary math  |
+| `BID-*` | Bidding lifecycle (competitive/instant/emergency) | winner selection, bid-window transitions, notification fanout |
+| `NOS-*` | No-show detection + emergency reassignment        | cutoff math, emergency windows, manager alerts                |
+| `HLT-*` | Health scoring + interventions                    | streak transitions, scoring rules, tenant isolation           |
+| `API-*` | API journeys (org-scoped authZ)                   | cross-org access denials, actor context                       |
+| `UI-*`  | Targeted UI journeys (Playwright/agent-browser)   | UI shows stale/incorrect state, missing alerts                |
+| `ADV-*` | Adversarial concurrency/idempotency               | duplicates, races, ordering bugs, flake                       |
+
+## Invariant Taxonomy (`invariantId` prefixes)
+
+Invariant ids must be stable, searchable, and map to a single responsibility. Recommended prefix scheme:
+
+| Prefix     | Meaning                                                    | Evidence to capture                                              |
+| ---------- | ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| `TENANT-*` | Tenant isolation (no cross-org reads/writes/notifications) | counts by orgId, sample foreign ids, offending rows              |
+| `IDEMP-*`  | Idempotency (reruns do not duplicate transitions)          | before/after counts, dedupe keys, window/notification uniqueness |
+| `NOTIF-*`  | Notification correctness + scoping                         | notification rows, types, dedupe behavior                        |
+| `ASSIGN-*` | Assignment integrity (single winner, no duplicates)        | assignment rows, unique constraints, assigned_by                 |
+| `STATE-*`  | State machine correctness                                  | status transitions, timeline evidence                            |
+
+### Current invariants (stable IDs)
+
+| invariantId  | Meaning                                                                       | Where thrown                                          |
+| ------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `NOTIF-001`  | Cross-org notification leakage (notification org must match user org)         | `tests/integration/invariants/tenantIsolation.ts`     |
+| `TENANT-002` | Assignment assigned to cross-org user (warehouse org must match user org)     | `tests/integration/invariants/tenantIsolation.ts`     |
+| `TENANT-003` | Bid window resolved to cross-org winner (warehouse org must match winner org) | `tests/integration/invariants/tenantIsolation.ts`     |
+| `ASSIGN-001` | Assignment missing or not scheduled/assigned to expected driver               | `tests/integration/invariants/assignmentIntegrity.ts` |
+| `ASSIGN-002` | Bid window missing or not resolved to expected winner                         | `tests/integration/invariants/assignmentIntegrity.ts` |
+
+If the invariant id is present but the meaning is unclear, treat that as a documentation gap and update this runbook (or the invariant itself) so the next responder does not have to reverse-engineer it.
+
+## Ownership and Escalation Model
+
+Classify the failure first, then route it:
+
+- Infra/CI:
+  - Examples: Postgres service not healthy, missing env vars, node/pnpm failures.
+  - Owner: CI/workflow maintainers (files: `.github/workflows/**`).
+- Harness/diagnostics:
+  - Examples: reset/seed fails, clock helpers wrong, missing `scenarioId`/`invariantId`, evidence snapshots missing.
+  - Owner: integration harness maintainers (files: `tests/integration/harness/**`, `vitest.integration.config.ts`).
+- Algorithm regression:
+  - Examples: deterministic business logic drift; scenario reproduces locally.
+  - Owner: domain service owners (files under `src/lib/server/services/**`).
+- Data/schema drift:
+  - Examples: schema mismatch, seed assumes old columns/constraints.
+  - Owner: schema/migrations owners (files under `drizzle/**`, `scripts/seed.ts`).
+
+Escalate when:
+
+- You cannot classify within 20 minutes.
+- The failure impacts multiple scenario classes (likely harness or shared service regression).
+
+## Defect Bead Template (copy/paste)
+
+Title: `Integration failure: <scenarioId> / <invariantId> (<short symptom>)`
+
+Create the bead (CLI):
+
+If you're on Windows and `bd` is not available on your PATH as `bd`, use `bd.exe`.
+
+### Bash (macOS/Linux/Git Bash)
+
+```bash
+bd create \
+  --type bug \
+  --labels e2e,nightly \
+  --title "Integration failure: <scenarioId> / <invariantId> (<short symptom>)" \
+  --body-file - <<'EOF'
+scenarioId: <BID-001>
+invariantId: <NOTIF-001>
+CI run: <url>
+Artifacts:
+- CI: logs/nightly/<YYYY-MM-DD>/ci-artifacts/...
+- Local evidence (if present): tests/integration/.evidence/<scenarioId>.<label>.<timestamp>.json
+Git SHA: <sha>
+Expected: <what should have happened>
+Observed: <what happened>
+Repro (local): <exact commands + env>
+Key entity ids: <orgId, driverId, assignmentId, bidWindowId, ...>
+Owner guess: <infra | harness | algorithm | schema>
+EOF
+```
+
+### PowerShell (Windows)
+
+```powershell
+$body = @"
+scenarioId: <BID-001>
+invariantId: <NOTIF-001>
+CI run: <url>
+Artifacts:
+- CI: logs/nightly/<YYYY-MM-DD>/ci-artifacts/...
+- Local evidence (if present): tests/integration/.evidence/<scenarioId>.<label>.<timestamp>.json
+Git SHA: <sha>
+Expected: <what should have happened>
+Observed: <what happened>
+Repro (local): <exact commands + env>
+Key entity ids: <orgId, driverId, assignmentId, bidWindowId, ...>
+Owner guess: <infra | harness | algorithm | schema>
+"@
+
+$body | bd.exe create `
+  --type bug `
+  --labels e2e,nightly `
+  --title "Integration failure: <scenarioId> / <invariantId> (<short symptom>)" `
+  --body-file -
+```
+
+If piping to `--body-file -` is not supported in your shell, write the body to a temp file (e.g. `bead.md`) and pass `--body-file bead.md`.
+Include:
+
+- `scenarioId`: <BID-001>
+- `invariantId`: <NOTIF-001>
+- CI run: <url>
+- Artifacts:
+  - CI: `logs/nightly/<YYYY-MM-DD>/ci-artifacts/...`
+  - Local evidence (if present): `tests/integration/.evidence/<scenarioId>.<label>.<timestamp>.json`
+- Git SHA: <sha>
+- Expected: <what should have happened>
+- Observed: <what happened>
+- Repro (local): <exact commands + env>
+- Key entity ids: <orgId, driverId, assignmentId, bidWindowId, ...>
+- Owner guess: <infra | harness | algorithm | schema>
+
+## Fresh Session Validation Checklist
+
+This runbook is usable when a responder can complete the following without tribal context:
+
+- [ ] Create a disposable local Postgres DB ending in `_integration`.
+- [ ] Set required env vars and run `pnpm test:integration:smoke` successfully.
+- [ ] When a failure occurs, locate `scenarioId` + `invariantId` (from logs or artifacts) as documented.
+- [ ] Download CI artifacts using either GitHub UI or `gh run download`.
+- [ ] Create a defect bead using the template and include the required fields.
+
+Last validated:
+
+- YYYY-MM-DD (OS): PASS/FAIL - notes

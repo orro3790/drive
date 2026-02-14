@@ -52,10 +52,7 @@ export interface GeneratedHealthResult {
  * Detect no-show: past + scheduled + confirmed + no shift arrival.
  * This is the state before the no-show detection cron cancels them.
  */
-function isNoShow(
-	assignment: GeneratedAssignment,
-	shift: GeneratedShift | undefined
-): boolean {
+function isNoShow(assignment: GeneratedAssignment, shift: GeneratedShift | undefined): boolean {
 	return (
 		isPastDate(assignment.date) &&
 		assignment.status === 'scheduled' &&
@@ -300,8 +297,7 @@ export function generateHealth(
 					}
 				}
 			}
-			const weekHardStop =
-				weekNoShows > 0 || weekLateCancels >= health.lateCancelThreshold;
+			const weekHardStop = weekNoShows > 0 || weekLateCancels >= health.lateCancelThreshold;
 
 			if (weekHardStop) {
 				stars = 0;
@@ -369,7 +365,7 @@ export function generateHealth(
 			userId: driver.id,
 			currentScore: anyHardStop
 				? Math.min(latestSnapshot?.score ?? 0, health.tierThreshold - 1)
-				: latestSnapshot?.score ?? 0,
+				: (latestSnapshot?.score ?? 0),
 			streakWeeks,
 			stars,
 			lastQualifiedWeekStart,

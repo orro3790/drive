@@ -3,7 +3,7 @@ import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import logger from './logger';
-import { db } from './db';
+import { db } from '$lib/server/db';
 import { rateLimit as authRateLimit } from './db/auth-schema';
 import { releaseProductionSignupAuthorizationReservation } from './services/onboarding';
 import {

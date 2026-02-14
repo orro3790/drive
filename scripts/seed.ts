@@ -71,10 +71,7 @@ function hashJoinCode(code: string): string {
 	return createHash('sha256').update(code.trim().toUpperCase()).digest('hex');
 }
 
-async function createSeedOrganization(
-	slug: string,
-	name: string
-): Promise<string> {
+async function createSeedOrganization(slug: string, name: string): Promise<string> {
 	const joinCode = randomBytes(6).toString('hex').toUpperCase();
 	const [org] = await db
 		.insert(organizations)
@@ -136,9 +133,7 @@ async function clearData(): Promise<Map<string, string>> {
 	const testManagers = await db.select({ id: user.id, email: user.email }).from(user);
 	const seedManagerIds = testManagers
 		.filter(
-			(u) =>
-				u.email.includes('@drivermanager.test') ||
-				u.email.includes('@hamiltonmanager.test')
+			(u) => u.email.includes('@drivermanager.test') || u.email.includes('@hamiltonmanager.test')
 		)
 		.map((u) => u.id);
 
@@ -180,17 +175,15 @@ async function clearData(): Promise<Map<string, string>> {
 	return orgIds;
 }
 
-async function seedOrg(
-	orgConfig: OrgSeedConfig,
-	orgId: string,
-	isPrimary: boolean
-): Promise<void> {
+async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boolean): Promise<void> {
 	const seedConfig = orgConfig.config;
 	const label = orgConfig.slug;
 
 	console.log(`\n${'='.repeat(50)}`);
 	console.log(`Seeding ${orgConfig.name} (${label})`);
-	console.log(`Config: ${seedConfig.drivers} drivers, ${seedConfig.managers} managers, ${seedConfig.routes} routes`);
+	console.log(
+		`Config: ${seedConfig.drivers} drivers, ${seedConfig.managers} managers, ${seedConfig.routes} routes`
+	);
 	console.log(`${'='.repeat(50)}`);
 
 	// 1. Generate warehouses
@@ -198,9 +191,7 @@ async function seedOrg(
 	const warehouseData = generateWarehouses(seedConfig, orgConfig.warehouseOffset);
 	const insertedWarehouses = await db
 		.insert(warehouses)
-		.values(
-			warehouseData.map((w) => ({ name: w.name, address: w.address, organizationId: orgId }))
-		)
+		.values(warehouseData.map((w) => ({ name: w.name, address: w.address, organizationId: orgId })))
 		.returning({ id: warehouses.id, name: warehouses.name });
 	console.log(`   Created ${insertedWarehouses.length} warehouses`);
 	const warehouseNameById = new Map(insertedWarehouses.map((w) => [w.id, w.name]));
@@ -349,6 +340,24 @@ async function seedOrg(
 	}
 	console.log(`   Created ${warehouseManagerAssignments.length} warehouse-manager assignments`);
 
+	// 3c. Assign a primary manager to each route (for manager alert verification)
+	console.log('\n3c. Assigning primary managers to routes...');
+	if (managers.length > 0) {
+		const primaryManagerId = managers[0].id;
+		await db
+			.update(routes)
+			.set({ managerId: primaryManagerId, updatedAt: getSeedNow() })
+			.where(
+				inArray(
+					routes.id,
+					insertedRoutes.map((r) => r.id)
+				)
+			);
+		console.log(`   Assigned primary manager to ${insertedRoutes.length} routes`);
+	} else {
+		console.log('   No managers seeded; skipping route manager assignment');
+	}
+
 	// 4. Generate preferences
 	console.log('\n4. Creating preferences...');
 	const routeIds = insertedRoutes.map((r) => r.id);
@@ -430,7 +439,9 @@ async function seedOrg(
 	console.log(`   Created ${insertedAssignments.length} assignments:`, statusCounts);
 	console.log(`   Created ${assignmentData.shifts.length} shifts`);
 	console.log(`   No-show assignments: ${assignmentData.noShowIndices.length}`);
-	console.log(`   Personas: exemplary=${assignmentData.personas.exemplary.length}, good=${assignmentData.personas.good.length}, unreliable=${assignmentData.personas.unreliable.length}, new=${assignmentData.personas.new.length}`);
+	console.log(
+		`   Personas: exemplary=${assignmentData.personas.exemplary.length}, good=${assignmentData.personas.good.length}, unreliable=${assignmentData.personas.unreliable.length}, new=${assignmentData.personas.new.length}`
+	);
 
 	// 6. Generate route completions
 	console.log('\n6. Creating route completions...');
@@ -617,20 +628,16 @@ async function seedOrg(
 		assignmentIdByIndex.set(i, insertedAssignments[i].id);
 	}
 
-	const notificationData = generateNotifications(
-		notificationUsers,
-		routesWithWarehouses,
-		{
-			assignments: assignmentData.assignments,
-			shifts: assignmentData.shifts,
-			bidWindows: biddingData.bidWindows,
-			bids: biddingData.bids,
-			healthStates: healthData.states,
-			personas: assignmentData.personas,
-			noShowIndices: assignmentData.noShowIndices,
-			assignmentIdByIndex
-		}
-	);
+	const notificationData = generateNotifications(notificationUsers, routesWithWarehouses, {
+		assignments: assignmentData.assignments,
+		shifts: assignmentData.shifts,
+		bidWindows: biddingData.bidWindows,
+		bids: biddingData.bids,
+		healthStates: healthData.states,
+		personas: assignmentData.personas,
+		noShowIndices: assignmentData.noShowIndices,
+		assignmentIdByIndex
+	});
 	if (notificationData.length > 0) {
 		await db.insert(notifications).values(
 			notificationData.map((notification) => ({
@@ -724,7 +731,9 @@ async function main() {
 	console.log(`  Password for all users: ${getSeedPassword()}`);
 	console.log(`\nOrganizations:`);
 	for (const oc of orgConfigs) {
-		console.log(`  - ${oc.name} (${oc.slug}): ${oc.config.drivers} drivers, ${oc.config.managers} managers`);
+		console.log(
+			`  - ${oc.name} (${oc.slug}): ${oc.config.drivers} drivers, ${oc.config.managers} managers`
+		);
 	}
 }
 

@@ -84,13 +84,15 @@ agent-browser --session driver-ops resize 390 844
 
 This MUST be done before any navigation. Verification without mobile viewport is invalid.
 
-#### Load Auth State (if route requires auth)
+#### Open with Auth Auto-Restore (if route requires auth)
+
+Use `--session-name` on the `open` command to auto-restore persisted auth:
 
 ```bash
-agent-browser --session driver-ops state load .agent-browser/driver-ops-auth.json 2>/dev/null
+agent-browser --session driver-ops --session-name driver-ops open http://localhost:5173/ --headed
 ```
 
-If no saved auth exists or it's stale, use `/dev-login` skill first.
+If you land on `/sign-in` instead of the expected route, auth has expired — use `/dev-login` skill first.
 
 ### 2. Navigate & Interact (Mobile First)
 

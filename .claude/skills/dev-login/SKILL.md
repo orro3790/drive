@@ -9,25 +9,24 @@ Log into the Driver Ops development server using agent-browser.
 
 **IMPORTANT**: Use the credentials below. Do NOT read `.env` or other config files for credentials.
 
-## Auth State File
-
-Location: `.agent-browser/driver-ops-auth.json` (gitignored)
-
 ## Workflow
 
-### 1. Try Loading Saved Auth
+Auth state auto-persists via `--session-name`. No manual save/load needed.
+
+### 1. Open App (auto-restores auth if previously logged in)
 
 ```bash
-agent-browser --session driver-ops state load .agent-browser/driver-ops-auth.json 2>/dev/null
+agent-browser --session driver-ops --session-name driver-ops open http://localhost:5173/ --headed
 ```
 
-If file exists and loads successfully, skip to step 6 (verify auth).
-
-### 2. Navigate to Login Page
+### 2. Check If Already Authenticated
 
 ```bash
-agent-browser --session driver-ops open http://localhost:5173/sign-in --headed
+agent-browser --session driver-ops get url
 ```
+
+- If URL is `/` or a protected route → Auth valid, done!
+- If URL contains `/sign-in` → Need to login, continue to step 3
 
 ### 3. Take Snapshot
 
@@ -50,36 +49,24 @@ agent-browser --session driver-ops click @e3
 agent-browser --session driver-ops wait --url "**/"
 ```
 
-### 5. Save Auth State
+Auth state auto-saves via `--session-name`. Next session will auto-restore.
 
-After successful login:
-
-```bash
-agent-browser --session driver-ops state save .agent-browser/driver-ops-auth.json
-```
-
-### 6. Verify Auth Works
-
-Navigate to a protected route:
+### 5. Verify
 
 ```bash
-agent-browser --session driver-ops open http://localhost:5173/ --headed
 agent-browser --session driver-ops get url
 ```
 
-- If URL is `/` or a protected route → Auth valid
-- If URL contains `/sign-in` → Auth expired, clear and retry
+Confirm URL is `/` or a protected route (not `/sign-in`).
 
 ## Stale Session Recovery
 
-If you load saved auth but get redirected to sign-in:
+If auth auto-restores but you still get redirected to sign-in:
 
 ```bash
-# Clear stale state
+# Clear persisted state and re-login
 agent-browser --session driver-ops cookies clear
-powershell -Command "Remove-Item '.agent-browser/driver-ops-auth.json' -ErrorAction SilentlyContinue"
-
-# Re-login (steps 2-5)
+# Re-login (steps 1-4 — open with --session-name, fill form)
 ```
 
 ## Credentials
