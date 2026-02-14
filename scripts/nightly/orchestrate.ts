@@ -40,16 +40,29 @@ function runDrill(name: string, command: string): DrillResult {
 	}
 }
 
-async function checkDevServer(): Promise<boolean> {
-	try {
-		const res = await fetch('http://localhost:5173/', {
-			method: 'HEAD',
-			signal: AbortSignal.timeout(2000)
-		});
-		return res.ok || res.status === 302;
-	} catch {
-		return false;
+async function checkDevServer(): Promise<{ ok: boolean; baseUrl: string | null }> {
+	const configured = process.env.BASE_URL?.trim();
+	const candidates = configured
+		? [configured]
+		: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173'];
+
+	for (const candidate of candidates) {
+		const base = candidate.replace(/\/+$/, '');
+		try {
+			const res = await fetch(`${base}/`, {
+				method: 'HEAD',
+				signal: AbortSignal.timeout(2000),
+				redirect: 'manual'
+			});
+			if (res.status > 0) {
+				return { ok: true, baseUrl: base };
+			}
+		} catch {
+			// try next candidate
+		}
 	}
+
+	return { ok: false, baseUrl: null };
 }
 
 async function main(): Promise<void> {
@@ -59,14 +72,19 @@ async function main(): Promise<void> {
 	results.lifecycleE2E = runDrill('Lifecycle E2E', 'pnpm nightly:lifecycle-e2e');
 
 	const witnessScriptExists = hasPackageScript('nightly:witness-ui');
-	const devServerRunning = await checkDevServer();
+	const devServer = await checkDevServer();
 
-	if (witnessScriptExists && devServerRunning) {
+	if (witnessScriptExists && devServer.ok) {
+		// If we auto-detected a viable dev server URL, prefer to pass it through
+		// so witness-ui uses the same origin (important for localhost vs 127.0.0.1).
+		if (!process.env.BASE_URL && devServer.baseUrl) {
+			process.env.BASE_URL = devServer.baseUrl;
+		}
 		results.witnessUI = runDrill('Witness UI', 'pnpm nightly:witness-ui');
 	} else {
 		const reason = !witnessScriptExists
 			? 'nightly:witness-ui script missing'
-			: 'dev server not detected (localhost:5173)';
+			: `dev server not detected (BASE_URL=${process.env.BASE_URL ? 'set' : 'unset'})`;
 		console.log(`\n=== Skipping Witness UI (${reason}) ===\n`);
 		results.witnessUI = { passed: true, skipped: true, durationMs: 0, exitCode: 0 };
 	}

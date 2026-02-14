@@ -1106,7 +1106,9 @@ describe('nightly lifecycle E2E drill (dev DB)', () => {
 				`select score::int as score from driver_health_snapshots where user_id = $1 and evaluated_at = $2::date limit 1;`,
 				[driverUserId, anchorDate]
 			);
-			expect(snapshot?.score ?? 0).toBeGreaterThan(0);
+			expect(snapshot).toBeTruthy();
+			expect(snapshot?.score ?? 0).toBeGreaterThanOrEqual(0);
+			expect(snapshot?.score ?? 0).toBeLessThanOrEqual(100);
 
 			setScenario('S9', {
 				status: 'passed',

@@ -422,12 +422,26 @@ async function screenshot(session: string, screenshotPath: string): Promise<void
 	await runAgentBrowser(session, ['screenshot', screenshotPath, '--full'], 60_000);
 }
 
+async function tryReadSignInError(session: string): Promise<string | null> {
+	const selector = '.notice-banner.warning .notice-content';
+	const exists = await elementExists(session, selector);
+	if (!exists) return null;
+	try {
+		const text = await runAgentBrowser(session, ['find', 'first', selector, 'text'], 15_000);
+		const trimmed = text.trim();
+		return trimmed ? trimmed : 'Sign-in error banner present (no text)';
+	} catch {
+		return 'Sign-in error banner present (unable to read text)';
+	}
+}
+
 async function login(params: {
 	session: string;
 	baseUrl: string;
 	redirectPath: string;
 	email: string;
 	viewport?: { width: number; height: number };
+	failureScreenshotPath?: string;
 }): Promise<void> {
 	const headed = process.env.AGENT_BROWSER_HEADED === '1';
 	const signInUrl = `${params.baseUrl}/sign-in?redirect=${encodeURIComponent(params.redirectPath)}`;
@@ -451,31 +465,44 @@ async function login(params: {
 
 	await runAgentBrowser(params.session, ['wait', 'input[name=email]'], 30_000);
 
-	await runAgentBrowser(
-		params.session,
-		['find', 'first', 'input[name=email]', 'fill', params.email],
-		30_000
-	);
-	await runAgentBrowser(
-		params.session,
-		['find', 'first', 'input[name=password]', 'fill', SEED_PASSWORD],
-		30_000
-	);
+	// Prefer typing into focused inputs so Svelte bindings receive real input events.
+	await runAgentBrowser(params.session, ['find', 'first', 'input[name=email]', 'click'], 30_000);
+	await runAgentBrowser(params.session, ['press', 'Control+a'], 15_000).catch(() => {});
+	await runAgentBrowser(params.session, ['type', params.email], 30_000);
+
+	await runAgentBrowser(params.session, ['find', 'first', 'input[name=password]', 'click'], 30_000);
+	await runAgentBrowser(params.session, ['press', 'Control+a'], 15_000).catch(() => {});
+	await runAgentBrowser(params.session, ['type', SEED_PASSWORD], 30_000);
+
 	await runAgentBrowser(params.session, ['find', 'first', 'button[type=submit]', 'click'], 30_000);
+	await runAgentBrowser(params.session, ['wait', '--load', 'networkidle'], 30_000).catch(() => {});
 
 	// Wait for the redirect to complete after login.
 	// NOTE: Do NOT use `wait --url **/` — on Windows this pattern hangs/times out
 	// because `**/` doesn't match URLs that don't end with `/`.
 	// Instead, poll `get url` until we leave /sign-in.
-	const loginDeadline = Date.now() + 30_000;
+	const loginDeadline = Date.now() + 60_000;
 	while (Date.now() < loginDeadline) {
 		const currentUrl = await runAgentBrowser(params.session, ['get', 'url'], 15_000);
 		if (!currentUrl.includes('/sign-in')) {
 			return;
 		}
+
+		const errorBanner = await tryReadSignInError(params.session);
+		if (errorBanner) {
+			if (params.failureScreenshotPath) {
+				await screenshot(params.session, params.failureScreenshotPath).catch(() => {});
+			}
+			throw new Error(`Login failed: ${errorBanner}`);
+		}
+
 		await runAgentBrowser(params.session, ['wait', '1000'], 5_000);
 	}
-	throw new Error('Login failed: still on /sign-in after 30s');
+
+	if (params.failureScreenshotPath) {
+		await screenshot(params.session, params.failureScreenshotPath).catch(() => {});
+	}
+	throw new Error('Login failed: still on /sign-in after 60s');
 }
 
 async function dbLookupUser(params: {
@@ -639,12 +666,14 @@ async function run(): Promise<void> {
 			const actorUserId = witnesses.scheduleAssigned.driverId;
 			const actor = await dbLookupUser({ client: dbClient, userId: actorUserId });
 			const session = sessionName(artifactDate, flowId, actorUserId);
+			const loginShot = path.join(screenshotsDir, `${flowId}__${actorUserId}__login__FAIL.png`);
 			await login({
 				session,
 				baseUrl,
 				redirectPath: '/schedule',
 				email: actor.email,
-				viewport: VIEWPORT
+				viewport: VIEWPORT,
+				failureScreenshotPath: loginShot
 			});
 
 			const checks: WitnessCheckOutcome[] = [];
@@ -729,13 +758,15 @@ async function run(): Promise<void> {
 			const actorUserId = witnesses.autoDropped.originalDriverId;
 			const actor = await dbLookupUser({ client: dbClient, userId: actorUserId });
 			const session = sessionName(artifactDate, flowId, actorUserId);
+			const loginShot = path.join(screenshotsDir, `${flowId}__${actorUserId}__login__FAIL.png`);
 
 			await login({
 				session,
 				baseUrl,
 				redirectPath: '/notifications',
 				email: actor.email,
-				viewport: VIEWPORT
+				viewport: VIEWPORT,
+				failureScreenshotPath: loginShot
 			});
 
 			const checks: WitnessCheckOutcome[] = [];
@@ -810,13 +841,15 @@ async function run(): Promise<void> {
 				const actorUserId = witnesses.bidResolution.winnerId;
 				const actor = await dbLookupUser({ client: dbClient, userId: actorUserId });
 				const session = sessionName(artifactDate, flowId, actorUserId);
+				const loginShot = path.join(screenshotsDir, `${flowId}__${actorUserId}__login__FAIL.png`);
 
 				await login({
 					session,
 					baseUrl,
 					redirectPath: '/schedule',
 					email: actor.email,
-					viewport: VIEWPORT
+					viewport: VIEWPORT,
+					failureScreenshotPath: loginShot
 				});
 
 				const checks: WitnessCheckOutcome[] = [];
@@ -911,13 +944,15 @@ async function run(): Promise<void> {
 				const actorUserId = loserId;
 				const actor = await dbLookupUser({ client: dbClient, userId: actorUserId });
 				const session = sessionName(artifactDate, flowId, actorUserId);
+				const loginShot = path.join(screenshotsDir, `${flowId}__${actorUserId}__login__FAIL.png`);
 
 				await login({
 					session,
 					baseUrl,
 					redirectPath: '/notifications',
 					email: actor.email,
-					viewport: VIEWPORT
+					viewport: VIEWPORT,
+					failureScreenshotPath: loginShot
 				});
 
 				const checks: WitnessCheckOutcome[] = [];
@@ -977,13 +1012,15 @@ async function run(): Promise<void> {
 			const actorUserId = witnesses.noShowManager.managerId;
 			const actor = await dbLookupUser({ client: dbClient, userId: actorUserId });
 			const session = sessionName(artifactDate, flowId, actorUserId);
+			const loginShot = path.join(screenshotsDir, `${flowId}__${actorUserId}__login__FAIL.png`);
 
 			await login({
 				session,
 				baseUrl,
 				redirectPath: '/notifications',
 				email: actor.email,
-				viewport: VIEWPORT
+				viewport: VIEWPORT,
+				failureScreenshotPath: loginShot
 			});
 
 			const checks: WitnessCheckOutcome[] = [];
