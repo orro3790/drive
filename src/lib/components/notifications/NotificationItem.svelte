@@ -92,6 +92,9 @@
 
 <article
 	class="notification-item"
+	data-testid="notification-row"
+	data-notification-id={notification.id}
+	data-notification-type={notification.type}
 	class:unread={isUnread}
 	class:read={!isUnread}
 	style={`--notification-accent: var(${effectiveColor});`}

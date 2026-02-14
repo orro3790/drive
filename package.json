@@ -15,6 +15,7 @@
 		"test:integration:full": "cross-env INTEGRATION_TEST=1 vitest run -c vitest.integration.config.ts",
 		"nightly:cron-e2e": "cross-env NIGHTLY_CRON_E2E=1 vitest run -c vitest.cron-e2e.config.ts",
 		"nightly:lifecycle-e2e": "cross-env NIGHTLY_LIFECYCLE_E2E=1 vitest run -c vitest.lifecycle-e2e.config.ts",
+		"nightly:witness-ui": "cross-env NIGHTLY_WITNESS_UI=1 tsx scripts/nightly/witness-ui.ts",
 		"nightly": "tsx scripts/nightly/orchestrate.ts",
 		"test:coverage": "vitest run --coverage",
 		"test:watch": "vitest",
