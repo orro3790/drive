@@ -455,5 +455,28 @@
 	"whitelist_restore_confirm_message": "确定要恢复此白名单条目吗？该邮箱将再次被批准注册。",
 	"whitelist_restore_success": "条目已恢复。",
 	"whitelist_restore_error": "恢复条目失败。",
-	"whitelist_restore_conflict": "该邮箱已存在活跃条目。"
+	"whitelist_restore_conflict": "该邮箱已存在活跃条目。",
+
+	"settings_passkey_section": "通行密钥",
+	"settings_passkey_description": "使用生物识别或安全密钥进行无密码登录。",
+	"settings_passkey_add_button": "添加通行密钥",
+	"settings_passkey_add_success": "通行密钥添加成功。",
+	"settings_passkey_add_error": "无法添加通行密钥。",
+	"settings_passkey_add_not_supported": "此设备不支持通行密钥。",
+	"settings_passkey_delete_button": "移除",
+	"settings_passkey_delete_title": "移除通行密钥",
+	"settings_passkey_delete_confirm": "移除此通行密钥？您可以稍后重新添加。",
+	"settings_passkey_delete_success": "通行密钥已移除。",
+	"settings_passkey_delete_error": "无法移除通行密钥。",
+	"settings_passkey_empty": "未注册通行密钥",
+	"settings_passkey_empty_message": "添加通行密钥，使用生物识别或安全密钥更快登录。",
+	"settings_passkey_registered": "注册于 {date}",
+	"settings_passkey_name_placeholder": "我的手机",
+	"settings_passkey_name_label": "通行密钥名称",
+
+	"auth_passkey_button": "使用通行密钥登录",
+	"auth_passkey_signing_in": "验证中...",
+	"auth_passkey_error": "通行密钥验证失败。",
+	"auth_passkey_not_supported": "此设备不支持通行密钥。",
+	"auth_passkey_or_divider": "或"
 }

@@ -1,5 +1,6 @@
 import { inferAdditionalFields, adminClient } from 'better-auth/client/plugins';
 import { createAuthClient } from 'better-auth/svelte';
+import { passkeyClient } from '@better-auth/passkey/client';
 import type { auth } from '$lib/server/auth';
 
 import { createAccessControl } from 'better-auth/plugins/access';
@@ -29,6 +30,7 @@ export const authClient = createAuthClient({
 				admin,
 				manager
 			}
-		})
+		}),
+		passkeyClient()
 	]
 });

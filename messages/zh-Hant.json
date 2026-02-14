@@ -762,5 +762,28 @@
 	"whitelist_restore_confirm_message": "確定要恢復此白名單條目嗎？該郵箱將再次被批准註冊。",
 	"whitelist_restore_success": "條目已恢復。",
 	"whitelist_restore_error": "恢復條目失敗。",
-	"whitelist_restore_conflict": "該郵箱已存在活躍條目。"
+	"whitelist_restore_conflict": "該郵箱已存在活躍條目。",
+
+	"settings_passkey_section": "通行密鑰",
+	"settings_passkey_description": "使用生物辨識或安全金鑰進行無密碼登入。",
+	"settings_passkey_add_button": "新增通行密鑰",
+	"settings_passkey_add_success": "通行密鑰新增成功。",
+	"settings_passkey_add_error": "無法新增通行密鑰。",
+	"settings_passkey_add_not_supported": "此裝置不支援通行密鑰。",
+	"settings_passkey_delete_button": "移除",
+	"settings_passkey_delete_title": "移除通行密鑰",
+	"settings_passkey_delete_confirm": "移除此通行密鑰？您可以稍後重新新增。",
+	"settings_passkey_delete_success": "通行密鑰已移除。",
+	"settings_passkey_delete_error": "無法移除通行密鑰。",
+	"settings_passkey_empty": "未註冊通行密鑰",
+	"settings_passkey_empty_message": "新增通行密鑰，使用生物辨識或安全金鑰更快登入。",
+	"settings_passkey_registered": "註冊於 {date}",
+	"settings_passkey_name_placeholder": "我的手機",
+	"settings_passkey_name_label": "通行密鑰名稱",
+
+	"auth_passkey_button": "使用通行密鑰登入",
+	"auth_passkey_signing_in": "驗證中...",
+	"auth_passkey_error": "通行密鑰驗證失敗。",
+	"auth_passkey_not_supported": "此裝置不支援通行密鑰。",
+	"auth_passkey_or_divider": "或"
 }

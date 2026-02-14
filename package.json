@@ -59,6 +59,7 @@
 	},
 	"dependencies": {
 		"@axiomhq/pino": "^1.4.0",
+		"@better-auth/passkey": "^1.4.18",
 		"@capacitor/android": "^8.0.2",
 		"@capacitor/core": "^8.0.2",
 		"@inlang/paraglide-js": "^2.10.0",
