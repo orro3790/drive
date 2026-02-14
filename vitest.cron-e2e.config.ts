@@ -13,6 +13,7 @@ export default defineConfig({
 	test: {
 		include: ['scripts/nightly/cron-e2e.test.ts'],
 		environment: 'node',
+		setupFiles: ['scripts/nightly/cron-e2e.setup.ts'],
 		testTimeout: 12 * 60_000,
 		hookTimeout: 12 * 60_000,
 
