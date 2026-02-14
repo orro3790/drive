@@ -340,6 +340,24 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 	}
 	console.log(`   Created ${warehouseManagerAssignments.length} warehouse-manager assignments`);
 
+	// 3c. Assign a primary manager to each route (for manager alert verification)
+	console.log('\n3c. Assigning primary managers to routes...');
+	if (managers.length > 0) {
+		const primaryManagerId = managers[0].id;
+		await db
+			.update(routes)
+			.set({ managerId: primaryManagerId, updatedAt: getSeedNow() })
+			.where(
+				inArray(
+					routes.id,
+					insertedRoutes.map((r) => r.id)
+				)
+			);
+		console.log(`   Assigned primary manager to ${insertedRoutes.length} routes`);
+	} else {
+		console.log('   No managers seeded; skipping route manager assignment');
+	}
+
 	// 4. Generate preferences
 	console.log('\n4. Creating preferences...');
 	const routeIds = insertedRoutes.map((r) => r.id);
