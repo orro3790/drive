@@ -13,6 +13,7 @@
 		"test": "vitest run",
 		"test:integration:smoke": "cross-env INTEGRATION_TEST=1 vitest run -c vitest.integration.smoke.config.ts",
 		"test:integration:full": "cross-env INTEGRATION_TEST=1 vitest run -c vitest.integration.config.ts",
+		"nightly:cron-e2e": "cross-env NIGHTLY_CRON_E2E=1 vitest run -c vitest.cron-e2e.config.ts",
 		"test:coverage": "vitest run --coverage",
 		"test:watch": "vitest",
 		"format": "prettier --write .",
