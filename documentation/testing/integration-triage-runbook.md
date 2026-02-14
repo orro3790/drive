@@ -165,6 +165,20 @@ Target artifact contents (nightly/full, tracked by DRV-b1l.10):
 - DB evidence snapshots (queries/rows) sufficient to confirm isolation + idempotency properties.
 - (If UI witness verification is part of the nightly pack) screenshots proving the UI matches DB outcomes.
 
+Current UI witness runner (local, DRV-b1l.12):
+
+```bash
+# Requires a running web server at BASE_URL (default http://localhost:5173)
+# and the same DATABASE_URL used by the cron drill.
+BASE_URL=http://localhost:5173 DATABASE_URL=... pnpm nightly:witness-ui
+```
+
+Outputs (under the cron drill artifact date directory):
+
+- `logs/nightly/<YYYY-MM-DD>/witness-ui-report.json`
+- `logs/nightly/<YYYY-MM-DD>/screenshots/**`
+- Updates `logs/nightly/<YYYY-MM-DD>/cron-e2e-report.md` with a UI witness PASS/FAIL section
+
 Local evidence bundles (available today):
 
 - Some scenarios may write JSON evidence bundles to `tests/integration/.evidence/*.json` via `tests/integration/harness/diagnostics.ts`.

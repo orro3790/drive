@@ -236,38 +236,38 @@ agent-browser wait --load networkidle
 agent-browser snapshot -i  # Check result
 ```
 
-## Example: Authentication with saved state
+## Example: Authentication with auto-persistence
 
 ```bash
-# Login once
-agent-browser open https://app.example.com/login
-agent-browser snapshot -i
-agent-browser fill @e1 "username"
-agent-browser fill @e2 "password"
-agent-browser click @e3
-agent-browser wait --url "**/dashboard"
-agent-browser state save auth.json
+# Login once — --session-name auto-saves cookies & localStorage
+agent-browser --session myapp --session-name myapp open https://app.example.com/login
+agent-browser --session myapp snapshot -i
+agent-browser --session myapp fill @e1 "username"
+agent-browser --session myapp fill @e2 "password"
+agent-browser --session myapp click @e3
+agent-browser --session myapp wait --url "**/dashboard"
+# State is auto-saved — no manual state save needed
 
-# Later sessions: load saved state
-agent-browser state load auth.json
-agent-browser open https://app.example.com/dashboard
+# Later sessions: state auto-restores from --session-name
+agent-browser --session myapp --session-name myapp open https://app.example.com/dashboard
 ```
 
 ## Sessions (IMPORTANT for isolation)
 
 **Always use named sessions** when running multiple browser instances or working in parallel with other agents/terminals. Each session has its own browser instance, cookies, storage, and auth state.
 
+Two session flags — use both together:
+
+- `--session <name>` — process isolation (separate browser instance)
+- `--session-name <name>` — auto-persistence (cookies & localStorage survive restarts)
+
 ```bash
-# Use a project-specific session name
-agent-browser --session driver-ops open http://localhost:5173 --headed
+# Use both flags: isolation + auto-persistence
+agent-browser --session driver-ops --session-name driver-ops open http://localhost:5173 --headed
 
 # All subsequent commands use the same session
 agent-browser --session driver-ops snapshot -i
 agent-browser --session driver-ops click @e1
-
-# Or set via environment variable
-export AGENT_BROWSER_SESSION=driver-ops
-agent-browser open http://localhost:5173 --headed
 
 # List active sessions
 agent-browser session list
@@ -275,33 +275,35 @@ agent-browser session list
 
 **Why this matters:** Without `--session`, all agent-browser commands share the "default" session. If you have multiple terminals or agents running browser tests on different ports/projects, they'll collide and cause "Page crashed" or "Browser not launched" errors.
 
-## Auth Persistence (Recommended)
+## Auth Persistence (via --session-name)
 
-Save auth state after login to avoid re-authenticating each session:
+With `--session-name`, cookies and localStorage are **automatically saved and restored** across browser restarts. No manual `state save`/`state load` needed.
 
 ```bash
-# After successful login
-agent-browser --session driver-ops state save .agent-browser/driver-ops-auth.json
+# First time: login normally — state auto-saves after login
+agent-browser --session driver-ops --session-name driver-ops open http://localhost:5173/sign-in --headed
 
-# In future sessions, load first
-agent-browser --session driver-ops state load .agent-browser/driver-ops-auth.json 2>/dev/null
-agent-browser --session driver-ops open http://localhost:5173/ --headed
+# Next session: state auto-restores — you're already logged in
+agent-browser --session driver-ops --session-name driver-ops open http://localhost:5173/ --headed
 ```
+
+Include `--session-name driver-ops` on the `open` command to trigger auto-restore.
 
 ### Stale Auth Detection
 
-If after loading state you land on `/sign-in` instead of the expected route:
+If after opening you land on `/sign-in` instead of the expected route:
 
 ```bash
-# Session expired - clear and re-auth
+# Session expired - clear persisted state and re-auth
 agent-browser --session driver-ops cookies clear
-powershell -Command "Remove-Item '.agent-browser/driver-ops-auth.json' -ErrorAction SilentlyContinue"
 # Then run /dev-login
 ```
 
-### Auth State Location
+### Managing Persisted Sessions
 
-Store auth files in `.agent-browser/` at project root (gitignored).
+```bash
+agent-browser session list            # List all saved sessions
+```
 
 ## JSON output (for parsing)
 
