@@ -40,10 +40,11 @@ Both drills produce reports under `logs/nightly/YYYY-MM-DD/`.
 - Losing bidders receive bid-lost notifications.
 - Re-running the bid-close cron does not double-award, double-notify, or corrupt the assignment.
 
-### Urgent/instant shifts (within 24 hours)
+### Instant-mode bid windows (within 24 hours)
 
-- When a bid window is in "instant" mode (urgent window), the first eligible bidder is awarded the shift.
-- The assignment transitions correctly and downstream metrics/notifications reflect the pickup.
+- When a shift is within 24 hours, the system can open a bid window in "instant" mode (for example after certain cancellations).
+- We verify the window mode/state in the database.
+- We do **not** currently prove (in these drills) the full "first bidder immediately wins" path end-to-end.
 
 ### Driver lifecycle actions (driver side)
 
