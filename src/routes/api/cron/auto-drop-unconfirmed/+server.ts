@@ -37,6 +37,9 @@ export const GET: RequestHandler = async ({ request }) => {
 	log.info('Starting auto-drop unconfirmed cron');
 
 	try {
+		const includeDebugErrors = process.env.NIGHTLY_CRON_E2E === '1';
+		const debugErrors: string[] = [];
+
 		const organizationRows = await db.select({ id: organizations.id }).from(organizations);
 
 		if (organizationRows.length === 0) {
@@ -163,6 +166,9 @@ export const GET: RequestHandler = async ({ request }) => {
 						});
 					} catch (notifyError) {
 						errors++;
+						if (includeDebugErrors) {
+							debugErrors.push(`notifyError assignmentId=${candidate.id}: ${String(notifyError)}`);
+						}
 						orgLog.error(
 							{ assignmentId: candidate.id, error: notifyError },
 							'Failed to notify driver after auto-drop'
@@ -170,6 +176,9 @@ export const GET: RequestHandler = async ({ request }) => {
 					}
 				} catch (err) {
 					errors++;
+					if (includeDebugErrors) {
+						debugErrors.push(`candidateError assignmentId=${candidate.id}: ${String(err)}`);
+					}
 					orgLog.error(
 						{ assignmentId: candidate.id, error: err },
 						'Failed to auto-drop assignment'
@@ -184,7 +193,15 @@ export const GET: RequestHandler = async ({ request }) => {
 			'Auto-drop cron completed'
 		);
 
-		return json({ success: true, dropped, bidWindowsCreated, skippedNoWindow, errors, elapsedMs });
+		return json({
+			success: true,
+			dropped,
+			bidWindowsCreated,
+			skippedNoWindow,
+			errors,
+			elapsedMs,
+			...(includeDebugErrors ? { debugErrors: debugErrors.slice(0, 10) } : {})
+		});
 	} catch (err) {
 		log.error({ error: err }, 'Auto-drop cron failed');
 		return json({ error: 'Internal server error' }, { status: 500 });
