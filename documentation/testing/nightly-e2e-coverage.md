@@ -73,7 +73,7 @@ Both drills produce reports under `logs/nightly/YYYY-MM-DD/`.
 
 These drills deliberately do **not** prove every production behavior:
 
-- **UI witness checks**: We are not currently running a browser-based witness pack as part of `pnpm nightly`.
+- **UI witness checks**: We have an optional browser-based witness pack (`pnpm nightly:witness-ui`). The orchestrator (`pnpm nightly`) will run it only when a dev server is reachable at `BASE_URL` (default `http://localhost:5173`).
 - **Delivery of notifications**: We verify notification records in the DB, but not that Apple/Android push, email, or SMS delivery succeeded.
 - **True production environment parity**: Runs against the configured dev database. Production infra differences (secrets, third-party outages, edge runtime quirks) are not fully simulated.
 - **Load/scale**: We do not currently stress-test with hundreds/thousands of drivers concurrently.
@@ -88,3 +88,11 @@ These drills deliberately do **not** prove every production behavior:
 
 - These drills mutate the database. They should only run against a safe, non-production database.
 - Drills are designed to be rerunnable without accumulating duplicate state (idempotency is a first-class invariant).
+
+## How To Run On Demand
+
+- Start the dev server: `pnpm dev`
+- Run the full pack:
+  - `pnpm nightly` (runs cron + lifecycle, and runs witness-ui if the dev server is reachable)
+- Or run just the witness pack:
+  - `pnpm nightly:witness-ui`

@@ -326,8 +326,14 @@ cmd.exe mangles JS expressions, URLs with `%xx`, and glob patterns. Use the nati
 import path from 'node:path';
 
 // Resolve the native exe — bypasses cmd.exe entirely
-const exe = path.join(process.env.APPDATA!, 'npm', 'node_modules',
-  'agent-browser', 'bin', 'agent-browser-win32-x64.exe');
+const exe = path.join(
+	process.env.APPDATA!,
+	'npm',
+	'node_modules',
+	'agent-browser',
+	'bin',
+	'agent-browser-win32-x64.exe'
+);
 spawn(exe, ['--session', name, 'open', url], { windowsHide: true });
 // NOT: spawn('agent-browser', args, { shell: true })  // BROKEN
 ```
@@ -347,7 +353,7 @@ agent-browser wait "[data-testid=foo][data-loaded=true]"       # waits for match
 
 ### 3. Do NOT use wait --url with broad globs
 
-`wait --url "**/"`  hangs on Windows. Use specific patterns or poll `get url`:
+`wait --url "**/"` hangs on Windows. Use specific patterns or poll `get url`:
 
 ```bash
 # BAD — hangs
