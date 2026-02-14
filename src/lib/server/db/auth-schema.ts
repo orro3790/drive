@@ -107,3 +107,23 @@ export const rateLimit = pgTable('rate_limit', {
 	count: integer('count').notNull(),
 	lastRequest: bigint('last_request', { mode: 'number' }).notNull()
 });
+
+/**
+ * Better Auth Passkey table
+ * Stores WebAuthn/FIDO2 passkey credentials for passwordless authentication.
+ */
+export const passkey = pgTable('passkey', {
+	id: text('id').primaryKey(),
+	name: text('name'),
+	publicKey: text('public_key').notNull(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	credentialId: text('credential_id').notNull().unique(),
+	counter: integer('counter').notNull(),
+	deviceType: text('device_type').notNull(),
+	backedUp: boolean('backed_up').notNull(),
+	transports: text('transports'),
+	aaguid: text('aaguid'),
+	createdAt: timestamp('created_at', { withTimezone: true }).defaultNow()
+});
