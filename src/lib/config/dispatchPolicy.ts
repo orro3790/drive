@@ -14,7 +14,7 @@ export const dispatchPolicy = {
 		windowDaysBeforeShift: 7,
 		deadlineHoursBeforeShift: 48,
 		reminderLeadDays: 3,
-		deploymentDate: '2026-03-01'
+		deploymentDate: '2026-02-01'
 	},
 	bidding: {
 		instantModeCutoffHours: 24,

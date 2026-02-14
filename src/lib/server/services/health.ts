@@ -31,6 +31,7 @@ import { createAuditLog } from '$lib/server/services/audit';
 import { getDriverHealthPolicyThresholds } from '$lib/server/services/dispatchSettings';
 import { sendNotification } from '$lib/server/services/notifications';
 import type { HealthContributions } from '$lib/schemas/health';
+import { addDaysToDateString, toTorontoDateString } from '$lib/server/time/toronto';
 
 const TORONTO_TZ = dispatchPolicy.timezone.toronto;
 const HARD_STOP_SCORE_CAP = 49;
@@ -40,7 +41,7 @@ function sameTimestamp(a: Date | null | undefined, b: Date | null | undefined): 
 }
 
 function torontoToday(): string {
-	return format(toZonedTime(new Date(), TORONTO_TZ), 'yyyy-MM-dd');
+	return toTorontoDateString(new Date());
 }
 
 async function resolveHealthOrganizationIds(organizationId?: string): Promise<string[]> {
@@ -66,10 +67,9 @@ interface RollingCounts {
  */
 async function getRollingCounts(userId: string, windowDays: number): Promise<RollingCounts> {
 	const now = new Date();
-	const nowToronto = toZonedTime(now, TORONTO_TZ);
-	const cutoffDate = format(subDays(nowToronto, windowDays), 'yyyy-MM-dd');
+	const todayStr = toTorontoDateString(now);
+	const cutoffDate = addDaysToDateString(todayStr, -windowDays);
 	const cutoffInstant = subDays(now, windowDays);
-	const todayStr = format(nowToronto, 'yyyy-MM-dd');
 
 	const [noShowResult] = await db
 		.select({ count: sql<number>`count(distinct ${assignments.id})::int` })

@@ -88,7 +88,11 @@ Uses notificationsStore for data loading and optimistic read updates.
 </svelte:head>
 
 <div class="page-surface">
-	<div class="page-stage">
+	<div
+		class="page-stage"
+		data-testid="notifications-list"
+		data-loaded={notificationsStore.isLoading ? 'false' : 'true'}
+	>
 		<div class="page-header">
 			<div class="header-text">
 				<h1>{m.notifications_page_title()}</h1>

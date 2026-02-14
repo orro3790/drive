@@ -375,7 +375,7 @@ export const auditLogs = pgTable(
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
 		entityType: text('entity_type').notNull(),
-		entityId: uuid('entity_id').notNull(),
+		entityId: text('entity_id').notNull(),
 		action: text('action').notNull(),
 		actorId: text('actor_id').references(() => user.id),
 		organizationId: uuid('organization_id').references(() => organizations.id),

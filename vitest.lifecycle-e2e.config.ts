@@ -11,9 +11,9 @@ export default defineConfig({
 		sveltekit()
 	],
 	test: {
-		include: ['scripts/nightly/cron-e2e.test.ts'],
+		include: ['scripts/nightly/lifecycle-e2e.test.ts'],
 		environment: 'node',
-		setupFiles: ['scripts/nightly/cron-e2e.setup.ts'],
+		setupFiles: ['scripts/nightly/lifecycle-e2e.setup.ts'],
 		testTimeout: 12 * 60_000,
 		hookTimeout: 12 * 60_000,
 

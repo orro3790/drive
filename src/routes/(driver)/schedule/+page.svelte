@@ -309,6 +309,9 @@
 	{@const deltas = dispatchPolicy.health.displayDeltas}
 	<div
 		class="assignment-item"
+		data-testid="assignment-row"
+		data-assignment-id={assignment.id}
+		data-assignment-status={assignment.status}
 		class:past={isPast}
 		class:overdue={isOverdue}
 		style="--assignment-accent: var({accent});"
@@ -424,7 +427,11 @@
 </svelte:head>
 
 <div class="page-surface">
-	<div class="page-stage">
+	<div
+		class="page-stage"
+		data-testid="schedule-list"
+		data-loaded={scheduleStore.isLoading ? 'false' : 'true'}
+	>
 		<div class="page-header">
 			<div class="header-text">
 				<h1>{m.schedule_page_title()}</h1>

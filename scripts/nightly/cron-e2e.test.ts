@@ -156,6 +156,18 @@ function toTorontoDateString(date: Date): string {
 	return format(toZonedTime(date, TORONTO_TZ), 'yyyy-MM-dd');
 }
 
+function computeWeekdayAnchor(): string {
+	let candidate = new Date();
+	while (true) {
+		const toronto = toZonedTime(candidate, TORONTO_TZ);
+		const day = toronto.getDay();
+		if (day !== 0 && day !== 6) {
+			return toTorontoDateString(candidate);
+		}
+		candidate = addDays(candidate, 1);
+	}
+}
+
 function getCurrentLockDeadline(nowToronto: Date): Date {
 	const day = nowToronto.getDay();
 	const daysUntilSunday = day === 0 ? 7 : 7 - day;
@@ -366,7 +378,9 @@ describe('nightly cron E2E drill (dev DB)', () => {
 			throw new Error('Invalid CRON_E2E_SEED (expected a number)');
 		}
 
-		const anchorDate = (process.env.CRON_E2E_ANCHOR_DATE ?? '2026-03-02').trim();
+		// Default to a weekday anchor so weekend runs can still exercise no-show flows.
+		const defaultAnchor = computeWeekdayAnchor();
+		const anchorDate = (process.env.CRON_E2E_ANCHOR_DATE ?? defaultAnchor).trim();
 		if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) {
 			throw new Error('Invalid CRON_E2E_ANCHOR_DATE (expected YYYY-MM-DD)');
 		}
@@ -376,7 +390,9 @@ describe('nightly cron E2E drill (dev DB)', () => {
 			);
 		}
 
-		const frozenNow = new Date(`${anchorDate}T15:00:00.000Z`);
+		// 18:00 UTC = 1 PM EST (Feb) / 2 PM EDT — ensures ALL route start times
+		// (up to 11:00 local) have passed for the no-show-detection scenario.
+		const frozenNow = new Date(`${anchorDate}T18:00:00.000Z`);
 
 		const report: CronE2EReport = {
 			run: {
