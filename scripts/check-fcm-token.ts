@@ -29,7 +29,10 @@ async function main() {
 
 	console.log('User:', u.name);
 	console.log('Email:', u.email);
-	console.log('FCM Token:', u.fcmToken ? u.fcmToken.substring(0, 40) + '...' : 'NULL (not registered)');
+	console.log(
+		'FCM Token:',
+		u.fcmToken ? u.fcmToken.substring(0, 40) + '...' : 'NULL (not registered)'
+	);
 	process.exit(0);
 }
 
