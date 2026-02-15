@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.2](https://github.com/orro3790/drive/compare/v1.2.1...v1.2.2) (2026-02-15)
+
+
+### Bug Fixes
+
+* **android:** use SystemBars safe-area insets ([#146](https://github.com/orro3790/drive/issues/146)) ([5ca4e6d](https://github.com/orro3790/drive/commit/5ca4e6d7b0c8af6cac3103e0e630f9a7bc14e6bf))
+* **mobile:** harden /download and add inset fallback ([#144](https://github.com/orro3790/drive/issues/144)) ([5b54762](https://github.com/orro3790/drive/commit/5b5476240674260299cb1dd97035099b5ff6876e))
+
 ## [1.2.1](https://github.com/orro3790/drive/compare/v1.2.0...v1.2.1) (2026-02-15)
 
 
