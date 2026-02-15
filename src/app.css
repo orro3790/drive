@@ -64,6 +64,11 @@
 }
 
 :root {
+	/* Native safe-area insets (Capacitor / Android edge-to-edge).
+	   Defaults to CSS env(), but can be overridden at runtime by JS. */
+	--safe-area-top: env(safe-area-inset-top, 0px);
+	--safe-area-bottom: env(safe-area-inset-bottom, 0px);
+
 	/*═══════════════════════════════════════════════════════════════════════════
 	  TYPOGRAPHY
 	  ═══════════════════════════════════════════════════════════════════════════*/
