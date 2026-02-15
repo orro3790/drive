@@ -325,7 +325,7 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--spacing-3);
-		padding: var(--spacing-2) var(--spacing-3);
+		padding: calc(var(--spacing-2) + var(--safe-area-top)) var(--spacing-3) var(--spacing-2);
 		background: var(--surface-primary);
 		box-shadow: var(--shadow-base);
 		font-size: var(--font-size-sm);

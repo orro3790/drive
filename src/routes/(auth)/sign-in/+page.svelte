@@ -213,6 +213,8 @@
 
 	<div class="auth-footer">
 		<a href="/sign-up">{m.auth_sign_in_create_account()}</a>
+		<span class="footer-sep" aria-hidden="true">·</span>
+		<a href="/download" class="download-link">Download Android APK</a>
 	</div>
 </div>
 
@@ -286,7 +288,11 @@
 	}
 
 	.auth-footer {
-		text-align: center;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-2);
+		flex-wrap: wrap;
 		font-size: var(--font-size-sm);
 		margin-top: var(--spacing-3);
 	}
@@ -296,8 +302,17 @@
 	}
 
 	.auth-footer a {
-		margin-left: 0.5rem;
 		color: var(--text-accent);
+	}
+
+	.download-link {
+		color: var(--text-muted);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.download-link:hover {
+		color: var(--text-normal);
 	}
 
 	.icon-toggle {
