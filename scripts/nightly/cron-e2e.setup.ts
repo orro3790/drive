@@ -1,5 +1,7 @@
 import { vi } from 'vitest';
 
+// Mock $lib/server/db with a stable node-postgres client.
+// The Neon serverless WebSocket driver drops connections in long-running test processes.
 vi.mock('$lib/server/db', async () => {
 	// Load .env for local runs (secrets remain outside git).
 	const { config } = await import('dotenv');
