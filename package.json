@@ -34,6 +34,7 @@
 		"mobile:android:apk:release": "node scripts/mobile/android-gradle.mjs assembleRelease"
 	},
 	"devDependencies": {
+		"@capacitor/assets": "^3.0.5",
 		"@capacitor/cli": "^8.0.2",
 		"@faker-js/faker": "^10.2.0",
 		"@noble/hashes": "^2.0.1",
@@ -54,6 +55,7 @@
 		"pino-pretty": "^13.1.3",
 		"prettier": "^3.8.1",
 		"prettier-plugin-svelte": "^3.4.1",
+		"sharp": "^0.34.5",
 		"svelte": "^5.48.2",
 		"svelte-check": "^4.3.5",
 		"tsx": "^4.21.0",

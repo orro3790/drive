@@ -30,26 +30,35 @@ export async function initPushNotifications(): Promise<void> {
 		return;
 	}
 
+	console.log('[Push] Starting initialization on native platform');
+
 	try {
 		// Check current permission status
 		const permStatus = await PushNotifications.checkPermissions();
 		console.log('[Push] Current permission status:', permStatus.receive);
 
-		// Request permission if not granted
-		if (permStatus.receive !== 'granted') {
+		// Request permission if not already granted
+		// On Android 13+, this should show a system dialog
+		if (permStatus.receive === 'prompt' || permStatus.receive === 'prompt-with-rationale') {
+			console.log('[Push] Requesting permissions (will show dialog)...');
 			const requestResult = await PushNotifications.requestPermissions();
 			console.log('[Push] Permission request result:', requestResult.receive);
 
 			if (requestResult.receive !== 'granted') {
 				console.warn('[Push] Permission denied by user');
-				return;
+				// Don't return - still set up listeners in case user enables later
 			}
+		} else if (permStatus.receive === 'denied') {
+			console.warn('[Push] Permission previously denied - user must enable in settings');
+			// Still continue to set up - token might register if user enables later
+		} else {
+			console.log('[Push] Permission already granted');
 		}
 
 		// Set up event listeners before registering
 		setupPushListeners();
 
-		// Register with FCM
+		// Register with FCM (this works even if permission denied - we just won't show notifications)
 		await PushNotifications.register();
 		console.log('[Push] Registration initiated');
 	} catch (error) {
