@@ -777,11 +777,6 @@
 	"download_page_subtitle": "獲取 Android 版 Drive 應用",
 	"download_page_version": "版本 {version}",
 	"download_page_button": "下載 APK",
-	"download_page_instructions_title": "安裝說明",
-	"download_page_instructions_1": "點擊上方「下載 APK」",
-	"download_page_instructions_2": "出現提示時，允許從未知來源安裝",
-	"download_page_instructions_3": "打開下載的檔案並點擊「安裝」",
-	"download_page_instructions_4": "打開 Drive 並使用您的帳戶登入",
-	"download_page_have_account": "已有帳戶？",
-	"download_page_sign_in": "登入"
+	"download_page_instructions_short": "下載後，打開檔案並按提示安裝。您可能需要允許從未知來源安裝。",
+	"download_page_back": "返回登入"
 }

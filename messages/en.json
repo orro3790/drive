@@ -895,11 +895,6 @@
 	"download_page_subtitle": "Get the Drive app for Android",
 	"download_page_version": "Version {version}",
 	"download_page_button": "Download APK",
-	"download_page_instructions_title": "Installation Instructions",
-	"download_page_instructions_1": "Tap \"Download APK\" above",
-	"download_page_instructions_2": "When prompted, allow installation from unknown sources",
-	"download_page_instructions_3": "Open the downloaded file and tap \"Install\"",
-	"download_page_instructions_4": "Open Drive and sign in with your account",
-	"download_page_have_account": "Already have an account?",
-	"download_page_sign_in": "Sign in"
+	"download_page_instructions_short": "After downloading, open the file and follow the prompts to install. You may need to allow installation from unknown sources.",
+	"download_page_back": "Back to sign in"
 }
