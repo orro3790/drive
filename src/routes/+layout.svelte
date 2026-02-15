@@ -12,6 +12,7 @@
 		}
 
 		const root = document.documentElement;
+		root.dataset.native = 'true';
 		const viewport = window.visualViewport;
 
 		function updateInsets() {

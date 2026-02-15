@@ -68,6 +68,8 @@
 	   Defaults to CSS env(), but can be overridden at runtime by JS. */
 	--safe-area-top: env(safe-area-inset-top, 0px);
 	--safe-area-bottom: env(safe-area-inset-bottom, 0px);
+	--safe-area-top-min: 0px;
+	--safe-area-bottom-min: 0px;
 
 	/*═══════════════════════════════════════════════════════════════════════════
 	  TYPOGRAPHY
@@ -293,6 +295,13 @@
 	--tree-indent-width: var(--spacing-3);
 	--tree-node-height: var(--spacing-5);
 	--cover-page-min-height: 600px;
+}
+
+html[data-native='true'] {
+	/* Android commonly reports 0px for env(safe-area-inset-*) even when system
+	   bars overlay the WebView; keep a small minimum so content isn't obscured. */
+	--safe-area-top-min: 24px;
+	--safe-area-bottom-min: 16px;
 }
 
 /* Base Styles */

@@ -63,7 +63,7 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		padding-bottom: var(--safe-area-bottom);
+		padding-bottom: max(var(--safe-area-bottom), var(--safe-area-bottom-min));
 		overflow-x: hidden;
 		overflow-y: auto;
 		overscroll-behavior-y: contain;
