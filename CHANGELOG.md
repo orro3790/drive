@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/orro3790/drive/compare/v1.1.0...v1.1.1) (2026-02-15)
+
+
+### Bug Fixes
+
+* **android:** use solid purple background for app icon ([ccc7be3](https://github.com/orro3790/drive/commit/ccc7be342a29f397a8733d60e138a8f9c0d72799))
+
 ## [1.1.0](https://github.com/orro3790/drive/compare/v1.0.0...v1.1.0) (2026-02-15)
 
 ### Features
