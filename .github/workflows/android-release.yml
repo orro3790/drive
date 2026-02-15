@@ -1,0 +1,101 @@
+name: Android Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version name (e.g., 1.0.0)'
+        required: true
+        type: string
+      version_code:
+        description: 'Version code (integer, e.g., 1)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/keystore/drive-release.jks
+
+      - name: Create keystore.properties
+        run: |
+          cat > android/keystore.properties << EOF
+          storeFile=keystore/drive-release.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Update version in build.gradle
+        run: |
+          sed -i "s/versionCode 1/versionCode ${{ inputs.version_code }}/" android/app/build.gradle
+          sed -i "s/versionName \"1.0\"/versionName \"${{ inputs.version_name }}\"/" android/app/build.gradle
+
+      - name: Build mobile shell
+        run: pnpm mobile:build
+        env:
+          CAP_SERVER_URL: ${{ secrets.CAP_SERVER_URL }}
+
+      - name: Sync Capacitor
+        run: pnpm mobile:android:sync
+        env:
+          CAP_SERVER_URL: ${{ secrets.CAP_SERVER_URL }}
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+
+      - name: Rename APK
+        run: |
+          mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/drive-v${{ inputs.version_name }}.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version_name }}
+          name: Drive v${{ inputs.version_name }}
+          body: |
+            ## Drive Android v${{ inputs.version_name }}
+
+            **Version Code:** ${{ inputs.version_code }}
+
+            ### Installation
+            1. Download the APK file below
+            2. Open the file on your Android device
+            3. If prompted, enable "Install from unknown sources"
+            4. Follow the installation prompts
+          files: android/app/build/outputs/apk/release/drive-v${{ inputs.version_name }}.apk
+          draft: false
+          prerelease: false

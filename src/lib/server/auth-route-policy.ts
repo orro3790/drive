@@ -1,4 +1,12 @@
-const PUBLIC_PATHS = new Set(['/', '/sign-in', '/sign-up', '/forgot-password', '/reset-password']);
+const PUBLIC_PATHS = new Set([
+	'/',
+	'/sign-in',
+	'/sign-up',
+	'/forgot-password',
+	'/reset-password',
+	'/download',
+	'/api/app-version'
+]);
 
 const PUBLIC_PREFIXES = ['/api/auth', '/api/cron', '/_app', '/static'];
 
