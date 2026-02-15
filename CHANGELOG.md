@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/orro3790/drive/compare/v1.2.0...v1.2.1) (2026-02-15)
+
+
+### Bug Fixes
+
+* **mobile:** stop PWA install + add safe-area insets ([#141](https://github.com/orro3790/drive/issues/141)) ([c9b2bd6](https://github.com/orro3790/drive/commit/c9b2bd64272fad391ca663201601d60ef5709c38))
+
 ## [1.2.0](https://github.com/orro3790/drive/compare/v1.1.6...v1.2.0) (2026-02-15)
 
 
