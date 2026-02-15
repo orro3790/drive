@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.6](https://github.com/orro3790/drive/compare/v1.1.5...v1.1.6) (2026-02-15)
+
+
+### Bug Fixes
+
+* **android:** bake dark background into launcher icons ([a450277](https://github.com/orro3790/drive/commit/a450277eaa75d9134f83346a19ef002e155b8aa9))
+* **mobile:** auto-request notification permission with delay ([3149777](https://github.com/orro3790/drive/commit/3149777a74ffd7ac791b2ff4a5ca470da8347d69))
+* **mobile:** require user action to request notification permission ([1abeab1](https://github.com/orro3790/drive/commit/1abeab157aa83d0a5fb5252e240b8b864f74f350))
+
 ## [1.1.5](https://github.com/orro3790/drive/compare/v1.1.4...v1.1.5) (2026-02-15)
 
 
