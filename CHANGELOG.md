@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.5](https://github.com/orro3790/drive/compare/v1.1.4...v1.1.5) (2026-02-15)
+
+
+### Bug Fixes
+
+* **mobile:** regenerate app icons with dark background and improve push logging ([0f34d11](https://github.com/orro3790/drive/commit/0f34d11469ac03a63943b6799c2c31b5d57622b9))
+
 ## [1.1.4](https://github.com/orro3790/drive/compare/v1.1.3...v1.1.4) (2026-02-15)
 
 
