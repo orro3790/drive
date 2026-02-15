@@ -896,5 +896,28 @@
 	"download_page_version": "Version {version}",
 	"download_page_button": "Download APK",
 	"download_page_instructions_short": "After downloading, open the file and follow the prompts to install. You may need to allow installation from unknown sources.",
-	"download_page_back": "Back to sign in"
+	"download_page_back": "Back to sign in",
+
+	"settings_passkey_section": "Passkeys",
+	"settings_passkey_description": "Use biometrics or security keys for passwordless sign-in.",
+	"settings_passkey_add_button": "Add Passkey",
+	"settings_passkey_add_success": "Passkey added successfully.",
+	"settings_passkey_add_error": "Unable to add passkey.",
+	"settings_passkey_add_not_supported": "Passkeys are not supported on this device.",
+	"settings_passkey_delete_button": "Remove",
+	"settings_passkey_delete_title": "Remove Passkey",
+	"settings_passkey_delete_confirm": "Remove this passkey? You can add it again later.",
+	"settings_passkey_delete_success": "Passkey removed.",
+	"settings_passkey_delete_error": "Unable to remove passkey.",
+	"settings_passkey_empty": "No passkeys registered",
+	"settings_passkey_empty_message": "Add a passkey to sign in faster with biometrics or a security key.",
+	"settings_passkey_registered": "Registered {date}",
+	"settings_passkey_name_placeholder": "My Phone",
+	"settings_passkey_name_label": "Passkey name",
+
+	"auth_passkey_button": "Sign in with Passkey",
+	"auth_passkey_signing_in": "Authenticating...",
+	"auth_passkey_error": "Passkey authentication failed.",
+	"auth_passkey_not_supported": "Passkeys are not supported on this device.",
+	"auth_passkey_or_divider": "or"
 }

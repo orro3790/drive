@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { authClient } from '$lib/auth-client';
@@ -10,6 +11,7 @@
 	import EyeOff from '$lib/components/icons/EyeOff.svelte';
 	import Login from '$lib/components/icons/Login.svelte';
 	import Mail from '$lib/components/icons/Mail.svelte';
+	import Key from '$lib/components/icons/Key.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
 	const redirectTo = $derived($page.url.searchParams.get('redirect') ?? '/');
@@ -19,11 +21,54 @@
 	let showPassword = $state(false);
 	let errorMessage = $state<string | null>(null);
 	let isSubmitting = $state(false);
+	let isPasskeySupported = $state(false);
+	let isPasskeyLoading = $state(false);
 
 	const PasswordToggleIcon = $derived(showPassword ? EyeOff : Eye);
 
+	onMount(async () => {
+		// Check WebAuthn support
+		if (
+			typeof window !== 'undefined' &&
+			window.PublicKeyCredential &&
+			PublicKeyCredential.isConditionalMediationAvailable
+		) {
+			try {
+				isPasskeySupported = await PublicKeyCredential.isConditionalMediationAvailable();
+			} catch {
+				isPasskeySupported = false;
+			}
+		}
+	});
+
 	function handlePasswordToggle() {
 		showPassword = !showPassword;
+	}
+
+	async function handlePasskeySignIn() {
+		if (isPasskeyLoading) return;
+
+		errorMessage = null;
+		isPasskeyLoading = true;
+
+		try {
+			const { error } = await authClient.signIn.passkey(
+				{},
+				{
+					onSuccess: () => {
+						goto(redirectTo);
+					}
+				}
+			);
+
+			if (error) {
+				errorMessage = error.message ?? m.auth_passkey_error();
+			}
+		} catch {
+			errorMessage = m.auth_passkey_error();
+		} finally {
+			isPasskeyLoading = false;
+		}
 	}
 
 	const handleSubmit = async () => {
@@ -63,6 +108,25 @@
 
 	{#if errorMessage}
 		<NoticeBanner variant="warning">{errorMessage}</NoticeBanner>
+	{/if}
+
+	{#if isPasskeySupported}
+		<Button
+			variant="secondary"
+			size="standard"
+			type="button"
+			fill={true}
+			isLoading={isPasskeyLoading}
+			disabled={isPasskeyLoading || isSubmitting}
+			onclick={handlePasskeySignIn}
+		>
+			<Icon><Key /></Icon>
+			{isPasskeyLoading ? m.auth_passkey_signing_in() : m.auth_passkey_button()}
+		</Button>
+
+		<div class="auth-divider">
+			<span>{m.auth_passkey_or_divider()}</span>
+		</div>
 	{/if}
 
 	<form
@@ -183,6 +247,22 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-3);
+	}
+
+	.auth-divider {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-3);
+		color: var(--text-muted);
+		font-size: var(--font-size-sm);
+	}
+
+	.auth-divider::before,
+	.auth-divider::after {
+		content: '';
+		flex: 1;
+		height: 1px;
+		background: var(--border-muted);
 	}
 
 	.forgot-password {

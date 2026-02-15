@@ -11,6 +11,7 @@
 	import { pageHeaderStore } from '$lib/stores/app-shell/pageHeaderStore.svelte';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import AccountSection from '$lib/components/settings/AccountSection.svelte';
+	import PasskeySection from '$lib/components/settings/PasskeySection.svelte';
 	import ManagerDispatchSection from '$lib/components/settings/ManagerDispatchSection.svelte';
 	import ManagerHealthPolicySection from '$lib/components/settings/ManagerHealthPolicySection.svelte';
 
@@ -103,6 +104,7 @@
 		<div class="settings-content-shell">
 			<section class="settings-content-area" aria-live="polite">
 				<AccountSection {user} />
+				<PasskeySection />
 				{#if user?.role === 'manager'}
 					<ManagerDispatchSection />
 					<ManagerHealthPolicySection />

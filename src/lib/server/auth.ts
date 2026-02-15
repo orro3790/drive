@@ -6,6 +6,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { admin as adminPlugin } from 'better-auth/plugins';
+import { passkey } from '@better-auth/passkey';
 import { getRequestEvent } from '$app/server';
 import { db } from '$lib/server/db';
 import * as authSchema from './db/auth-schema';
@@ -145,6 +146,7 @@ export const auth = betterAuth({
 				admin,
 				manager
 			}
-		})
+		}),
+		passkey()
 	]
 });

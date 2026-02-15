@@ -765,9 +765,9 @@
 	"whitelist_restore_conflict": "該郵箱已存在活躍條目。",
 
 	"app_update_required_title": "需要更新",
-	"app_update_required_message": "您的應用版本不再受支援。請下載最新版本以繼續使用。",
-	"app_update_your_version": "您的版本: {version}",
-	"app_update_minimum_version": "最低要求: {version}",
+	"app_update_required_message": "您的應用版本已不再支援。請下載最新版本以繼續使用。",
+	"app_update_your_version": "您的版本：{version}",
+	"app_update_minimum_version": "最低要求：{version}",
 	"app_update_download_button": "下載更新",
 	"app_connection_required_title": "需要連接",
 	"app_connection_required_message": "無法連接到伺服器。請檢查您的網絡連接後重試。",
@@ -778,5 +778,28 @@
 	"download_page_version": "版本 {version}",
 	"download_page_button": "下載 APK",
 	"download_page_instructions_short": "下載後，打開檔案並按提示安裝。您可能需要允許從未知來源安裝。",
-	"download_page_back": "返回登入"
+	"download_page_back": "返回登入",
+
+	"settings_passkey_section": "通行密鑰",
+	"settings_passkey_description": "使用生物辨識或安全金鑰進行無密碼登入。",
+	"settings_passkey_add_button": "新增通行密鑰",
+	"settings_passkey_add_success": "通行密鑰新增成功。",
+	"settings_passkey_add_error": "無法新增通行密鑰。",
+	"settings_passkey_add_not_supported": "此裝置不支援通行密鑰。",
+	"settings_passkey_delete_button": "移除",
+	"settings_passkey_delete_title": "移除通行密鑰",
+	"settings_passkey_delete_confirm": "移除此通行密鑰？您可以稍後重新新增。",
+	"settings_passkey_delete_success": "通行密鑰已移除。",
+	"settings_passkey_delete_error": "無法移除通行密鑰。",
+	"settings_passkey_empty": "未註冊通行密鑰",
+	"settings_passkey_empty_message": "新增通行密鑰，使用生物辨識或安全金鑰更快登入。",
+	"settings_passkey_registered": "註冊於 {date}",
+	"settings_passkey_name_placeholder": "我的手機",
+	"settings_passkey_name_label": "通行密鑰名稱",
+
+	"auth_passkey_button": "使用通行密鑰登入",
+	"auth_passkey_signing_in": "驗證中...",
+	"auth_passkey_error": "通行密鑰驗證失敗。",
+	"auth_passkey_not_supported": "此裝置不支援通行密鑰。",
+	"auth_passkey_or_divider": "或"
 }
