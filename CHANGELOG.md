@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/orro3790/drive/compare/v1.1.1...v1.1.2) (2026-02-15)
+
+
+### Bug Fixes
+
+* **android:** use dark surface color for app icon background ([2023457](https://github.com/orro3790/drive/commit/202345773df8606a527abdf1189d62d2dc578874))
+
 ## [1.1.1](https://github.com/orro3790/drive/compare/v1.1.0...v1.1.1) (2026-02-15)
 
 
