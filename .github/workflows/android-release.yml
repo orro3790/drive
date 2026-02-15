@@ -86,11 +86,6 @@ jobs:
           sed -i "s/versionCode 1/versionCode ${{ steps.version.outputs.version_code }}/" android/app/build.gradle
           sed -i "s/versionName \"1.0\"/versionName \"${{ steps.version.outputs.version_name }}\"/" android/app/build.gradle
 
-      - name: Build mobile shell
-        run: pnpm mobile:build
-        env:
-          CAP_SERVER_URL: ${{ secrets.CAP_SERVER_URL }}
-
       - name: Sync Capacitor
         run: pnpm mobile:android:sync
         env:
