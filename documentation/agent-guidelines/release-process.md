@@ -2,13 +2,23 @@
 
 How releases work in Drive. Read this before attempting any release or APK build.
 
+## TL;DR for Agents
+
+**DO NOT tell users to manually build APKs.** The pipeline is automated:
+
+1. Push to main
+2. Merge the Release Please PR
+3. Done - APK is built and uploaded automatically
+
+Manual WSL builds are ONLY for local debugging, never for distribution.
+
 ## Automated Release Flow
 
 Releases are fully automated via GitHub Actions:
 
 1. **Push to main** → `release-please.yml` creates/updates a "Release PR"
 2. **Merge the Release PR** → release-please creates a GitHub Release with tag
-3. **Release published** → `android-release.yml` builds and attaches APK
+3. **Release published** → `android-release.yml` builds and attaches APK to the release
 
 **You do NOT need to:**
 
@@ -17,6 +27,43 @@ Releases are fully automated via GitHub Actions:
 - Manually build APKs for distribution
 
 Just push to main and merge the Release PR when ready.
+
+## App Update Flow (Version Gate)
+
+Mobile apps cannot auto-update themselves. Here's how updates work:
+
+### How Users Get Updates
+
+1. User opens the app
+2. App checks version against `APP_MIN_VERSION` on login
+3. If outdated → redirects to `/download` page
+4. User downloads new APK from GitHub Releases
+5. User installs manually (sideload)
+
+This is the best possible experience for sideloaded apps. Only Play Store apps can truly auto-update in the background.
+
+### Vercel Environment Variables
+
+| Variable              | Purpose                                    | Example |
+| --------------------- | ------------------------------------------ | ------- |
+| `APP_MIN_VERSION`     | Minimum version users must have            | `10100` |
+| `APP_CURRENT_VERSION` | Current version (for display on /download) | `10100` |
+
+Version code format: `MAJOR * 10000 + MINOR * 100 + PATCH`
+
+- v1.0.0 = `10000`
+- v1.1.0 = `10100`
+- v1.2.3 = `10203`
+
+### Forcing an Update
+
+To force all users to update:
+
+1. Set `APP_MIN_VERSION` in Vercel to the new version code
+2. Set `APP_CURRENT_VERSION` to match
+3. Redeploy (or wait for next deploy)
+
+Users on older versions will be redirected to download on next login.
 
 ## Android APK Distribution
 
@@ -29,11 +76,11 @@ APKs are distributed via the `/download` page, which pulls from GitHub Releases.
 | APK      | `android/app/build/outputs/apk/release/app-release.apk`    | Side-load to devices |
 | AAB      | `android/app/build/outputs/bundle/release/app-release.aab` | Play Store (future)  |
 
-### Local Development Builds (Windows)
+### Local Development Builds (Debugging Only)
 
-**IMPORTANT: Use WSL for Android builds on Windows.**
+**This section is for local debugging only. Never distribute manually-built APKs.**
 
-Gradle 8.13+ has a [known bug](https://github.com/gradle/gradle/issues/31438) on Windows where transform cache renames fail. The only reliable workaround is building from WSL.
+Use WSL for Android builds on Windows. Gradle 8.13+ has a [known bug](https://github.com/gradle/gradle/issues/31438) on Windows where transform cache renames fail.
 
 #### Prerequisites (one-time WSL setup)
 
