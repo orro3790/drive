@@ -299,6 +299,13 @@
 	padding: 0;
 }
 
+/* Disable mobile tap highlight globally - use component-specific :active states instead */
+*,
+*::before,
+*::after {
+	-webkit-tap-highlight-color: transparent;
+}
+
 /* Reset browser defaults to prevent component style conflicts */
 button {
 	font-family: inherit;

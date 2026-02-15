@@ -21,6 +21,7 @@
 	<AppSidebar {role} />
 	<div class="main-area">
 		<PageHeader
+			showUnfilledWindowsButton={role === 'manager'}
 			showUnconfirmedShiftsButton={role === 'driver'}
 			showOpenBidsButton={role === 'driver'}
 		/>

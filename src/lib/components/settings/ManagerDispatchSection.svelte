@@ -225,6 +225,17 @@
 		text-align: right;
 	}
 
+	/* On mobile (when control wraps to its own line), left-align readonly values */
+	@container (max-width: 620px) {
+		.dispatch-control-row.readonly {
+			justify-content: flex-start;
+		}
+
+		.dispatch-readonly-value {
+			text-align: left;
+		}
+	}
+
 	.field-error {
 		margin: 0;
 		font-size: var(--font-size-sm);
