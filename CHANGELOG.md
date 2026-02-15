@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/orro3790/drive/compare/v1.1.2...v1.1.3) (2026-02-15)
+
+
+### Bug Fixes
+
+* **android:** add POST_NOTIFICATIONS permission for Android 13+ ([1e370ca](https://github.com/orro3790/drive/commit/1e370caba6d82d599de66a6e79dea565fdc59f5c))
+
 ## [1.1.2](https://github.com/orro3790/drive/compare/v1.1.1...v1.1.2) (2026-02-15)
 
 
