@@ -39,6 +39,10 @@ android/.gradle/
 android/.gradle-local/
 android/**/build/
 
+# Android IDE artifacts (Eclipse/Buildship)
+android/app/.project
+android/app/.settings/
+
 # bv (beads viewer) local config and caches
 .bv/
 
@@ -47,6 +51,7 @@ android/**/build/
 
 # Local temp artifacts
 tmp/*.cookie
+tmp/release-apk/
 
 # Nightly cron drill artifacts (generated at runtime)
 logs/nightly/**
