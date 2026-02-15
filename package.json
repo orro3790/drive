@@ -65,6 +65,7 @@
 		"@capacitor/android": "^8.0.2",
 		"@capacitor/app": "^8.0.1",
 		"@capacitor/core": "^8.0.2",
+		"@capacitor/push-notifications": "^8.0.1",
 		"@inlang/paraglide-js": "^2.10.0",
 		"@neondatabase/serverless": "^1.0.2",
 		"@tanstack/table-core": "^8.21.3",

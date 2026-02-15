@@ -33,6 +33,11 @@ Health, Scoring & Automation:
 
 - `documentation/agent-guidelines/health-and-automation-quickref.md` (point values, cron timeline, shift lifecycle, bid scoring, flagging thresholds — **start here** for any health/scoring/automation work)
 
+Mobile & Releases:
+
+- `documentation/agent-guidelines/release-process.md` (automated release flow, APK builds, WSL setup — **read before any release work**)
+- `documentation/testing/push-notification-checklist.md` (FCM notification testing)
+
 Process:
 
 - `documentation/agent-guidelines/code-review-standards.md`
