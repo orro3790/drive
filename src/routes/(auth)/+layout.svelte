@@ -29,7 +29,7 @@
 			radial-gradient(420px 260px at 12% 12%, rgba(255, 255, 255, 0.05), transparent 65%),
 			radial-gradient(420px 260px at 88% 14%, rgba(255, 255, 255, 0.04), transparent 65%),
 			var(--surface-inset);
-		overflow: hidden;
+		overflow-y: auto;
 	}
 
 	.auth-content {
