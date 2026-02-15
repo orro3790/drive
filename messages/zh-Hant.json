@@ -762,5 +762,26 @@
 	"whitelist_restore_confirm_message": "確定要恢復此白名單條目嗎？該郵箱將再次被批准註冊。",
 	"whitelist_restore_success": "條目已恢復。",
 	"whitelist_restore_error": "恢復條目失敗。",
-	"whitelist_restore_conflict": "該郵箱已存在活躍條目。"
+	"whitelist_restore_conflict": "該郵箱已存在活躍條目。",
+
+	"app_update_required_title": "需要更新",
+	"app_update_required_message": "您的應用版本不再受支援。請下載最新版本以繼續使用。",
+	"app_update_your_version": "您的版本: {version}",
+	"app_update_minimum_version": "最低要求: {version}",
+	"app_update_download_button": "下載更新",
+	"app_connection_required_title": "需要連接",
+	"app_connection_required_message": "無法連接到伺服器。請檢查您的網絡連接後重試。",
+	"app_connection_retry_button": "重試",
+
+	"download_page_title": "下載 Drive",
+	"download_page_subtitle": "獲取 Android 版 Drive 應用",
+	"download_page_version": "版本 {version}",
+	"download_page_button": "下載 APK",
+	"download_page_instructions_title": "安裝說明",
+	"download_page_instructions_1": "點擊上方「下載 APK」",
+	"download_page_instructions_2": "出現提示時，允許從未知來源安裝",
+	"download_page_instructions_3": "打開下載的檔案並點擊「安裝」",
+	"download_page_instructions_4": "打開 Drive 並使用您的帳戶登入",
+	"download_page_have_account": "已有帳戶？",
+	"download_page_sign_in": "登入"
 }

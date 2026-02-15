@@ -880,5 +880,26 @@
 	"weekly_reports_filter_route_label": "Route",
 	"weekly_reports_filter_route_placeholder": "Filter by route name...",
 	"weekly_reports_filter_warehouse_label": "Warehouse",
-	"weekly_reports_filter_warehouse_placeholder": "Filter by warehouse name..."
+	"weekly_reports_filter_warehouse_placeholder": "Filter by warehouse name...",
+
+	"app_update_required_title": "Update Required",
+	"app_update_required_message": "Your app version is no longer supported. Please download the latest version to continue.",
+	"app_update_your_version": "Your version: {version}",
+	"app_update_minimum_version": "Minimum required: {version}",
+	"app_update_download_button": "Download Update",
+	"app_connection_required_title": "Connection Required",
+	"app_connection_required_message": "Unable to connect to the server. Check your internet connection and try again.",
+	"app_connection_retry_button": "Retry",
+
+	"download_page_title": "Download Drive",
+	"download_page_subtitle": "Get the Drive app for Android",
+	"download_page_version": "Version {version}",
+	"download_page_button": "Download APK",
+	"download_page_instructions_title": "Installation Instructions",
+	"download_page_instructions_1": "Tap \"Download APK\" above",
+	"download_page_instructions_2": "When prompted, allow installation from unknown sources",
+	"download_page_instructions_3": "Open the downloaded file and tap \"Install\"",
+	"download_page_instructions_4": "Open Drive and sign in with your account",
+	"download_page_have_account": "Already have an account?",
+	"download_page_sign_in": "Sign in"
 }

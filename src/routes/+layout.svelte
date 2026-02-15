@@ -1,7 +1,10 @@
 <script lang="ts">
 	import '../app.css';
+	import AppVersionGate from '$lib/components/app-shell/AppVersionGate.svelte';
 
 	let { children } = $props();
 </script>
 
-{@render children()}
+<AppVersionGate>
+	{@render children()}
+</AppVersionGate>
