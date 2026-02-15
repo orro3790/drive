@@ -14,7 +14,7 @@
 	} from '$lib/utils/pushNotifications';
 	import { onMount } from 'svelte';
 
-	let permissionStatus: PushPermissionStatus = $state('unknown');
+	let permissionStatus = $state<PushPermissionStatus>('unknown');
 	let isRequesting = $state(false);
 	let dismissed = $state(false);
 
@@ -64,8 +64,8 @@
 			</div>
 		</div>
 		<div class="actions">
-			<Button variant="ghost" size="sm" onclick={handleDismiss}>Not now</Button>
-			<Button variant="primary" size="sm" onclick={handleEnable} disabled={isRequesting}>
+			<Button variant="ghost" size="small" onclick={handleDismiss}>Not now</Button>
+			<Button variant="primary" size="small" onclick={handleEnable} disabled={isRequesting}>
 				{isRequesting ? 'Enabling...' : 'Enable'}
 			</Button>
 		</div>
