@@ -7,3 +7,4 @@ src/lib/paraglide/
 android/.gradle/
 android/.gradle-local/
 android/**/build/
+CHANGELOG.md
