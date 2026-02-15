@@ -19,6 +19,7 @@
 	const role = $derived((data.user?.role as 'driver' | 'manager') ?? 'driver');
 
 	// Initialize push notifications on native platforms
+	// Only completes registration if already granted - won't prompt user
 	onMount(() => {
 		void initPushNotifications();
 	});

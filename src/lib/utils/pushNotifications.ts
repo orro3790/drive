@@ -5,10 +5,16 @@
  * - Requests notification permission
  * - Registers for push notifications
  * - Sends FCM token to server
+ *
+ * IMPORTANT: On Android 13+, permission requests must be triggered by user action.
+ * Use checkPushPermissionStatus() to check if permission is needed, then show
+ * an in-app prompt. Only call requestPushPermission() after user taps a button.
  */
 
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
+
+export type PushPermissionStatus = 'granted' | 'denied' | 'prompt' | 'unknown';
 
 /**
  * Check if we're running in a native Capacitor environment
@@ -18,51 +24,95 @@ export function isNativePlatform(): boolean {
 }
 
 /**
- * Initialize push notifications on native platforms.
- * Safe to call on web - will no-op.
- *
- * @returns Promise that resolves when initialization is complete
+ * Check current push notification permission status.
+ * Use this to determine if we need to show a permission prompt UI.
  */
-export async function initPushNotifications(): Promise<void> {
-	// Only run on native platforms
+export async function checkPushPermissionStatus(): Promise<PushPermissionStatus> {
 	if (!isNativePlatform()) {
-		console.log('[Push] Skipping - not a native platform');
-		return;
+		return 'unknown';
 	}
 
-	console.log('[Push] Starting initialization on native platform');
+	try {
+		const permStatus = await PushNotifications.checkPermissions();
+		console.log('[Push] Permission status:', permStatus.receive);
+		return permStatus.receive as PushPermissionStatus;
+	} catch (error) {
+		console.error('[Push] Failed to check permissions:', error);
+		return 'unknown';
+	}
+}
+
+/**
+ * Request push notification permission.
+ * MUST be called from a user-initiated action (button tap) on Android 13+.
+ * Returns the resulting permission status.
+ */
+export async function requestPushPermission(): Promise<PushPermissionStatus> {
+	if (!isNativePlatform()) {
+		return 'unknown';
+	}
 
 	try {
-		// Check current permission status
-		const permStatus = await PushNotifications.checkPermissions();
-		console.log('[Push] Current permission status:', permStatus.receive);
+		console.log('[Push] Requesting permission (user-initiated)...');
+		const result = await PushNotifications.requestPermissions();
+		console.log('[Push] Permission result:', result.receive);
 
-		// Request permission if not already granted
-		// On Android 13+, this should show a system dialog
-		if (permStatus.receive === 'prompt' || permStatus.receive === 'prompt-with-rationale') {
-			console.log('[Push] Requesting permissions (will show dialog)...');
-			const requestResult = await PushNotifications.requestPermissions();
-			console.log('[Push] Permission request result:', requestResult.receive);
-
-			if (requestResult.receive !== 'granted') {
-				console.warn('[Push] Permission denied by user');
-				// Don't return - still set up listeners in case user enables later
-			}
-		} else if (permStatus.receive === 'denied') {
-			console.warn('[Push] Permission previously denied - user must enable in settings');
-			// Still continue to set up - token might register if user enables later
-		} else {
-			console.log('[Push] Permission already granted');
+		// If granted, complete the registration
+		if (result.receive === 'granted') {
+			await completePushRegistration();
 		}
 
-		// Set up event listeners before registering
-		setupPushListeners();
+		return result.receive as PushPermissionStatus;
+	} catch (error) {
+		console.error('[Push] Failed to request permission:', error);
+		return 'unknown';
+	}
+}
 
-		// Register with FCM (this works even if permission denied - we just won't show notifications)
+/**
+ * Complete push notification registration (listeners + FCM).
+ * Called automatically when permission is granted.
+ */
+async function completePushRegistration(): Promise<void> {
+	try {
+		setupPushListeners();
 		await PushNotifications.register();
-		console.log('[Push] Registration initiated');
+		console.log('[Push] Registration complete');
+	} catch (error) {
+		console.error('[Push] Registration failed:', error);
+	}
+}
+
+/**
+ * Initialize push notifications on native platforms.
+ * Only completes registration if permission is already granted.
+ * If permission is 'prompt', does nothing - caller should show UI.
+ *
+ * @returns 'granted' if already set up, 'prompt' if user action needed, 'denied' if blocked
+ */
+export async function initPushNotifications(): Promise<PushPermissionStatus> {
+	if (!isNativePlatform()) {
+		console.log('[Push] Skipping - not a native platform');
+		return 'unknown';
+	}
+
+	console.log('[Push] Checking permission status...');
+
+	try {
+		const permStatus = await PushNotifications.checkPermissions();
+		console.log('[Push] Current status:', permStatus.receive);
+
+		if (permStatus.receive === 'granted') {
+			// Already have permission - complete registration
+			await completePushRegistration();
+			return 'granted';
+		}
+
+		// Don't auto-request on Android 13+ - return status so UI can prompt user
+		return permStatus.receive as PushPermissionStatus;
 	} catch (error) {
 		console.error('[Push] Initialization failed:', error);
+		return 'unknown';
 	}
 }
 
