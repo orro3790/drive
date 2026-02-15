@@ -55,6 +55,16 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install build-tools (aapt)
+        run: |
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          fi
+
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          "$SDKMANAGER" "build-tools;34.0.0"
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -99,9 +109,42 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease
 
+      - name: Verify embedded APK version
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          SDKROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
+          BUILD_TOOLS_DIR="$SDKROOT/build-tools"
+          AAPT="$(ls "$BUILD_TOOLS_DIR"/*/aapt | sort -V | tail -n 1)"
+
+          if [ ! -x "$AAPT" ]; then
+            echo "aapt not found in $BUILD_TOOLS_DIR"
+            exit 1
+          fi
+
+          BADGING="$($AAPT dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+
+          EMBEDDED_CODE="$(echo "$BADGING" | sed -n "s/.*versionCode='\\([^']*\\)'.*/\\1/p")"
+          EMBEDDED_NAME="$(echo "$BADGING" | sed -n "s/.*versionName='\\([^']*\\)'.*/\\1/p")"
+
+          EXPECTED_CODE="${{ steps.version.outputs.version_code }}"
+          EXPECTED_NAME="${{ steps.version.outputs.version_name }}"
+
+          if [ "$EMBEDDED_NAME" != "$EXPECTED_NAME" ] || [ "$EMBEDDED_CODE" != "$EXPECTED_CODE" ]; then
+            echo "APK version mismatch: embedded=$EMBEDDED_NAME ($EMBEDDED_CODE) expected=$EXPECTED_NAME ($EXPECTED_CODE)"
+            exit 1
+          fi
+
+      - name: Create versioned APK asset
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk \
+            android/app/build/outputs/apk/release/drive-v${{ steps.version.outputs.version_name }}.apk
+
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: android/app/build/outputs/apk/release/app-release.apk
+          files: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/drive-v${{ steps.version.outputs.version_name }}.apk
           fail_on_unmatched_files: true
