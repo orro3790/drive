@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.4](https://github.com/orro3790/drive/compare/v1.1.3...v1.1.4) (2026-02-15)
+
+
+### Bug Fixes
+
+* **ci:** chain Android build into release-please workflow ([b1683cb](https://github.com/orro3790/drive/commit/b1683cb06a82bd78a64a84aa352ebafd45e49471))
+
 ## [1.1.3](https://github.com/orro3790/drive/compare/v1.1.2...v1.1.3) (2026-02-15)
 
 
