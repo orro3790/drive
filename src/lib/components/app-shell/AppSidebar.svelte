@@ -274,11 +274,13 @@ Mobile: Hidden by default, hamburger in header opens overlay
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-3);
-		padding: var(--spacing-2);
+		padding: calc(var(--spacing-2) + var(--safe-area-top)) var(--spacing-2)
+			calc(var(--spacing-2) + var(--safe-area-bottom));
 	}
 
 	.sidebar.expanded > .nav-section {
-		padding: var(--spacing-2) var(--spacing-3) var(--spacing-3) var(--spacing-3);
+		padding: calc(var(--spacing-2) + var(--safe-area-top)) var(--spacing-3)
+			calc(var(--spacing-3) + var(--safe-area-bottom)) var(--spacing-3);
 		gap: var(--spacing-4);
 	}
 
