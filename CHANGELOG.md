@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/orro3790/drive/compare/v1.1.6...v1.2.0) (2026-02-15)
+
+
+### Features
+
+* **android:** auto-track latest GitHub release APK ([0b8f819](https://github.com/orro3790/drive/commit/0b8f819483c7eb886cf2bce23d6586f5c29e096e))
+
+
+### Bug Fixes
+
+* **svelte:** resolve notification permission card typecheck ([524d044](https://github.com/orro3790/drive/commit/524d044e48c058373496ec4a6ad0f6ca0ad2f249))
+
 ## [1.1.6](https://github.com/orro3790/drive/compare/v1.1.5...v1.1.6) (2026-02-15)
 
 
