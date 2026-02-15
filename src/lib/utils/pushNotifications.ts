@@ -85,10 +85,10 @@ async function completePushRegistration(): Promise<void> {
 
 /**
  * Initialize push notifications on native platforms.
- * Only completes registration if permission is already granted.
- * If permission is 'prompt', does nothing - caller should show UI.
+ * If permission is already granted, completes registration immediately.
+ * If permission is 'prompt', delays slightly then requests (Android 13+ needs Activity ready).
  *
- * @returns 'granted' if already set up, 'prompt' if user action needed, 'denied' if blocked
+ * @returns 'granted' if set up, 'denied' if blocked, 'prompt' if dialog shown
  */
 export async function initPushNotifications(): Promise<PushPermissionStatus> {
 	if (!isNativePlatform()) {
@@ -108,8 +108,26 @@ export async function initPushNotifications(): Promise<PushPermissionStatus> {
 			return 'granted';
 		}
 
-		// Don't auto-request on Android 13+ - return status so UI can prompt user
-		return permStatus.receive as PushPermissionStatus;
+		if (permStatus.receive === 'prompt' || permStatus.receive === 'prompt-with-rationale') {
+			// Delay request slightly to ensure Android Activity is fully ready
+			// This prevents the permission dialog from being suppressed on Android 13+
+			console.log('[Push] Delaying permission request for Activity readiness...');
+			await new Promise((resolve) => setTimeout(resolve, 500));
+
+			console.log('[Push] Requesting permission...');
+			const result = await PushNotifications.requestPermissions();
+			console.log('[Push] Permission result:', result.receive);
+
+			if (result.receive === 'granted') {
+				await completePushRegistration();
+				return 'granted';
+			}
+			return result.receive as PushPermissionStatus;
+		}
+
+		// Permission is 'denied' - user must enable in system settings
+		console.log('[Push] Permission denied - user must enable in Settings');
+		return 'denied';
 	} catch (error) {
 		console.error('[Push] Initialization failed:', error);
 		return 'unknown';

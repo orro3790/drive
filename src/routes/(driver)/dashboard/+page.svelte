@@ -25,7 +25,6 @@
 	import Modal from '$lib/components/primitives/Modal.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import HealthCard from '$lib/components/driver/HealthCard.svelte';
-	import NotificationPermissionCard from '$lib/components/driver/NotificationPermissionCard.svelte';
 	import Announcement from '$lib/components/icons/Announcement.svelte';
 	import CalendarX from '$lib/components/icons/CalendarX.svelte';
 	import CheckCircleIcon from '$lib/components/icons/CheckCircleIcon.svelte';
@@ -521,9 +520,6 @@
 			<div class="dashboard-sections">
 				<!-- Health Card -->
 				<HealthCard />
-
-				<!-- Push Notification Permission Prompt (native only) -->
-				<NotificationPermissionCard />
 
 				<!-- New Driver Banner -->
 				{#if showNewDriverBanner}
