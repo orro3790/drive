@@ -11,6 +11,7 @@ Releases are fully automated via GitHub Actions:
 3. **Release published** → `android-release.yml` builds and attaches APK
 
 **You do NOT need to:**
+
 - Manually trigger workflows
 - Manually create releases
 - Manually build APKs for distribution
@@ -23,10 +24,10 @@ APKs are distributed via the `/download` page, which pulls from GitHub Releases.
 
 ### Build Artifacts
 
-| Artifact | Path | Purpose |
-|----------|------|---------|
-| APK | `android/app/build/outputs/apk/release/app-release.apk` | Side-load to devices |
-| AAB | `android/app/build/outputs/bundle/release/app-release.aab` | Play Store (future) |
+| Artifact | Path                                                       | Purpose              |
+| -------- | ---------------------------------------------------------- | -------------------- |
+| APK      | `android/app/build/outputs/apk/release/app-release.apk`    | Side-load to devices |
+| AAB      | `android/app/build/outputs/bundle/release/app-release.aab` | Play Store (future)  |
 
 ### Local Development Builds (Windows)
 
@@ -59,6 +60,7 @@ sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 #### Building locally
 
 1. **From Windows (Git Bash/PowerShell):** Sync Capacitor first
+
    ```bash
    pnpm mobile:android:sync
    ```
@@ -89,6 +91,7 @@ Users only need to download a new APK when native code changes.
 ## Firebase / Push Notifications
 
 Push notifications require:
+
 1. `@capacitor/push-notifications` plugin installed
 2. `google-services.json` in `android/app/`
 3. Firebase Admin SDK credentials in `.env` (server-side)
