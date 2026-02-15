@@ -13,17 +13,40 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
+import { getLatestAndroidApkRelease } from '$lib/server/githubRelease';
 
 export const GET: RequestHandler = async () => {
-	const minVersion = parseInt(env.APP_MIN_VERSION || '1', 10);
-	const currentVersion = parseInt(env.APP_CURRENT_VERSION || '1', 10);
-	const downloadUrl =
-		env.APP_DOWNLOAD_URL ||
-		'https://github.com/orro3790/drive/releases/latest/download/app-release.apk';
+	const parsedMinVersion = Number.parseInt(env.APP_MIN_VERSION ?? '0', 10);
+	const minVersion =
+		Number.isFinite(parsedMinVersion) && parsedMinVersion > 0 ? parsedMinVersion : 0;
 
-	return json({
-		minVersion,
-		currentVersion,
-		downloadUrl
-	});
+	try {
+		const latest = await getLatestAndroidApkRelease();
+		return json(
+			{
+				minVersion,
+				currentVersion: latest.versionCode,
+				downloadUrl: latest.downloadUrl
+			},
+			{
+				headers: {
+					'Cache-Control': 'public, max-age=0, s-maxage=600, stale-while-revalidate=3600',
+					'X-Drive-AppVersion-Source': latest.source
+				}
+			}
+		);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Unable to resolve latest app version';
+		return json(
+			{ message },
+			{
+				status: 503,
+				headers: {
+					'Cache-Control': 'no-store',
+					'Retry-After': '60',
+					'X-Drive-AppVersion-Source': 'error'
+				}
+			}
+		);
+	}
 };

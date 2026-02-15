@@ -1,11 +1,10 @@
-import { env } from '$env/dynamic/private';
 import type { PageServerLoad } from './$types';
+import { getLatestAndroidApkRelease } from '$lib/server/githubRelease';
 
 export const load: PageServerLoad = async () => {
+	const latest = await getLatestAndroidApkRelease();
 	return {
-		currentVersion: env.APP_CURRENT_VERSION || '1',
-		downloadUrl:
-			env.APP_DOWNLOAD_URL ||
-			'https://github.com/orro3790/drive/releases/latest/download/app-release.apk'
+		currentVersion: latest.versionName,
+		downloadUrl: latest.downloadUrl
 	};
 };
