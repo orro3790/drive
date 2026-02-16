@@ -12,6 +12,7 @@
 	import Login from '$lib/components/icons/Login.svelte';
 	import Mail from '$lib/components/icons/Mail.svelte';
 	import Key from '$lib/components/icons/Key.svelte';
+	import Download from '$lib/components/icons/Download.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
 	const redirectTo = $derived($page.url.searchParams.get('redirect') ?? '/');
@@ -210,7 +211,10 @@
 	</form>
 
 	<div class="auth-footer">
-		<a href="/download" class="download-link">Download app</a>
+		<a href="/download" class="download-link">
+			<Icon><Download /></Icon>
+			<span>Download app</span>
+		</a>
 	</div>
 </div>
 
@@ -248,7 +252,7 @@
 	}
 
 	.create-account-link {
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-base);
 	}
 
 	.auth-divider {
@@ -302,6 +306,9 @@
 	}
 
 	.download-link {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-1-5);
 		color: var(--text-muted);
 		text-decoration: underline;
 		text-underline-offset: 2px;
