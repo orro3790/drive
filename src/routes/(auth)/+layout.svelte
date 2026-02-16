@@ -5,7 +5,7 @@
 <div class="auth-shell">
 	<div class="auth-content">
 		<a href="/" aria-label="Go to homepage" class="logo-link">
-			<img src="/images/logo-3D.png" alt="Drive" class="auth-logo" />
+			<img src="/images/logo-3D.png" alt="App logo" class="auth-logo" />
 		</a>
 
 		<div class="auth-panel">

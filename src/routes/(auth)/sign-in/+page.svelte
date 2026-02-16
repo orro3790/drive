@@ -102,10 +102,6 @@
 </script>
 
 <div class="auth-card">
-	<header class="auth-header">
-		<h2>Drive</h2>
-	</header>
-
 	{#if errorMessage}
 		<NoticeBanner variant="warning">{errorMessage}</NoticeBanner>
 	{/if}
@@ -203,18 +199,18 @@
 			disabled={isSubmitting}
 		>
 			<Icon><Login /></Icon>
-			{m.auth_sign_in_button()}
+			Continue
 		</Button>
 
-		<a href="/forgot-password" class="forgot-password">
-			{m.auth_forgot_password()}
-		</a>
+		<div class="auth-links">
+			<a href="/forgot-password" class="forgot-password">{m.auth_forgot_password()}</a>
+			<span class="links-sep" aria-hidden="true">/</span>
+			<a href="/sign-up" class="create-account-link">{m.auth_sign_in_create_account()}</a>
+		</div>
 	</form>
 
 	<div class="auth-footer">
-		<a href="/sign-up">{m.auth_sign_in_create_account()}</a>
-		<span class="footer-sep" aria-hidden="true">·</span>
-		<a href="/download" class="download-link">Download Android APK</a>
+		<a href="/download" class="download-link">Download app</a>
 	</div>
 </div>
 
@@ -233,22 +229,26 @@
 		color: var(--text-normal);
 	}
 
-	.auth-header {
-		text-align: center;
-	}
-
-	h2 {
-		margin: 0;
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-medium);
-		letter-spacing: -0.01em;
-		color: var(--text-normal);
-	}
-
 	.auth-form {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-3);
+	}
+
+	.auth-links {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-2);
+		font-size: var(--font-size-sm);
+	}
+
+	.links-sep {
+		color: var(--text-muted);
+	}
+
+	.create-account-link {
+		font-size: var(--font-size-sm);
 	}
 
 	.auth-divider {
@@ -297,10 +297,6 @@
 		margin-top: var(--spacing-3);
 	}
 
-	.auth-footer span {
-		color: var(--text-muted);
-	}
-
 	.auth-footer a {
 		color: var(--text-accent);
 	}
@@ -337,5 +333,19 @@
 
 	.icon-toggle:focus-visible {
 		box-shadow: 0 0 0 2px var(--interactive-accent);
+	}
+
+	@media (max-width: 600px) {
+		.auth-card {
+			padding: 0;
+			background: transparent;
+			border: none;
+			box-shadow: none;
+			border-radius: 0;
+		}
+
+		.auth-footer {
+			margin-top: var(--spacing-2);
+		}
 	}
 </style>
