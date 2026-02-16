@@ -64,12 +64,17 @@
 }
 
 :root {
-	/* Native safe-area insets (Capacitor / Android edge-to-edge).
-	   Defaults to CSS env(), but can be overridden at runtime by JS. */
-	--safe-area-top: env(safe-area-inset-top, 0px);
-	--safe-area-bottom: env(safe-area-inset-bottom, 0px);
-	--safe-area-top-min: 0px;
-	--safe-area-bottom-min: 0px;
+	/*
+		Native safe-area insets (Capacitor / Android edge-to-edge).
+
+		Capacitor SystemBars can inject CSS variables named --safe-area-inset-* on Android
+		when WebView has broken env(safe-area-inset-*).
+		Docs: https://capacitorjs.com/docs/apis/system-bars
+	*/
+	--safe-area-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+	--safe-area-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+	--safe-area-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+	--safe-area-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
 
 	/*═══════════════════════════════════════════════════════════════════════════
 	  TYPOGRAPHY
