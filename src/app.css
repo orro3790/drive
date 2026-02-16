@@ -302,6 +302,13 @@
 	--cover-page-min-height: 600px;
 }
 
+html[data-native='true'] {
+	/* Android commonly reports 0px for env(safe-area-inset-*) even when system
+	   bars overlay the WebView; keep a small minimum so content isn't obscured. */
+	--safe-area-top-min: 24px;
+	--safe-area-bottom-min: 16px;
+}
+
 /* Base Styles */
 *,
 *::before,

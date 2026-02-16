@@ -11,6 +11,23 @@ Before testing:
 3. Manager user account for triggering certain notifications
 4. Access to cron endpoints (for time-based notifications)
 
+## Single-Device Execution Mode (Recommended)
+
+If you only have one physical device (for example, Z Flip 3), run tests with this actor model:
+
+1. Keep the phone logged into the expected recipient account.
+2. Use desktop browser sessions as the triggering actor (manager or driver).
+3. For each case, verify all three surfaces:
+   - push delivery in Android notification tray
+   - in-app notification record
+   - tap behavior opens the expected app surface
+
+Important:
+
+- A device token belongs to the currently logged-in app account after registration.
+- Logging out/in can change which user receives pushes on that device.
+- When switching recipient role, re-open the app and wait 5-10 seconds before testing.
+
 ## FCM Token Verification
 
 First, verify the device has registered its FCM token:
@@ -428,14 +445,36 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 ## Testing Procedure
 
-### Quick Smoke Test
+### Required Verification for Every Case
 
-Test the most common notifications first:
+For each notification scenario, mark pass only if all checks pass:
 
-1. [ ] `shift_reminder` - Call cron with today's assignment
-2. [ ] `bid_won` - Accept an instant bid
-3. [ ] `assignment_confirmed` - Manager assigns via bid window
-4. [ ] `confirmation_reminder` - Call cron with upcoming assignment
+1. Trigger fired from a real domain action (manager action, driver action, or cron).
+2. Push notification appears in Android notification tray.
+3. Matching in-app notification record appears in notifications inbox.
+4. Tapping push opens the app and lands on a reasonable destination.
+5. Non-recipients do not receive the notification.
+
+### One-Device Smoke Run (Do First)
+
+Run this sequence before full coverage:
+
+1. [ ] `shift_reminder` (phone logged in as Driver; trigger cron)
+2. [ ] `bid_won` (phone logged in as Driver; manager creates instant bid path)
+3. [ ] `driver_no_show` (phone logged in as Manager; trigger no-show flow)
+4. [ ] `return_exception` (phone logged in as Manager; driver completes with exceptions)
+
+If any smoke case fails, stop and fix before running full matrix.
+
+### Cron Invocation Template
+
+Most cron endpoints require `Authorization: Bearer <CRON_SECRET>`.
+
+```bash
+curl -X GET \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  "https://drive-three-psi.vercel.app/api/cron/shift-reminders"
+```
 
 ### Full Test Suite
 
@@ -480,28 +519,28 @@ To verify FCM is actually delivering:
 
 ---
 
-## Summary Table
+## Summary Table (Single-Device Actor Matrix)
 
-| Type                      | Recipient | Trigger            | Source File                      |
-| ------------------------- | --------- | ------------------ | -------------------------------- |
-| shift_reminder            | Driver    | Cron (6 AM)        | shift-reminders/+server.ts       |
-| bid_open                  | Driver    | Bid window created | bidding.ts                       |
-| emergency_route_available | Driver    | Emergency bid      | notifications.ts                 |
-| bid_won                   | Driver    | Bid resolution     | bidding.ts, bids/+server.ts      |
-| bid_lost                  | Driver    | Bid resolution     | bidding.ts, assignments.ts       |
-| assignment_confirmed      | Driver    | Schedule/assign    | lock-preferences, assignments.ts |
-| confirmation_reminder     | Driver    | Cron (daily)       | send-confirmation-reminders      |
-| shift_auto_dropped        | Driver    | Cron (hourly)      | auto-drop-unconfirmed            |
-| schedule_locked           | Driver    | Cron (Sunday)      | lock-preferences                 |
-| stale_shift_reminder      | Driver    | Cron (daily)       | stale-shift-reminder             |
-| warning                   | Driver    | Flagging check     | flagging.ts                      |
-| streak_advanced           | Driver    | Weekly health      | health.ts                        |
-| streak_reset              | Driver    | Weekly health      | health.ts                        |
-| bonus_eligible            | Driver    | Weekly health      | health.ts                        |
-| corrective_warning        | Driver    | Daily health       | health.ts                        |
-| route_unfilled            | Manager   | Schedule gen       | notifications.ts                 |
-| route_cancelled           | Manager   | Route cancel       | notifications.ts                 |
-| driver_no_show            | Manager   | No-show detect     | notifications.ts                 |
-| return_exception          | Manager   | Shift complete     | notifications.ts                 |
-| shift_cancelled           | Driver    | Cancel action      | TBD                              |
-| manual                    | Any       | Admin action       | TBD                              |
+| Type                      | Recipient | Phone Login (1 device) | Trigger Actor (desktop) | Trigger            | Source File                      |
+| ------------------------- | --------- | ---------------------- | ----------------------- | ------------------ | -------------------------------- |
+| shift_reminder            | Driver    | Driver                 | Manager/System          | Cron (6 AM)        | shift-reminders/+server.ts       |
+| bid_open                  | Driver    | Driver                 | Manager/System          | Bid window created | bidding.ts                       |
+| emergency_route_available | Driver    | Driver                 | Manager/System          | Emergency bid      | notifications.ts                 |
+| bid_won                   | Driver    | Driver                 | Driver/System           | Bid resolution     | bidding.ts, bids/+server.ts      |
+| bid_lost                  | Driver    | Driver                 | System                  | Bid resolution     | bidding.ts, assignments.ts       |
+| assignment_confirmed      | Driver    | Driver                 | Manager/System          | Schedule/assign    | lock-preferences, assignments.ts |
+| confirmation_reminder     | Driver    | Driver                 | Manager/System          | Cron (daily)       | send-confirmation-reminders      |
+| shift_auto_dropped        | Driver    | Driver                 | Manager/System          | Cron (hourly)      | auto-drop-unconfirmed            |
+| schedule_locked           | Driver    | Driver                 | Manager/System          | Cron (Sunday)      | lock-preferences                 |
+| stale_shift_reminder      | Driver    | Driver                 | Manager/System          | Cron (daily)       | stale-shift-reminder             |
+| warning                   | Driver    | Driver                 | System                  | Flagging check     | flagging.ts                      |
+| streak_advanced           | Driver    | Driver                 | System                  | Weekly health      | health.ts                        |
+| streak_reset              | Driver    | Driver                 | System                  | Weekly health      | health.ts                        |
+| bonus_eligible            | Driver    | Driver                 | System                  | Weekly health      | health.ts                        |
+| corrective_warning        | Driver    | Driver                 | System                  | Daily health       | health.ts                        |
+| route_unfilled            | Manager   | Manager                | System                  | Schedule gen       | notifications.ts                 |
+| route_cancelled           | Manager   | Manager                | Driver                  | Route cancel       | notifications.ts                 |
+| driver_no_show            | Manager   | Manager                | System                  | No-show detect     | notifications.ts                 |
+| return_exception          | Manager   | Manager                | Driver                  | Shift complete     | notifications.ts                 |
+| shift_cancelled           | Driver    | Driver                 | TBD                     | Cancel action      | TBD                              |
+| manual                    | Any       | Target role            | Admin                   | Admin action       | TBD                              |
