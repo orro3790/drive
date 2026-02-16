@@ -65,18 +65,26 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		padding-bottom: calc(var(--safe-area-bottom) + var(--spacing-2));
 		overflow-x: hidden;
 		overflow-y: auto;
 		overscroll-behavior-y: contain;
 		-webkit-overflow-scrolling: touch;
 	}
 
+	.content::after {
+		content: '';
+		display: block;
+		flex: 0 0 0px;
+	}
+
+	:global(html[data-native='true']) .content::after {
+		/* Spacer inside the scroll flow so final content clears Android nav bars. */
+		flex-basis: calc(max(var(--safe-area-bottom), 64px) + var(--spacing-2));
+	}
+
 	@media (max-width: 767px) {
-		.content {
-			/* Reserve reliable room above Android 3-button nav bars even when
-			   WebView safe-area reporting is inconsistent. */
-			padding-bottom: calc(max(var(--safe-area-bottom), 64px) + var(--spacing-2));
+		:global(html[data-native='true']) .content::after {
+			flex-basis: calc(max(var(--safe-area-bottom), 72px) + var(--spacing-2));
 		}
 	}
 </style>
