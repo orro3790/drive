@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.2](https://github.com/orro3790/drive/compare/v1.2.1...v1.2.2) (2026-02-16)
+
+
+### Bug Fixes
+
+* **android:** use SystemBars safe-area insets ([#146](https://github.com/orro3790/drive/issues/146)) ([5ca4e6d](https://github.com/orro3790/drive/commit/5ca4e6d7b0c8af6cac3103e0e630f9a7bc14e6bf))
+* **mobile:** harden /download and add inset fallback ([564cd9d](https://github.com/orro3790/drive/commit/564cd9d52a00e85d04a84aa463432c87463d7d0d))
+* **mobile:** harden /download and add inset fallback ([#144](https://github.com/orro3790/drive/issues/144)) ([5b54762](https://github.com/orro3790/drive/commit/5b5476240674260299cb1dd97035099b5ff6876e))
+* **push:** create Android channel for system tray delivery ([f067d76](https://github.com/orro3790/drive/commit/f067d761d4f9b38bf2f84bb6d4fed0c9ff679ea4))
+* **push:** create Android notification channel for native delivery ([026e0b9](https://github.com/orro3790/drive/commit/026e0b9dc746d0e918a2f6105e65dd11b3f6f112))
+
 ## [1.2.1](https://github.com/orro3790/drive/compare/v1.2.0...v1.2.1) (2026-02-15)
 
 
