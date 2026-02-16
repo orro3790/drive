@@ -71,20 +71,12 @@
 		-webkit-overflow-scrolling: touch;
 	}
 
-	.content::after {
-		content: '';
-		display: block;
-		flex: 0 0 0px;
-	}
-
-	:global(html[data-native='true']) .content::after {
-		/* Spacer inside the scroll flow so final content clears Android nav bars. */
-		flex-basis: calc(max(var(--safe-area-bottom), 64px) + var(--spacing-2));
-	}
-
-	@media (max-width: 767px) {
-		:global(html[data-native='true']) .content::after {
-			flex-basis: calc(max(var(--safe-area-bottom), 72px) + var(--spacing-2));
-		}
+	/*
+	 * Native safe area padding (Android edge-to-edge / iOS notch).
+	 * Uses padding instead of ::after spacer so content is always visible
+	 * above the system navigation bar, not just scrollable past it.
+	 */
+	:global(html[data-native='true']) .content {
+		padding-bottom: var(--safe-area-bottom);
 	}
 </style>
