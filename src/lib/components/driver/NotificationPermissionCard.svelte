@@ -5,7 +5,11 @@
 	Only displayed on native platforms when permission status is 'prompt'.
 -->
 <script lang="ts">
-	import Button from '$lib/components/primitives/Button.svelte';
+	import IconButton from '$lib/components/primitives/IconButton.svelte';
+	import Icon from '$lib/components/primitives/Icon.svelte';
+	import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
+	import XIcon from '$lib/components/icons/XIcon.svelte';
+	import BellRinging from '$lib/components/icons/BellRinging.svelte';
 	import {
 		isNativePlatform,
 		checkPushPermissionStatus,
@@ -41,81 +45,61 @@
 
 {#if shouldShow}
 	<div class="notification-card">
+		<div class="icon">
+			<Icon size="md"><BellRinging /></Icon>
+		</div>
 		<div class="content">
-			<div class="icon">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="24"
-					height="24"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-					<path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-				</svg>
-			</div>
-			<div class="text">
-				<h3>Enable Notifications</h3>
-				<p>Get notified about new shift assignments, bid windows, and important updates.</p>
-			</div>
+			<h3>Enable Notifications</h3>
+			<p>Get notified about new shift assignments, bid windows, and important updates.</p>
 		</div>
 		<div class="actions">
-			<Button variant="ghost" size="small" onclick={handleDismiss}>Not now</Button>
-			<Button variant="primary" size="small" onclick={handleEnable} disabled={isRequesting}>
-				{isRequesting ? 'Enabling...' : 'Enable'}
-			</Button>
+			<IconButton tooltip="Dismiss" onclick={handleDismiss}>
+				<Icon size="sm"><XIcon /></Icon>
+			</IconButton>
+			<IconButton tooltip="Enable notifications" onclick={handleEnable} disabled={isRequesting}>
+				<Icon size="sm"><CheckIcon /></Icon>
+			</IconButton>
 		</div>
 	</div>
 {/if}
 
 <style>
 	.notification-card {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-secondary);
-		border-radius: var(--radius-lg);
-		padding: var(--space-4);
-		margin-bottom: var(--space-4);
-	}
-
-	.content {
 		display: flex;
-		gap: var(--space-3);
-		margin-bottom: var(--space-4);
+		align-items: flex-start;
+		gap: var(--spacing-3);
+		background: var(--surface-primary);
+		border-bottom: 1px solid var(--border-muted);
+		padding: var(--spacing-3);
 	}
 
 	.icon {
 		flex-shrink: 0;
-		width: 40px;
-		height: 40px;
-		border-radius: var(--radius-full);
-		background: var(--surface-accent);
 		color: var(--text-accent);
-		display: flex;
-		align-items: center;
-		justify-content: center;
 	}
 
-	.text h3 {
-		font-size: var(--text-base);
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0 0 var(--space-1) 0;
+	.content {
+		flex: 1;
+		min-width: 0;
 	}
 
-	.text p {
-		font-size: var(--text-sm);
-		color: var(--text-secondary);
+	.content h3 {
+		font-size: var(--font-size-base);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-normal);
+		margin: 0 0 var(--spacing-1) 0;
+	}
+
+	.content p {
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
 		margin: 0;
 		line-height: 1.4;
 	}
 
 	.actions {
 		display: flex;
-		justify-content: flex-end;
-		gap: var(--space-2);
+		gap: var(--spacing-1);
+		flex-shrink: 0;
 	}
 </style>
