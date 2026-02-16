@@ -9,7 +9,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/schema';
 import { fcmTokenSchema } from '$lib/schemas/fcm-token';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import logger, { toSafeErrorMessage } from '$lib/server/logger';
 import { requireAuthenticatedWithOrg } from '$lib/server/org-scope';
 
@@ -33,6 +33,16 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const log = logger.child({ operation: 'registerFcmToken' });
 
 	try {
+		// A device token can only belong to one account at a time.
+		// Clear any stale links first (e.g. after account switching on the same device).
+		await db
+			.update(user)
+			.set({
+				fcmToken: null,
+				updatedAt: new Date()
+			})
+			.where(and(eq(user.fcmToken, token), ne(user.id, authedUser.id)));
+
 		await db
 			.update(user)
 			.set({

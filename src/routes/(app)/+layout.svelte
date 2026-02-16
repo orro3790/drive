@@ -10,6 +10,7 @@
 	import AppSidebar from '$lib/components/app-shell/AppSidebar.svelte';
 	import OfflineBanner from '$lib/components/app-shell/OfflineBanner.svelte';
 	import PageHeader from '$lib/components/app-shell/PageHeader.svelte';
+	import NotificationPermissionCard from '$lib/components/driver/NotificationPermissionCard.svelte';
 	import { initPushNotifications } from '$lib/utils/pushNotifications';
 	import type { LayoutData } from './$types';
 
@@ -34,6 +35,7 @@
 			showOpenBidsButton={role === 'driver'}
 		/>
 		<OfflineBanner />
+		<NotificationPermissionCard />
 		<main class="content" data-scroll-root>
 			{@render children()}
 		</main>

@@ -14,6 +14,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import { getLocale, setLocale, type Locale } from '$lib/paraglide/runtime.js';
 	import * as m from '$lib/paraglide/messages.js';
 	import { authClient } from '$lib/auth-client';
+	import { clearPushNotifications } from '$lib/utils/pushNotifications';
 
 	// Import icons
 	import ClockDollar from '$lib/components/icons/ClockDollar.svelte';
@@ -143,6 +144,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 		if (isLoggingOut) return;
 		isLoggingOut = true;
 		try {
+			await clearPushNotifications();
 			await authClient.signOut();
 			await invalidateAll();
 			await goto('/sign-in');
