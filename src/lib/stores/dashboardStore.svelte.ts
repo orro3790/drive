@@ -51,6 +51,7 @@ export type UnconfirmedShift = {
 	id: string;
 	date: string;
 	routeName: string;
+	routeStartTime: string;
 	warehouseName: string;
 	confirmationOpensAt: string;
 	confirmationDeadline: string;
@@ -77,6 +78,7 @@ export type PendingBid = {
 	assignmentId: string;
 	assignmentDate: string;
 	routeName: string;
+	routeStartTime: string;
 	warehouseName: string;
 	bidAt: string;
 	windowClosesAt: string;
@@ -159,6 +161,7 @@ const unconfirmedShiftSchema = z.object({
 	id: z.string().min(1),
 	date: z.string().min(1),
 	routeName: z.string().min(1),
+	routeStartTime: z.string().min(1),
 	warehouseName: z.string().min(1),
 	confirmationOpensAt: z.string().min(1),
 	confirmationDeadline: z.string().min(1),
@@ -185,6 +188,7 @@ const pendingBidSchema = z.object({
 	assignmentId: z.string().min(1),
 	assignmentDate: z.string().min(1),
 	routeName: z.string().min(1),
+	routeStartTime: z.string().min(1),
 	warehouseName: z.string().min(1),
 	bidAt: z.string().min(1),
 	windowClosesAt: z.string().min(1)

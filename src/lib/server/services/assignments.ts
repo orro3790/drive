@@ -8,6 +8,18 @@ import { sendBulkNotifications, sendNotification } from '$lib/server/services/no
 import { getDriverWeeklyAssignmentCount, getWeekStart } from '$lib/server/services/scheduling';
 import type { AssignmentStatus } from '$lib/schemas/assignment';
 
+function formatRouteStartTimeLabel(startTime: string | null | undefined): string {
+	if (!startTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
+		return '9:00 AM';
+	}
+
+	const [hour24, minute] = startTime.split(':').map(Number);
+	const period = hour24 >= 12 ? 'PM' : 'AM';
+	const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+
+	return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+}
+
 export type ManualAssignErrorCode =
 	| 'assignment_not_found'
 	| 'forbidden'
@@ -53,6 +65,7 @@ export async function manualAssignDriverToAssignment(params: {
 			id: assignments.id,
 			routeId: assignments.routeId,
 			routeName: routes.name,
+			routeStartTime: routes.startTime,
 			warehouseId: assignments.warehouseId,
 			date: assignments.date,
 			status: assignments.status,
@@ -212,6 +225,7 @@ export async function manualAssignDriverToAssignment(params: {
 	const notificationData: Record<string, string> = {
 		assignmentId: assignment.id,
 		routeName: assignment.routeName,
+		routeStartTime: assignment.routeStartTime,
 		assignmentDate: assignment.date
 	};
 	if (transactionResult.bidWindowId) {
@@ -219,7 +233,7 @@ export async function manualAssignDriverToAssignment(params: {
 	}
 
 	await sendNotification(driver.id, 'assignment_confirmed', {
-		customBody: `You were assigned ${assignment.routeName} for ${assignment.date}.`,
+		customBody: `You were assigned ${assignment.routeName} for ${assignment.date} at ${formatRouteStartTimeLabel(assignment.routeStartTime)}.`,
 		data: notificationData,
 		organizationId: assignmentOrganizationId
 	});
@@ -229,7 +243,7 @@ export async function manualAssignDriverToAssignment(params: {
 		.map((bid) => bid.userId);
 	if (loserIds.length > 0) {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
-			customBody: `${assignment.routeName} for ${assignment.date} was assigned by a manager.`,
+			customBody: `${assignment.routeName} for ${assignment.date} at ${formatRouteStartTimeLabel(assignment.routeStartTime)} was assigned by a manager.`,
 			data: notificationData,
 			organizationId: assignmentOrganizationId
 		});

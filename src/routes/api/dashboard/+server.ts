@@ -111,6 +111,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 				assignmentId: bids.assignmentId,
 				assignmentDate: assignments.date,
 				routeName: routes.name,
+				routeStartTime: routes.startTime,
 				warehouseName: warehouses.name,
 				status: bids.status,
 				bidAt: bids.bidAt,
@@ -216,6 +217,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		assignmentId: bid.assignmentId,
 		assignmentDate: bid.assignmentDate,
 		routeName: bid.routeName,
+		routeStartTime: bid.routeStartTime,
 		warehouseName: bid.warehouseName,
 		bidAt: bid.bidAt?.toISOString() ?? '',
 		windowClosesAt: bid.windowClosesAt.toISOString()

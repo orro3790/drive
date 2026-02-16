@@ -176,6 +176,7 @@ export const GET: RequestHandler = async ({ request }) => {
 						data: {
 							assignmentId: assignment.assignmentId,
 							routeName: assignment.routeName,
+							routeStartTime: assignment.routeStartTime,
 							warehouseName: assignment.warehouseName,
 							date: today,
 							dedupeKey

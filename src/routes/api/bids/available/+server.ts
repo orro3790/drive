@@ -60,6 +60,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			assignmentDate: assignments.date,
 			routeId: assignments.routeId,
 			routeName: routes.name,
+			routeStartTime: routes.startTime,
 			warehouseId: assignments.warehouseId,
 			warehouseName: warehouses.name
 		})
@@ -110,6 +111,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			assignmentId: window.assignmentId,
 			assignmentDate: window.assignmentDate,
 			routeName: window.routeName,
+			routeStartTime: window.routeStartTime,
 			warehouseName: window.warehouseName,
 			mode: window.mode,
 			payBonusPercent: window.payBonusPercent,

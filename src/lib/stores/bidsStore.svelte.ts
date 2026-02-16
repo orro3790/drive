@@ -17,6 +17,7 @@ export type AvailableBidWindow = {
 	assignmentId: string;
 	assignmentDate: string;
 	routeName: string;
+	routeStartTime: string;
 	warehouseName: string;
 	mode: BidWindowMode;
 	payBonusPercent: number;
@@ -29,6 +30,7 @@ export type DriverBid = {
 	assignmentId: string;
 	assignmentDate: string;
 	routeName: string;
+	routeStartTime: string;
 	warehouseName: string;
 	status: BidStatus;
 	score: number | null;
@@ -58,6 +60,7 @@ const availableBidWindowSchema = z.object({
 	assignmentId: z.string().min(1),
 	assignmentDate: z.string().min(1),
 	routeName: z.string().min(1),
+	routeStartTime: z.string().min(1),
 	warehouseName: z.string().min(1),
 	mode: z.enum(['competitive', 'instant', 'emergency']),
 	payBonusPercent: z.number(),
@@ -70,6 +73,7 @@ const driverBidSchema = z.object({
 	assignmentId: z.string().min(1),
 	assignmentDate: z.string().min(1),
 	routeName: z.string().min(1),
+	routeStartTime: z.string().min(1),
 	warehouseName: z.string().min(1),
 	status: z.enum(['pending', 'won', 'lost']),
 	score: z.number().nullable(),

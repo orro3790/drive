@@ -11,6 +11,19 @@ Before testing:
 3. Manager user account for triggering certain notifications
 4. Access to cron endpoints (for time-based notifications)
 
+### Push Infra Preflight (Run Before Smoke)
+
+1. Verify Firebase project alignment:
+   - Android app project: `android/app/google-services.json` -> `project_info.project_id`
+   - Server project: `FIREBASE_PROJECT_ID` in Vercel environment
+2. If they do not match, fix env vars and redeploy before continuing.
+3. Confirm recipient has a fresh FCM token (`fcm_token` is non-null and recently updated).
+4. Confirm Android system settings for Drive app:
+   - Notifications allowed
+   - Notification categories enabled for app (if OEM-gated)
+   - `Drive Notifications` category enabled and alerting
+   - Battery set to unrestricted for test runs
+
 ## Single-Device Execution Mode (Recommended)
 
 If you only have one physical device (for example, Z Flip 3), run tests with this actor model:
@@ -51,8 +64,8 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **How to Test**:
 
-1. Create an assignment for today with `status = 'confirmed'`
-2. Call the cron endpoint: `POST /api/cron/shift-reminders`
+1. Create an assignment for today with `status = 'scheduled'`
+2. Call the cron endpoint: `GET /api/cron/shift-reminders` with `Authorization: Bearer <CRON_SECRET>`
 3. Verify push notification received
 
 **Source**: `src/routes/api/cron/shift-reminders/+server.ts:159`
@@ -493,6 +506,7 @@ To verify FCM is actually delivering:
 1. Check server logs for FCM send success/failure
 2. Check device notification tray
 3. Check in-app notification list for the record
+4. If tray fails while in-app exists, run a direct FCM send probe to the same token.
 
 ---
 
@@ -509,7 +523,8 @@ To verify FCM is actually delivering:
 
 1. FCM token issue (see above)
 2. Firebase Admin SDK initialization failure
-3. Check server logs for FCM errors
+3. Sender/project mismatch (`messaging/mismatched-credential` / `SenderId mismatch`)
+4. Check server logs for FCM errors
 
 ### Cron Not Triggering
 
