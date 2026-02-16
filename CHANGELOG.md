@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.0](https://github.com/orro3790/drive/compare/v1.2.2...v1.3.0) (2026-02-16)
+
+
+### Features
+
+* **driver:** show route start time across shifts and bids ([a009d00](https://github.com/orro3790/drive/commit/a009d006ac327ae240d0bf40d4146ae772d67e60))
+* **driver:** show route start time across shifts and bids ([f545656](https://github.com/orro3790/drive/commit/f54565647263537aa62a921518c1a9decb650d40))
+* **notifications:** include route start time in shift reminders ([c2831d2](https://github.com/orro3790/drive/commit/c2831d24792142a1fb78ebd1dc6301507588b769))
+* **notifications:** include shift start time in reminder push ([989a573](https://github.com/orro3790/drive/commit/989a573458ef343ca4b60ede597456f8fce9c57f))
+
+
+### Bug Fixes
+
+* **auth:** add download icon and align link typography ([66a89fa](https://github.com/orro3790/drive/commit/66a89fa58ef998045a31927cb428ecbb3808e8be))
+* **auth:** add download icon and align link typography ([cbb69b4](https://github.com/orro3790/drive/commit/cbb69b4286467a66c90df0ab60f7e5b9ab942690))
+* **auth:** simplify sign-in UI and restore SystemBars insets ([50722c7](https://github.com/orro3790/drive/commit/50722c7d15937cebdfbe2faeb396f87d233254cc))
+* **auth:** simplify sign-in UI and restore SystemBars insets ([29847b9](https://github.com/orro3790/drive/commit/29847b9fc1e0111d9cc5e726ba3e03e1f2e04a76))
+* **driver-ui:** prevent shift time wrapping on mobile ([d799907](https://github.com/orro3790/drive/commit/d7999076ba957b02880f217f643561637bfaa583))
+* **driver-ui:** prevent shift time wrapping on mobile ([4489b5a](https://github.com/orro3790/drive/commit/4489b5a1549777db0f15f156689cab2bc2043c1d))
+* **notifications:** harden push delivery and realtime completion updates ([33a36d9](https://github.com/orro3790/drive/commit/33a36d958460b7393d55a7506e30029a355fef2d))
+
 ## [1.2.2](https://github.com/orro3790/drive/compare/v1.2.1...v1.2.2) (2026-02-16)
 
 
