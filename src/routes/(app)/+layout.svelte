@@ -71,4 +71,12 @@
 		overscroll-behavior-y: contain;
 		-webkit-overflow-scrolling: touch;
 	}
+
+	@media (max-width: 767px) {
+		.content {
+			/* Reserve reliable room above Android 3-button nav bars even when
+			   WebView safe-area reporting is inconsistent. */
+			padding-bottom: calc(max(var(--safe-area-bottom), 64px) + var(--spacing-2));
+		}
+	}
 </style>
