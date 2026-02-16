@@ -31,6 +31,18 @@ function getTodayToronto(): string {
 	return format(toZonedTime(now, TORONTO_TZ), 'yyyy-MM-dd');
 }
 
+function formatRouteStartTimeLabel(startTime: string | null | undefined): string {
+	if (!startTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
+		return '9:00 AM';
+	}
+
+	const [hour24, minute] = startTime.split(':').map(Number);
+	const period = hour24 >= 12 ? 'PM' : 'AM';
+	const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+
+	return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+}
+
 export const GET: RequestHandler = async ({ request }) => {
 	const authError = verifyCronAuth(request);
 	if (authError) return authError;
@@ -70,7 +82,8 @@ export const GET: RequestHandler = async ({ request }) => {
 					assignmentId: assignments.id,
 					userId: assignments.userId,
 					routeName: routes.name,
-					warehouseName: warehouses.name
+					warehouseName: warehouses.name,
+					routeStartTime: routes.startTime
 				})
 				.from(assignments)
 				.innerJoin(routes, eq(routes.id, assignments.routeId))
@@ -156,8 +169,9 @@ export const GET: RequestHandler = async ({ request }) => {
 				}
 
 				try {
+					const routeStartTimeLabel = formatRouteStartTimeLabel(assignment.routeStartTime);
 					await sendNotification(assignment.userId, 'shift_reminder', {
-						customBody: `Your shift on route ${assignment.routeName} at ${assignment.warehouseName} is today.`,
+						customBody: `Your shift on route ${assignment.routeName} at ${assignment.warehouseName} starts at ${routeStartTimeLabel} today.`,
 						organizationId,
 						data: {
 							assignmentId: assignment.assignmentId,
