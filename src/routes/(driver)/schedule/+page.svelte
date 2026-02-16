@@ -34,7 +34,7 @@
 		type AssignmentLifecycleActionId
 	} from '$lib/config/driverLifecycleIa';
 	import { statusLabels } from '$lib/config/lifecycleLabels';
-	import { formatAssignmentDateTime } from '$lib/utils/date/formatting';
+	import { formatAssignmentDate, formatRouteStartTime } from '$lib/utils/date/formatting';
 	import type { AssignmentStatus } from '$lib/schemas/assignment';
 
 	// Cancel modal state
@@ -339,9 +339,10 @@
 		</div>
 		<div class="assignment-content">
 			<div class="assignment-header">
-				<span class="assignment-date"
-					>{formatAssignmentDateTime(assignment.date, assignment.routeStartTime)}</span
-				>
+				<div class="assignment-when">
+					<span class="assignment-date">{formatAssignmentDate(assignment.date)}</span>
+					<span class="assignment-time">{formatRouteStartTime(assignment.routeStartTime)}</span>
+				</div>
 				{#if assignment.status === 'scheduled'}
 					{#if confirmAction || cancelAction}
 						<div class="assignment-actions">
@@ -806,8 +807,16 @@
 		gap: var(--spacing-2);
 	}
 
-	.assignment-header .assignment-date {
+	.assignment-header .assignment-when {
 		margin-right: auto;
+	}
+
+	.assignment-when {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		margin-right: auto;
+		min-width: 0;
 	}
 
 	.assignment-actions {
@@ -821,6 +830,13 @@
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 		line-height: 1.3;
+	}
+
+	.assignment-time {
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-muted);
+		line-height: 1.2;
 	}
 
 	.assignment-status {
