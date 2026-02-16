@@ -52,5 +52,7 @@
 		scrollbar-gutter: stable;
 		overscroll-behavior-y: contain;
 		-webkit-overflow-scrolling: touch;
+		/* Safe area padding for native platforms (Android edge-to-edge / iOS notch) */
+		padding-bottom: var(--safe-area-bottom);
 	}
 </style>
