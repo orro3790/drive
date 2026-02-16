@@ -137,7 +137,7 @@
 		flex-direction: column;
 		gap: var(--spacing-4);
 		padding: var(--spacing-4);
-		padding-bottom: calc(var(--spacing-4) + env(safe-area-inset-bottom, 0px));
+		padding-bottom: calc(var(--spacing-4) + var(--safe-area-bottom));
 	}
 
 	.settings-content-area :global(.settings-card) {
@@ -151,7 +151,7 @@
 
 		.settings-content-area {
 			padding: var(--spacing-3);
-			padding-bottom: calc(var(--spacing-3) + env(safe-area-inset-bottom, 0px));
+			padding-bottom: calc(var(--spacing-3) + var(--safe-area-bottom));
 			gap: var(--spacing-3);
 		}
 	}

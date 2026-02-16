@@ -71,10 +71,14 @@
 		when WebView has broken env(safe-area-inset-*).
 		Docs: https://capacitorjs.com/docs/apis/system-bars
 	*/
-	--safe-area-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
-	--safe-area-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
-	--safe-area-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
-	--safe-area-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+	--safe-area-top-raw: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+	--safe-area-bottom-raw: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+	--safe-area-left-raw: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+	--safe-area-right-raw: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+	--safe-area-top: var(--safe-area-top-raw);
+	--safe-area-bottom: var(--safe-area-bottom-raw);
+	--safe-area-left: var(--safe-area-left-raw);
+	--safe-area-right: var(--safe-area-right-raw);
 
 	/*═══════════════════════════════════════════════════════════════════════════
 	  TYPOGRAPHY
@@ -306,7 +310,9 @@ html[data-native='true'] {
 	/* Android commonly reports 0px for env(safe-area-inset-*) even when system
 	   bars overlay the WebView; keep a small minimum so content isn't obscured. */
 	--safe-area-top-min: 24px;
-	--safe-area-bottom-min: 16px;
+	--safe-area-bottom-min: 36px;
+	--safe-area-top: max(var(--safe-area-top-raw), var(--safe-area-top-min));
+	--safe-area-bottom: max(var(--safe-area-bottom-raw), var(--safe-area-bottom-min));
 }
 
 /* Base Styles */
