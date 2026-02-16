@@ -57,7 +57,7 @@
 				{},
 				{
 					onSuccess: () => {
-						goto(redirectTo);
+						goto(redirectTo, { replaceState: true });
 					}
 				}
 			);
@@ -89,7 +89,7 @@
 			},
 			{
 				onSuccess: () => {
-					goto(redirectTo);
+					goto(redirectTo, { replaceState: true });
 				}
 			}
 		);

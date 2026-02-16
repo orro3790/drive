@@ -131,12 +131,13 @@ async function getBidWindowById(windowId: string): Promise<OpenBidWindowSnapshot
 	return window ?? null;
 }
 
-async function closeOpenWindowForUrgentEscalation(params: {
+async function closeOpenWindow(params: {
 	assignmentId: string;
 	bidWindowId: string;
 	actorId: string;
 	organizationId: string;
 	assignmentStatusBefore: AssignmentSnapshot['status'];
+	auditAction: 'manager_override_escalate_urgent' | 'manager_override_suspend_route';
 }) {
 	const resolvedAt = new Date();
 
@@ -166,7 +167,7 @@ async function closeOpenWindowForUrgentEscalation(params: {
 			{
 				entityType: 'assignment',
 				entityId: params.assignmentId,
-				action: 'manager_override_escalate_urgent',
+				action: params.auditAction,
 				actorType: 'user',
 				actorId: params.actorId,
 				changes: {
@@ -316,6 +317,207 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		});
 	}
 
+	if (parsed.data.action === 'suspend_route') {
+		if (assignment.status === 'active' || assignment.status === 'completed') {
+			return overrideError(
+				409,
+				'invalid_assignment_state',
+				'Suspend route is only available for scheduled, unfilled, or already suspended assignments'
+			);
+		}
+
+		if (assignment.status === 'cancelled' && assignment.userId === null && !openWindow) {
+			return json({
+				action: parsed.data.action,
+				assignment: {
+					id: assignment.id,
+					status: 'cancelled',
+					userId: null,
+					driverName: null,
+					routeId: assignment.routeId
+				},
+				bidWindow: null,
+				notifiedCount: null
+			});
+		}
+
+		const suspendedAt = new Date();
+		let closedBidWindowId: string | null = null;
+
+		await db.transaction(async (tx) => {
+			if (openWindow) {
+				const [closedWindow] = await tx
+					.update(bidWindows)
+					.set({
+						status: 'closed',
+						winnerId: null
+					})
+					.where(and(eq(bidWindows.id, openWindow.id), eq(bidWindows.status, 'open')))
+					.returning({ id: bidWindows.id });
+
+				if (closedWindow) {
+					closedBidWindowId = closedWindow.id;
+					await tx
+						.update(bids)
+						.set({
+							status: 'lost',
+							resolvedAt: suspendedAt
+						})
+						.where(and(eq(bids.bidWindowId, closedWindow.id), eq(bids.status, 'pending')));
+				}
+			}
+
+			await tx
+				.update(assignments)
+				.set({
+					status: 'cancelled',
+					userId: null,
+					assignedBy: null,
+					assignedAt: null,
+					confirmedAt: null,
+					cancelType: null,
+					cancelledAt: suspendedAt,
+					updatedAt: suspendedAt
+				})
+				.where(eq(assignments.id, assignmentId));
+
+			await createAuditLog(
+				{
+					entityType: 'assignment',
+					entityId: assignmentId,
+					action: 'manager_override_suspend_route',
+					actorType: 'user',
+					actorId: manager.id,
+					changes: {
+						before: {
+							status: assignment.status,
+							userId: assignment.userId,
+							bidWindowId: openWindow?.id ?? null
+						},
+						after: {
+							status: 'cancelled',
+							userId: null,
+							closedBidWindowId
+						},
+						reason: 'route_suspended'
+					}
+				},
+				tx
+			);
+		});
+
+		if (closedBidWindowId) {
+			broadcastBidWindowClosed(organizationId, {
+				assignmentId,
+				bidWindowId: closedBidWindowId,
+				winnerId: null,
+				winnerName: null
+			});
+		}
+
+		broadcastAssignmentUpdated(organizationId, {
+			assignmentId,
+			status: 'cancelled',
+			driverId: null,
+			driverName: null,
+			routeId: assignment.routeId,
+			bidWindowClosesAt: null
+		});
+
+		return json({
+			action: parsed.data.action,
+			assignment: {
+				id: assignment.id,
+				status: 'cancelled',
+				userId: null,
+				driverName: null,
+				routeId: assignment.routeId
+			},
+			bidWindow: null,
+			notifiedCount: null
+		});
+	}
+
+	if (parsed.data.action === 'resume_route') {
+		if (assignment.status !== 'cancelled' || assignment.userId !== null) {
+			return overrideError(
+				409,
+				'invalid_assignment_state',
+				'Resume route is only available for suspended assignments'
+			);
+		}
+
+		if (openWindow) {
+			return overrideError(
+				409,
+				'open_window_exists',
+				'Cannot resume route while a bid window is open'
+			);
+		}
+
+		const resumedAt = new Date();
+
+		await db.transaction(async (tx) => {
+			await tx
+				.update(assignments)
+				.set({
+					status: 'unfilled',
+					userId: null,
+					assignedBy: null,
+					assignedAt: null,
+					confirmedAt: null,
+					cancelType: null,
+					cancelledAt: null,
+					updatedAt: resumedAt
+				})
+				.where(eq(assignments.id, assignmentId));
+
+			await createAuditLog(
+				{
+					entityType: 'assignment',
+					entityId: assignmentId,
+					action: 'manager_override_resume_route',
+					actorType: 'user',
+					actorId: manager.id,
+					changes: {
+						before: {
+							status: assignment.status,
+							userId: assignment.userId
+						},
+						after: {
+							status: 'unfilled',
+							userId: null
+						},
+						reason: 'route_resumed'
+					}
+				},
+				tx
+			);
+		});
+
+		broadcastAssignmentUpdated(organizationId, {
+			assignmentId,
+			status: 'unfilled',
+			driverId: null,
+			driverName: null,
+			routeId: assignment.routeId,
+			bidWindowClosesAt: null
+		});
+
+		return json({
+			action: parsed.data.action,
+			assignment: {
+				id: assignment.id,
+				status: 'unfilled',
+				userId: null,
+				driverName: null,
+				routeId: assignment.routeId
+			},
+			bidWindow: null,
+			notifiedCount: null
+		});
+	}
+
 	if (parsed.data.action === 'open_bidding') {
 		if (assignment.status !== 'unfilled') {
 			return overrideError(
@@ -394,12 +596,13 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 	}
 
 	if (openWindow && openWindow.mode !== 'emergency') {
-		const closed = await closeOpenWindowForUrgentEscalation({
+		const closed = await closeOpenWindow({
 			assignmentId,
 			bidWindowId: openWindow.id,
 			actorId: manager.id,
 			organizationId,
-			assignmentStatusBefore: assignment.status
+			assignmentStatusBefore: assignment.status,
+			auditAction: 'manager_override_escalate_urgent'
 		});
 
 		if (!closed) {

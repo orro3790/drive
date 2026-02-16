@@ -59,7 +59,9 @@
 
 	// Tab state
 	type TabId = 'routes' | 'unfilled' | 'bidWindows';
-	type RouteOverrideAction = 'open_bidding' | 'open_urgent_bidding';
+	type RouteBidOverrideAction = 'open_bidding' | 'open_urgent_bidding';
+	type RouteSuspendAction = 'suspend_route' | 'resume_route';
+	type RouteOverrideAction = RouteBidOverrideAction | RouteSuspendAction;
 	let activeTab = $state<TabId>('routes');
 
 	// State
@@ -211,7 +213,8 @@
 				const statusSortOrder: Record<RouteStatus, number> = {
 					assigned: 20,
 					bidding: 21,
-					unfilled: 22
+					unfilled: 22,
+					suspended: 23
 				};
 
 				return statusSortOrder[row.status];
@@ -249,13 +252,15 @@
 	const statusLabels: Record<RouteStatus, string> = {
 		assigned: m.route_status_assigned(),
 		unfilled: m.route_status_unfilled(),
-		bidding: m.route_status_bidding()
+		bidding: m.route_status_bidding(),
+		suspended: m.route_status_suspended()
 	};
 
-	const statusChip: Record<RouteStatus, 'success' | 'error' | 'info'> = {
+	const statusChip: Record<RouteStatus, 'success' | 'error' | 'info' | 'warning'> = {
 		assigned: 'success',
 		unfilled: 'error',
-		bidding: 'info'
+		bidding: 'info',
+		suspended: 'warning'
 	};
 
 	const progressLabels: Record<ShiftProgress, string> = {
@@ -295,7 +300,8 @@
 		{ value: '', label: m.route_filter_status_all() },
 		{ value: 'assigned', label: statusLabels.assigned },
 		{ value: 'unfilled', label: statusLabels.unfilled },
-		{ value: 'bidding', label: statusLabels.bidding }
+		{ value: 'bidding', label: statusLabels.bidding },
+		{ value: 'suspended', label: statusLabels.suspended }
 	];
 
 	const progressFilterSelectValue = $derived(progressFilter ?? '');
@@ -667,7 +673,7 @@
 		return route.assignmentId ? routeStore.isOverridingAssignment(route.assignmentId) : false;
 	}
 
-	function getRouteOverrideAction(route: RouteWithWarehouse): RouteOverrideAction | null {
+	function getRouteBidOverrideAction(route: RouteWithWarehouse): RouteBidOverrideAction | null {
 		if (!route.assignmentId || !route.assignmentStatus) {
 			return null;
 		}
@@ -687,16 +693,48 @@
 		return route.isShiftStarted ? 'open_urgent_bidding' : 'open_bidding';
 	}
 
+	function getRouteSuspendAction(route: RouteWithWarehouse): RouteSuspendAction | null {
+		if (!route.assignmentId || !route.assignmentStatus) {
+			return null;
+		}
+
+		if (route.assignmentStatus === 'cancelled' && route.status === 'suspended') {
+			return 'resume_route';
+		}
+
+		if (route.assignmentStatus === 'scheduled' || route.assignmentStatus === 'unfilled') {
+			return 'suspend_route';
+		}
+
+		return null;
+	}
+
 	function getOverrideActionLabel(action: RouteOverrideAction): string {
-		return action === 'open_bidding'
-			? m.manager_override_open_bidding_button()
-			: m.manager_override_open_urgent_bidding_button();
+		if (action === 'open_bidding') {
+			return m.manager_override_open_bidding_button();
+		}
+
+		if (action === 'open_urgent_bidding') {
+			return m.manager_override_open_urgent_bidding_button();
+		}
+
+		return action === 'suspend_route'
+			? m.manager_override_suspend_route_button()
+			: m.manager_override_resume_route_button();
 	}
 
 	function getOverrideConfirmTitle(action: RouteOverrideAction): string {
-		return action === 'open_bidding'
-			? m.manager_override_open_bidding_title()
-			: m.manager_override_open_urgent_bidding_title();
+		if (action === 'open_bidding') {
+			return m.manager_override_open_bidding_title();
+		}
+
+		if (action === 'open_urgent_bidding') {
+			return m.manager_override_open_urgent_bidding_title();
+		}
+
+		return action === 'suspend_route'
+			? m.manager_override_suspend_route_title()
+			: m.manager_override_resume_route_title();
 	}
 
 	function getOverrideConfirmDescription(confirm: {
@@ -705,6 +743,23 @@
 	}): string {
 		if (confirm.action === 'open_bidding') {
 			return m.manager_override_open_bidding_description({ routeName: confirm.route.name });
+		}
+
+		if (confirm.action === 'suspend_route') {
+			if (confirm.route.driverName) {
+				return m.manager_override_suspend_route_description_assigned({
+					routeName: confirm.route.name,
+					driverName: confirm.route.driverName
+				});
+			}
+
+			return m.manager_override_suspend_route_description_unfilled({
+				routeName: confirm.route.name
+			});
+		}
+
+		if (confirm.action === 'resume_route') {
+			return m.manager_override_resume_route_description({ routeName: confirm.route.name });
 		}
 
 		if (confirm.route.driverName) {
@@ -722,9 +777,17 @@
 	}
 
 	function getOverrideConfirmLabel(action: RouteOverrideAction): string {
-		return action === 'open_bidding'
-			? m.manager_override_open_bidding_confirm()
-			: m.manager_override_open_urgent_bidding_confirm();
+		if (action === 'open_bidding') {
+			return m.manager_override_open_bidding_confirm();
+		}
+
+		if (action === 'open_urgent_bidding') {
+			return m.manager_override_open_urgent_bidding_confirm();
+		}
+
+		return action === 'suspend_route'
+			? m.manager_override_suspend_route_confirm()
+			: m.manager_override_resume_route_confirm();
 	}
 
 	function getAssignButtonLabel(route: RouteWithWarehouse): string {
@@ -854,7 +917,17 @@
 			return;
 		}
 
-		await routeStore.openUrgentBidding(assignmentId);
+		if (action === 'open_urgent_bidding') {
+			await routeStore.openUrgentBidding(assignmentId);
+			return;
+		}
+
+		if (action === 'suspend_route') {
+			await routeStore.suspendRoute(assignmentId);
+			return;
+		}
+
+		await routeStore.resumeRoute(assignmentId);
 	}
 
 	async function loadDispatchSettingsBonus() {
@@ -897,6 +970,8 @@
 {#snippet driverCell(ctx: CellRendererContext<RouteWithWarehouse>)}
 	{#if ctx.row.status === 'assigned' && ctx.row.driverName}
 		<span class="driver-name">{ctx.row.driverName}</span>
+	{:else if ctx.row.status === 'suspended'}
+		<span class="driver-unassigned">{m.route_status_suspended()}</span>
 	{:else if ctx.row.status === 'bidding' && ctx.row.bidWindowClosesAt}
 		<span class="bid-closes">{formatBidWindowLabel(ctx.row.bidWindowClosesAt)}</span>
 	{:else}
@@ -998,11 +1073,7 @@
 	{#if statusFilter}
 		<Chip
 			variant="status"
-			status={statusFilter === 'assigned'
-				? 'success'
-				: statusFilter === 'bidding'
-					? 'info'
-					: 'warning'}
+			status={statusChip[statusFilter]}
 			label={statusLabels[statusFilter]}
 			size="sm"
 			onDismiss={clearStatusFilter}
@@ -1167,19 +1238,31 @@
 {/snippet}
 
 {#snippet routeFooterActions(route: RouteWithWarehouse)}
-	{@const overrideAction = getRouteOverrideAction(route)}
+	{@const bidOverrideAction = getRouteBidOverrideAction(route)}
+	{@const suspendAction = getRouteSuspendAction(route)}
 	{@const canAssign = canManualAssignRoute(route)}
-	{#if overrideAction || canAssign}
+	{#if bidOverrideAction || suspendAction || canAssign}
 		<div class="route-footer-actions">
-			{#if overrideAction}
+			{#if bidOverrideAction}
 				<Button
 					fill
 					variant="ghost"
-					onclick={(e) => openOverrideConfirm(route, overrideAction, e)}
+					onclick={(e) => openOverrideConfirm(route, bidOverrideAction, e)}
 					disabled={isRouteAssigning(route) || isRouteOverriding(route)}
 					isLoading={isRouteOverriding(route)}
 				>
-					{getOverrideActionLabel(overrideAction)}
+					{getOverrideActionLabel(bidOverrideAction)}
+				</Button>
+			{/if}
+			{#if suspendAction}
+				<Button
+					fill
+					variant={suspendAction === 'suspend_route' ? 'danger' : 'secondary'}
+					onclick={(e) => openOverrideConfirm(route, suspendAction, e)}
+					disabled={isRouteAssigning(route) || isRouteOverriding(route)}
+					isLoading={isRouteOverriding(route)}
+				>
+					{getOverrideActionLabel(suspendAction)}
 				</Button>
 			{/if}
 			{#if canAssign}
@@ -1188,7 +1271,7 @@
 					onclick={() => openRouteAssignModal(route)}
 					disabled={isRouteAssigning(route) || isRouteOverriding(route)}
 					isLoading={isRouteAssigning(route)}
-					style={overrideAction ? 'margin-left:auto;' : undefined}
+					style={bidOverrideAction || suspendAction ? 'margin-left:auto;' : undefined}
 				>
 					{getAssignButtonLabel(route)}
 				</Button>

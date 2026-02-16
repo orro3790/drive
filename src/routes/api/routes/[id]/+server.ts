@@ -24,6 +24,7 @@ import {
 type AssignmentDetails = {
 	assignmentId: string;
 	status: 'scheduled' | 'active' | 'completed' | 'cancelled' | 'unfilled';
+	userId: string | null;
 	driverName: string | null;
 	bidWindowStatus: 'open' | null;
 	bidWindowClosesAt: Date | null;
@@ -36,6 +37,9 @@ type AssignmentDetails = {
 
 function resolveStatus(assignment: AssignmentDetails | null): RouteStatus {
 	if (!assignment) return 'unfilled';
+	if (assignment.status === 'cancelled' && assignment.userId === null) {
+		return 'suspended';
+	}
 	if (assignment.status === 'unfilled') {
 		return assignment.bidWindowStatus === 'open' ? 'bidding' : 'unfilled';
 	}
@@ -50,6 +54,7 @@ async function getRouteAssignmentDetails(
 		.select({
 			assignmentId: assignments.id,
 			status: assignments.status,
+			userId: assignments.userId,
 			driverName: user.name,
 			confirmedAt: assignments.confirmedAt,
 			assignmentCancelledAt: assignments.cancelledAt,
@@ -76,6 +81,7 @@ async function getRouteAssignmentDetails(
 	return {
 		assignmentId: assignment.assignmentId,
 		status: assignment.status,
+		userId: assignment.userId,
 		driverName: assignment.driverName,
 		bidWindowStatus: openWindow ? 'open' : null,
 		bidWindowClosesAt: openWindow?.closesAt ?? null,

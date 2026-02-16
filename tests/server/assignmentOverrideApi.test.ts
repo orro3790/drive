@@ -686,4 +686,121 @@ describe('POST /api/assignments/[id]/override', () => {
 			})
 		);
 	});
+
+	it('suspends a route, closes open bidding, and unassigns the driver', async () => {
+		setSelectResults([
+			[
+				{
+					id: ASSIGNMENT_ID,
+					status: 'scheduled',
+					userId: 'driver-current',
+					driverName: 'Current Driver',
+					routeId: 'route-1',
+					routeName: 'Route One',
+					warehouseId: 'warehouse-1',
+					warehouseName: 'Warehouse One',
+					date: '2026-02-12',
+					routeStartTime: '09:00'
+				}
+			],
+			[
+				{
+					id: 'window-suspend',
+					mode: 'competitive',
+					status: 'open',
+					closesAt: new Date('2026-02-12T08:00:00.000Z'),
+					payBonusPercent: 0
+				}
+			]
+		]);
+		setTxBidWindowReturning([[{ id: 'window-suspend' }]]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			params: { id: ASSIGNMENT_ID },
+			locals: { user: createManagerUser('manager-suspend') },
+			body: { action: 'suspend_route' }
+		});
+
+		const response = await POST(event as Parameters<typeof POST>[0]);
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			action: 'suspend_route',
+			assignment: {
+				id: ASSIGNMENT_ID,
+				status: 'cancelled',
+				userId: null,
+				driverName: null,
+				routeId: 'route-1'
+			},
+			bidWindow: null,
+			notifiedCount: null
+		});
+
+		expect(txUpdateMock).toHaveBeenCalled();
+		expect(broadcastBidWindowClosedMock).toHaveBeenCalledWith(
+			'org-test',
+			expect.objectContaining({ bidWindowId: 'window-suspend', assignmentId: ASSIGNMENT_ID })
+		);
+		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
+			'org-test',
+			expect.objectContaining({
+				assignmentId: ASSIGNMENT_ID,
+				status: 'cancelled',
+				routeId: 'route-1'
+			})
+		);
+	});
+
+	it('resumes a suspended route back to unfilled without opening bidding', async () => {
+		setSelectResults([
+			[
+				{
+					id: ASSIGNMENT_ID,
+					status: 'cancelled',
+					userId: null,
+					driverName: null,
+					routeId: 'route-1',
+					routeName: 'Route One',
+					warehouseId: 'warehouse-1',
+					warehouseName: 'Warehouse One',
+					date: '2026-02-12',
+					routeStartTime: '09:00'
+				}
+			],
+			[]
+		]);
+
+		const event = createRequestEvent({
+			method: 'POST',
+			params: { id: ASSIGNMENT_ID },
+			locals: { user: createManagerUser('manager-resume') },
+			body: { action: 'resume_route' }
+		});
+
+		const response = await POST(event as Parameters<typeof POST>[0]);
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			action: 'resume_route',
+			assignment: {
+				id: ASSIGNMENT_ID,
+				status: 'unfilled',
+				userId: null,
+				driverName: null,
+				routeId: 'route-1'
+			},
+			bidWindow: null,
+			notifiedCount: null
+		});
+
+		expect(createBidWindowMock).not.toHaveBeenCalled();
+		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
+			'org-test',
+			expect.objectContaining({
+				assignmentId: ASSIGNMENT_ID,
+				status: 'unfilled',
+				routeId: 'route-1'
+			})
+		);
+	});
 });

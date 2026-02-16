@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 
-export const routeStatusSchema = z.enum(['assigned', 'unfilled', 'bidding']);
+export const routeStatusSchema = z.enum(['assigned', 'unfilled', 'bidding', 'suspended']);
 
 export type RouteStatus = z.infer<typeof routeStatusSchema>;
 
