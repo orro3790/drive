@@ -211,7 +211,7 @@ export const routeStore = {
 
 		try {
 			const query = buildQuery(state.filters);
-			const res = await fetch(`/api/routes${query}`);
+			const res = await fetch(`/api/routes${query}`, { cache: 'no-store' });
 			if (!res.ok) {
 				throw new Error('Failed to load routes');
 			}

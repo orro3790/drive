@@ -11,6 +11,7 @@ interface AssignmentRow {
 	routeId: string;
 	date: string;
 	routeName: string;
+	routeStartTime: string;
 }
 
 interface ShiftRow {
@@ -45,7 +46,8 @@ const assignmentsTable = {
 
 const routesTable = {
 	id: 'routes.id',
-	name: 'routes.name'
+	name: 'routes.name',
+	startTime: 'routes.startTime'
 };
 
 const shiftsTable = {
@@ -134,6 +136,7 @@ function createAssignment(overrides: Partial<AssignmentRow> = {}): AssignmentRow
 		routeId: 'route-1',
 		date: '2026-02-09',
 		routeName: 'Route Alpha',
+		routeStartTime: '09:00',
 		...overrides
 	};
 }
@@ -538,7 +541,8 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 			{
 				routeName: 'Route Alpha',
 				driverName: 'driver-driver-1',
-				date: '2026-02-09'
+				date: '2026-02-09',
+				routeStartTime: '09:00'
 			},
 			'org-test'
 		);

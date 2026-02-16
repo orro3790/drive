@@ -49,7 +49,8 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 			userId: assignments.userId,
 			routeId: assignments.routeId,
 			date: assignments.date,
-			routeName: routes.name
+			routeName: routes.name,
+			routeStartTime: routes.startTime
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
@@ -202,7 +203,8 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 			{
 				routeName: assignment.routeName ?? 'Unknown Route',
 				driverName: user.name ?? 'A driver',
-				date: assignment.date
+				date: assignment.date,
+				routeStartTime: assignment.routeStartTime ?? undefined
 			},
 			organizationId
 		);

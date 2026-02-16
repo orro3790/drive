@@ -220,6 +220,21 @@ const confirmShiftResponseSchema = z.object({
 	confirmedAt: z.string().min(1)
 });
 
+const shiftCompleteResponseSchema = z.object({
+	shift: z.object({
+		id: z.string().min(1),
+		parcelsStart: z.number().int().nonnegative(),
+		parcelsDelivered: z.number().int().nonnegative(),
+		parcelsReturned: z.number().int().nonnegative(),
+		exceptedReturns: z.number().int().nonnegative().default(0),
+		exceptionNotes: z.string().nullable().default(null),
+		startedAt: z.string().min(1).nullable(),
+		completedAt: z.string().min(1).nullable(),
+		editableUntil: z.string().min(1).nullable()
+	}),
+	assignmentStatus: assignmentStatusSchema
+});
+
 const emptyDriverMetrics: DriverMetrics = {
 	totalShifts: 0,
 	completedShifts: 0,
@@ -408,7 +423,58 @@ export const dashboardStore = {
 				throw new Error('Failed to complete shift');
 			}
 
-			await this.load();
+			const parsed = shiftCompleteResponseSchema.safeParse(await res.json().catch(() => ({})));
+			if (!parsed.success) {
+				throw new Error('Invalid shift completion response');
+			}
+
+			const { shift, assignmentStatus } = parsed.data;
+			const updateAssignment = (assignment: DashboardAssignment): DashboardAssignment => {
+				if (assignment.id !== assignmentId) {
+					return assignment;
+				}
+
+				return {
+					...assignment,
+					status: assignmentStatus,
+					isArrivable: false,
+					isStartable: false,
+					isCompletable: false,
+					isCancelable: false,
+					shift: {
+						id: shift.id,
+						arrivedAt: assignment.shift?.arrivedAt ?? null,
+						parcelsStart: shift.parcelsStart,
+						parcelsDelivered: shift.parcelsDelivered,
+						parcelsReturned: shift.parcelsReturned,
+						exceptedReturns: shift.exceptedReturns,
+						exceptionNotes: shift.exceptionNotes,
+						startedAt: shift.startedAt,
+						completedAt: shift.completedAt,
+						editableUntil: shift.editableUntil
+					}
+				};
+			};
+
+			if (state.todayShift?.id === assignmentId) {
+				state.todayShift = updateAssignment(state.todayShift);
+			}
+
+			if (state.thisWeek) {
+				state.thisWeek = {
+					...state.thisWeek,
+					assignments: state.thisWeek.assignments.map(updateAssignment)
+				};
+			}
+
+			if (state.nextWeek) {
+				state.nextWeek = {
+					...state.nextWeek,
+					assignments: state.nextWeek.assignments.map(updateAssignment)
+				};
+			}
+
+			void this.load();
 
 			toastStore.success(m.shift_complete_success());
 			return true;

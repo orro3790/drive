@@ -229,7 +229,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			{
 				routeName: assignment.routeName ?? 'Unknown Route',
 				driverName: user.name ?? 'A driver',
-				date: assignment.date
+				date: assignment.date,
+				routeStartTime: assignment.routeStartTime ?? undefined
 			},
 			organizationId
 		);

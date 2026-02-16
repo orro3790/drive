@@ -227,7 +227,8 @@ export async function detectNoShowsForOrganization(
 						{
 							routeName: candidate.routeName ?? 'Unknown Route',
 							driverName: candidate.driverName ?? 'A driver',
-							date: candidate.assignmentDate
+							date: candidate.assignmentDate,
+							routeStartTime: candidate.routeStartTime ?? undefined
 						},
 						organizationId
 					);

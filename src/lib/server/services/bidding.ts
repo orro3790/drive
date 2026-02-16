@@ -623,7 +623,8 @@ export async function resolveBidWindow(
 				'route_unfilled',
 				{
 					routeName: assignment.routeName,
-					date: assignment.date
+					date: assignment.date,
+					routeStartTime: assignment.routeStartTime ?? undefined
 				},
 				assignmentOrganizationId
 			);

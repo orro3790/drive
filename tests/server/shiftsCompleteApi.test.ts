@@ -658,7 +658,8 @@ describe('POST /api/shifts/complete contract', () => {
 			{
 				routeName: 'Route Alpha',
 				driverName: 'driver-driver-1',
-				date: '2026-02-09'
+				date: '2026-02-09',
+				routeStartTime: '09:00'
 			},
 			'org-test'
 		);

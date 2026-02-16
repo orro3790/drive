@@ -12,11 +12,47 @@
  */
 
 import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { PushNotifications } from '@capacitor/push-notifications';
 
 export type PushPermissionStatus = 'granted' | 'denied' | 'prompt' | 'unknown';
 
 const ANDROID_PUSH_CHANNEL_ID = 'drive_notifications';
+const FCM_TOKEN_STORAGE_KEY = 'fcmToken';
+const MAX_TOKEN_REGISTER_ATTEMPTS = 3;
+
+let pushListenersReady = false;
+let appStateListenerReady = false;
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readCachedFcmToken(): string | null {
+	try {
+		return localStorage.getItem(FCM_TOKEN_STORAGE_KEY);
+	} catch {
+		return null;
+	}
+}
+
+function setupAppStateListener(): void {
+	if (appStateListenerReady) {
+		return;
+	}
+
+	appStateListenerReady = true;
+	void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+		if (!isActive) {
+			return;
+		}
+
+		const cachedToken = readCachedFcmToken();
+		if (cachedToken) {
+			void registerTokenWithServer(cachedToken);
+		}
+	});
+}
 
 async function ensureAndroidPushChannel(): Promise<void> {
 	if (!isNativePlatform() || Capacitor.getPlatform() !== 'android') {
@@ -98,7 +134,14 @@ export async function requestPushPermission(): Promise<PushPermissionStatus> {
 async function completePushRegistration(): Promise<void> {
 	try {
 		setupPushListeners();
+		setupAppStateListener();
 		await ensureAndroidPushChannel();
+
+		const cachedToken = readCachedFcmToken();
+		if (cachedToken) {
+			await registerTokenWithServer(cachedToken);
+		}
+
 		await PushNotifications.register();
 		console.log('[Push] Registration complete');
 	} catch (error) {
@@ -161,13 +204,19 @@ export async function initPushNotifications(): Promise<PushPermissionStatus> {
  * Set up push notification event listeners
  */
 function setupPushListeners(): void {
+	if (pushListenersReady) {
+		return;
+	}
+
+	pushListenersReady = true;
+
 	// Registration success - we get the FCM token here
 	PushNotifications.addListener('registration', async (token) => {
 		console.log('[Push] Registration successful, token:', token.value.substring(0, 20) + '...');
 
 		// Store token locally for reference
 		try {
-			localStorage.setItem('fcmToken', token.value);
+			localStorage.setItem(FCM_TOKEN_STORAGE_KEY, token.value);
 		} catch {
 			// localStorage might not be available
 		}
@@ -202,7 +251,11 @@ function setupPushListeners(): void {
 /**
  * Send FCM token to server for storage
  */
-async function registerTokenWithServer(token: string): Promise<void> {
+async function registerTokenWithServer(token: string, attempt = 1): Promise<void> {
+	if (!token) {
+		return;
+	}
+
 	try {
 		const response = await fetch('/api/users/fcm-token', {
 			method: 'POST',
@@ -216,6 +269,16 @@ async function registerTokenWithServer(token: string): Promise<void> {
 
 		console.log('[Push] Token registered with server');
 	} catch (error) {
+		if (attempt < MAX_TOKEN_REGISTER_ATTEMPTS) {
+			const retryDelayMs = attempt * 1000;
+			console.warn(
+				`[Push] Token registration attempt ${attempt} failed, retrying in ${retryDelayMs}ms`,
+				error
+			);
+			await sleep(retryDelayMs);
+			return registerTokenWithServer(token, attempt + 1);
+		}
+
 		console.error('[Push] Failed to register token with server:', error);
 	}
 }
@@ -231,10 +294,12 @@ export async function clearPushNotifications(): Promise<void> {
 	try {
 		// Remove all listeners
 		await PushNotifications.removeAllListeners();
+		pushListenersReady = false;
+		appStateListenerReady = false;
 
 		// Clear local storage
 		try {
-			localStorage.removeItem('fcmToken');
+			localStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
 		} catch {
 			// Ignore
 		}

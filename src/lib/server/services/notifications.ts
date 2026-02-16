@@ -214,6 +214,22 @@ export interface SendNotificationResult {
 	pushError?: string;
 }
 
+function sanitizePushData(data?: Record<string, string>): Record<string, string> | undefined {
+	if (!data) {
+		return undefined;
+	}
+
+	const entries = Object.entries(data)
+		.filter(([, value]) => value !== null && value !== undefined)
+		.map(([key, value]) => [key, String(value)] as const);
+
+	if (entries.length === 0) {
+		return undefined;
+	}
+
+	return Object.fromEntries(entries);
+}
+
 /**
  * Send a notification to a user.
  *
@@ -238,6 +254,7 @@ export async function sendNotification(
 	const template = NOTIFICATION_TEMPLATES[type];
 	const title = options.customTitle || template.title;
 	const body = options.customBody || template.body;
+	const pushData = sanitizePushData(options.data);
 
 	const [recipient] = await db
 		.select({ fcmToken: user.fcmToken, organizationId: user.organizationId })
@@ -293,7 +310,7 @@ export async function sendNotification(
 				title,
 				body
 			},
-			data: options.data,
+			data: pushData,
 			// Android-specific settings
 			android: {
 				priority: 'high' as const,
@@ -366,6 +383,29 @@ export interface ManagerAlertDetails {
 	driverName?: string;
 	date?: string;
 	warehouseName?: string;
+	routeStartTime?: string;
+}
+
+function formatManagerAlertWhen(date: string, routeStartTime?: string): string {
+	let dateLabel = date;
+
+	try {
+		dateLabel = format(toZonedTime(parseISO(date), TORONTO_TZ), 'EEE, MMM d');
+	} catch {
+		dateLabel = date;
+	}
+
+	if (!routeStartTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(routeStartTime)) {
+		return dateLabel;
+	}
+
+	const [hourText, minuteText] = routeStartTime.split(':');
+	const hour = Number(hourText);
+	const minute = Number(minuteText);
+	const period = hour >= 12 ? 'PM' : 'AM';
+	const hour12 = hour % 12 || 12;
+
+	return `${dateLabel} ${hour12}:${String(minute).padStart(2, '0')} ${period} ET`;
 }
 
 /**
@@ -406,7 +446,7 @@ export async function sendManagerAlert(
 		body = body.replace('A driver', details.driverName);
 	}
 	if (details.date) {
-		body += ` (${details.date})`;
+		body += ` (${formatManagerAlertWhen(details.date, details.routeStartTime)})`;
 	}
 
 	await sendNotification(managerId, alertType, {

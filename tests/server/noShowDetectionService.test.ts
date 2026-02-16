@@ -323,7 +323,8 @@ describe('LC-05 cron service: detectNoShows', () => {
 			{
 				routeName: 'Downtown Route',
 				driverName: 'Driver One',
-				date: '2026-02-10'
+				date: '2026-02-10',
+				routeStartTime: '09:00'
 			},
 			'org-a'
 		);
