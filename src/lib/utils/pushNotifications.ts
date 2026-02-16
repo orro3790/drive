@@ -302,12 +302,8 @@ export async function clearPushNotifications(): Promise<void> {
 		pushListenersReady = false;
 		appStateListenerReady = false;
 
-		// Clear local storage
-		try {
-			localStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
-		} catch {
-			// Ignore
-		}
+		// Keep cached token locally so next authenticated session can quickly re-bind
+		// without requiring a fresh native token emission.
 
 		// Tell server to remove token
 		await fetch('/api/users/fcm-token', { method: 'DELETE' });
