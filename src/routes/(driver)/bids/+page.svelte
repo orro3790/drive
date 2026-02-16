@@ -20,7 +20,7 @@
 	import WarehouseIcon from '$lib/components/icons/Warehouse.svelte';
 	import { getBidWindowPrimaryAction } from '$lib/config/driverLifecycleIa';
 	import { bidStatusLabels, bidStatusChipVariants } from '$lib/config/lifecycleLabels';
-	import { formatAssignmentDate } from '$lib/utils/date/formatting';
+	import { formatAssignmentDateTime } from '$lib/utils/date/formatting';
 	import { bidsStore } from '$lib/stores/bidsStore.svelte';
 
 	function formatClosesAt(isoString: string) {
@@ -118,7 +118,10 @@
 											<div class="header-left">
 												<div class="date-row">
 													<span class="assignment-date"
-														>{formatAssignmentDate(window.assignmentDate)}</span
+														>{formatAssignmentDateTime(
+															window.assignmentDate,
+															window.routeStartTime
+														)}</span
 													>
 													{#if isBoosted}
 														<span class="premium-badge">
@@ -209,7 +212,7 @@
 										<div class="assignment-header">
 											<div class="header-left">
 												<span class="assignment-date"
-													>{formatAssignmentDate(bid.assignmentDate)}</span
+													>{formatAssignmentDateTime(bid.assignmentDate, bid.routeStartTime)}</span
 												>
 												<span class="header-muted">{formatSubmittedAt(bid.bidAt)}</span>
 											</div>

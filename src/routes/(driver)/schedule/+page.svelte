@@ -34,7 +34,7 @@
 		type AssignmentLifecycleActionId
 	} from '$lib/config/driverLifecycleIa';
 	import { statusLabels } from '$lib/config/lifecycleLabels';
-	import { formatAssignmentDate } from '$lib/utils/date/formatting';
+	import { formatAssignmentDateTime } from '$lib/utils/date/formatting';
 	import type { AssignmentStatus } from '$lib/schemas/assignment';
 
 	// Cancel modal state
@@ -339,7 +339,9 @@
 		</div>
 		<div class="assignment-content">
 			<div class="assignment-header">
-				<span class="assignment-date">{formatAssignmentDate(assignment.date)}</span>
+				<span class="assignment-date"
+					>{formatAssignmentDateTime(assignment.date, assignment.routeStartTime)}</span
+				>
 				{#if assignment.status === 'scheduled'}
 					{#if confirmAction || cancelAction}
 						<div class="assignment-actions">

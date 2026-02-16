@@ -43,7 +43,7 @@
 	} from '$lib/config/driverLifecycleIa';
 	import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 	import { statusLabels } from '$lib/config/lifecycleLabels';
-	import { formatAssignmentDate } from '$lib/utils/date/formatting';
+	import { formatAssignmentDateTime } from '$lib/utils/date/formatting';
 	import { dashboardStore } from '$lib/stores/dashboardStore.svelte';
 
 	// Cancel modal state
@@ -566,7 +566,9 @@
 							<div class="today-content">
 								<div class="assignment-header">
 									<div class="assignment-date-group">
-										<span class="assignment-date">{formatAssignmentDate(todayShift.date)}</span>
+										<span class="assignment-date"
+											>{formatAssignmentDateTime(todayShift.date, todayShift.routeStartTime)}</span
+										>
 										{#if isTodayShiftInProgress}
 											<Chip label="In Progress" variant="status" status="warning" size="xs" />
 										{/if}
@@ -1025,7 +1027,9 @@
 									</div>
 									<div class="assignment-content">
 										<div class="assignment-header">
-											<span class="assignment-date">{formatAssignmentDate(shift.date)}</span>
+											<span class="assignment-date"
+												>{formatAssignmentDateTime(shift.date, shift.routeStartTime)}</span
+											>
 											<div class="assignment-actions">
 												<IconButton
 													tooltip={m.dashboard_confirm_button()}
@@ -1151,7 +1155,7 @@
 										<div class="assignment-header">
 											<div class="header-left">
 												<span class="assignment-date"
-													>{formatAssignmentDate(bid.assignmentDate)}</span
+													>{formatAssignmentDateTime(bid.assignmentDate, bid.routeStartTime)}</span
 												>
 												<span class="header-muted">{formatClosesAt(bid.windowClosesAt)}</span>
 											</div>

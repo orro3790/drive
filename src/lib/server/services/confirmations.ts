@@ -184,6 +184,7 @@ export interface UnconfirmedAssignment {
 	id: string;
 	date: string;
 	routeName: string;
+	routeStartTime: string;
 	warehouseName: string;
 	confirmationOpensAt: string;
 	confirmationDeadline: string;
@@ -203,6 +204,7 @@ export async function getUnconfirmedAssignments(userId: string): Promise<Unconfi
 			id: assignments.id,
 			date: assignments.date,
 			routeName: routes.name,
+			routeStartTime: routes.startTime,
 			warehouseName: warehouses.name,
 			confirmedAt: assignments.confirmedAt
 		})
@@ -230,6 +232,7 @@ export async function getUnconfirmedAssignments(userId: string): Promise<Unconfi
 				id: row.id,
 				date: row.date,
 				routeName: row.routeName,
+				routeStartTime: row.routeStartTime,
 				warehouseName: row.warehouseName,
 				confirmationOpensAt: opensAt.toISOString(),
 				confirmationDeadline: deadline.toISOString(),

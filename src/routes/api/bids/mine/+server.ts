@@ -26,6 +26,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			resolvedAt: bids.resolvedAt,
 			assignmentDate: assignments.date,
 			routeName: routes.name,
+			routeStartTime: routes.startTime,
 			warehouseName: warehouses.name
 		})
 		.from(bids)
@@ -40,6 +41,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		assignmentId: bid.assignmentId,
 		assignmentDate: bid.assignmentDate,
 		routeName: bid.routeName,
+		routeStartTime: bid.routeStartTime,
 		warehouseName: bid.warehouseName,
 		status: bid.status,
 		score: bid.score,
