@@ -69,14 +69,11 @@
 		overflow-y: auto;
 		overscroll-behavior-y: contain;
 		-webkit-overflow-scrolling: touch;
-	}
-
-	/*
-	 * Native safe area padding (Android edge-to-edge / iOS notch).
-	 * Uses padding instead of ::after spacer so content is always visible
-	 * above the system navigation bar, not just scrollable past it.
-	 */
-	:global(html[data-native='true']) .content {
+		/*
+		 * Safe area padding for native platforms (Android edge-to-edge / iOS notch).
+		 * Always apply --safe-area-bottom (0px on web, 48px+ on native).
+		 * Matches sidebar approach for consistency.
+		 */
 		padding-bottom: var(--safe-area-bottom);
 	}
 </style>
