@@ -119,7 +119,13 @@ const assignmentStatusSchema = z.enum([
 	'unfilled'
 ]);
 
-const overrideActionSchema = z.enum(['reassign', 'open_bidding', 'open_urgent_bidding']);
+const overrideActionSchema = z.enum([
+	'reassign',
+	'open_bidding',
+	'open_urgent_bidding',
+	'suspend_route',
+	'resume_route'
+]);
 
 const assignmentOverrideResponseSchema = z.object({
 	action: overrideActionSchema,
@@ -146,8 +152,13 @@ const assignmentOverrideResponseSchema = z.object({
 
 function resolveRouteStatusFromAssignment(params: {
 	assignmentStatus: z.infer<typeof assignmentStatusSchema>;
+	assignmentUserId: string | null;
 	bidWindowStatus: 'open' | 'closed' | 'resolved' | null;
 }): RouteStatus {
+	if (params.assignmentStatus === 'cancelled' && params.assignmentUserId === null) {
+		return 'suspended';
+	}
+
 	if (params.assignmentStatus === 'unfilled') {
 		return params.bidWindowStatus === 'open' ? 'bidding' : 'unfilled';
 	}
@@ -550,6 +561,7 @@ export const routeStore = {
 				this.applyAssignmentUpdate(assignmentId, {
 					status: resolveRouteStatusFromAssignment({
 						assignmentStatus: parsed.data.assignment.status,
+						assignmentUserId: parsed.data.assignment.userId,
 						bidWindowStatus: parsed.data.bidWindow?.status ?? null
 					}),
 					assignmentStatus: parsed.data.assignment.status,
@@ -638,6 +650,76 @@ export const routeStore = {
 		);
 	},
 
+	suspendRoute(assignmentId: string): Promise<{ ok: boolean; notifiedCount?: number }> {
+		if (!ensureOnlineForWrite()) {
+			return Promise.resolve({ ok: false });
+		}
+
+		const originalRoute = this.applyAssignmentUpdate(assignmentId, {
+			status: 'suspended',
+			assignmentStatus: 'cancelled',
+			driverName: null,
+			bidWindowClosesAt: null,
+			shiftProgress: null,
+			confirmedAt: null,
+			arrivedAt: null,
+			startedAt: null,
+			completedAt: null
+		});
+
+		if (!originalRoute) {
+			return Promise.resolve({ ok: false });
+		}
+
+		const mutationKey = `suspendRoute:${assignmentId}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
+
+		return this._runOverrideActionInDb(
+			assignmentId,
+			'suspend_route',
+			originalRoute,
+			mutationKey,
+			mutationVersion,
+			() => m.manager_override_suspend_route_success(),
+			() => m.manager_override_suspend_route_error()
+		);
+	},
+
+	resumeRoute(assignmentId: string): Promise<{ ok: boolean; notifiedCount?: number }> {
+		if (!ensureOnlineForWrite()) {
+			return Promise.resolve({ ok: false });
+		}
+
+		const originalRoute = this.applyAssignmentUpdate(assignmentId, {
+			status: 'unfilled',
+			assignmentStatus: 'unfilled',
+			driverName: null,
+			bidWindowClosesAt: null,
+			shiftProgress: null,
+			confirmedAt: null,
+			arrivedAt: null,
+			startedAt: null,
+			completedAt: null
+		});
+
+		if (!originalRoute) {
+			return Promise.resolve({ ok: false });
+		}
+
+		const mutationKey = `resumeRoute:${assignmentId}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
+
+		return this._runOverrideActionInDb(
+			assignmentId,
+			'resume_route',
+			originalRoute,
+			mutationKey,
+			mutationVersion,
+			() => m.manager_override_resume_route_success(),
+			() => m.manager_override_resume_route_error()
+		);
+	},
+
 	async _runOverrideActionInDb(
 		assignmentId: string,
 		action: z.infer<typeof overrideActionSchema>,
@@ -683,6 +765,7 @@ export const routeStore = {
 			this.applyAssignmentUpdate(assignmentId, {
 				status: resolveRouteStatusFromAssignment({
 					assignmentStatus: parsed.data.assignment.status,
+					assignmentUserId: parsed.data.assignment.userId,
 					bidWindowStatus: parsed.data.bidWindow?.status ?? null
 				}),
 				assignmentStatus: parsed.data.assignment.status,

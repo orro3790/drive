@@ -22,7 +22,7 @@ import {
 } from '$lib/server/services/routeHelpers';
 import { z } from 'zod';
 
-const VALID_STATUSES: RouteStatus[] = ['assigned', 'unfilled', 'bidding'];
+const VALID_STATUSES: RouteStatus[] = ['assigned', 'unfilled', 'bidding', 'suspended'];
 const warehouseIdQuerySchema = z.string().uuid();
 
 type AssignmentInfo = {
@@ -40,6 +40,9 @@ type AssignmentInfo = {
 
 function resolveStatus(assignment?: AssignmentInfo): RouteStatus {
 	if (!assignment) return 'unfilled';
+	if (assignment.status === 'cancelled' && assignment.userId === null) {
+		return 'suspended';
+	}
 	if (assignment.status === 'unfilled') {
 		return assignment.bidWindowClosesAt ? 'bidding' : 'unfilled';
 	}

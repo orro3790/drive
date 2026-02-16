@@ -19,7 +19,18 @@ export type PushPermissionStatus = 'granted' | 'denied' | 'prompt' | 'unknown';
 
 const ANDROID_PUSH_CHANNEL_ID = 'drive_notifications';
 const FCM_TOKEN_STORAGE_KEY = 'fcmToken';
-const MAX_TOKEN_REGISTER_ATTEMPTS = 3;
+const MAX_TOKEN_REGISTER_ATTEMPTS = 6;
+const TOKEN_REGISTER_RETRYABLE_STATUS_CODES = new Set([401, 403, 408, 429, 500, 502, 503, 504]);
+
+class TokenRegisterError extends Error {
+	retryable: boolean;
+
+	constructor(message: string, retryable: boolean) {
+		super(message);
+		this.name = 'TokenRegisterError';
+		this.retryable = retryable;
+	}
+}
 
 let pushListenersReady = false;
 let appStateListenerReady = false;
@@ -175,20 +186,8 @@ export async function initPushNotifications(): Promise<PushPermissionStatus> {
 		}
 
 		if (permStatus.receive === 'prompt' || permStatus.receive === 'prompt-with-rationale') {
-			// Delay request slightly to ensure Android Activity is fully ready
-			// This prevents the permission dialog from being suppressed on Android 13+
-			console.log('[Push] Delaying permission request for Activity readiness...');
-			await new Promise((resolve) => setTimeout(resolve, 500));
-
-			console.log('[Push] Requesting permission...');
-			const result = await PushNotifications.requestPermissions();
-			console.log('[Push] Permission result:', result.receive);
-
-			if (result.receive === 'granted') {
-				await completePushRegistration();
-				return 'granted';
-			}
-			return result.receive as PushPermissionStatus;
+			console.log('[Push] Permission prompt required - waiting for user action');
+			return 'prompt';
 		}
 
 		// Permission is 'denied' - user must enable in system settings
@@ -264,11 +263,17 @@ async function registerTokenWithServer(token: string, attempt = 1): Promise<void
 		});
 
 		if (!response.ok) {
-			throw new Error(`Server returned ${response.status}`);
+			const retryable = TOKEN_REGISTER_RETRYABLE_STATUS_CODES.has(response.status);
+			throw new TokenRegisterError(`Server returned ${response.status}`, retryable);
 		}
 
 		console.log('[Push] Token registered with server');
 	} catch (error) {
+		if (error instanceof TokenRegisterError && !error.retryable) {
+			console.error('[Push] Token registration failed with non-retryable status:', error.message);
+			return;
+		}
+
 		if (attempt < MAX_TOKEN_REGISTER_ATTEMPTS) {
 			const retryDelayMs = attempt * 1000;
 			console.warn(

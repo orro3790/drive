@@ -29,10 +29,14 @@ vi.mock('$lib/paraglide/messages.js', () => ({
 	manager_override_open_bidding_success: () => 'manager_override_open_bidding_success',
 	manager_override_open_urgent_bidding_error: () => 'manager_override_open_urgent_bidding_error',
 	manager_override_open_urgent_bidding_success: ({ count }: { count: number }) =>
-		`manager_override_open_urgent_bidding_success_${count}`
+		`manager_override_open_urgent_bidding_success_${count}`,
+	manager_override_suspend_route_success: () => 'manager_override_suspend_route_success',
+	manager_override_suspend_route_error: () => 'manager_override_suspend_route_error',
+	manager_override_resume_route_success: () => 'manager_override_resume_route_success',
+	manager_override_resume_route_error: () => 'manager_override_resume_route_error'
 }));
 
-type RouteStatus = 'assigned' | 'unfilled' | 'bidding';
+type RouteStatus = 'assigned' | 'unfilled' | 'bidding' | 'suspended';
 
 type ShiftProgress =
 	| 'unconfirmed'
@@ -478,6 +482,94 @@ describe('routeStore', () => {
 		expect(store.routes[0]?.status).toBe('bidding');
 		expect(store.routes[0]?.assignmentStatus).toBe('unfilled');
 		expect(mocked.toastSuccess).toHaveBeenCalledWith('manager_override_open_bidding_success');
+	});
+
+	it('suspends a route and clears assignment details', async () => {
+		const store = await importRouteStore();
+		const route = makeRoute({
+			id: 'route-suspend-success',
+			status: 'assigned',
+			assignmentStatus: 'scheduled',
+			driverName: 'Driver Active',
+			assignmentId: 'assignment-suspend-success',
+			shiftProgress: 'confirmed',
+			confirmedAt: '2026-02-10T09:00:00.000Z'
+		});
+
+		await seedRoutes(store, [route]);
+		fetchMock.mockResolvedValueOnce(
+			jsonResponse({
+				action: 'suspend_route',
+				assignment: {
+					id: 'assignment-suspend-success',
+					status: 'cancelled',
+					userId: null,
+					driverName: null,
+					routeId: 'route-suspend-success'
+				},
+				bidWindow: null,
+				notifiedCount: null
+			})
+		);
+
+		await expect(store.suspendRoute('assignment-suspend-success')).resolves.toEqual({ ok: true });
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/api/assignments/assignment-suspend-success/override',
+			expect.objectContaining({
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'suspend_route' })
+			})
+		);
+
+		expect(store.routes[0]?.status).toBe('suspended');
+		expect(store.routes[0]?.assignmentStatus).toBe('cancelled');
+		expect(store.routes[0]?.driverName).toBeNull();
+		expect(store.routes[0]?.shiftProgress).toBeNull();
+		expect(mocked.toastSuccess).toHaveBeenCalledWith('manager_override_suspend_route_success');
+	});
+
+	it('resumes a suspended route back to unfilled state', async () => {
+		const store = await importRouteStore();
+		const route = makeRoute({
+			id: 'route-resume-success',
+			status: 'suspended',
+			assignmentStatus: 'cancelled',
+			driverName: null,
+			assignmentId: 'assignment-resume-success'
+		});
+
+		await seedRoutes(store, [route]);
+		fetchMock.mockResolvedValueOnce(
+			jsonResponse({
+				action: 'resume_route',
+				assignment: {
+					id: 'assignment-resume-success',
+					status: 'unfilled',
+					userId: null,
+					driverName: null,
+					routeId: 'route-resume-success'
+				},
+				bidWindow: null,
+				notifiedCount: null
+			})
+		);
+
+		await expect(store.resumeRoute('assignment-resume-success')).resolves.toEqual({ ok: true });
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/api/assignments/assignment-resume-success/override',
+			expect.objectContaining({
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'resume_route' })
+			})
+		);
+
+		expect(store.routes[0]?.status).toBe('unfilled');
+		expect(store.routes[0]?.assignmentStatus).toBe('unfilled');
+		expect(mocked.toastSuccess).toHaveBeenCalledWith('manager_override_resume_route_success');
 	});
 
 	it('surfaces backend error details when urgent override is rejected', async () => {

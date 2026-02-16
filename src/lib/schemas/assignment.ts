@@ -45,7 +45,9 @@ export const assignmentManualAssignSchema = z
 export const assignmentOverrideActionSchema = z.enum([
 	'reassign',
 	'open_bidding',
-	'open_urgent_bidding'
+	'open_urgent_bidding',
+	'suspend_route',
+	'resume_route'
 ]);
 
 export const assignmentOverrideSchema = z.discriminatedUnion('action', [
@@ -63,6 +65,16 @@ export const assignmentOverrideSchema = z.discriminatedUnion('action', [
 	z
 		.object({
 			action: z.literal('open_urgent_bidding')
+		})
+		.strict(),
+	z
+		.object({
+			action: z.literal('suspend_route')
+		})
+		.strict(),
+	z
+		.object({
+			action: z.literal('resume_route')
 		})
 		.strict()
 ]);

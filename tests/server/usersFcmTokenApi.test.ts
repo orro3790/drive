@@ -99,8 +99,15 @@ describe('POST /api/users/fcm-token route contract', () => {
 
 		expect(response.status).toBe(200);
 		await expect(response.json()).resolves.toEqual({ success: true });
-		expect(updateMock).toHaveBeenCalledTimes(1);
-		expect(updateSetMock).toHaveBeenCalledWith(
+		expect(updateMock).toHaveBeenCalledTimes(2);
+		expect(updateSetMock).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				fcmToken: null
+			})
+		);
+		expect(updateSetMock).toHaveBeenNthCalledWith(
+			2,
 			expect.objectContaining({
 				fcmToken: 'fcm-token-abc'
 			})

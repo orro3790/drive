@@ -41,6 +41,19 @@ Important:
 - Logging out/in can change which user receives pushes on that device.
 - When switching recipient role, re-open the app and wait 5-10 seconds before testing.
 
+### Current Smoke Progress (2026-02-16)
+
+- [x] `shift_reminder` PASS (tray + in-app + tap verified)
+- [ ] `bid_won` PENDING
+- [x] `driver_no_show` PASS (tray + in-app + tap verified)
+- [x] `return_exception` PASS (tray + in-app + tap verified)
+
+Notes:
+
+- Post-release probe delivery confirmed to manager device.
+- Driver dashboard completion path updated to optimistic UI with rollback (`fix(driver-dashboard): apply optimistic shift completion with rollback`).
+- If UI still appears stale in an already-open tab/session, hard-refresh once to load latest bundle before retesting.
+
 ## FCM Token Verification
 
 First, verify the device has registered its FCM token:
@@ -154,7 +167,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 - `src/lib/server/services/assignments.ts:231`
 - `src/routes/api/bid-windows/[id]/assign/+server.ts:232`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified
 
 ---
 
@@ -179,7 +192,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 - `src/lib/server/services/assignments.ts:221`
 - `src/routes/api/bid-windows/[id]/assign/+server.ts:223`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified
 
 ---
 
@@ -398,7 +411,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/notifications.ts:412`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified
 
 ---
 
@@ -415,7 +428,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/notifications.ts:412`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified
 
 ---
 
@@ -472,10 +485,10 @@ For each notification scenario, mark pass only if all checks pass:
 
 Run this sequence before full coverage:
 
-1. [ ] `shift_reminder` (phone logged in as Driver; trigger cron)
+1. [x] `shift_reminder` (phone logged in as Driver; trigger cron)
 2. [ ] `bid_won` (phone logged in as Driver; manager creates instant bid path)
-3. [ ] `driver_no_show` (phone logged in as Manager; trigger no-show flow)
-4. [ ] `return_exception` (phone logged in as Manager; driver completes with exceptions)
+3. [x] `driver_no_show` (phone logged in as Manager; trigger no-show flow)
+4. [x] `return_exception` (phone logged in as Manager; driver completes with exceptions)
 
 If any smoke case fails, stop and fix before running full matrix.
 
