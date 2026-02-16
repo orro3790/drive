@@ -16,6 +16,28 @@ import { PushNotifications } from '@capacitor/push-notifications';
 
 export type PushPermissionStatus = 'granted' | 'denied' | 'prompt' | 'unknown';
 
+const ANDROID_PUSH_CHANNEL_ID = 'drive_notifications';
+
+async function ensureAndroidPushChannel(): Promise<void> {
+	if (!isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+		return;
+	}
+
+	try {
+		await PushNotifications.createChannel({
+			id: ANDROID_PUSH_CHANNEL_ID,
+			name: 'Drive Notifications',
+			description: 'Shift updates and alerts',
+			importance: 5,
+			visibility: 1,
+			sound: 'default'
+		});
+		console.log('[Push] Android channel ready:', ANDROID_PUSH_CHANNEL_ID);
+	} catch (error) {
+		console.error('[Push] Failed to create Android channel:', error);
+	}
+}
+
 /**
  * Check if we're running in a native Capacitor environment
  */
@@ -76,6 +98,7 @@ export async function requestPushPermission(): Promise<PushPermissionStatus> {
 async function completePushRegistration(): Promise<void> {
 	try {
 		setupPushListeners();
+		await ensureAndroidPushChannel();
 		await PushNotifications.register();
 		console.log('[Push] Registration complete');
 	} catch (error) {
