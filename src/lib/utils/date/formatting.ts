@@ -121,8 +121,9 @@ export function formatRouteStartTime(startTime: string | null | undefined): stri
 	const [hour24, minute] = startTime.split(':').map(Number);
 	const period = hour24 >= 12 ? 'PM' : 'AM';
 	const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+	const minuteLabel = minute === 0 ? '' : `:${String(minute).padStart(2, '0')}`;
 
-	return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+	return `${hour12}${minuteLabel} ${period}`;
 }
 
 /**

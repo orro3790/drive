@@ -20,7 +20,7 @@
 	import WarehouseIcon from '$lib/components/icons/Warehouse.svelte';
 	import { getBidWindowPrimaryAction } from '$lib/config/driverLifecycleIa';
 	import { bidStatusLabels, bidStatusChipVariants } from '$lib/config/lifecycleLabels';
-	import { formatAssignmentDateTime } from '$lib/utils/date/formatting';
+	import { formatAssignmentDate, formatRouteStartTime } from '$lib/utils/date/formatting';
 	import { bidsStore } from '$lib/stores/bidsStore.svelte';
 
 	function formatClosesAt(isoString: string) {
@@ -117,12 +117,14 @@
 										<div class="assignment-header">
 											<div class="header-left">
 												<div class="date-row">
-													<span class="assignment-date"
-														>{formatAssignmentDateTime(
-															window.assignmentDate,
-															window.routeStartTime
-														)}</span
-													>
+													<div class="assignment-when">
+														<span class="assignment-date"
+															>{formatAssignmentDate(window.assignmentDate)}</span
+														>
+														<span class="assignment-time"
+															>{formatRouteStartTime(window.routeStartTime)}</span
+														>
+													</div>
 													{#if isBoosted}
 														<span class="premium-badge">
 															<span class="premium-badge-value">{window.payBonusPercent}%</span>
@@ -211,9 +213,14 @@
 									<div class="assignment-content">
 										<div class="assignment-header">
 											<div class="header-left">
-												<span class="assignment-date"
-													>{formatAssignmentDateTime(bid.assignmentDate, bid.routeStartTime)}</span
-												>
+												<div class="assignment-when">
+													<span class="assignment-date"
+														>{formatAssignmentDate(bid.assignmentDate)}</span
+													>
+													<span class="assignment-time"
+														>{formatRouteStartTime(bid.routeStartTime)}</span
+													>
+												</div>
 												<span class="header-muted">{formatSubmittedAt(bid.bidAt)}</span>
 											</div>
 											<div class="header-right">
@@ -392,9 +399,16 @@
 
 	.date-row {
 		display: inline-flex;
-		align-items: center;
+		align-items: flex-start;
 		flex-wrap: wrap;
 		gap: var(--spacing-1);
+	}
+
+	.assignment-when {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
 	}
 
 	.premium-badge {
@@ -497,6 +511,13 @@
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 		line-height: 1.3;
+	}
+
+	.assignment-time {
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-muted);
+		line-height: 1.2;
 	}
 
 	.header-muted {

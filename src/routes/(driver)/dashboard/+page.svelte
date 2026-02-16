@@ -43,7 +43,7 @@
 	} from '$lib/config/driverLifecycleIa';
 	import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 	import { statusLabels } from '$lib/config/lifecycleLabels';
-	import { formatAssignmentDateTime } from '$lib/utils/date/formatting';
+	import { formatAssignmentDate, formatRouteStartTime } from '$lib/utils/date/formatting';
 	import { dashboardStore } from '$lib/stores/dashboardStore.svelte';
 
 	// Cancel modal state
@@ -566,9 +566,12 @@
 							<div class="today-content">
 								<div class="assignment-header">
 									<div class="assignment-date-group">
-										<span class="assignment-date"
-											>{formatAssignmentDateTime(todayShift.date, todayShift.routeStartTime)}</span
-										>
+										<div class="assignment-when">
+											<span class="assignment-date">{formatAssignmentDate(todayShift.date)}</span>
+											<span class="assignment-time"
+												>{formatRouteStartTime(todayShift.routeStartTime)}</span
+											>
+										</div>
 										{#if isTodayShiftInProgress}
 											<Chip label="In Progress" variant="status" status="warning" size="xs" />
 										{/if}
@@ -1027,9 +1030,12 @@
 									</div>
 									<div class="assignment-content">
 										<div class="assignment-header">
-											<span class="assignment-date"
-												>{formatAssignmentDateTime(shift.date, shift.routeStartTime)}</span
-											>
+											<div class="assignment-when">
+												<span class="assignment-date">{formatAssignmentDate(shift.date)}</span>
+												<span class="assignment-time"
+													>{formatRouteStartTime(shift.routeStartTime)}</span
+												>
+											</div>
 											<div class="assignment-actions">
 												<IconButton
 													tooltip={m.dashboard_confirm_button()}
@@ -1154,9 +1160,14 @@
 									<div class="assignment-content">
 										<div class="assignment-header">
 											<div class="header-left">
-												<span class="assignment-date"
-													>{formatAssignmentDateTime(bid.assignmentDate, bid.routeStartTime)}</span
-												>
+												<div class="assignment-when">
+													<span class="assignment-date"
+														>{formatAssignmentDate(bid.assignmentDate)}</span
+													>
+													<span class="assignment-time"
+														>{formatRouteStartTime(bid.routeStartTime)}</span
+													>
+												</div>
 												<span class="header-muted">{formatClosesAt(bid.windowClosesAt)}</span>
 											</div>
 										</div>
@@ -1418,7 +1429,7 @@
 		gap: var(--spacing-2);
 	}
 
-	.assignment-header .assignment-date {
+	.assignment-header .assignment-when {
 		margin-right: auto;
 	}
 
@@ -1430,7 +1441,7 @@
 
 	.assignment-date-group {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: var(--spacing-2);
 		margin-right: auto;
 		min-width: 0;
@@ -1440,11 +1451,25 @@
 		margin-right: 0;
 	}
 
+	.assignment-when {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
+	}
+
 	.assignment-date {
 		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
 		line-height: 1.3;
+	}
+
+	.assignment-time {
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		color: var(--text-muted);
+		line-height: 1.2;
 	}
 
 	.assignment-date-group :global(.chip[data-status='warning']) {
