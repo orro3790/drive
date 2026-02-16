@@ -43,9 +43,10 @@ Look for:
 ### 4. Fill and Submit Login Form
 
 ```bash
-agent-browser --session driver-ops fill @e1 "justin.myddp@proton.me"
-agent-browser --session driver-ops fill @e2 "test1234"
-agent-browser --session driver-ops click @e3
+# Use seeded test users (see Credentials section)
+agent-browser --session driver-ops fill @e3 "driver009@driver.test"
+agent-browser --session driver-ops fill @e5 "test1234"
+agent-browser --session driver-ops click @e6
 agent-browser --session driver-ops wait --url "**/"
 ```
 
@@ -71,55 +72,42 @@ agent-browser --session driver-ops cookies clear
 
 ## Credentials
 
-### Manager Credentials (Real)
-
-- Email: `justin.myddp@proton.me`
-- Password: `test1234`
-- Invite code (for sign-up): `drive-2026`
-
-### Seeded Test Users
+### Seeded Test Users (Recommended)
 
 Run `pnpm seed:staging` to populate the database with 100 drivers and 5 managers.
 
 **All seeded users share the same password:** `test1234`
 
-Seeded emails use test domains:
+**Email format** (increment number for different users):
 
-- Drivers: `*@driver.test`
-- Managers: `*@drivermanager.test`
+- Drivers: `driver001@driver.test` through `driver100@driver.test`
+- Managers: `manager001@drivermanager.test` through `manager005@drivermanager.test`
 
-To find seeded user emails, query the database:
+**Examples:**
 
-```sql
-SELECT email FROM "user" WHERE email LIKE '%@driver.test' LIMIT 5;
-SELECT email FROM "user" WHERE email LIKE '%@drivermanager.test';
 ```
-
-Or check the seed script output after running `pnpm seed` or `pnpm seed:staging`.
+driver009@driver.test / test1234    # Driver login
+manager001@drivermanager.test / test1234   # Manager login
+```
 
 **Development only** — not real user data.
 
+### Invite Code (for sign-up)
+
+`drive-2026`
+
 ## Creating a Test User
 
-If no user exists, sign up first. **Note:** The invite code must be sent as a header, not in the body.
+Prefer using `pnpm seed:staging` to create seeded users. If you need a custom user:
 
 ```bash
 curl -X POST http://localhost:5173/api/auth/sign-up/email \
   -H "Content-Type: application/json" \
   -H "x-invite-code: drive-2026" \
-  -d '{"email":"justin.myddp@proton.me","password":"test1234","name":"Test Manager"}'
+  -d '{"email":"custom@driver.test","password":"test1234","name":"Custom Driver"}'
 ```
 
-If the user already exists and you need to reset the password, update directly in the database:
-
-```bash
-# Generate a new hash (using better-auth's expected format)
-# Or delete and recreate the user:
-curl -X POST http://localhost:5173/api/auth/sign-up/email \
-  -H "Content-Type: application/json" \
-  -H "x-invite-code: drive-2026" \
-  -d '{"email":"NEW_EMAIL","password":"NEW_PASSWORD","name":"Test Manager"}'
-```
+**Note:** The invite code must be sent as a header, not in the body.
 
 ## Prerequisites
 
