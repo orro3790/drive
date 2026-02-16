@@ -412,11 +412,115 @@ export const dashboardStore = {
 
 		state.isCompletingShift = true;
 
+		const normalizeAssignment = (assignment: DashboardAssignment): DashboardAssignment => ({
+			...assignment,
+			shift: assignment.shift ? { ...assignment.shift } : null
+		});
+
+		const previousTodayShift =
+			state.todayShift?.id === assignmentId ? normalizeAssignment(state.todayShift) : null;
+		const previousThisWeekShift =
+			state.thisWeek?.assignments.find((assignment) => assignment.id === assignmentId) ?? null;
+		const previousNextWeekShift =
+			state.nextWeek?.assignments.find((assignment) => assignment.id === assignmentId) ?? null;
+
+		const previousThisWeekSnapshot = previousThisWeekShift
+			? normalizeAssignment(previousThisWeekShift)
+			: null;
+		const previousNextWeekSnapshot = previousNextWeekShift
+			? normalizeAssignment(previousNextWeekShift)
+			: null;
+
+		const applyAssignmentUpdate = (
+			updater: (assignment: DashboardAssignment) => DashboardAssignment
+		) => {
+			if (state.todayShift?.id === assignmentId) {
+				state.todayShift = updater(state.todayShift);
+			}
+
+			if (state.thisWeek) {
+				state.thisWeek = {
+					...state.thisWeek,
+					assignments: state.thisWeek.assignments.map(updater)
+				};
+			}
+
+			if (state.nextWeek) {
+				state.nextWeek = {
+					...state.nextWeek,
+					assignments: state.nextWeek.assignments.map(updater)
+				};
+			}
+		};
+
+		const restoreSnapshot = () => {
+			if (previousTodayShift) {
+				state.todayShift = previousTodayShift;
+			}
+
+			if (state.thisWeek && previousThisWeekSnapshot) {
+				state.thisWeek = {
+					...state.thisWeek,
+					assignments: state.thisWeek.assignments.map((assignment) =>
+						assignment.id === assignmentId ? previousThisWeekSnapshot : assignment
+					)
+				};
+			}
+
+			if (state.nextWeek && previousNextWeekSnapshot) {
+				state.nextWeek = {
+					...state.nextWeek,
+					assignments: state.nextWeek.assignments.map((assignment) =>
+						assignment.id === assignmentId ? previousNextWeekSnapshot : assignment
+					)
+				};
+			}
+		};
+
+		const normalizedExceptionNotes = exceptionNotes?.trim() ? exceptionNotes.trim() : null;
+
+		applyAssignmentUpdate((assignment) => {
+			if (assignment.id !== assignmentId) {
+				return assignment;
+			}
+
+			const parcelsStart = assignment.shift?.parcelsStart ?? null;
+			const optimisticCompletedAt = new Date().toISOString();
+			const parcelsDelivered =
+				parcelsStart === null ? null : Math.max(0, parcelsStart - parcelsReturned);
+
+			return {
+				...assignment,
+				status: 'completed',
+				isArrivable: false,
+				isStartable: false,
+				isCompletable: false,
+				isCancelable: false,
+				shift: {
+					id: assignment.shift?.id ?? assignment.id,
+					arrivedAt: assignment.shift?.arrivedAt ?? null,
+					parcelsStart,
+					parcelsDelivered,
+					parcelsReturned,
+					exceptedReturns,
+					exceptionNotes: normalizedExceptionNotes,
+					startedAt: assignment.shift?.startedAt ?? null,
+					completedAt: optimisticCompletedAt,
+					editableUntil: assignment.shift?.editableUntil ?? null
+				}
+			};
+		});
+
 		try {
 			const res = await fetch('/api/shifts/complete', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ assignmentId, parcelsReturned, exceptedReturns, exceptionNotes })
+				body: JSON.stringify({
+					assignmentId,
+					parcelsReturned,
+					exceptedReturns,
+					exceptionNotes: normalizedExceptionNotes ?? undefined
+				})
 			});
 
 			if (!res.ok) {
@@ -429,7 +533,7 @@ export const dashboardStore = {
 			}
 
 			const { shift, assignmentStatus } = parsed.data;
-			const updateAssignment = (assignment: DashboardAssignment): DashboardAssignment => {
+			applyAssignmentUpdate((assignment) => {
 				if (assignment.id !== assignmentId) {
 					return assignment;
 				}
@@ -454,31 +558,14 @@ export const dashboardStore = {
 						editableUntil: shift.editableUntil
 					}
 				};
-			};
-
-			if (state.todayShift?.id === assignmentId) {
-				state.todayShift = updateAssignment(state.todayShift);
-			}
-
-			if (state.thisWeek) {
-				state.thisWeek = {
-					...state.thisWeek,
-					assignments: state.thisWeek.assignments.map(updateAssignment)
-				};
-			}
-
-			if (state.nextWeek) {
-				state.nextWeek = {
-					...state.nextWeek,
-					assignments: state.nextWeek.assignments.map(updateAssignment)
-				};
-			}
+			});
 
 			void this.load();
 
 			toastStore.success(m.shift_complete_success());
 			return true;
 		} catch (err) {
+			restoreSnapshot();
 			toastStore.error(m.shift_complete_error());
 			return false;
 		} finally {
