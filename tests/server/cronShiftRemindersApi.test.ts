@@ -9,6 +9,7 @@ interface TodayAssignment {
 	userId: string | null;
 	routeName: string;
 	warehouseName: string;
+	routeStartTime?: string;
 }
 
 interface StartedShiftRow {
@@ -32,7 +33,8 @@ const assignmentsTable = {
 
 const routesTable = {
 	id: 'routes.id',
-	name: 'routes.name'
+	name: 'routes.name',
+	startTime: 'routes.startTime'
 };
 
 const shiftsTable = {
@@ -205,19 +207,22 @@ describe('GET /api/cron/shift-reminders contract', () => {
 				assignmentId: 'assignment-1',
 				userId: 'driver-1',
 				routeName: 'Route A',
-				warehouseName: 'Warehouse A'
+				warehouseName: 'Warehouse A',
+				routeStartTime: '09:00'
 			},
 			{
 				assignmentId: 'assignment-2',
 				userId: 'driver-2',
 				routeName: 'Route B',
-				warehouseName: 'Warehouse B'
+				warehouseName: 'Warehouse B',
+				routeStartTime: '09:00'
 			},
 			{
 				assignmentId: 'assignment-3',
 				userId: 'driver-3',
 				routeName: 'Route C',
-				warehouseName: 'Warehouse C'
+				warehouseName: 'Warehouse C',
+				routeStartTime: '09:00'
 			}
 		];
 		const startedRows: StartedShiftRow[] = [{ assignmentId: 'assignment-2' }];
@@ -245,22 +250,24 @@ describe('GET /api/cron/shift-reminders contract', () => {
 
 		expect(sendNotificationMock).toHaveBeenCalledTimes(2);
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(1, 'driver-1', 'shift_reminder', {
-			customBody: 'Your shift on route Route A at Warehouse A is today.',
+			customBody: 'Your shift on route Route A at Warehouse A starts at 9:00 AM today.',
 			organizationId: 'org-1',
 			data: {
 				assignmentId: 'assignment-1',
 				routeName: 'Route A',
+				routeStartTime: '09:00',
 				warehouseName: 'Warehouse A',
 				date: '2026-02-09',
 				dedupeKey: 'shift_reminder:org-1:assignment-1:driver-1:2026-02-09'
 			}
 		});
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(2, 'driver-3', 'shift_reminder', {
-			customBody: 'Your shift on route Route C at Warehouse C is today.',
+			customBody: 'Your shift on route Route C at Warehouse C starts at 9:00 AM today.',
 			organizationId: 'org-1',
 			data: {
 				assignmentId: 'assignment-3',
 				routeName: 'Route C',
+				routeStartTime: '09:00',
 				warehouseName: 'Warehouse C',
 				date: '2026-02-09',
 				dedupeKey: 'shift_reminder:org-1:assignment-3:driver-3:2026-02-09'

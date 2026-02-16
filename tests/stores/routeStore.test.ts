@@ -152,7 +152,8 @@ describe('routeStore', () => {
 		await store.load({ warehouseId: 'warehouse-1', status: 'unfilled', date: '2026-02-10' });
 
 		expect(fetchMock).toHaveBeenCalledWith(
-			'/api/routes?warehouseId=warehouse-1&status=unfilled&date=2026-02-10'
+			'/api/routes?warehouseId=warehouse-1&status=unfilled&date=2026-02-10',
+			{ cache: 'no-store' }
 		);
 		expect(store.routes).toHaveLength(1);
 		expect(store.routes[0]?.id).toBe('route-1');

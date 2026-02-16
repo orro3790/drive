@@ -49,6 +49,7 @@ function makeAvailableWindow(overrides: Partial<Record<string, unknown>> = {}) {
 		assignmentId: 'assignment-1',
 		assignmentDate: '2026-02-12',
 		routeName: 'Downtown',
+		routeStartTime: '09:00',
 		warehouseName: 'Main Warehouse',
 		mode: 'competitive',
 		payBonusPercent: 0,
