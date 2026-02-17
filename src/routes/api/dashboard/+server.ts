@@ -26,7 +26,7 @@ import { addDays } from 'date-fns';
 import { format, toZonedTime } from 'date-fns-tz';
 import { getWeekStart } from '$lib/server/services/scheduling';
 import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
-import { getUnconfirmedAssignments } from '$lib/server/services/confirmations';
+import { getUpcomingAssignments } from '$lib/server/services/confirmations';
 import {
 	createAssignmentLifecycleContext,
 	deriveAssignmentLifecycle
@@ -223,8 +223,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 		windowClosesAt: bid.windowClosesAt.toISOString()
 	}));
 
-	// Get unconfirmed shifts within confirmation window
-	const unconfirmedShifts = await getUnconfirmedAssignments(user.id);
+	// Get upcoming shifts (both confirmed and unconfirmed) for this week
+	const unconfirmedShifts = await getUpcomingAssignments(user.id);
 
 	// Check for any incomplete shift (arrived but not completed, from a previous day)
 	const [incompleteShiftRow] = await db

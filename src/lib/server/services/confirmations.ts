@@ -191,6 +191,18 @@ export interface UnconfirmedAssignment {
 	isConfirmable: boolean;
 }
 
+export interface UpcomingAssignment {
+	id: string;
+	date: string;
+	routeName: string;
+	routeStartTime: string;
+	warehouseName: string;
+	confirmationOpensAt: string;
+	confirmationDeadline: string;
+	isConfirmable: boolean;
+	confirmedAt: string | null;
+}
+
 /**
  * Get unconfirmed assignments for a driver that are within
  * the confirmation window (7 days to 48h before shift).
@@ -237,6 +249,60 @@ export async function getUnconfirmedAssignments(userId: string): Promise<Unconfi
 				confirmationOpensAt: opensAt.toISOString(),
 				confirmationDeadline: deadline.toISOString(),
 				isConfirmable
+			});
+		}
+	}
+
+	return result;
+}
+
+/**
+ * Get upcoming (this week) assignments for a driver,
+ * including both confirmed and unconfirmed shifts.
+ * Used for the dashboard "This Week's Shifts" section.
+ */
+export async function getUpcomingAssignments(userId: string): Promise<UpcomingAssignment[]> {
+	const now = getNowToronto();
+	const todayString = toTorontoDateString(now);
+
+	const rows = await db
+		.select({
+			id: assignments.id,
+			date: assignments.date,
+			routeName: routes.name,
+			routeStartTime: routes.startTime,
+			warehouseName: warehouses.name,
+			confirmedAt: assignments.confirmedAt
+		})
+		.from(assignments)
+		.innerJoin(routes, eq(assignments.routeId, routes.id))
+		.innerJoin(warehouses, eq(routes.warehouseId, warehouses.id))
+		.where(
+			and(
+				eq(assignments.userId, userId),
+				eq(assignments.status, 'scheduled'),
+				gte(assignments.date, todayString)
+			)
+		);
+
+	const result: UpcomingAssignment[] = [];
+
+	for (const row of rows) {
+		const { opensAt, deadline } = calculateConfirmationDeadline(row.date);
+		const isConfirmable = !row.confirmedAt && now >= opensAt && now <= deadline;
+
+		// Only include assignments within or approaching the confirmation window
+		if (now <= deadline) {
+			result.push({
+				id: row.id,
+				date: row.date,
+				routeName: row.routeName,
+				routeStartTime: row.routeStartTime,
+				warehouseName: row.warehouseName,
+				confirmationOpensAt: opensAt.toISOString(),
+				confirmationDeadline: deadline.toISOString(),
+				isConfirmable,
+				confirmedAt: row.confirmedAt?.toISOString() ?? null
 			});
 		}
 	}

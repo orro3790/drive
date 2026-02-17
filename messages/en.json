@@ -344,8 +344,8 @@
 	"schedule_cancel_error": "Unable to cancel assignment.",
 	"schedule_load_error": "Failed to load schedule.",
 	"schedule_confirmed_chip": "Confirmed",
-	"schedule_confirm_by_chip": "Confirm by {date}",
-	"schedule_confirm_opens_chip": "Opens {date}",
+	"schedule_confirm_by_chip": "Confirm by {datetime}",
+	"schedule_confirm_opens_chip": "Opens in {days} days",
 	"schedule_unconfirmed_by_chip": "Unconfirmed by {date}",
 	"schedule_unconfirmed_chip": "Unconfirmed",
 	"schedule_confirm_button": "Confirm",
@@ -933,5 +933,14 @@
 	"auth_passkey_signing_in": "Authenticating...",
 	"auth_passkey_error": "Passkey authentication failed.",
 	"auth_passkey_not_supported": "Passkeys are not supported on this device.",
-	"auth_passkey_or_divider": "or"
+	"auth_passkey_or_divider": "or",
+
+	"nav_history": "History",
+	"history_page_title": "Shift History",
+	"history_page_description": "Your past completed shifts.",
+	"history_empty_title": "No past shifts",
+	"history_empty_message": "Completed shifts will appear here.",
+	"history_load_error": "Failed to load shift history.",
+	"history_load_more": "Load more",
+	"dashboard_coming_up_section": "Coming Up"
 }

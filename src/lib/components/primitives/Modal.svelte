@@ -204,6 +204,8 @@
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-2);
+		/* Nudge down to align icon center with h2 cap height */
+		margin-top: 2px;
 	}
 
 	.modal-body {

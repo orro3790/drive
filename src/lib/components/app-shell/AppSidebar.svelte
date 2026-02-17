@@ -17,6 +17,7 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	import { clearPushNotifications } from '$lib/utils/pushNotifications';
 
 	// Import icons
+	import Clock from '$lib/components/icons/Clock.svelte';
 	import ClockDollar from '$lib/components/icons/ClockDollar.svelte';
 	import Calendar from '$lib/components/icons/Calendar.svelte';
 	import Home from '$lib/components/icons/Home.svelte';
@@ -66,6 +67,12 @@ Mobile: Hidden by default, hamburger in header opens overlay
 			label: () => m.nav_bids(),
 			Icon: ClockDollar,
 			path: '/bids'
+		},
+		{
+			id: 'history',
+			label: () => m.nav_history(),
+			Icon: Clock,
+			path: '/history'
 		}
 	];
 

@@ -6,11 +6,17 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { invalidateAll } from '$app/navigation';
 	import AppSidebar from '$lib/components/app-shell/AppSidebar.svelte';
 	import OfflineBanner from '$lib/components/app-shell/OfflineBanner.svelte';
 	import PageHeader from '$lib/components/app-shell/PageHeader.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 
 	let { children }: { children: Snippet } = $props();
+
+	async function handleRefresh() {
+		await invalidateAll();
+	}
 </script>
 
 <div class="app-shell">
@@ -19,7 +25,9 @@
 		<PageHeader showUnconfirmedShiftsButton={true} showOpenBidsButton={true} />
 		<OfflineBanner />
 		<main class="content" data-scroll-root>
-			{@render children()}
+			<PullToRefresh onRefresh={handleRefresh}>
+				{@render children()}
+			</PullToRefresh>
 		</main>
 	</div>
 </div>

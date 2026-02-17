@@ -47,7 +47,7 @@ export type DashboardAssignment = {
 	shift: ShiftData | null;
 };
 
-export type UnconfirmedShift = {
+export type UpcomingShift = {
 	id: string;
 	date: string;
 	routeName: string;
@@ -56,7 +56,11 @@ export type UnconfirmedShift = {
 	confirmationOpensAt: string;
 	confirmationDeadline: string;
 	isConfirmable: boolean;
+	confirmedAt: string | null;
 };
+
+/** @deprecated Use UpcomingShift instead */
+export type UnconfirmedShift = UpcomingShift;
 
 export type WeekSummary = {
 	weekStart: string;
@@ -90,7 +94,7 @@ const state = $state<{
 	nextWeek: WeekSummary | null;
 	metrics: DriverMetrics;
 	pendingBids: PendingBid[];
-	unconfirmedShifts: UnconfirmedShift[];
+	unconfirmedShifts: UpcomingShift[];
 	isNewDriver: boolean;
 	isLoading: boolean;
 	isArriving: boolean;
@@ -100,6 +104,8 @@ const state = $state<{
 	isCancelling: boolean;
 	isConfirming: boolean;
 	error: string | null;
+	/** Version tick — increments on each state refresh to force dependent re-computation */
+	tick: number;
 }>({
 	todayShift: null,
 	thisWeek: null,
@@ -122,7 +128,8 @@ const state = $state<{
 	isEditingShift: false,
 	isCancelling: false,
 	isConfirming: false,
-	error: null
+	error: null,
+	tick: 0
 });
 
 const shiftDataSchema = z.object({
@@ -157,7 +164,7 @@ const dashboardAssignmentSchema = z.object({
 	shift: shiftDataSchema.nullable()
 });
 
-const unconfirmedShiftSchema = z.object({
+const upcomingShiftSchema = z.object({
 	id: z.string().min(1),
 	date: z.string().min(1),
 	routeName: z.string().min(1),
@@ -165,7 +172,8 @@ const unconfirmedShiftSchema = z.object({
 	warehouseName: z.string().min(1),
 	confirmationOpensAt: z.string().min(1),
 	confirmationDeadline: z.string().min(1),
-	isConfirmable: z.boolean()
+	isConfirmable: z.boolean(),
+	confirmedAt: z.string().min(1).nullable()
 });
 
 const weekSummarySchema = z.object({
@@ -200,7 +208,7 @@ const dashboardResponseSchema = z.object({
 	nextWeek: weekSummarySchema.nullable().optional(),
 	metrics: driverMetricsSchema.optional(),
 	pendingBids: z.array(pendingBidSchema).optional(),
-	unconfirmedShifts: z.array(unconfirmedShiftSchema).optional(),
+	unconfirmedShifts: z.array(upcomingShiftSchema).optional(),
 	isNewDriver: z.boolean().optional()
 });
 
@@ -290,6 +298,10 @@ export const dashboardStore = {
 	get error() {
 		return state.error;
 	},
+	/** Version tick — read this in $derived to force re-computation on state changes */
+	get tick() {
+		return state.tick;
+	},
 
 	async load() {
 		state.isLoading = true;
@@ -330,6 +342,8 @@ export const dashboardStore = {
 			state.pendingBids = dashboardData.pendingBids ?? [];
 			state.unconfirmedShifts = dashboardData.unconfirmedShifts ?? [];
 			state.isNewDriver = dashboardData.isNewDriver ?? false;
+			// Increment tick to force dependent components to re-compute
+			state.tick++;
 		} catch (err) {
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.dashboard_load_error());
@@ -511,6 +525,9 @@ export const dashboardStore = {
 			};
 		});
 
+		// Increment tick immediately after optimistic update to force UI re-render
+		state.tick++;
+
 		try {
 			const res = await fetch('/api/shifts/complete', {
 				method: 'POST',
@@ -639,8 +656,12 @@ export const dashboardStore = {
 				throw new Error('Failed to confirm shift');
 			}
 
-			// Remove from unconfirmedShifts locally
-			state.unconfirmedShifts = state.unconfirmedShifts.filter((s) => s.id !== assignmentId);
+			// Mark the shift as confirmed in the upcoming shifts list (don't remove it)
+			state.unconfirmedShifts = state.unconfirmedShifts.map((s) =>
+				s.id === assignmentId
+					? { ...s, confirmedAt: parsed.data.confirmedAt, isConfirmable: false }
+					: s
+			);
 
 			// Update the assignment in week summaries
 			const updateAssignment = (a: DashboardAssignment) => {
