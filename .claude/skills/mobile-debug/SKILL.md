@@ -42,24 +42,34 @@ adb pull //sdcard//screenshot.png C:/Users/matto/projects/drive/.mobile-debug/be
 adb pull //sdcard//screenshot.png C:/Users/matto/projects/drive/.mobile-debug/after-fix.png
 ```
 
-## Build and Install
+## Development Modes
 
-### Quick Rebuild (after code changes)
+### Live Development (Recommended)
+
+For rapid iteration with hot reload — no rebuild needed:
 
 ```bash
-# Sync web assets + native code
-cd /c/Users/matto/projects/drive
-CAP_SERVER_URL="https://drive-three-psi.vercel.app" npx cap sync android
-
-# Build and install
-cd android && ./gradlew installDebug
+pnpm mobile:android:sync:usb   # One-time: point app at localhost
+pnpm mobile:android:open       # One-time: install on device
+pnpm dev:mobile                # Run this each session
 ```
 
-### Full Rebuild (after Gradle/config changes)
+Changes hot-reload instantly. Use this for UI/UX iteration.
+
+### Production-like Testing
+
+Test against the actual Vercel deployment:
+
+```bash
+pnpm mobile:android:sync:prod
+cd android && .\\gradlew.bat installDebug
+```
+
+### Full Rebuild (after native/Gradle changes)
 
 ```bash
 cd /c/Users/matto/projects/drive/android
-./gradlew clean installDebug
+.\\gradlew.bat clean installDebug
 ```
 
 ## Debug Iteration Loop
@@ -67,9 +77,10 @@ cd /c/Users/matto/projects/drive/android
 1. **Take screenshot** to see current state
 2. **Identify issue** with user
 3. **Make fix** in code
-4. **Sync and rebuild**: `npx cap sync android && cd android && ./gradlew installDebug`
-5. **Take screenshot** to verify fix
-6. **Repeat** until user is satisfied
+4. If using live dev: changes hot-reload automatically
+5. If using prod sync: `pnpm mobile:android:sync:prod && cd android && .\\gradlew.bat installDebug`
+6. **Take screenshot** to verify fix
+7. **Repeat** until user is satisfied
 
 ## Common Issues
 
