@@ -46,7 +46,7 @@
 {#if shouldShow}
 	<div class="notification-card">
 		<div class="icon">
-			<Icon size="md"><BellRinging /></Icon>
+			<Icon size="medium"><BellRinging /></Icon>
 		</div>
 		<div class="content">
 			<h3>Enable Notifications</h3>
@@ -54,10 +54,10 @@
 		</div>
 		<div class="actions">
 			<IconButton tooltip="Dismiss" onclick={handleDismiss}>
-				<Icon size="sm"><XIcon /></Icon>
+				<Icon size="small"><XIcon /></Icon>
 			</IconButton>
 			<IconButton tooltip="Enable notifications" onclick={handleEnable} disabled={isRequesting}>
-				<Icon size="sm"><CheckIcon /></Icon>
+				<Icon size="small"><CheckIcon /></Icon>
 			</IconButton>
 		</div>
 	</div>

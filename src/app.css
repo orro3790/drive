@@ -302,16 +302,11 @@
 	--cover-page-min-height: 600px;
 }
 
-html[data-native='true'] {
-	/*
-	 * On native platforms, ensure minimum safe area values as a fallback
-	 * in case Capacitor's SystemBars CSS injection fails or reports 0px.
-	 * These values cover typical Android status bar (~24px) and
-	 * navigation bar (~48px for 3-button nav, ~32px for gesture nav).
-	 */
-	--safe-area-top: max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 24px);
-	--safe-area-bottom: max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 48px);
-}
+/*
+ * Note: Native safe area insets are handled by MainActivity.java on Android <= 15.
+ * The Java code applies margins directly to the WebView, so CSS padding is not needed.
+ * On Android 16+ and iOS, Capacitor's CSS injection should work correctly.
+ */
 
 /* Base Styles */
 *,
