@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.4.0](https://github.com/orro3790/drive/compare/v1.3.0...v1.4.0) (2026-02-16)
+
+
+### Features
+
+* **routes:** add suspend/resume overrides and harden auth redirects ([01f238d](https://github.com/orro3790/drive/commit/01f238db2dd312eab4f5233c2c502a877fa686ae))
+
+
+### Bug Fixes
+
+* **driver-dashboard:** apply optimistic shift completion with rollback ([533b7b2](https://github.com/orro3790/drive/commit/533b7b2ae47deea1ec31db78d60c973a127e2152))
+* **mobile-ui:** add native scroll spacer above nav bar ([10dfc1c](https://github.com/orro3790/drive/commit/10dfc1c6ad651cc5c5ebdc607eb3acf3d34845b7))
+* **mobile-ui:** add safe-area padding to driver/manager layouts + improve notification card ([355fcf4](https://github.com/orro3790/drive/commit/355fcf40253d0c3f14767f29b1a5f7b9dacc71ee))
+* **mobile-ui:** apply safe-area padding unconditionally like sidebar ([52aab28](https://github.com/orro3790/drive/commit/52aab284fbfe8a291b02d4090e03db80c1168dd5))
+* **mobile-ui:** compute native viewport insets at runtime ([2e8ffed](https://github.com/orro3790/drive/commit/2e8ffed0ad9db76fbefae414d482d989feaf4de0))
+* **mobile-ui:** enforce bottom gutter on small screens ([77c2532](https://github.com/orro3790/drive/commit/77c253292994e2bd0304acc050e05765d4b95cc2))
+* **mobile-ui:** prevent Android nav bar overlap at page bottom ([c438086](https://github.com/orro3790/drive/commit/c438086467fb5533b17ee7c94b1f856ef81459fb))
+* **mobile-ui:** use padding instead of spacer for Android nav bar insets ([6564591](https://github.com/orro3790/drive/commit/656459153bed903efaf97bd181c1e2cc283ee07e))
+* **notifications:** harden FCM token ownership and registration flow ([c071508](https://github.com/orro3790/drive/commit/c071508506d1828152d8c7897b218ef53a1544fd))
+* **notifications:** preserve cached token across logout ([0ea221a](https://github.com/orro3790/drive/commit/0ea221afcc04b2ebd72fbaba570978cb504878b2))
+
 ## [1.3.0](https://github.com/orro3790/drive/compare/v1.2.2...v1.3.0) (2026-02-16)
 
 
