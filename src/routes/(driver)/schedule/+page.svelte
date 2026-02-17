@@ -828,6 +828,49 @@
 		gap: 1px;
 		margin-right: auto;
 		min-width: 0;
+		/* Mirror IconCircle dimensions for action buttons */
+		.action-circle {
+			flex-shrink: 0;
+			display: grid;
+			place-items: center;
+			width: 36px;
+			height: 36px;
+			border: none;
+			border-radius: var(--radius-full);
+			background: transparent;
+			color: var(--text-muted);
+			cursor: pointer;
+			transition:
+				background-color 0.15s ease,
+				color 0.15s ease;
+		}
+
+		.action-circle:hover:not(:disabled) {
+			background: var(--interactive-hover);
+			color: var(--text-normal);
+		}
+
+		.action-circle:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+
+		.action-circle :global(svg) {
+			width: 20px;
+			height: 20px;
+		}
+
+		@media (max-width: 640px) {
+			.action-circle {
+				width: 32px;
+				height: 32px;
+			}
+
+			.action-circle :global(svg) {
+				width: 18px;
+				height: 18px;
+			}
+		}
 	}
 
 	.assignment-actions {
