@@ -11,7 +11,10 @@ const config: CapacitorConfig = {
 		// On Android, it can inject CSS vars (--safe-area-inset-*) to work around
 		// WebView safe-area env() bugs for edge-to-edge layouts.
 		SystemBars: {
-			insetsHandling: 'css'
+			insetsHandling: 'css',
+			// Default to dark icons (for light backgrounds).
+			// App dynamically updates based on theme in +layout.svelte.
+			style: 'DARK'
 		}
 	}
 };
