@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -119,7 +120,7 @@ if (RELEASE_TASKS.has(task)) {
 
 run('pnpm', ['exec', 'cap', 'sync', 'android']);
 
-const gradleCommand = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
+const gradleCommand = process.platform === 'win32' ? '.\\gradlew.bat' : './gradlew';
 const gradleArgs = [task];
 
 if (gradleMaxWorkers) {
