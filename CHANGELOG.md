@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.1](https://github.com/orro3790/drive/compare/v1.4.0...v1.4.1) (2026-02-17)
+
+
+### Bug Fixes
+
+* **android:** native edge-to-edge inset handling ([5e19b64](https://github.com/orro3790/drive/commit/5e19b641e5395ef7bb9da2de80a629a7c8af740f))
+* **android:** native edge-to-edge inset handling ([#156](https://github.com/orro3790/drive/issues/156)) ([7f18849](https://github.com/orro3790/drive/commit/7f18849a8563dfff416829c54d6fac42453f14b8))
+* **android:** proper edge-to-edge safe area handling ([fca3f61](https://github.com/orro3790/drive/commit/fca3f61ff857f689ae1db7c3ac4bfc48e71a7440))
+* **mobile:** environment-aware Capacitor sync ([5aa4d54](https://github.com/orro3790/drive/commit/5aa4d54e9720e40c9fa7b53f1a42c83dd40418cc))
+
 ## [1.4.0](https://github.com/orro3790/drive/compare/v1.3.0...v1.4.0) (2026-02-16)
 
 
