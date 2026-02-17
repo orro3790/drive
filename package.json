@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
-		"dev:mobile": "adb reverse tcp:5173 tcp:5173 && vite dev --host",
+		"dev:mobile": "node scripts/mobile/dev-mobile.mjs",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "husky",
@@ -35,7 +35,8 @@
 		"mobile:android:open": "pnpm exec cap open android",
 		"mobile:android:doctor": "pnpm exec cap doctor",
 		"mobile:android:bundle:release": "node scripts/mobile/android-gradle.mjs bundleRelease",
-		"mobile:android:apk:release": "node scripts/mobile/android-gradle.mjs assembleRelease"
+		"mobile:android:apk:release": "node scripts/mobile/android-gradle.mjs assembleRelease",
+		"mobile:screenshot": "node scripts/mobile/screenshot.mjs"
 	},
 	"devDependencies": {
 		"@capacitor/assets": "^3.0.5",

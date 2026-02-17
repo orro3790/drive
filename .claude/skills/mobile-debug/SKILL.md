@@ -15,15 +15,12 @@ Debug the Android app in tandem with the user. Take screenshots automatically to
 
 ## Screenshot Workflow
 
-**IMPORTANT**: Do NOT pipe `screencap` output directly - it corrupts on Windows. Save to device first, then pull.
+**ALWAYS use the screenshot script** — raw adb piping corrupts images on Windows.
 
 ### Take Screenshot
 
 ```bash
-export PATH="$PATH:$LOCALAPPDATA/Android/Sdk/platform-tools"
-adb shell screencap -p //sdcard//screenshot.png
-adb pull //sdcard//screenshot.png C:/Users/matto/projects/drive/.mobile-debug/screenshot.png
-adb shell rm //sdcard//screenshot.png
+pnpm mobile:screenshot
 ```
 
 Then read the screenshot:
@@ -37,10 +34,12 @@ Read(.mobile-debug/screenshot.png)
 For comparing before/after, use descriptive names:
 
 ```bash
-adb pull //sdcard//screenshot.png C:/Users/matto/projects/drive/.mobile-debug/before-fix.png
-# ... make changes and rebuild ...
-adb pull //sdcard//screenshot.png C:/Users/matto/projects/drive/.mobile-debug/after-fix.png
+pnpm mobile:screenshot before-fix.png
+# ... make changes ...
+pnpm mobile:screenshot after-fix.png
 ```
+
+**NEVER** use raw `adb exec-out screencap` or pipe `adb shell screencap` directly — it corrupts on Windows.
 
 ## Development Modes
 
