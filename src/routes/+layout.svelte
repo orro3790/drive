@@ -1,21 +1,24 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
+	import { Capacitor, SystemBars, SystemBarsStyle, SystemBarType } from '@capacitor/core';
 	import { getDomTheme } from '$lib/utils/theme';
 	import AppVersionGate from '$lib/components/app-shell/AppVersionGate.svelte';
 
 	let { children } = $props();
 
-	/**
-	 * Set status bar icon style based on current theme.
-	 * DARK = dark icons (for light backgrounds)
-	 * LIGHT = light icons (for dark backgrounds)
-	 */
-	async function syncStatusBarStyle() {
+	async function syncSystemBarStyle() {
 		const theme = getDomTheme() ?? 'dark';
-		const style = theme === 'dark' ? SystemBarsStyle.Light : SystemBarsStyle.Dark;
-		await SystemBars.setStyle({ style });
+		const style = theme === 'dark' ? SystemBarsStyle.Dark : SystemBarsStyle.Light;
+
+		try {
+			await Promise.all([
+				SystemBars.setStyle({ style, bar: SystemBarType.StatusBar }),
+				SystemBars.setStyle({ style, bar: SystemBarType.NavigationBar })
+			]);
+		} catch (error) {
+			console.error('Failed to sync system bar style', { theme, style, error });
+		}
 	}
 
 	onMount(() => {
@@ -26,18 +29,23 @@
 		// Flag enables CSS minimum safe area values for native platforms.
 		document.documentElement.dataset.native = 'true';
 
-		// Set status bar icon color based on theme
-		void syncStatusBarStyle();
+		void syncSystemBarStyle();
+		setTimeout(() => {
+			void syncSystemBarStyle();
+		}, 250);
 
-		// Watch for theme changes
 		const observer = new MutationObserver((mutations) => {
 			for (const mutation of mutations) {
 				if (mutation.attributeName === 'data-theme') {
-					void syncStatusBarStyle();
+					void syncSystemBarStyle();
 				}
 			}
 		});
-		observer.observe(document.documentElement, { attributes: true });
+
+		observer.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ['data-theme']
+		});
 
 		return () => observer.disconnect();
 	});

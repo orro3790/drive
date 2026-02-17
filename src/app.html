@@ -32,9 +32,22 @@
 					var t = localStorage.getItem('drive-theme');
 					if (t === 'light' || t === 'dark') {
 						document.documentElement.setAttribute('data-theme', t);
-						document.documentElement.style.colorScheme = t;
+						if (t === 'light') {
+							document.documentElement.style.colorScheme = 'light';
+						} else {
+							document.documentElement.style.removeProperty('color-scheme');
+						}
 					}
 				} catch (e) {}
+			})();
+		</script>
+		<script>
+			// Android WebView detection for safe-area fallbacks (iOS env() works correctly)
+			(function () {
+				var ua = navigator.userAgent;
+				if (/Android/i.test(ua) && /wv|WebView/i.test(ua)) {
+					document.documentElement.dataset.androidNative = 'true';
+				}
 			})();
 		</script>
 		%sveltekit.head%
