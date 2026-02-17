@@ -351,16 +351,27 @@
 					<span class="assignment-time">{formatRouteStartTime(assignment.routeStartTime)}</span>
 				</div>
 				{#if assignment.status === 'scheduled'}
-					{#if cancelAction}
-						<button
-							type="button"
-							class="action-circle"
-							title={m.common_cancel()}
-							disabled={scheduleStore.isConfirming || scheduleStore.isCancelling}
-							onclick={() => handleScheduleAction('cancel_shift', assignment)}
-						>
-							<CalendarX />
-						</button>
+					{#if confirmAction || cancelAction}
+						<div class="assignment-actions">
+							{#if confirmAction}
+								<IconButton
+									tooltip={getScheduleActionLabel('confirm_shift')}
+									disabled={scheduleStore.isConfirming || scheduleStore.isCancelling}
+									onclick={() => handleScheduleAction('confirm_shift', assignment)}
+								>
+									<IconBase size="small"><CheckCircleIcon /></IconBase>
+								</IconButton>
+							{/if}
+							{#if cancelAction}
+								<IconButton
+									tooltip={m.common_cancel()}
+									disabled={scheduleStore.isConfirming || scheduleStore.isCancelling}
+									onclick={() => handleScheduleAction('cancel_shift', assignment)}
+								>
+									<IconBase size="small"><CalendarX /></IconBase>
+								</IconButton>
+							{/if}
+						</div>
 					{/if}
 				{:else if assignment.status === 'cancelled'}
 					<Chip variant="status" status="error" size="xs" label={statusLabels[assignment.status]} />
@@ -828,49 +839,6 @@
 		gap: 1px;
 		margin-right: auto;
 		min-width: 0;
-		/* Mirror IconCircle dimensions for action buttons */
-		.action-circle {
-			flex-shrink: 0;
-			display: grid;
-			place-items: center;
-			width: 36px;
-			height: 36px;
-			border: none;
-			border-radius: var(--radius-full);
-			background: transparent;
-			color: var(--text-muted);
-			cursor: pointer;
-			transition:
-				background-color 0.15s ease,
-				color 0.15s ease;
-		}
-
-		.action-circle:hover:not(:disabled) {
-			background: var(--interactive-hover);
-			color: var(--text-normal);
-		}
-
-		.action-circle:disabled {
-			opacity: 0.5;
-			cursor: not-allowed;
-		}
-
-		.action-circle :global(svg) {
-			width: 20px;
-			height: 20px;
-		}
-
-		@media (max-width: 640px) {
-			.action-circle {
-				width: 32px;
-				height: 32px;
-			}
-
-			.action-circle :global(svg) {
-				width: 18px;
-				height: 18px;
-			}
-		}
 	}
 
 	.assignment-actions {
