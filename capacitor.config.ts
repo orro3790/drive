@@ -7,14 +7,12 @@ const config: CapacitorConfig = {
 	appName: 'Drive',
 	webDir: 'mobile-shell',
 	plugins: {
-		// SystemBars is bundled with @capacitor/core.
-		// On Android, it can inject CSS vars (--safe-area-inset-*) to work around
-		// WebView safe-area env() bugs for edge-to-edge layouts.
+		// SystemBars handles edge-to-edge layouts.
+		// 'css' injects --safe-area-inset-* CSS variables.
+		// Default to dark-mode-friendly system bar content at launch.
 		SystemBars: {
 			insetsHandling: 'css',
-			// Default to dark icons (for light backgrounds).
-			// App dynamically updates based on theme in +layout.svelte.
-			style: 'DARK'
+			style: 'DEFAULT'
 		}
 	}
 };

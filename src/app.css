@@ -65,17 +65,35 @@
 
 :root {
 	/*
-		Native safe-area insets (Capacitor / Android edge-to-edge).
-
-		Capacitor SystemBars plugin (insetsHandling: 'css') injects CSS variables
-		named --safe-area-inset-* on Android where env(safe-area-inset-*) is broken.
-		Docs: https://capacitorjs.com/docs/apis/system-bars
+		Safe-area insets for edge-to-edge layouts.
+		Capacitor SystemBars plugin (insetsHandling: 'css') injects --safe-area-inset-*
+		CSS variables on Android where env(safe-area-inset-*) is broken.
+		Pattern: var(injected-var, env(standard-env, fallback))
 	*/
 	--safe-area-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
 	--safe-area-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
 	--safe-area-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
 	--safe-area-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+}
 
+/*
+ * Android WebView minimum insets: Guarantee minimum padding when
+ * Capacitor's SystemBars plugin fails to inject values or injects 0.
+ *
+ * data-android-native is set by app.html inline script (before first paint).
+ * Floor values are conservative minimums — actual devices typically have:
+ *   - Gesture nav: ~34px bottom
+ *   - Button nav: ~48-56px bottom
+ *   - Status bar: 24-28px top
+ *
+ * iOS is excluded: env(safe-area-inset-*) works correctly there.
+ */
+html[data-android-native='true'] {
+	--safe-area-bottom: max(var(--safe-area-inset-bottom, 0px), 24px);
+	--safe-area-top: max(var(--safe-area-inset-top, 0px), 24px);
+}
+
+:root {
 	/*═══════════════════════════════════════════════════════════════════════════
 	  TYPOGRAPHY
 	  ═══════════════════════════════════════════════════════════════════════════*/
@@ -115,8 +133,6 @@
 	--spacing-6: 2.5rem; /* 35px */
 	--spacing-7: 3rem; /* 42px */
 	--spacing-8: 4rem; /* 56px — for outer gutters, page-level spacing */
-	/*
-
 	/*═══════════════════════════════════════════════════════════════════════════
 	  RESPONSIVE BREAKPOINTS (Reference)
 	  
@@ -495,7 +511,9 @@ textarea::selection,
 }
 
 html[data-theme='dark'] {
-	color-scheme: dark;
+	/* NOTE: Removed color-scheme: dark - it was causing Android WebView to apply
+	   system-level dark mode styling to the status bar and navigation bar,
+	   resulting in dimmed/inverted icons. Our app handles theming via CSS vars. */
 }
 
 /*═══════════════════════════════════════════════════════════════════════════

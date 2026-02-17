@@ -58,6 +58,8 @@
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
+		/* Safe area: shrink the content area so scroll container doesn't extend under nav bar */
+		padding-bottom: var(--safe-area-bottom);
 	}
 
 	.content {
@@ -69,11 +71,5 @@
 		overflow-y: auto;
 		overscroll-behavior-y: contain;
 		-webkit-overflow-scrolling: touch;
-		/*
-		 * Safe area padding for native platforms (Android edge-to-edge / iOS notch).
-		 * Always apply --safe-area-bottom (0px on web, 48px+ on native).
-		 * Matches sidebar approach for consistency.
-		 */
-		padding-bottom: var(--safe-area-bottom);
 	}
 </style>
