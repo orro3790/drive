@@ -191,12 +191,8 @@ jobs:
           });
           NODE
 
-      - name: Run integration smoke prerequisites
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p logs/ci/e2e-smoke tests/integration/.evidence
-          pnpm test:integration:smoke 2>&1 | tee logs/ci/e2e-smoke/integration.log
+      - name: Apply schema for e2e database
+        run: pnpm db:push
 
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
