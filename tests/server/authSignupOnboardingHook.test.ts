@@ -1,3 +1,4 @@
+import { APIError } from 'better-auth/api';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -220,12 +221,14 @@ describe('signup onboarding auth hooks', () => {
 		});
 		const releaseReservation = vi.fn(async () => null);
 		const recordCreateReconciliation = vi.fn(async () => undefined);
+		const rollbackSignupUser = vi.fn(async () => undefined);
 
 		const consumer = createSignupOnboardingConsumer(createProductionAllowlistConfig(), {
 			finalizeOrganizationJoinSignup: finalizeJoinReservation,
 			finalizeOrganizationCreateSignup: finalizeCreateOrganization,
 			releaseProductionSignupAuthorizationReservation: releaseReservation,
-			recordSignupCreateOrganizationFinalizeReconciliation: recordCreateReconciliation
+			recordSignupCreateOrganizationFinalizeReconciliation: recordCreateReconciliation,
+			rollbackSignupUser
 		});
 
 		await expect(
@@ -250,7 +253,7 @@ describe('signup onboarding auth hooks', () => {
 					}
 				}
 			} as never)
-		).resolves.toBeUndefined();
+		).rejects.toBeInstanceOf(APIError);
 
 		expect(recordCreateReconciliation).toHaveBeenCalledWith({
 			userId: 'owner-2',
@@ -260,5 +263,60 @@ describe('signup onboarding auth hooks', () => {
 		});
 		expect(finalizeJoinReservation).not.toHaveBeenCalled();
 		expect(releaseReservation).not.toHaveBeenCalled();
+		expect(rollbackSignupUser).toHaveBeenCalledWith({ userId: 'owner-2' });
+	});
+
+	it('rolls back user and blocks signup when create finalization returns null', async () => {
+		const createOrganizationId = '66666666-6666-4666-8666-666666666666';
+		const finalizeJoinReservation = vi.fn(async () => null);
+		const finalizeCreateOrganization = vi.fn(async () => null);
+		const releaseReservation = vi.fn(async () => null);
+		const recordCreateReconciliation = vi.fn(async () => undefined);
+		const rollbackSignupUser = vi.fn(async () => undefined);
+
+		const consumer = createSignupOnboardingConsumer(createProductionAllowlistConfig(), {
+			finalizeOrganizationJoinSignup: finalizeJoinReservation,
+			finalizeOrganizationCreateSignup: finalizeCreateOrganization,
+			releaseProductionSignupAuthorizationReservation: releaseReservation,
+			recordSignupCreateOrganizationFinalizeReconciliation: recordCreateReconciliation,
+			rollbackSignupUser
+		});
+
+		await expect(
+			consumer({
+				path: '/sign-up/email',
+				headers: new Headers(),
+				context: {
+					signupOrganizationAssignment: {
+						organizationId: createOrganizationId,
+						role: 'manager',
+						source: 'create_provision'
+					},
+					signupOrganization: {
+						mode: 'create',
+						organizationName: 'Acme Logistics'
+					},
+					returned: {
+						user: {
+							id: 'owner-3',
+							email: 'owner3@example.test'
+						}
+					}
+				}
+			} as never)
+		).rejects.toBeInstanceOf(APIError);
+
+		expect(recordCreateReconciliation).toHaveBeenCalledWith({
+			userId: 'owner-3',
+			email: 'owner3@example.test',
+			organizationName: 'Acme Logistics'
+		});
+		expect(finalizeCreateOrganization).toHaveBeenCalledWith({
+			userId: 'owner-3',
+			organizationId: createOrganizationId
+		});
+		expect(finalizeJoinReservation).not.toHaveBeenCalled();
+		expect(releaseReservation).not.toHaveBeenCalled();
+		expect(rollbackSignupUser).toHaveBeenCalledWith({ userId: 'owner-3' });
 	});
 });
