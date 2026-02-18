@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 type DrillResult = {
 	passed: boolean;
@@ -10,6 +11,11 @@ type DrillResult = {
 	reportPath: string | null;
 	reportVerdict: boolean | null;
 	reconciliationError: string | null;
+};
+
+export type WitnessRunDecision = {
+	shouldRun: boolean;
+	reason: string | null;
 };
 
 type DrillReport = {
@@ -158,8 +164,39 @@ async function checkDevServer(): Promise<{ ok: boolean; baseUrl: string | null }
 	return { ok: false, baseUrl: null };
 }
 
+export function decideWitnessRun(params: {
+	witnessScriptExists: boolean;
+	devServerOk: boolean;
+	upstreamPassed: boolean;
+	allowFailedUpstream: boolean;
+}): WitnessRunDecision {
+	if (!params.witnessScriptExists) {
+		return { shouldRun: false, reason: 'nightly:witness-ui script missing' };
+	}
+
+	if (!params.devServerOk) {
+		return {
+			shouldRun: false,
+			reason: `dev server not detected (BASE_URL=${process.env.BASE_URL ? 'set' : 'unset'})`
+		};
+	}
+
+	if (!params.upstreamPassed && !params.allowFailedUpstream) {
+		return {
+			shouldRun: false,
+			reason:
+				'upstream drills failed (set NIGHTLY_ALLOW_WITNESS_WITH_FAILED_UPSTREAM=1 to override)'
+		};
+	}
+
+	return { shouldRun: true, reason: null };
+}
+
 async function main(): Promise<void> {
 	const results: Record<string, DrillResult> = {};
+	const strictAuditMode = process.env.NIGHTLY_STRICT_AUDIT === '1';
+	const allowWitnessOnFailedUpstream =
+		process.env.NIGHTLY_ALLOW_WITNESS_WITH_FAILED_UPSTREAM === '1';
 
 	results.cronE2E = reconcileReportVerdict(
 		'Cron E2E',
@@ -174,8 +211,15 @@ async function main(): Promise<void> {
 
 	const witnessScriptExists = hasPackageScript('nightly:witness-ui');
 	const devServer = await checkDevServer();
+	const upstreamPassed = results.cronE2E.passed && results.lifecycleE2E.passed;
+	const witnessDecision = decideWitnessRun({
+		witnessScriptExists,
+		devServerOk: devServer.ok,
+		upstreamPassed,
+		allowFailedUpstream: allowWitnessOnFailedUpstream
+	});
 
-	if (witnessScriptExists && devServer.ok) {
+	if (witnessDecision.shouldRun) {
 		// If we auto-detected a viable dev server URL, prefer to pass it through
 		// so witness-ui uses the same origin (important for localhost vs 127.0.0.1).
 		if (!process.env.BASE_URL && devServer.baseUrl) {
@@ -187,24 +231,26 @@ async function main(): Promise<void> {
 			'witness-ui-report.json'
 		);
 	} else {
-		const reason = !witnessScriptExists
-			? 'nightly:witness-ui script missing'
-			: `dev server not detected (BASE_URL=${process.env.BASE_URL ? 'set' : 'unset'})`;
+		const reason = witnessDecision.reason ?? 'witness run skipped';
+		const skippedCountsAsPass = !strictAuditMode;
 		console.log(`\n=== Skipping Witness UI (${reason}) ===\n`);
 		results.witnessUI = {
-			passed: true,
+			passed: skippedCountsAsPass,
 			skipped: true,
 			durationMs: 0,
 			exitCode: 0,
 			reportPath: null,
 			reportVerdict: null,
-			reconciliationError: null
+			reconciliationError: skippedCountsAsPass
+				? null
+				: `Witness skipped in strict audit mode: ${reason}`
 		};
 	}
 
 	const allPassed = Object.values(results).every((r) => r.passed);
 	const summary = {
 		date: today,
+		strictAuditMode,
 		passed: allPassed,
 		drills: results
 	};
@@ -221,8 +267,15 @@ async function main(): Promise<void> {
 	process.exit(allPassed ? 0 : 1);
 }
 
-// If a promise rejection escapes, make sure the process exits non-zero.
-main().catch((err) => {
-	console.error('[nightly/orchestrate] Unhandled error:', err);
-	process.exit(1);
-});
+function isMainModule(): boolean {
+	if (!process.argv[1]) return false;
+	return resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+}
+
+if (isMainModule()) {
+	// If a promise rejection escapes, make sure the process exits non-zero.
+	main().catch((err) => {
+		console.error('[nightly/orchestrate] Unhandled error:', err);
+		process.exit(1);
+	});
+}
