@@ -8,7 +8,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, routes, shifts } from '$lib/server/db/schema';
-import { shiftEditSchema } from '$lib/schemas/shift';
+import { shiftAssignmentIdParamsSchema, shiftEditSchema } from '$lib/schemas/shift';
 import { updateDriverMetrics } from '$lib/server/services/metrics';
 import { sendManagerAlert } from '$lib/server/services/notifications';
 import { and, eq, gt, isNotNull } from 'drizzle-orm';
@@ -18,6 +18,13 @@ import { requireDriverWithOrg } from '$lib/server/org-scope';
 
 export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 	const { user, organizationId } = requireDriverWithOrg(locals);
+	const paramsResult = shiftAssignmentIdParamsSchema.safeParse(params);
+
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid assignment ID');
+	}
+
+	const { assignmentId } = paramsResult.data;
 
 	let body: unknown;
 	try {
@@ -59,7 +66,7 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 		})
 		.from(assignments)
 		.innerJoin(routes, eq(assignments.routeId, routes.id))
-		.where(eq(assignments.id, params.assignmentId));
+		.where(eq(assignments.id, assignmentId));
 
 	if (!assignment) {
 		throw error(404, 'Assignment not found');
@@ -82,7 +89,7 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 			editableUntil: shifts.editableUntil
 		})
 		.from(shifts)
-		.where(eq(shifts.assignmentId, params.assignmentId));
+		.where(eq(shifts.assignmentId, assignmentId));
 
 	if (!shift) {
 		throw error(404, 'Shift not found');
@@ -135,7 +142,7 @@ export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 	const userId = user.id;
 	const log = logger.child({
 		operation: 'shiftEdit',
-		assignmentId: params.assignmentId,
+		assignmentId,
 		userId
 	});
 	log.info('Starting shift edit');
