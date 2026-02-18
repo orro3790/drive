@@ -27,9 +27,9 @@ import {
 } from '$lib/server/services/notifications';
 import { createAuditLog, type AuditActor } from '$lib/server/services/audit';
 import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
-import { addHours, differenceInMonths, parseISO } from 'date-fns';
+import { addHours, differenceInMonths } from 'date-fns';
 import logger, { toSafeErrorMessage } from '$lib/server/logger';
-import { getWeekStart, canDriverTakeAssignment } from './scheduling';
+import { canDriverTakeAssignment, getWeekStartForDateString } from './scheduling';
 import {
 	broadcastAssignmentUpdated,
 	broadcastBidWindowClosed,
@@ -438,7 +438,7 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 		return 0;
 	}
 
-	const assignmentWeekStart = getWeekStart(parseISO(assignmentDate));
+	const assignmentWeekStart = getWeekStartForDateString(assignmentDate);
 
 	const eligibleDriverIds: string[] = [];
 	for (const driver of drivers) {

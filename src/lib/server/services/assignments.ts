@@ -1,11 +1,13 @@
-import { parseISO } from 'date-fns';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { assignments, bids, bidWindows, routes, user, warehouses } from '$lib/server/db/schema';
 import { createAuditLog } from '$lib/server/services/audit';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
-import { getDriverWeeklyAssignmentCount, getWeekStart } from '$lib/server/services/scheduling';
+import {
+	getDriverWeeklyAssignmentCount,
+	getWeekStartForDateString
+} from '$lib/server/services/scheduling';
 import type { AssignmentStatus } from '$lib/schemas/assignment';
 
 function formatRouteStartTimeLabel(startTime: string | null | undefined): string {
@@ -115,7 +117,7 @@ export async function manualAssignDriverToAssignment(params: {
 		return { ok: false, code: 'driver_flagged' };
 	}
 
-	const assignmentWeekStart = getWeekStart(parseISO(assignment.date));
+	const assignmentWeekStart = getWeekStartForDateString(assignment.date);
 	const currentAssignmentCount = await getDriverWeeklyAssignmentCount(
 		driver.id,
 		assignmentWeekStart,

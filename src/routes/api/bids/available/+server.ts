@@ -13,8 +13,10 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, bidWindows, bids, routes, warehouses, user } from '$lib/server/db/schema';
 import { and, eq, gt, inArray } from 'drizzle-orm';
-import { parseISO } from 'date-fns';
-import { getWeekStart, canDriverTakeAssignment } from '$lib/server/services/scheduling';
+import {
+	canDriverTakeAssignment,
+	getWeekStartForDateString
+} from '$lib/server/services/scheduling';
 import { getExpiredBidWindows, resolveBidWindow } from '$lib/server/services/bidding';
 import logger from '$lib/server/logger';
 import { requireDriverWithOrg } from '$lib/server/org-scope';
@@ -100,7 +102,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		}
 
 		// Check weekly cap for the assignment's week
-		const assignmentWeekStart = getWeekStart(parseISO(window.assignmentDate));
+		const assignmentWeekStart = getWeekStartForDateString(window.assignmentDate);
 		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart, organizationId);
 		if (!canTake) {
 			continue;
