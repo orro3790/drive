@@ -7,7 +7,7 @@ description: Converts specifications or implementation plans into actionable BEA
 
 Convert product specifications or implementation plans into actionable BEADS.
 
-Note: Use `bd` by default. If your shell has a Windows wrapper issue, temporarily use `bd.exe` with the same flags.
+Note: Use `bd` for all BEADS operations.
 
 ## Usage
 
