@@ -34,6 +34,14 @@ export function getWeekStart(date: Date): Date {
 	return getTorontoDateTimeInstant(weekStartDate, { hours: 0 });
 }
 
+/**
+ * Resolve the Toronto week start instant for a date-only string.
+ */
+export function getWeekStartForDateString(dateString: string): Date {
+	const assignmentInstant = getTorontoDateTimeInstant(dateString, { hours: 0 });
+	return getWeekStart(assignmentInstant);
+}
+
 interface EligibleDriver {
 	userId: string;
 	familiarityCount: number;
