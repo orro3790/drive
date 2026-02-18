@@ -276,50 +276,56 @@ export async function createBidWindow(
 		.where(and(eq(routes.id, assignment.routeId), eq(warehouses.organizationId, organizationId)));
 	const routeName = route?.name ?? 'Unknown Route';
 
-	if (assignment.status !== 'unfilled' || assignment.userId !== null) {
-		const updatedAt = new Date();
-		await db
-			.update(assignments)
-			.set({ status: 'unfilled', userId: null, updatedAt })
-			.where(eq(assignments.id, assignmentId));
-
-		await createAuditLog({
-			entityType: 'assignment',
-			entityId: assignmentId,
-			action: 'unfilled',
-			actorType: 'system',
-			actorId: null,
-			changes: {
-				before: { status: assignment.status, userId: assignment.userId },
-				after: { status: 'unfilled', userId: null },
-				reason: 'bid_window_opened',
-				trigger: options.trigger
-			}
-		});
-	}
-
 	let bidWindowId: string;
 
 	try {
-		const [bidWindow] = await db
-			.insert(bidWindows)
-			.values({
-				assignmentId,
-				mode,
-				trigger: options.trigger ?? null,
-				payBonusPercent: options.payBonusPercent ?? 0,
-				opensAt: new Date(),
-				closesAt,
-				status: 'open'
-			})
-			.returning({ id: bidWindows.id });
+		const transactionResult = await db.transaction(async (tx) => {
+			if (assignment.status !== 'unfilled' || assignment.userId !== null) {
+				const updatedAt = new Date();
+				await tx
+					.update(assignments)
+					.set({ status: 'unfilled', userId: null, updatedAt })
+					.where(eq(assignments.id, assignmentId));
 
-		if (!bidWindow) {
-			log.info('Open bid window already exists');
-			return { success: false, reason: 'Open bid window already exists for this assignment' };
-		}
+				await createAuditLog(
+					{
+						entityType: 'assignment',
+						entityId: assignmentId,
+						action: 'unfilled',
+						actorType: 'system',
+						actorId: null,
+						changes: {
+							before: { status: assignment.status, userId: assignment.userId },
+							after: { status: 'unfilled', userId: null },
+							reason: 'bid_window_opened',
+							trigger: options.trigger
+						}
+					},
+					tx
+				);
+			}
 
-		bidWindowId = bidWindow.id;
+			const [bidWindow] = await tx
+				.insert(bidWindows)
+				.values({
+					assignmentId,
+					mode,
+					trigger: options.trigger ?? null,
+					payBonusPercent: options.payBonusPercent ?? 0,
+					opensAt: new Date(),
+					closesAt,
+					status: 'open'
+				})
+				.returning({ id: bidWindows.id });
+
+			if (!bidWindow) {
+				throw new Error('Bid window insert returned no rows');
+			}
+
+			return { bidWindowId: bidWindow.id };
+		});
+
+		bidWindowId = transactionResult.bidWindowId;
 	} catch (err) {
 		if (isPgUniqueViolation(err, OPEN_WINDOW_CONSTRAINT)) {
 			log.info('Open bid window already exists');
