@@ -138,14 +138,17 @@ describe('LC-05 cron decision logic: GET /api/cron/close-bid-windows', () => {
 		const response = await GET(createAuthorizedCronEvent() as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(200);
-		await expect(response.json()).resolves.toEqual({
-			success: true,
-			processed: 0,
-			resolved: 0,
-			transitioned: 0,
-			closed: 0,
-			errors: 0
-		});
+		await expect(response.json()).resolves.toEqual(
+			expect.objectContaining({
+				success: true,
+				processed: 0,
+				resolved: 0,
+				transitioned: 0,
+				closed: 0,
+				errors: 0,
+				elapsedMs: expect.any(Number)
+			})
+		);
 		expect(resolveBidWindowMock).not.toHaveBeenCalled();
 		expect(getExpiredBidWindowsMock).toHaveBeenCalledWith(undefined, 'org-1');
 		expect(dbUpdateMock).not.toHaveBeenCalled();
@@ -192,14 +195,17 @@ describe('LC-05 cron decision logic: GET /api/cron/close-bid-windows', () => {
 		const response = await GET(createAuthorizedCronEvent() as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(200);
-		await expect(response.json()).resolves.toEqual({
-			success: true,
-			processed: 4,
-			resolved: 1,
-			transitioned: 1,
-			closed: 1,
-			errors: 1
-		});
+		await expect(response.json()).resolves.toEqual(
+			expect.objectContaining({
+				success: true,
+				processed: 4,
+				resolved: 1,
+				transitioned: 1,
+				closed: 1,
+				errors: 1,
+				elapsedMs: expect.any(Number)
+			})
+		);
 
 		expect(resolveBidWindowMock).toHaveBeenCalledTimes(4);
 		expect(dbUpdateMock).toHaveBeenCalledTimes(1);
@@ -223,25 +229,85 @@ describe('LC-05 cron decision logic: GET /api/cron/close-bid-windows', () => {
 
 		expect(firstResponse.status).toBe(200);
 		expect(secondResponse.status).toBe(200);
-		await expect(firstResponse.json()).resolves.toEqual({
-			success: true,
-			processed: 1,
-			resolved: 0,
-			transitioned: 0,
-			closed: 1,
-			errors: 0
-		});
-		await expect(secondResponse.json()).resolves.toEqual({
-			success: true,
-			processed: 0,
-			resolved: 0,
-			transitioned: 0,
-			closed: 0,
-			errors: 0
-		});
+		await expect(firstResponse.json()).resolves.toEqual(
+			expect.objectContaining({
+				success: true,
+				processed: 1,
+				resolved: 0,
+				transitioned: 0,
+				closed: 1,
+				errors: 0,
+				elapsedMs: expect.any(Number)
+			})
+		);
+		await expect(secondResponse.json()).resolves.toEqual(
+			expect.objectContaining({
+				success: true,
+				processed: 0,
+				resolved: 0,
+				transitioned: 0,
+				closed: 0,
+				errors: 0,
+				elapsedMs: expect.any(Number)
+			})
+		);
 
 		expect(resolveBidWindowMock).toHaveBeenCalledTimes(1);
 		expect(dbUpdateMock).toHaveBeenCalledTimes(1);
 		expect(updateWhereMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('continues processing other organizations when one organization fails', async () => {
+		selectFromMock.mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }]);
+
+		getExpiredBidWindowsMock.mockImplementation(async (_cutoff, organizationId) => {
+			if (organizationId === 'org-1') {
+				throw new Error('org query failed');
+			}
+
+			return [{ id: 'window-2', mode: 'competitive' }];
+		});
+
+		resolveBidWindowMock.mockResolvedValue({
+			resolved: true,
+			winnerId: 'driver-1',
+			bidCount: 2
+		});
+
+		const response = await GET(createAuthorizedCronEvent() as Parameters<typeof GET>[0]);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual(
+			expect.objectContaining({
+				success: true,
+				processed: 1,
+				resolved: 1,
+				transitioned: 0,
+				closed: 0,
+				errors: 1,
+				elapsedMs: expect.any(Number)
+			})
+		);
+		expect(resolveBidWindowMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('returns 500 with telemetry when organization loading fails', async () => {
+		selectFromMock.mockRejectedValue(new Error('database unavailable'));
+
+		const response = await GET(createAuthorizedCronEvent() as Parameters<typeof GET>[0]);
+
+		expect(response.status).toBe(500);
+		await expect(response.json()).resolves.toEqual(
+			expect.objectContaining({
+				success: false,
+				processed: 0,
+				resolved: 0,
+				transitioned: 0,
+				closed: 0,
+				errors: 1,
+				elapsedMs: expect.any(Number)
+			})
+		);
+		expect(getExpiredBidWindowsMock).not.toHaveBeenCalled();
 	});
 });

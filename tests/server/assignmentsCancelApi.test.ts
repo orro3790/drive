@@ -193,7 +193,7 @@ beforeEach(async () => {
 
 	createAssignmentLifecycleContextMock = vi.fn(() => ({ torontoToday: '2026-02-09' }));
 	deriveAssignmentLifecycleMock = vi.fn(() => createLifecycleOutput());
-	createBidWindowMock = vi.fn(async () => ({ success: true }));
+	createBidWindowMock = vi.fn(async () => ({ success: true, bidWindowId: 'bid-window-1' }));
 	sendManagerAlertMock = vi.fn(async () => undefined);
 	createAuditLogMock = vi.fn(async () => undefined);
 	broadcastAssignmentUpdatedMock = vi.fn();
@@ -331,7 +331,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 403 });
 	});
 
-	it('returns 409 when assignment is already cancelled', async () => {
+	it('returns 200 for idempotent replay when assignment is already cancelled', async () => {
 		selectWhereMock.mockResolvedValue([
 			{
 				id: 'assignment-1',
@@ -350,7 +350,26 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 			body: { reason: 'other' }
 		});
 
-		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 409 });
+		const response = await POST(event as Parameters<typeof POST>[0]);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			assignment: {
+				id: 'assignment-1',
+				status: 'cancelled'
+			},
+			alreadyCancelled: true,
+			replacementWindow: {
+				status: 'created',
+				bidWindowId: 'bid-window-1',
+				reason: null
+			}
+		});
+
+		expect(createBidWindowMock).toHaveBeenCalledWith('assignment-1', {
+			organizationId: 'org-test',
+			trigger: 'cancellation'
+		});
 	});
 
 	it('returns 400 when lifecycle marks assignment as not cancelable', async () => {
@@ -405,6 +424,11 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 			assignment: {
 				id: 'assignment-1',
 				status: 'cancelled'
+			},
+			replacementWindow: {
+				status: 'created',
+				bidWindowId: 'bid-window-1',
+				reason: null
 			}
 		});
 
@@ -423,5 +447,87 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 			})
 		);
 		expect(metricsUpdateWhereMock).not.toHaveBeenCalled();
+	});
+
+	it('returns 200 when replacement window already exists', async () => {
+		freezeTime('2026-02-09T12:00:00.000Z');
+		selectWhereMock.mockResolvedValue([
+			{
+				id: 'assignment-1',
+				userId: 'driver-1',
+				routeId: 'route-1',
+				date: '2026-02-10',
+				status: 'scheduled',
+				confirmedAt: null
+			}
+		]);
+		assignmentUpdateReturningMock.mockResolvedValue([{ id: 'assignment-1', status: 'cancelled' }]);
+		createBidWindowMock.mockResolvedValue({
+			success: false,
+			reason: 'Open bid window already exists for this assignment'
+		});
+
+		const event = createRequestEvent({
+			method: 'POST',
+			params: { id: 'assignment-1' },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { reason: 'other' }
+		});
+
+		const response = await POST(event as Parameters<typeof POST>[0]);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			assignment: {
+				id: 'assignment-1',
+				status: 'cancelled'
+			},
+			replacementWindow: {
+				status: 'already_open',
+				bidWindowId: null,
+				reason: 'Open bid window already exists for this assignment'
+			}
+		});
+	});
+
+	it('returns 200 even when replacement window creation fails', async () => {
+		freezeTime('2026-02-09T12:00:00.000Z');
+		selectWhereMock.mockResolvedValue([
+			{
+				id: 'assignment-1',
+				userId: 'driver-1',
+				routeId: 'route-1',
+				date: '2026-02-10',
+				status: 'scheduled',
+				confirmedAt: null
+			}
+		]);
+		assignmentUpdateReturningMock.mockResolvedValue([{ id: 'assignment-1', status: 'cancelled' }]);
+		createBidWindowMock.mockResolvedValue({
+			success: false,
+			reason: 'Failed to create bid window'
+		});
+
+		const event = createRequestEvent({
+			method: 'POST',
+			params: { id: 'assignment-1' },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { reason: 'other' }
+		});
+
+		const response = await POST(event as Parameters<typeof POST>[0]);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			assignment: {
+				id: 'assignment-1',
+				status: 'cancelled'
+			},
+			replacementWindow: {
+				status: 'not_created',
+				bidWindowId: null,
+				reason: 'Failed to create bid window'
+			}
+		});
 	});
 });
