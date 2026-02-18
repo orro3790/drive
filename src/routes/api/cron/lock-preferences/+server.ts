@@ -106,12 +106,26 @@ export const GET: RequestHandler = async ({ request }) => {
 							)
 							.returning({ id: driverPreferences.id, userId: driverPreferences.userId });
 
-			lockedCount += lockedRows.length;
-			orgLog.info({ lockedCount: lockedRows.length }, 'Preferences locked for organization');
+			const insertedRows =
+				driverIds.length === 0
+					? []
+					: await db
+							.insert(driverPreferences)
+							.values(driverIds.map((driverId) => ({ userId: driverId, lockedAt: lockAt })))
+							.onConflictDoNothing({ target: driverPreferences.userId })
+							.returning({ id: driverPreferences.id, userId: driverPreferences.userId });
+
+			const lockedOrInsertedRows = [...lockedRows, ...insertedRows];
+
+			lockedCount += lockedOrInsertedRows.length;
+			orgLog.info(
+				{ lockedCount: lockedOrInsertedRows.length },
+				'Preferences locked for organization'
+			);
 
 			// Send schedule_locked notification to drivers whose preferences were locked
-			if (lockedRows.length > 0) {
-				const lockedUserIds = lockedRows.map((row) => row.userId);
+			if (lockedOrInsertedRows.length > 0) {
+				const lockedUserIds = lockedOrInsertedRows.map((row) => row.userId);
 				const lockResults = await sendBulkNotifications(lockedUserIds, 'schedule_locked', {
 					organizationId
 				});

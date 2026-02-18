@@ -97,6 +97,31 @@ let updateMock: ReturnType<
 	>
 >;
 
+let insertReturningMock: ReturnType<
+	typeof vi.fn<(shape: Record<string, unknown>) => Promise<LockedPreferenceRow[]>>
+>;
+let insertOnConflictDoNothingMock: ReturnType<
+	typeof vi.fn<
+		(options: { target: unknown }) => {
+			returning: typeof insertReturningMock;
+		}
+	>
+>;
+let insertValuesMock: ReturnType<
+	typeof vi.fn<
+		(values: Array<Record<string, unknown>>) => {
+			onConflictDoNothing: typeof insertOnConflictDoNothingMock;
+		}
+	>
+>;
+let insertMock: ReturnType<
+	typeof vi.fn<
+		(table: unknown) => {
+			values: typeof insertValuesMock;
+		}
+	>
+>;
+
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
 let selectInnerJoinMock: ReturnType<typeof vi.fn>;
 let selectFromMock: ReturnType<typeof vi.fn>;
@@ -152,6 +177,25 @@ beforeEach(async () => {
 		set: updateSetMock
 	}));
 
+	insertReturningMock = vi.fn<(shape: Record<string, unknown>) => Promise<LockedPreferenceRow[]>>(
+		async () => []
+	);
+	insertOnConflictDoNothingMock = vi.fn<
+		(options: { target: unknown }) => { returning: typeof insertReturningMock }
+	>(() => ({
+		returning: insertReturningMock
+	}));
+	insertValuesMock = vi.fn<
+		(values: Array<Record<string, unknown>>) => {
+			onConflictDoNothing: typeof insertOnConflictDoNothingMock;
+		}
+	>(() => ({
+		onConflictDoNothing: insertOnConflictDoNothingMock
+	}));
+	insertMock = vi.fn<(table: unknown) => { values: typeof insertValuesMock }>(() => ({
+		values: insertValuesMock
+	}));
+
 	selectWhereMock = vi.fn<(whereClause: unknown) => Promise<unknown[]>>(async () => []);
 	selectInnerJoinMock = vi.fn((_table: unknown, _condition: unknown) => ({
 		innerJoin: selectInnerJoinMock,
@@ -199,6 +243,7 @@ beforeEach(async () => {
 	vi.doMock('$lib/server/db', () => ({
 		db: {
 			update: updateMock,
+			insert: insertMock,
 			select: selectMock
 		}
 	}));

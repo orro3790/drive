@@ -10,9 +10,10 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { driverPreferences, routes, warehouses } from '$lib/server/db/schema';
 import { preferencesUpdateSchema } from '$lib/schemas/preferences';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { requireDriverWithOrg } from '$lib/server/org-scope';
 import {
+	getCurrentPreferenceLockDeadline,
 	getNextPreferenceLockDeadline,
 	isCurrentPreferenceCycleLocked
 } from '$lib/server/time/preferenceLock';
@@ -78,18 +79,6 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 
 	const userId = user.id;
 
-	// Check if preferences are locked
-	const [existing] = await db
-		.select()
-		.from(driverPreferences)
-		.where(eq(driverPreferences.userId, userId));
-
-	const now = new Date();
-
-	if (isPreferencesLocked(existing?.lockedAt ?? null, now)) {
-		throw error(423, 'Preferences are locked for current scheduling cycle');
-	}
-
 	const body = await request.json();
 	const result = preferencesUpdateSchema.safeParse(body);
 
@@ -98,6 +87,8 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 	}
 
 	const { preferredDays, preferredRoutes } = result.data;
+	const now = new Date();
+	const currentLockDeadline = getCurrentPreferenceLockDeadline(now);
 
 	// Validate that all route IDs exist
 	if (preferredRoutes.length > 0) {
@@ -111,30 +102,28 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 		}
 	}
 
-	// Upsert preferences
-	if (existing) {
-		await db
-			.update(driverPreferences)
-			.set({
-				preferredDays,
-				preferredRoutes,
-				updatedAt: now
-			})
-			.where(eq(driverPreferences.id, existing.id));
-	} else {
-		await db.insert(driverPreferences).values({
+	const [updated] = await db
+		.insert(driverPreferences)
+		.values({
 			userId,
 			preferredDays,
 			preferredRoutes,
 			updatedAt: now
-		});
-	}
+		})
+		.onConflictDoUpdate({
+			target: driverPreferences.userId,
+			set: {
+				preferredDays,
+				preferredRoutes,
+				updatedAt: now
+			},
+			where: sql`${driverPreferences.lockedAt} is null or ${driverPreferences.lockedAt} < ${currentLockDeadline}`
+		})
+		.returning();
 
-	// Fetch updated preferences with route details
-	const [updated] = await db
-		.select()
-		.from(driverPreferences)
-		.where(eq(driverPreferences.userId, userId));
+	if (!updated) {
+		throw error(423, 'Preferences are locked for current scheduling cycle');
+	}
 
 	let preferredRoutesWithDetails: Array<{
 		id: string;
