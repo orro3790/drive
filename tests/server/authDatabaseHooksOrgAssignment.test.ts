@@ -21,6 +21,11 @@ describe('auth database hook org assignment', () => {
 	it('maps join reservation metadata into pre-insert user data', async () => {
 		const reservationId = '11111111-1111-4111-8111-111111111111';
 		const organizationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+		const getReservedOrganizationJoinSignup = vi.fn(async () => ({
+			reservationId,
+			organizationId,
+			targetRole: 'driver' as const
+		}));
 		const guard = createSignupAbuseGuard(createProductionAllowlistConfig(), {
 			reserveOrganizationJoinSignup: vi.fn(async () => ({
 				allowed: true as const,
@@ -29,7 +34,7 @@ describe('auth database hook org assignment', () => {
 				targetRole: 'driver' as const
 			}))
 		});
-		const dbHook = createSignupOrganizationAssignmentDbHook();
+		const dbHook = createSignupOrganizationAssignmentDbHook({ getReservedOrganizationJoinSignup });
 
 		const sharedContext: Record<string, unknown> = {};
 		await guard({
@@ -53,6 +58,7 @@ describe('auth database hook org assignment', () => {
 				role: 'driver'
 			}
 		});
+		expect(getReservedOrganizationJoinSignup).toHaveBeenCalledWith({ reservationId });
 	});
 
 	it('provisions create-mode organization once and stores assignment context', async () => {
@@ -127,6 +133,11 @@ describe('auth database hook org assignment', () => {
 	it('preserves join assignment context across before -> db hook -> after', async () => {
 		const reservationId = '33333333-3333-4333-8333-333333333333';
 		const organizationId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+		const getReservedOrganizationJoinSignup = vi.fn(async () => ({
+			reservationId,
+			organizationId,
+			targetRole: 'driver' as const
+		}));
 		const guard = createSignupAbuseGuard(createProductionAllowlistConfig(), {
 			reserveOrganizationJoinSignup: vi.fn(async () => ({
 				allowed: true as const,
@@ -135,7 +146,7 @@ describe('auth database hook org assignment', () => {
 				targetRole: 'driver' as const
 			}))
 		});
-		const dbHook = createSignupOrganizationAssignmentDbHook();
+		const dbHook = createSignupOrganizationAssignmentDbHook({ getReservedOrganizationJoinSignup });
 		const finalizeOrganizationJoinSignup = vi.fn(async () => ({
 			reservationId,
 			organizationId,
@@ -178,5 +189,36 @@ describe('auth database hook org assignment', () => {
 			reservationId,
 			userId: 'driver-1'
 		});
+	});
+
+	it('blocks join signup when reservation is revoked before user insert', async () => {
+		const reservationId = '44444444-4444-4444-8444-444444444444';
+		const organizationId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+		const guard = createSignupAbuseGuard(createProductionAllowlistConfig(), {
+			reserveOrganizationJoinSignup: vi.fn(async () => ({
+				allowed: true as const,
+				reservationId,
+				organizationId,
+				targetRole: 'driver' as const
+			}))
+		});
+		const dbHook = createSignupOrganizationAssignmentDbHook({
+			getReservedOrganizationJoinSignup: vi.fn(async () => null)
+		});
+
+		const sharedContext: Record<string, unknown> = {};
+		await guard({
+			path: '/sign-up/email',
+			body: { email: 'revoked@example.test' },
+			headers: new Headers({
+				'x-signup-org-mode': 'join',
+				'x-signup-org-code': 'ORG-REV-123'
+			}),
+			context: sharedContext
+		} as never);
+
+		await expect(
+			dbHook({ email: 'revoked@example.test' }, { path: '/sign-up/email', context: sharedContext })
+		).rejects.toBeInstanceOf(APIError);
 	});
 });
