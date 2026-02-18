@@ -252,6 +252,18 @@ const emptyDriverMetrics: DriverMetrics = {
 	avgParcelsDelivered: 0
 };
 
+const mutationVersions = new Map<string, number>();
+
+function nextMutationVersion(mutationKey: string): number {
+	const version = (mutationVersions.get(mutationKey) ?? 0) + 1;
+	mutationVersions.set(mutationKey, version);
+	return version;
+}
+
+function isLatestMutationVersion(mutationKey: string, version: number): boolean {
+	return (mutationVersions.get(mutationKey) ?? 0) === version;
+}
+
 export const dashboardStore = {
 	get todayShift() {
 		return state.todayShift;
@@ -425,6 +437,8 @@ export const dashboardStore = {
 		}
 
 		state.isCompletingShift = true;
+		const mutationKey = `dashboard:completeShift:${assignmentId}`;
+		const mutationVersion = nextMutationVersion(mutationKey);
 
 		const normalizeAssignment = (assignment: DashboardAssignment): DashboardAssignment => ({
 			...assignment,
@@ -549,6 +563,10 @@ export const dashboardStore = {
 				throw new Error('Invalid shift completion response');
 			}
 
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return true;
+			}
+
 			const { shift, assignmentStatus } = parsed.data;
 			applyAssignmentUpdate((assignment) => {
 				if (assignment.id !== assignmentId) {
@@ -582,11 +600,17 @@ export const dashboardStore = {
 			toastStore.success(m.shift_complete_success());
 			return true;
 		} catch (err) {
+			if (!isLatestMutationVersion(mutationKey, mutationVersion)) {
+				return false;
+			}
+
 			restoreSnapshot();
 			toastStore.error(m.shift_complete_error());
 			return false;
 		} finally {
-			state.isCompletingShift = false;
+			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
+				state.isCompletingShift = false;
+			}
 		}
 	},
 
