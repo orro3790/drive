@@ -36,6 +36,13 @@ jobs:
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/test
+      BETTER_AUTH_SECRET: test-better-auth-secret
+      FIREBASE_PROJECT_ID: test-project
+      FIREBASE_CLIENT_EMAIL: test@example.com
+      FIREBASE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nTEST\\n-----END PRIVATE KEY-----\\n"
+      CRON_SECRET: test-cron-secret
 
     steps:
       - name: Checkout
@@ -184,6 +191,13 @@ jobs:
           });
           NODE
 
+      - name: Run integration smoke prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p logs/ci/e2e-smoke tests/integration/.evidence
+          pnpm test:integration:smoke 2>&1 | tee logs/ci/e2e-smoke/integration.log
+
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
 
@@ -216,6 +230,7 @@ jobs:
       FIREBASE_CLIENT_EMAIL: test@example.com
       FIREBASE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nTEST\\n-----END PRIVATE KEY-----\\n"
       DATABASE_URL: postgresql://test:test@localhost:5432/test
+      BETTER_AUTH_TRUSTED_ORIGINS: https://example.com
 
     steps:
       - name: Checkout
