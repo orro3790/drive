@@ -12,56 +12,16 @@ import { driverPreferences, routes, warehouses } from '$lib/server/db/schema';
 import { preferencesUpdateSchema } from '$lib/schemas/preferences';
 import { eq, inArray } from 'drizzle-orm';
 import { requireDriverWithOrg } from '$lib/server/org-scope';
+import {
+	getNextPreferenceLockDeadline,
+	isCurrentPreferenceCycleLocked
+} from '$lib/server/time/preferenceLock';
 
 /**
- * Get next Sunday 23:59:59 Toronto time as lock deadline
+ * Check if preferences are locked for the active cycle.
  */
-function getNextLockDeadline(): Date {
-	const now = new Date();
-	// Get current time in Toronto
-	const torontoFormatter = new Intl.DateTimeFormat('en-CA', {
-		timeZone: 'America/Toronto',
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-		weekday: 'short'
-	});
-	const parts = torontoFormatter.formatToParts(now);
-	const weekday = parts.find((p) => p.type === 'weekday')?.value;
-
-	// Calculate days until Sunday (0 = Sunday)
-	const dayMap: Record<string, number> = {
-		Sun: 0,
-		Mon: 1,
-		Tue: 2,
-		Wed: 3,
-		Thu: 4,
-		Fri: 5,
-		Sat: 6
-	};
-	const currentDay = dayMap[weekday || 'Mon'] ?? 1;
-	const daysUntilSunday = currentDay === 0 ? 7 : 7 - currentDay;
-
-	// Set to next Sunday 23:59:59
-	const deadline = new Date(now);
-	deadline.setDate(deadline.getDate() + daysUntilSunday);
-	deadline.setHours(23, 59, 59, 999);
-
-	return deadline;
-}
-
-/**
- * Check if preferences are locked for current cycle (Week N+2)
- * Preferences lock Sunday 23:59 for schedules 2 weeks out
- */
-function isPreferencesLocked(lockedAt: Date | null): boolean {
-	if (!lockedAt) return false;
-
-	const now = new Date();
-	const lockDeadline = getNextLockDeadline();
-
-	// If locked after the last deadline, preferences are still locked
-	return lockedAt >= lockDeadline;
+function isPreferencesLocked(lockedAt: Date | null, referenceInstant: Date): boolean {
+	return isCurrentPreferenceCycleLocked(lockedAt, referenceInstant);
 }
 
 export const GET: RequestHandler = async ({ locals }) => {
@@ -75,8 +35,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.from(driverPreferences)
 		.where(eq(driverPreferences.userId, userId));
 
-	const lockDeadline = getNextLockDeadline();
-	const isLocked = isPreferencesLocked(preferences?.lockedAt ?? null);
+	const now = new Date();
+	const lockDeadline = getNextPreferenceLockDeadline(now);
+	const isLocked = isPreferencesLocked(preferences?.lockedAt ?? null, now);
 
 	// Get route details for preferred routes
 	let preferredRoutesWithDetails: Array<{
@@ -123,7 +84,9 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 		.from(driverPreferences)
 		.where(eq(driverPreferences.userId, userId));
 
-	if (isPreferencesLocked(existing?.lockedAt ?? null)) {
+	const now = new Date();
+
+	if (isPreferencesLocked(existing?.lockedAt ?? null, now)) {
 		throw error(423, 'Preferences are locked for current scheduling cycle');
 	}
 
@@ -147,8 +110,6 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 			throw error(400, 'One or more route IDs are invalid');
 		}
 	}
-
-	const now = new Date();
 
 	// Upsert preferences
 	if (existing) {
@@ -195,7 +156,7 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 		preferredRoutesWithDetails = routeRows;
 	}
 
-	const lockDeadline = getNextLockDeadline();
+	const lockDeadline = getNextPreferenceLockDeadline(now);
 
 	return json({
 		preferences: {

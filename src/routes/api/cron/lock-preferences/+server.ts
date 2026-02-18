@@ -13,8 +13,7 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { addDays, addWeeks, set, startOfDay } from 'date-fns';
-import { format, toZonedTime } from 'date-fns-tz';
+import { addDays, addWeeks } from 'date-fns';
 import { and, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
@@ -29,20 +28,8 @@ import logger from '$lib/server/logger';
 import { sendBulkNotifications } from '$lib/server/services/notifications';
 import { generateWeekSchedule, getWeekStart } from '$lib/server/services/scheduling';
 import { verifyCronAuth } from '$lib/server/cron/auth';
-
-const TORONTO_TZ = 'America/Toronto';
-
-function toTorontoDateString(date: Date): string {
-	return format(toZonedTime(date, TORONTO_TZ), 'yyyy-MM-dd');
-}
-
-function getCurrentLockDeadline(nowToronto: Date): Date {
-	const day = nowToronto.getDay();
-	const daysUntilSunday = day === 0 ? 7 : 7 - day;
-	const nextSunday = addDays(startOfDay(nowToronto), daysUntilSunday);
-	const currentSunday = addDays(nextSunday, -7);
-	return set(currentSunday, { hours: 23, minutes: 59, seconds: 59, milliseconds: 999 });
-}
+import { getCurrentPreferenceLockDeadline } from '$lib/server/time/preferenceLock';
+import { toTorontoDateString } from '$lib/server/time/toronto';
 
 export const GET: RequestHandler = async ({ request }) => {
 	const authError = verifyCronAuth(request);
@@ -50,7 +37,7 @@ export const GET: RequestHandler = async ({ request }) => {
 
 	const log = logger.child({ cron: 'lock-preferences' });
 	const startedAt = new Date();
-	const lockAt = getCurrentLockDeadline(toZonedTime(startedAt, TORONTO_TZ));
+	const lockAt = getCurrentPreferenceLockDeadline(startedAt);
 	const lockWeekStart = getWeekStart(lockAt);
 	const targetWeekStart = addWeeks(lockWeekStart, 2);
 	const targetWeekEnd = addDays(targetWeekStart, 7);
