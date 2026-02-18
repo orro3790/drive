@@ -436,6 +436,10 @@ export const dashboardStore = {
 			return false;
 		}
 
+		if (state.isCompletingShift) {
+			return false;
+		}
+
 		state.isCompletingShift = true;
 		const mutationKey = `dashboard:completeShift:${assignmentId}`;
 		const mutationVersion = nextMutationVersion(mutationKey);
