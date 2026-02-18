@@ -90,38 +90,44 @@ describe('auth signup reservation flow', () => {
 		const finalizeReservation = vi.fn(async () => null);
 		const releaseReservation = vi.fn(async () => null);
 		const recordReconciliation = vi.fn(async () => undefined);
+		const rollbackSignupUser = vi.fn(async () => undefined);
 
 		const consumer = createSignupOnboardingConsumer(createProductionAllowlistConfig(), {
 			finalizeOrganizationJoinSignup: finalizeReservation,
 			releaseProductionSignupAuthorizationReservation: releaseReservation,
-			recordSignupFinalizeReconciliation: recordReconciliation
+			recordSignupFinalizeReconciliation: recordReconciliation,
+			rollbackSignupUser
 		});
 
-		await expect(
-			consumer({
-				path: '/sign-up/email',
-				headers: new Headers(),
-				context: {
-					signupOnboardingReservationId: '88888888-8888-4888-8888-888888888888',
-					signupOrganization: {
-						mode: 'join',
-						organizationCode: 'ORG-RACE-123'
-					},
-					returned: {
-						user: {
-							id: 'driver-8',
-							email: 'driver8@example.test'
-						}
+		const blockedSignupAttempt = consumer({
+			path: '/sign-up/email',
+			headers: new Headers(),
+			context: {
+				signupOnboardingReservationId: '88888888-8888-4888-8888-888888888888',
+				signupOrganization: {
+					mode: 'join',
+					organizationCode: 'ORG-RACE-123'
+				},
+				returned: {
+					user: {
+						id: 'driver-8',
+						email: 'driver8@example.test'
 					}
 				}
-			} as never)
-		).resolves.toBeUndefined();
+			}
+		} as never);
+
+		await expect(blockedSignupAttempt).rejects.toBeInstanceOf(APIError);
+		await expect(blockedSignupAttempt).rejects.toMatchObject({
+			message: 'Signup is restricted. Please contact a manager for approval.'
+		});
 
 		expect(recordReconciliation).toHaveBeenCalledWith({
 			reservationId: '88888888-8888-4888-8888-888888888888',
 			userId: 'driver-8',
 			email: 'driver8@example.test'
 		});
+		expect(rollbackSignupUser).toHaveBeenCalledWith({ userId: 'driver-8' });
 		expect(releaseReservation).not.toHaveBeenCalled();
 	});
 });
