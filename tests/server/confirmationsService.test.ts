@@ -116,22 +116,34 @@ describe('confirmation service boundaries', () => {
 		expect(deadline.getTime() - opensAt.getTime()).toBe(120 * 60 * 60 * 1000);
 	});
 
-	it('keeps confirmation windows pinned to 7 AM Toronto across DST boundaries', () => {
+	it('keeps confirmation windows anchored to exact 48h/7d durations across DST boundaries', () => {
 		const springForward = calculateConfirmationDeadline('2026-03-08');
 		const fallBack = calculateConfirmationDeadline('2026-11-01');
+		const springForwardShiftStart = new Date('2026-03-08T11:00:00.000Z');
+		const fallBackShiftStart = new Date('2026-11-01T12:00:00.000Z');
+
+		expect(springForwardShiftStart.getTime() - springForward.opensAt.getTime()).toBe(
+			168 * 60 * 60 * 1000
+		);
+		expect(springForwardShiftStart.getTime() - springForward.deadline.getTime()).toBe(
+			48 * 60 * 60 * 1000
+		);
 
 		expect(formatInTimeZone(springForward.opensAt, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
-			'2026-03-01 07:00'
+			'2026-03-01 06:00'
 		);
 		expect(formatInTimeZone(springForward.deadline, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
-			'2026-03-06 07:00'
+			'2026-03-06 06:00'
 		);
 
+		expect(fallBackShiftStart.getTime() - fallBack.opensAt.getTime()).toBe(168 * 60 * 60 * 1000);
+		expect(fallBackShiftStart.getTime() - fallBack.deadline.getTime()).toBe(48 * 60 * 60 * 1000);
+
 		expect(formatInTimeZone(fallBack.opensAt, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
-			'2026-10-25 07:00'
+			'2026-10-25 08:00'
 		);
 		expect(formatInTimeZone(fallBack.deadline, 'America/Toronto', 'yyyy-MM-dd HH:mm')).toBe(
-			'2026-10-30 07:00'
+			'2026-10-30 08:00'
 		);
 	});
 

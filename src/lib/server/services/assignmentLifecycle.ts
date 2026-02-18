@@ -2,11 +2,9 @@ import { fromZonedTime } from 'date-fns-tz';
 
 import { dispatchPolicy, parseRouteStartTime } from '$lib/config/dispatchPolicy';
 import type { AssignmentStatus } from '$lib/schemas/assignment';
-import {
-	addDaysToDateString,
-	getTorontoDateTimeInstant,
-	toTorontoDateString
-} from '$lib/server/time/toronto';
+import { getTorontoDateTimeInstant, toTorontoDateString } from '$lib/server/time/toronto';
+
+const HOUR_IN_MS = 60 * 60 * 1000;
 
 export interface AssignmentLifecycleContext {
 	nowToronto: Date;
@@ -79,16 +77,13 @@ export function calculateConfirmationWindow(
 	assignmentDate: string,
 	timezone: string = dispatchPolicy.timezone.toronto
 ): { opensAt: Date; deadline: Date } {
-	const opensAtDate = addDaysToDateString(
-		assignmentDate,
-		-dispatchPolicy.confirmation.windowDaysBeforeShift
+	const shiftStart = getShiftStart(assignmentDate, timezone);
+	const opensAt = new Date(
+		shiftStart.getTime() - dispatchPolicy.confirmation.windowDaysBeforeShift * 24 * HOUR_IN_MS
 	);
-	const deadlineDate = addDaysToDateString(
-		assignmentDate,
-		-(dispatchPolicy.confirmation.deadlineHoursBeforeShift / 24)
+	const deadline = new Date(
+		shiftStart.getTime() - dispatchPolicy.confirmation.deadlineHoursBeforeShift * HOUR_IN_MS
 	);
-	const opensAt = getShiftStart(opensAtDate, timezone);
-	const deadline = getShiftStart(deadlineDate, timezone);
 
 	return { opensAt, deadline };
 }

@@ -340,7 +340,7 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 		selectWhereMock.mockResolvedValue([candidate]);
 		createBidWindowMock.mockResolvedValue({ success: true, bidWindowId: 'window-spring' });
 
-		freezeTime('2026-03-06T11:30:00.000Z');
+		freezeTime('2026-03-06T10:59:59.000Z');
 		const beforeDeadlineResponse = await GET(
 			createRequestEvent({
 				method: 'GET',
@@ -357,7 +357,7 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 		});
 		expect(createBidWindowMock).not.toHaveBeenCalled();
 
-		freezeTime('2026-03-06T12:00:00.000Z');
+		freezeTime('2026-03-06T11:00:00.000Z');
 		const atDeadlineResponse = await GET(
 			createRequestEvent({
 				method: 'GET',
@@ -376,19 +376,36 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 	});
 
 	it('uses confirmation deadline timing during fall-back week', async () => {
-		freezeTime('2026-10-30T11:30:00.000Z');
+		const candidate: AutoDropCandidate = {
+			id: 'assignment-fall-back',
+			userId: 'driver-fall',
+			routeId: 'route-fall',
+			date: '2026-11-01',
+			routeName: 'Route Fall',
+			organizationId: 'org-1'
+		};
 
-		selectWhereMock.mockResolvedValue([
-			{
-				id: 'assignment-fall-back',
-				userId: 'driver-fall',
-				routeId: 'route-fall',
-				date: '2026-11-01',
-				routeName: 'Route Fall',
-				organizationId: 'org-1'
-			}
-		]);
+		selectWhereMock.mockResolvedValue([candidate]);
 		createBidWindowMock.mockResolvedValue({ success: true, bidWindowId: 'window-fall' });
+
+		freezeTime('2026-10-30T11:59:59.000Z');
+		const beforeDeadlineResponse = await GET(
+			createRequestEvent({
+				method: 'GET',
+				headers: {
+					authorization: 'Bearer test-cron-secret'
+				}
+			}) as Parameters<typeof GET>[0]
+		);
+
+		await expect(beforeDeadlineResponse.json()).resolves.toMatchObject({
+			success: true,
+			dropped: 0,
+			bidWindowsCreated: 0
+		});
+		expect(createBidWindowMock).not.toHaveBeenCalled();
+
+		freezeTime('2026-10-30T12:00:00.000Z');
 
 		const response = await GET(
 			createRequestEvent({

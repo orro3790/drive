@@ -13,23 +13,14 @@ import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
-import {
-	addDaysToDateString,
-	getTorontoDateTimeInstant,
-	toTorontoDateString
-} from '$lib/server/time/toronto';
+import { toTorontoDateString } from '$lib/server/time/toronto';
+import { calculateConfirmationWindow } from '$lib/server/services/assignmentLifecycle';
 
 /** Set to the date confirmations go live. Pre-existing assignments are skipped. */
 export const CONFIRMATION_DEPLOYMENT_DATE = dispatchPolicy.confirmation.deploymentDate;
 
 function getNowToronto(): Date {
 	return new Date();
-}
-
-function getShiftStart(dateString: string): Date {
-	return getTorontoDateTimeInstant(dateString, {
-		hours: dispatchPolicy.shifts.startHourLocal
-	});
 }
 
 export interface ConfirmationWindow {
@@ -40,21 +31,11 @@ export interface ConfirmationWindow {
 /**
  * Calculate the confirmation window for an assignment date.
  *
- * - Opens: 7 days before shift start (07:00 Toronto)
+ * - Opens: 7 days (168h) before shift start instant
  * - Deadline: 48 hours before shift start
  */
 export function calculateConfirmationDeadline(assignmentDate: string): ConfirmationWindow {
-	const opensAtDate = addDaysToDateString(
-		assignmentDate,
-		-dispatchPolicy.confirmation.windowDaysBeforeShift
-	);
-	const deadlineDate = addDaysToDateString(
-		assignmentDate,
-		-(dispatchPolicy.confirmation.deadlineHoursBeforeShift / 24)
-	);
-	const opensAt = getShiftStart(opensAtDate);
-	const deadline = getShiftStart(deadlineDate);
-	return { opensAt, deadline };
+	return calculateConfirmationWindow(assignmentDate);
 }
 
 export interface ConfirmShiftResult {
