@@ -82,3 +82,64 @@ export async function assertNoCrossOrgBidWinnerLeakage(): Promise<void> {
 		);
 	}
 }
+
+export async function assertNoCrossOrgNoShowNotificationLeakage(
+	organizationId: string
+): Promise<void> {
+	const result = await pool.query<{
+		id: string;
+		type: string;
+		user_id: string;
+		user_organization_id: string;
+		notification_organization_id: string;
+	}>(
+		`SELECT n.id,
+				n.type,
+				n.user_id,
+				u.organization_id AS user_organization_id,
+				n.organization_id AS notification_organization_id
+		 FROM notifications n
+		 INNER JOIN "user" u ON u.id = n.user_id
+		 WHERE n.organization_id = $1
+			AND n.type IN ('driver_no_show', 'emergency_route_available')
+			AND u.organization_id <> n.organization_id;`,
+		[organizationId]
+	);
+
+	if ((result.rowCount ?? 0) > 0) {
+		throw new Error(
+			`TENANT-004: no-show notifications leaked across organizations (notification.organization_id must match user.organization_id). Offenders: ${JSON.stringify(
+				result.rows
+			)}`
+		);
+	}
+}
+
+export async function assertNoCrossOrgHealthNotificationLeakage(): Promise<void> {
+	const result = await pool.query<{
+		id: string;
+		type: string;
+		user_id: string;
+		user_organization_id: string;
+		notification_organization_id: string;
+	}>(
+		`SELECT n.id,
+				n.type,
+				n.user_id,
+				u.organization_id AS user_organization_id,
+				n.organization_id AS notification_organization_id
+		 FROM notifications n
+		 INNER JOIN "user" u ON u.id = n.user_id
+		 WHERE n.organization_id IS NOT NULL
+			AND n.type IN ('corrective_warning', 'streak_advanced', 'streak_reset', 'bonus_eligible')
+			AND n.organization_id <> u.organization_id;`
+	);
+
+	if ((result.rowCount ?? 0) > 0) {
+		throw new Error(
+			`TENANT-005: health notifications leaked across organizations (notification.organization_id must match user.organization_id). Offenders: ${JSON.stringify(
+				result.rows
+			)}`
+		);
+	}
+}
