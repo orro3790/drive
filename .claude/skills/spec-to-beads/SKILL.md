@@ -34,7 +34,7 @@ Accepts:
 For each unit of work, create a bead with:
 
 ```bash
-bd.exe create "<clear title>" -d "<detailed body>"
+bd create "<clear title>" -d "<detailed body>"
 ```
 
 ### Source Traceability (REQUIRED)
@@ -88,7 +88,7 @@ Each bead MUST include:
 Link related beads:
 
 ```bash
-bd.exe dep add <child-id> <parent-id>
+bd dep add <child-id> <parent-id>
 ```
 
 ### 4. Validate Completeness

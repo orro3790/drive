@@ -1,22 +1,20 @@
 ---
 name: beads
-description: "Beads task tracking system. TRIGGERS: user mentions 'beads', 'bv', 'beads viewer', 'backlog', 'what's next', 'next task', 'priorities', or asks about task planning/status. Covers analysis (bv --robot-*) and CRUD (bd.exe)."
+description: "Beads task tracking system. TRIGGERS: user mentions 'beads', 'bv', 'beads viewer', 'backlog', 'what's next', 'next task', 'priorities', or asks about task planning/status. Covers analysis (bv --robot-*) and CRUD (bd)."
 ---
 
 # Beads
 
 On-demand algorithmic analysis of the beads backlog using `bv` (beads_viewer).
 
-## Tool Usage: bd.exe vs bv
+## Tool Usage: bd vs bv
 
-| Tool         | Purpose                | Commands                                                            |
-| ------------ | ---------------------- | ------------------------------------------------------------------- |
-| **`bd.exe`** | CRUD operations        | `bd.exe show`, `bd.exe update`, `bd.exe close`, `bd.exe dep remove` |
-| **`bv`**     | Analysis & exploration | All `--robot-*` flags for insights                                  |
+| Tool     | Purpose                | Commands                                            |
+| -------- | ---------------------- | --------------------------------------------------- |
+| **`bd`** | CRUD operations        | `bd show`, `bd update`, `bd close`, `bd dep remove` |
+| **`bv`** | Analysis & exploration | All `--robot-*` flags for insights                  |
 
-**Rule**: Use `bv` for all analysis. Use `bd.exe` only for fixing issues found (e.g., breaking cycles).
-
-**Note**: Use `bd.exe` (not `bd`) in Claude Code on Windows due to [shell script wrapper bug](https://github.com/anthropics/claude-code/issues/18469).
+**Rule**: Use `bv` for all analysis. Use `bd` only for fixing issues found (e.g., breaking cycles).
 
 ## When to Use
 
@@ -28,7 +26,7 @@ On-demand algorithmic analysis of the beads backlog using `bv` (beads_viewer).
 
 ## Analysis Workflow
 
-**Important:** Always run `bv` and `bd.exe` commands from the main repo directory, not from worktrees:
+**Important:** Always run `bv` and `bd` commands from the main repo directory, not from worktrees:
 
 ```bash
 cd C:/Users/matto/projects/drive && bv --robot-triage
@@ -103,14 +101,14 @@ Correlates beads with git commits to understand code changes.
 
 ## Interpreting Results
 
-| Metric           | Meaning                        | Action                               |
-| ---------------- | ------------------------------ | ------------------------------------ |
-| High betweenness | Bottleneck — blocks many paths | Prioritize to unblock parallelism    |
-| High PageRank    | Central to project             | Important for overall progress       |
-| Keystone         | Many dependents                | Completing unblocks multiple tracks  |
-| Cycle detected   | Circular dependency            | Break cycle with `bd.exe dep remove` |
-| Stale alert      | No activity > threshold        | Review or close                      |
-| Quick win        | Low effort, high impact        | Do first for momentum                |
+| Metric           | Meaning                        | Action                              |
+| ---------------- | ------------------------------ | ----------------------------------- |
+| High betweenness | Bottleneck — blocks many paths | Prioritize to unblock parallelism   |
+| High PageRank    | Central to project             | Important for overall progress      |
+| Keystone         | Many dependents                | Completing unblocks multiple tracks |
+| Cycle detected   | Circular dependency            | Break cycle with `bd dep remove`    |
+| Stale alert      | No activity > threshold        | Review or close                     |
+| Quick win        | Low effort, high impact        | Do first for momentum               |
 
 ## Output to User
 

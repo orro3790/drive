@@ -253,7 +253,7 @@ Write the spec to an appropriate location (e.g., `documentation/specs/`, `plans/
 ### Create Bead for Tracking
 
 ```bash
-bd.exe create "<feature title>"
+bd create "<feature title>"
 bd update <bead-id>  # Add description, acceptance criteria, dependencies
 ```
 

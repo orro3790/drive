@@ -248,7 +248,7 @@ Title: `Integration failure: <scenarioId> / <invariantId> (<short symptom>)`
 
 Create the bead (CLI):
 
-If you're on Windows and `bd` is not available on your PATH as `bd`, use `bd.exe`.
+Use `bd` for CRUD operations.
 
 ### Bash (macOS/Linux/Git Bash)
 
@@ -291,7 +291,7 @@ Key entity ids: <orgId, driverId, assignmentId, bidWindowId, ...>
 Owner guess: <infra | harness | algorithm | schema>
 "@
 
-$body | bd.exe create `
+$body | bd create `
   --type bug `
   --labels e2e,nightly `
   --title "Integration failure: <scenarioId> / <invariantId> (<short symptom>)" `
