@@ -102,7 +102,9 @@ beforeAll(async () => {
 	}));
 
 	vi.doMock('$lib/server/services/scheduling', () => ({
-		getWeekStart: vi.fn((date: Date) => date),
+		getWeekStartForDateString: vi.fn(
+			(dateString: string) => new Date(`${dateString}T00:00:00.000Z`)
+		),
 		canDriverTakeAssignment: vi.fn(async () => true)
 	}));
 

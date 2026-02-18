@@ -79,7 +79,9 @@ const createAuditLogMock = vi.fn(
 const canManagerAccessWarehouseMock = vi.fn(
 	async (_managerId: string, _warehouseId: string) => true
 );
-const getWeekStartMock = vi.fn((date: Date) => date);
+const getWeekStartForDateStringMock = vi.fn(
+	(dateString: string) => new Date(`${dateString}T00:00:00.000Z`)
+);
 const getDriverWeeklyAssignmentCountMock = vi.fn(async (_driverId: string, _weekStart: Date) => 0);
 const sendNotificationMock = vi.fn(async () => ({ inAppCreated: true, pushSent: false }));
 const sendBulkNotificationsMock = vi.fn(async () => undefined);
@@ -103,7 +105,7 @@ beforeAll(async () => {
 	}));
 
 	vi.doMock('$lib/server/services/scheduling', () => ({
-		getWeekStart: getWeekStartMock,
+		getWeekStartForDateString: getWeekStartForDateStringMock,
 		getDriverWeeklyAssignmentCount: getDriverWeeklyAssignmentCountMock
 	}));
 
@@ -128,7 +130,7 @@ beforeEach(() => {
 	transactionMock.mockClear();
 	createAuditLogMock.mockClear();
 	canManagerAccessWarehouseMock.mockClear();
-	getWeekStartMock.mockClear();
+	getWeekStartForDateStringMock.mockClear();
 	getDriverWeeklyAssignmentCountMock.mockClear();
 	sendNotificationMock.mockClear();
 	sendBulkNotificationsMock.mockClear();

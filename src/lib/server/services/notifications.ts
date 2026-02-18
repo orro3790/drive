@@ -12,7 +12,7 @@ import { toZonedTime, format } from 'date-fns-tz';
 import { parseISO } from 'date-fns';
 import logger, { toSafeErrorMessage } from '$lib/server/logger';
 import { getRouteManager } from './managers';
-import { getWeekStart, canDriverTakeAssignment } from './scheduling';
+import { canDriverTakeAssignment, getWeekStartForDateString } from './scheduling';
 import {
 	FIREBASE_PROJECT_ID,
 	FIREBASE_CLIENT_EMAIL,
@@ -531,7 +531,7 @@ export async function notifyAvailableDriversForEmergency(
 	}
 
 	// Filter by weekly cap
-	const assignmentWeekStart = getWeekStart(parseISO(date));
+	const assignmentWeekStart = getWeekStartForDateString(date);
 	const eligibleDriverIds: string[] = [];
 	for (const driver of drivers) {
 		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart, organizationId);
