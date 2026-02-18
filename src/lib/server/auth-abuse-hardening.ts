@@ -10,6 +10,7 @@ import {
 	prepareOrganizationCreateSignup,
 	finalizeOrganizationCreateSignup,
 	finalizeOrganizationJoinSignup,
+	getReservedOrganizationJoinSignup,
 	reserveOrganizationJoinSignup
 } from './services/organizationSignup';
 import {
@@ -56,6 +57,7 @@ export interface SignupAbuseGuardDependencies {
 	reserveOrganizationJoinSignup?: typeof reserveOrganizationJoinSignup;
 	prepareOrganizationCreateSignup?: typeof prepareOrganizationCreateSignup;
 	finalizeOrganizationJoinSignup?: typeof finalizeOrganizationJoinSignup;
+	getReservedOrganizationJoinSignup?: typeof getReservedOrganizationJoinSignup;
 	finalizeOrganizationCreateSignup?: typeof finalizeOrganizationCreateSignup;
 	releaseProductionSignupAuthorizationReservation?: typeof releaseProductionSignupAuthorizationReservation;
 	rollbackSignupUser?: (input: { userId: string }) => Promise<void> | void;
@@ -659,6 +661,8 @@ export function createSignupOrganizationAssignmentDbHook(
 ) {
 	const provisionCreateOrganization =
 		dependencies.prepareOrganizationCreateSignup ?? prepareOrganizationCreateSignup;
+	const loadReservedJoinSignup =
+		dependencies.getReservedOrganizationJoinSignup ?? getReservedOrganizationJoinSignup;
 
 	return async (
 		userData: Record<string, unknown>,
@@ -693,10 +697,26 @@ export function createSignupOrganizationAssignmentDbHook(
 					throw new APIError('BAD_REQUEST', { message: MISSING_SIGNUP_ASSIGNMENT_MESSAGE });
 				}
 
+				const activeReservation = await loadReservedJoinSignup({ reservationId });
+				if (!activeReservation) {
+					throw new APIError('BAD_REQUEST', { message: SIGN_UP_BLOCKED_MESSAGE });
+				}
+
+				if (
+					activeReservation.organizationId !== assignment.organizationId ||
+					activeReservation.targetRole !== assignment.role
+				) {
+					logger.error(
+						{ event: 'auth.signup.assignment.join_context_mismatch', path, reservationId },
+						'auth_signup_assignment_join_context_mismatch'
+					);
+					throw new APIError('BAD_REQUEST', { message: MISSING_SIGNUP_ASSIGNMENT_MESSAGE });
+				}
+
 				return {
 					data: {
-						organizationId: assignment.organizationId,
-						role: assignment.role
+						organizationId: activeReservation.organizationId,
+						role: activeReservation.targetRole
 					}
 				};
 			}
