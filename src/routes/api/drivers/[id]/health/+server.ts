@@ -16,11 +16,17 @@ import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { computeContributions } from '$lib/server/services/health';
 import type { HealthResponse } from '$lib/schemas/health';
 import { requireManagerWithOrg } from '$lib/server/org-scope';
+import { driverIdParamsSchema } from '$lib/schemas/driver';
 
 export const GET: RequestHandler = async ({ locals, params }) => {
 	const { organizationId } = requireManagerWithOrg(locals);
+	const paramsResult = driverIdParamsSchema.safeParse(params);
 
-	const { id } = params;
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid driver ID');
+	}
+
+	const { id } = paramsResult.data;
 
 	// Verify the target user exists, is a driver, and is in the same org
 	const [target] = await db

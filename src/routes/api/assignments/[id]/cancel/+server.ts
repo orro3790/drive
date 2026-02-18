@@ -12,7 +12,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { assignments, driverMetrics, routes } from '$lib/server/db/schema';
-import { assignmentCancelSchema } from '$lib/schemas/assignment';
+import { assignmentCancelSchema, assignmentIdParamsSchema } from '$lib/schemas/assignment';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { sendManagerAlert } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
@@ -84,8 +84,13 @@ async function ensureReplacementBidWindow(
 export const POST: RequestHandler = async ({ locals, params, request }) => {
 	const { user, organizationId } = requireDriverWithOrg(locals);
 	const userId = user.id;
+	const paramsResult = assignmentIdParamsSchema.safeParse(params);
 
-	const { id } = params;
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid assignment ID');
+	}
+
+	const { id } = paramsResult.data;
 	let body: unknown;
 	try {
 		body = await request.json();

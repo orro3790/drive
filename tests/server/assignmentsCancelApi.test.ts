@@ -57,6 +57,9 @@ const driverMetricsTable = {
 
 let POST: CancelRouteModule['POST'];
 
+const VALID_ASSIGNMENT_ID = '11111111-1111-4111-8111-111111111111';
+const VALID_MISSING_ASSIGNMENT_ID = '22222222-2222-4222-8222-222222222222';
+
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<AssignmentRow[]>>>;
 let selectFromMock: ReturnType<
 	typeof vi.fn<
@@ -286,7 +289,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 	it('returns 401 when no user is present', async () => {
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			body: { reason: 'other' }
 		});
 
@@ -297,7 +300,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 	it('returns 403 for non-driver role', async () => {
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('manager', 'manager-1') },
 			body: { reason: 'other' }
 		});
@@ -309,9 +312,21 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 	it('returns 400 for invalid request body', async () => {
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'invalid_reason' }
+		});
+
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
+		expect(selectMock).not.toHaveBeenCalled();
+	});
+
+	it('returns 400 for invalid assignment ID param', async () => {
+		const event = createRequestEvent({
+			method: 'POST',
+			params: { id: 'assignment-1' },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { reason: 'other' }
 		});
 
 		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
@@ -323,7 +338,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-missing' },
+			params: { id: VALID_MISSING_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
@@ -346,7 +361,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
@@ -369,7 +384,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
@@ -413,7 +428,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
@@ -438,7 +453,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
@@ -503,7 +518,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
@@ -545,7 +560,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});

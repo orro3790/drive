@@ -14,6 +14,8 @@ type ConfirmShiftMock = ReturnType<
 let POST: ConfirmRouteModule['POST'];
 let confirmShiftMock: ConfirmShiftMock;
 
+const VALID_ASSIGNMENT_ID = '11111111-1111-4111-8111-111111111111';
+
 function createUser(role: 'driver' | 'manager', id: string): App.Locals['user'] {
 	return {
 		id,
@@ -72,7 +74,7 @@ describe('LC-05 API boundary: POST /api/assignments/[id]/confirm', () => {
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-123' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-123') }
 		});
 
@@ -82,7 +84,18 @@ describe('LC-05 API boundary: POST /api/assignments/[id]/confirm', () => {
 			success: true,
 			confirmedAt: '2026-02-09T00:00:00.000Z'
 		});
-		expect(confirmShiftMock).toHaveBeenCalledWith('assignment-123', 'driver-123');
+		expect(confirmShiftMock).toHaveBeenCalledWith(VALID_ASSIGNMENT_ID, 'driver-123');
+	});
+
+	it('returns 400 for invalid assignment ID param', async () => {
+		const event = createRequestEvent({
+			method: 'POST',
+			params: { id: 'assignment-123' },
+			locals: { user: createUser('driver', 'driver-1') }
+		});
+
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
+		expect(confirmShiftMock).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -98,7 +111,7 @@ describe('LC-05 API boundary: POST /api/assignments/[id]/confirm', () => {
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-999' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') }
 		});
 
