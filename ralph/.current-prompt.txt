@@ -1,11 +1,25 @@
-You are in a Ralph loop (iteration 12 of 20).
+You are in a Ralph AUDIT loop (iteration 20 of 20).
+
+## Mode: AUDIT (Read-Only)
+
+This is an AUDIT loop. You will:
+- READ and ANALYZE the codebase
+- WRITE reports to `logs/nightly/2026-02-18/`
+- CLOSE beads when done
+
+You will NOT:
+- Modify any source code
+- Create git branches or commits
+- Create PRs
+- Use /execute skill
 
 ## Environment
 - Workspace: drive
-- Plans directory: ralph/plans/
-- Session log: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260214-0126.md
+- Report directory: logs/nightly/2026-02-18/
+- Session log: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260218-0056.md
 - Status file: C:/Users/matto/projects/drive/ralph/.current-task
-- Label filter: nightly (only work on beads with this label)
+- Label filter: nightly
+
 
 ## Workflow
 
@@ -15,10 +29,7 @@ You are in a Ralph loop (iteration 12 of 20).
 bd list --assignee "drive" --status in_progress --label nightly --json
 ```
 
-If a task is found with status=in_progress assigned to this workspace:
-- Resume it: `/execute ralph/plans/<id>.md <id>`
-
-If no in_progress task, continue to step 2.
+If found, resume that audit task. Otherwise continue to step 2.
 
 ### 2. Triage
 
@@ -26,7 +37,7 @@ If no in_progress task, continue to step 2.
 bd list --label nightly --status open --json
 ```
 
-Pick ONE bead with label 'nightly': not blocked, status=open.
+Pick ONE bead with label 'nightly': status=open.
 
 ### 3. Claim
 
@@ -35,62 +46,72 @@ bd update <id> --claim --assignee "drive"
 echo "<id> | <title>" > C:/Users/matto/projects/drive/ralph/.current-task
 ```
 
-### 4. Validate
+### 4. Read Bead Details
 
-`bd show <id>` — must have clear description and acceptance criteria. If vague, skip and pick another.
+```bash
+bd show <id>
+```
 
-### 5. Plan
+Understand exactly what audit is requested. The bead description contains:
+- What to check
+- Where to look
+- What format to output
 
-If >5 implementation steps needed, decompose first: `bd create --parent <id> ...`
+### 5. Perform Audit
 
-Write `ralph/plans/<id>.md`:
+Do the audit as described in the bead:
+- Use Glob, Grep, Read tools to explore
+- Analyze findings
+- Take thorough notes
+
+### 6. Write Report
+
+Create the report file:
+```bash
+mkdir -p logs/nightly/2026-02-18
+```
+
+Then use Write tool to create: `logs/nightly/2026-02-18/<report-name>.md`
+
+Report format:
 ```markdown
-# <Title>
-Task: <id>
+# <Audit Title>
+Generated: 2026-02-18
 
-## Steps
-1. <concrete step>
-2. ...
+## Summary
+<1-2 sentence overview>
 
-## Acceptance Criteria
-- <from bead>
+## Findings
+<detailed findings with file paths and line numbers>
+
+## Recommended Actions
+<numbered list of specific actions to take>
 ```
 
-### 6. Review Plan
+### 7. Log & Close
 
-Spawn plan-reviewer (Task tool, subagent_type='plan-reviewer'). Fix Critical/High issues.
-
-### 7. Execute
-
-Use the execute skill via the skill tool. Do NOT use Task/subagents for execution.
-
-```
-skill({ name: "execute" })
-```
-
-Then follow it:
-
-```
-/execute ralph/plans/<id>.md <id>
-```
-
-### 8. Log
-
+Log completion:
 ```
 Edit tool:
-  file_path: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260214-0126.md
+  file_path: C:\Users\matto\projects\drive\ralph\sessions\ralph-session-20260218-0056.md
   old_string: "---"
-  new_string: "---\n\n## Iteration 12 — <id>\n\n**Task**: <title>\n**Done**: <1-2 sentences>\n**PR**: #<n>\n\n---"
+  new_string: "---\n\n## Iteration 20 - <id>\n\n**Audit**: <title>\n**Report**: logs/nightly/2026-02-18/<name>.md\n\n---"
 ```
 
-### 9. Exit
+Close the bead:
+```bash
+bd close <id> --comment "Report: logs/nightly/2026-02-18/<name>.md"
+```
 
-One bead per iteration. Loop continues automatically.
+### 8. Exit
+
+One audit per iteration. Loop continues automatically.
 
 ## Rules
 
-- ONE bead per iteration
-- CLAIM BEFORE any git ops
-- NO improvising on vague beads — skip them
-- Do NOT use Task tool to execute plans. Use the execute skill only.
-- /execute owns: git, PR, verification, merge, close
+- ONE audit per iteration
+- READ-ONLY: Never modify source code
+- NO git operations (no branches, commits, PRs)
+- NO /execute skill
+- Output goes ONLY to logs/nightly/2026-02-18/
+- Be THOROUGH: this runs overnight, use the time well
