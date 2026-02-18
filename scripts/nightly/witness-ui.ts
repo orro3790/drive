@@ -616,10 +616,35 @@ async function run(): Promise<void> {
 
 	const cronReport = await readJson<CronE2EReport>(reportJsonPath);
 	const witnesses = cronReport.witnesses ?? {};
+	const allowFailedCronWitness = process.env.NIGHTLY_ALLOW_WITNESS_WITH_FAILED_CRON === '1';
+
+	if (cronReport.overall?.passed !== true && !allowFailedCronWitness) {
+		const now = new Date().toISOString();
+		const blocked: WitnessUiReport = {
+			run: {
+				artifactDate,
+				startedAt: now,
+				finishedAt: now,
+				baseUrl,
+				viewport: VIEWPORT,
+				database: dbFingerprint
+			},
+			flows: [],
+			overall: {
+				passed: false,
+				failedFlows: ['UPSTREAM_CRON_FAILED']
+			}
+		};
+
+		await writeFileAtomic(witnessJsonPath, `${JSON.stringify(blocked, null, 2)}\n`);
+		throw new Error(
+			'Refusing witness run because cron-e2e-report overall.passed is not true (set NIGHTLY_ALLOW_WITNESS_WITH_FAILED_CRON=1 to override)'
+		);
+	}
 
 	if (cronReport.overall?.passed !== true) {
 		console.warn(
-			'⚠ Cron drill report indicates FAIL. Will run witness flows for available witnesses only.'
+			'⚠ Cron drill report indicates FAIL. Continuing witness run because NIGHTLY_ALLOW_WITNESS_WITH_FAILED_CRON=1.'
 		);
 	}
 

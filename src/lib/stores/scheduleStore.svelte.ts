@@ -50,6 +50,7 @@ const state = $state<{
 	assignments: ScheduleAssignment[];
 	weekStart: string | null;
 	nextWeekStart: string | null;
+	hasLoaded: boolean;
 	isLoading: boolean;
 	isCancelling: boolean;
 	isStartingShift: boolean;
@@ -60,6 +61,7 @@ const state = $state<{
 	assignments: [],
 	weekStart: null,
 	nextWeekStart: null,
+	hasLoaded: false,
 	isLoading: false,
 	isCancelling: false,
 	isStartingShift: false,
@@ -155,6 +157,9 @@ export const scheduleStore = {
 	get isLoading() {
 		return state.isLoading;
 	},
+	get hasLoaded() {
+		return state.hasLoaded;
+	},
 	get isCancelling() {
 		return state.isCancelling;
 	},
@@ -194,6 +199,7 @@ export const scheduleStore = {
 			toastStore.error(m.schedule_load_error());
 		} finally {
 			state.isLoading = false;
+			state.hasLoaded = true;
 		}
 	},
 
