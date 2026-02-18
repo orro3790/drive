@@ -79,7 +79,12 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 
 	const userId = user.id;
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
 	const result = preferencesUpdateSchema.safeParse(body);
 
 	if (!result.success) {

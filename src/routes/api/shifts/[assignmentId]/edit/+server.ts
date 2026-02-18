@@ -19,7 +19,12 @@ import { requireDriverWithOrg } from '$lib/server/org-scope';
 export const PATCH: RequestHandler = async ({ locals, request, params }) => {
 	const { user, organizationId } = requireDriverWithOrg(locals);
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
 	const result = shiftEditSchema.safeParse(body);
 
 	if (!result.success) {

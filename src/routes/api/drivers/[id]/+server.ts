@@ -23,7 +23,12 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 	const { user: manager, organizationId } = requireManagerWithOrg(locals);
 
 	const { id } = params;
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
 	const result = driverUpdateSchema.safeParse(body);
 
 	if (!result.success) {

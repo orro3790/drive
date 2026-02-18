@@ -22,7 +22,12 @@ import logger from '$lib/server/logger';
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const { user, organizationId } = requireDriverWithOrg(locals);
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
 	const result = shiftStartSchema.safeParse(body);
 
 	if (!result.success) {
