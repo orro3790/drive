@@ -338,32 +338,48 @@ export async function createBidWindow(
 
 	log.info({ mode, closesAt }, 'Bid window created');
 
-	const notifiedCount = await notifyEligibleDrivers({
-		organizationId,
-		assignmentId,
-		assignmentDate: assignment.date,
-		routeName,
-		closesAt,
-		mode,
-		payBonusPercent: options.payBonusPercent ?? 0
-	});
+	let notifiedCount = 0;
+	try {
+		notifiedCount = await notifyEligibleDrivers({
+			organizationId,
+			assignmentId,
+			assignmentDate: assignment.date,
+			routeName,
+			closesAt,
+			mode,
+			payBonusPercent: options.payBonusPercent ?? 0
+		});
+	} catch (err) {
+		log.warn(
+			getErrorLogContext(err),
+			'Eligible driver fanout failed after durable bid window create'
+		);
+	}
 
-	broadcastBidWindowOpened(organizationId, {
-		assignmentId,
-		routeId: assignment.routeId,
-		routeName,
-		assignmentDate: assignment.date,
-		closesAt: closesAt.toISOString()
-	});
+	try {
+		broadcastBidWindowOpened(organizationId, {
+			assignmentId,
+			routeId: assignment.routeId,
+			routeName,
+			assignmentDate: assignment.date,
+			closesAt: closesAt.toISOString()
+		});
+	} catch (err) {
+		log.warn(getErrorLogContext(err), 'Bid window open broadcast failed after durable create');
+	}
 
-	broadcastAssignmentUpdated(organizationId, {
-		assignmentId,
-		status: 'unfilled',
-		driverId: null,
-		driverName: null,
-		routeId: assignment.routeId,
-		bidWindowClosesAt: closesAt.toISOString()
-	});
+	try {
+		broadcastAssignmentUpdated(organizationId, {
+			assignmentId,
+			status: 'unfilled',
+			driverId: null,
+			driverName: null,
+			routeId: assignment.routeId,
+			bidWindowClosesAt: closesAt.toISOString()
+		});
+	} catch (err) {
+		log.warn(getErrorLogContext(err), 'Assignment update broadcast failed after durable create');
+	}
 
 	return {
 		success: true,
