@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import logger from './logger';
 import { db } from '$lib/server/db';
-import { rateLimit as authRateLimit } from './db/auth-schema';
+import { rateLimit as authRateLimit, user as authUser } from './db/auth-schema';
 import { releaseProductionSignupAuthorizationReservation } from './services/onboarding';
 import {
 	prepareOrganizationCreateSignup,
@@ -58,6 +58,7 @@ export interface SignupAbuseGuardDependencies {
 	finalizeOrganizationJoinSignup?: typeof finalizeOrganizationJoinSignup;
 	finalizeOrganizationCreateSignup?: typeof finalizeOrganizationCreateSignup;
 	releaseProductionSignupAuthorizationReservation?: typeof releaseProductionSignupAuthorizationReservation;
+	rollbackSignupUser?: (input: { userId: string }) => Promise<void> | void;
 	recordSignupFinalizeReconciliation?: (
 		input: SignupFinalizeReconciliationInput
 	) => Promise<void> | void;
@@ -617,6 +618,20 @@ async function reportCreateOrganizationFinalizeReconciliation(
 	}
 }
 
+async function rollbackSignupUser(input: { userId: string }): Promise<void> {
+	const [deletedUser] = await db
+		.delete(authUser)
+		.where(eq(authUser.id, input.userId))
+		.returning({ id: authUser.id });
+
+	if (!deletedUser) {
+		logger.error(
+			{ event: 'auth.signup.rollback.user_missing', userId: input.userId },
+			'auth_signup_rollback_user_missing'
+		);
+	}
+}
+
 type SignupDatabaseHookContext = {
 	path?: string;
 	body?: unknown;
@@ -904,6 +919,7 @@ export function createSignupOnboardingConsumer(
 	const releaseReservation =
 		dependencies.releaseProductionSignupAuthorizationReservation ??
 		releaseProductionSignupAuthorizationReservation;
+	const rollbackUser = dependencies.rollbackSignupUser ?? rollbackSignupUser;
 	const recordFinalizeReconciliation =
 		dependencies.recordSignupFinalizeReconciliation ?? logSignupFinalizeNeedsReconciliation;
 	const recordCreateOrganizationFinalizeReconciliation =
@@ -1050,26 +1066,43 @@ export function createSignupOnboardingConsumer(
 			return;
 		}
 
-		try {
-			const finalized = await finalizeJoinReservation({
-				reservationId,
-				userId: signedUpUser.id
-			});
-
-			if (!finalized) {
-				await reportFinalizeReconciliation(recordFinalizeReconciliation, {
-					reservationId,
-					userId: signedUpUser.id,
-					email: signedUpUser.email
-				});
-			}
-		} catch (error) {
+		const rollbackUserAndBlockSignup = async (reconciliationError?: unknown) => {
 			await reportFinalizeReconciliation(recordFinalizeReconciliation, {
 				reservationId,
 				userId: signedUpUser.id,
 				email: signedUpUser.email,
-				error
+				...(reconciliationError ? { error: reconciliationError } : {})
 			});
+
+			try {
+				await rollbackUser({ userId: signedUpUser.id });
+			} catch (rollbackError) {
+				logger.error(
+					{
+						event: 'auth.signup.rollback.user_failed',
+						reservationId,
+						userId: signedUpUser.id,
+						error: rollbackError
+					},
+					'auth_signup_rollback_user_failed'
+				);
+			}
+
+			throw new APIError('BAD_REQUEST', { message: SIGN_UP_BLOCKED_MESSAGE });
+		};
+
+		let finalized: Awaited<ReturnType<typeof finalizeJoinReservation>> | null = null;
+		try {
+			finalized = await finalizeJoinReservation({
+				reservationId,
+				userId: signedUpUser.id
+			});
+		} catch (error) {
+			await rollbackUserAndBlockSignup(error);
+		}
+
+		if (!finalized) {
+			await rollbackUserAndBlockSignup();
 		}
 	});
 }

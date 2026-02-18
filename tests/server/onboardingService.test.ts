@@ -420,19 +420,13 @@ describe('onboarding service duplicate race handling', () => {
 });
 
 describe('onboarding revocation behavior', () => {
-	it('allows managers to revoke reserved entries for manual recovery', async () => {
+	it('does not revoke reserved entries while signup is in-flight', async () => {
 		const reservedApproval = createEntry({
 			id: '56565656-5656-4656-8656-565656565656',
 			status: 'reserved'
 		});
-		const revokedApproval = createEntry({
-			...reservedApproval,
-			status: 'revoked',
-			revokedAt: new Date('2026-02-10T00:00:00.000Z'),
-			revokedByUserId: 'manager-1'
-		});
 
-		const { dbClient } = createDbClientMock([], [[revokedApproval]]);
+		const { dbClient } = createDbClientMock([], [[]]);
 
 		const revoked = await revokeOnboardingEntry(
 			reservedApproval.id,
@@ -441,7 +435,6 @@ describe('onboarding revocation behavior', () => {
 			dbClient
 		);
 
-		expect(revoked?.status).toBe('revoked');
-		expect(revoked?.revokedByUserId).toBe('manager-1');
+		expect(revoked).toBeNull();
 	});
 });

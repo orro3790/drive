@@ -728,7 +728,7 @@ export async function revokeOnboardingEntry(
 			and(
 				eq(signupOnboarding.id, entryId),
 				eq(signupOnboarding.organizationId, organizationId),
-				or(eq(signupOnboarding.status, 'pending'), eq(signupOnboarding.status, 'reserved'))
+				eq(signupOnboarding.status, 'pending')
 			)
 		)
 		.returning();
