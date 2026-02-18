@@ -11,7 +11,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { assignments, driverMetrics } from '$lib/server/db/schema';
+import { assignments, driverMetrics, routes } from '$lib/server/db/schema';
 import { assignmentCancelSchema } from '$lib/schemas/assignment';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { sendManagerAlert } from '$lib/server/services/notifications';
@@ -100,9 +100,11 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			routeId: assignments.routeId,
 			date: assignments.date,
 			status: assignments.status,
-			confirmedAt: assignments.confirmedAt
+			confirmedAt: assignments.confirmedAt,
+			routeStartTime: routes.startTime
 		})
 		.from(assignments)
+		.leftJoin(routes, eq(routes.id, assignments.routeId))
 		.where(eq(assignments.id, id));
 
 	if (!existing) {
@@ -139,7 +141,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			confirmedAt: existing.confirmedAt,
 			shiftArrivedAt: null,
 			parcelsStart: null,
-			shiftCompletedAt: null
+			shiftCompletedAt: null,
+			routeStartTime: existing.routeStartTime
 		},
 		lifecycleContext
 	);

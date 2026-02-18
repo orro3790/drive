@@ -129,6 +129,55 @@ describe('LC-05 lifecycle service: deriveAssignmentLifecycle', () => {
 		expect(justOverFortyEightHours.isLateCancel).toBe(false);
 	});
 
+	it('derives late-cancel boundary from route start time when provided', () => {
+		const assignmentDate = '2026-02-12';
+		const { deadline } = calculateConfirmationWindow(assignmentDate, 'America/Toronto', '11:00');
+
+		const beforeDeadline = deriveAssignmentLifecycle(
+			{
+				assignmentDate,
+				assignmentStatus: 'scheduled',
+				confirmedAt: null,
+				shiftArrivedAt: null,
+				parcelsStart: null,
+				shiftCompletedAt: null,
+				routeStartTime: '11:00'
+			},
+			createTorontoContext(addMilliseconds(deadline, -1))
+		);
+
+		const atDeadline = deriveAssignmentLifecycle(
+			{
+				assignmentDate,
+				assignmentStatus: 'scheduled',
+				confirmedAt: null,
+				shiftArrivedAt: null,
+				parcelsStart: null,
+				shiftCompletedAt: null,
+				routeStartTime: '11:00'
+			},
+			createTorontoContext(deadline)
+		);
+
+		const afterDeadline = deriveAssignmentLifecycle(
+			{
+				assignmentDate,
+				assignmentStatus: 'scheduled',
+				confirmedAt: null,
+				shiftArrivedAt: null,
+				parcelsStart: null,
+				shiftCompletedAt: null,
+				routeStartTime: '11:00'
+			},
+			createTorontoContext(addMilliseconds(deadline, 1))
+		);
+
+		expect(beforeDeadline.isCancelable).toBe(true);
+		expect(beforeDeadline.isLateCancel).toBe(false);
+		expect(atDeadline.isLateCancel).toBe(true);
+		expect(afterDeadline.isLateCancel).toBe(true);
+	});
+
 	it('derives arrive, start, and complete states', () => {
 		const context = createAssignmentLifecycleContext(new Date('2026-02-10T13:00:00.000Z'));
 		const confirmedAt = new Date('2026-02-08T13:00:00.000Z');

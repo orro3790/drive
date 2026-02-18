@@ -14,6 +14,7 @@ interface AssignmentRow {
 	date: string;
 	status: AssignmentStatus;
 	confirmedAt: Date | null;
+	routeStartTime: string | null;
 }
 
 interface UpdatedAssignmentRow {
@@ -43,6 +44,11 @@ const assignmentsTable = {
 	updatedAt: 'assignments.updatedAt'
 };
 
+const routesTable = {
+	id: 'routes.id',
+	startTime: 'routes.startTime'
+};
+
 const driverMetricsTable = {
 	userId: 'driver_metrics.userId',
 	lateCancellations: 'driver_metrics.lateCancellations',
@@ -55,6 +61,16 @@ let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<A
 let selectFromMock: ReturnType<
 	typeof vi.fn<
 		(table: unknown) => {
+			leftJoin: typeof selectLeftJoinMock;
+		}
+	>
+>;
+let selectLeftJoinMock: ReturnType<
+	typeof vi.fn<
+		(
+			joinTable: unknown,
+			onClause: unknown
+		) => {
 			where: typeof selectWhereMock;
 		}
 	>
@@ -157,8 +173,13 @@ beforeEach(async () => {
 	vi.resetModules();
 
 	selectWhereMock = vi.fn<(whereClause: unknown) => Promise<AssignmentRow[]>>(async () => []);
-	selectFromMock = vi.fn<(table: unknown) => { where: typeof selectWhereMock }>(() => ({
+	selectLeftJoinMock = vi.fn<
+		(joinTable: unknown, onClause: unknown) => { where: typeof selectWhereMock }
+	>(() => ({
 		where: selectWhereMock
+	}));
+	selectFromMock = vi.fn<(table: unknown) => { leftJoin: typeof selectLeftJoinMock }>(() => ({
+		leftJoin: selectLeftJoinMock
 	}));
 	selectMock = vi.fn<(shape: Record<string, unknown>) => { from: typeof selectFromMock }>(() => ({
 		from: selectFromMock
@@ -210,7 +231,8 @@ beforeEach(async () => {
 
 	vi.doMock('$lib/server/db/schema', () => ({
 		assignments: assignmentsTable,
-		driverMetrics: driverMetricsTable
+		driverMetrics: driverMetricsTable,
+		routes: routesTable
 	}));
 
 	vi.doMock('drizzle-orm', () => ({
@@ -317,7 +339,8 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				routeId: 'route-1',
 				date: '2026-02-10',
 				status: 'scheduled',
-				confirmedAt: null
+				confirmedAt: null,
+				routeStartTime: '09:00'
 			}
 		]);
 
@@ -339,7 +362,8 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				routeId: 'route-1',
 				date: '2026-02-10',
 				status: 'cancelled',
-				confirmedAt: null
+				confirmedAt: null,
+				routeStartTime: '09:00'
 			}
 		]);
 
@@ -382,7 +406,8 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				routeId: 'route-1',
 				date: '2026-02-09',
 				status: 'scheduled',
-				confirmedAt: new Date('2026-02-08T12:00:00.000Z')
+				confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+				routeStartTime: '09:00'
 			}
 		]);
 
@@ -405,7 +430,8 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				routeId: 'route-1',
 				date: '2026-02-10',
 				status: 'scheduled',
-				confirmedAt: null
+				confirmedAt: null,
+				routeStartTime: '11:00'
 			}
 		]);
 		assignmentUpdateReturningMock.mockResolvedValue([{ id: 'assignment-1', status: 'cancelled' }]);
@@ -436,6 +462,13 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 			organizationId: 'org-test',
 			trigger: 'cancellation'
 		});
+		expect(deriveAssignmentLifecycleMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				assignmentDate: '2026-02-10',
+				routeStartTime: '11:00'
+			}),
+			expect.any(Object)
+		);
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
 		expect(sendManagerAlertMock).toHaveBeenCalledTimes(1);
 		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
@@ -458,7 +491,8 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				routeId: 'route-1',
 				date: '2026-02-10',
 				status: 'scheduled',
-				confirmedAt: null
+				confirmedAt: null,
+				routeStartTime: '09:00'
 			}
 		]);
 		assignmentUpdateReturningMock.mockResolvedValue([{ id: 'assignment-1', status: 'cancelled' }]);
@@ -499,7 +533,8 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				routeId: 'route-1',
 				date: '2026-02-10',
 				status: 'scheduled',
-				confirmedAt: null
+				confirmedAt: null,
+				routeStartTime: '09:00'
 			}
 		]);
 		assignmentUpdateReturningMock.mockResolvedValue([{ id: 'assignment-1', status: 'cancelled' }]);
