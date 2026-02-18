@@ -1011,45 +1011,52 @@ export function createSignupOnboardingConsumer(
 		}
 
 		if (signupOrganization.mode === 'create') {
-			if (!signupAssignment || signupAssignment.source !== 'create_provision') {
+			const rollbackUserAndBlockCreateSignup = async (
+				reconciliationError?: unknown
+			): Promise<never> => {
 				await reportCreateOrganizationFinalizeReconciliation(
 					recordCreateOrganizationFinalizeReconciliation,
 					{
 						userId: signedUpUser.id,
 						email: signedUpUser.email,
 						organizationName: signupOrganization.organizationName,
-						error: new Error('signup_create_assignment_missing')
+						...(reconciliationError ? { error: reconciliationError } : {})
 					}
 				);
-				return;
+
+				try {
+					await rollbackUser({ userId: signedUpUser.id });
+				} catch (rollbackError) {
+					logger.error(
+						{
+							event: 'auth.signup.rollback.user_failed',
+							organizationName: signupOrganization.organizationName,
+							userId: signedUpUser.id,
+							error: rollbackError
+						},
+						'auth_signup_rollback_user_failed'
+					);
+				}
+
+				throw new APIError('BAD_REQUEST', { message: SIGN_UP_BLOCKED_MESSAGE });
+			};
+
+			const createProvisionAssignment = signupAssignment;
+			if (!createProvisionAssignment || createProvisionAssignment.source !== 'create_provision') {
+				await rollbackUserAndBlockCreateSignup(new Error('signup_create_assignment_missing'));
 			}
 
 			try {
 				const finalized = await finalizeCreateOrganization({
 					userId: signedUpUser.id,
-					organizationId: signupAssignment.organizationId
+					organizationId: createProvisionAssignment!.organizationId
 				});
 
 				if (!finalized) {
-					await reportCreateOrganizationFinalizeReconciliation(
-						recordCreateOrganizationFinalizeReconciliation,
-						{
-							userId: signedUpUser.id,
-							email: signedUpUser.email,
-							organizationName: signupOrganization.organizationName
-						}
-					);
+					await rollbackUserAndBlockCreateSignup();
 				}
 			} catch (error) {
-				await reportCreateOrganizationFinalizeReconciliation(
-					recordCreateOrganizationFinalizeReconciliation,
-					{
-						userId: signedUpUser.id,
-						email: signedUpUser.email,
-						organizationName: signupOrganization.organizationName,
-						error
-					}
-				);
+				await rollbackUserAndBlockCreateSignup(error);
 			}
 
 			return;
