@@ -23,7 +23,7 @@ import { createBidWindow } from '$lib/server/services/bidding';
 import { sendNotification } from '$lib/server/services/notifications';
 import { createAuditLog } from '$lib/server/services/audit';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
-import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
+import { calculateConfirmationWindow } from '$lib/server/services/assignmentLifecycle';
 import { verifyCronAuth } from '$lib/server/cron/auth';
 
 export const GET: RequestHandler = async ({ request }) => {
@@ -89,13 +89,9 @@ export const GET: RequestHandler = async ({ request }) => {
 			orgLog.info({ candidates: candidates.length }, 'Processing auto-drop candidates');
 
 			for (const candidate of candidates) {
-				// Check if past the 48h deadline
-				const shiftStart = getTorontoDateTimeInstant(candidate.date, {
-					hours: dispatchPolicy.shifts.startHourLocal
-				});
-				const hoursUntilShift = (shiftStart.getTime() - now.getTime()) / (1000 * 60 * 60);
+				const { deadline } = calculateConfirmationWindow(candidate.date);
 
-				if (hoursUntilShift > dispatchPolicy.confirmation.deadlineHoursBeforeShift) {
+				if (now < deadline) {
 					continue; // Not past deadline yet
 				}
 
