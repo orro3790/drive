@@ -90,6 +90,10 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 	const now = new Date();
 	const currentLockDeadline = getCurrentPreferenceLockDeadline(now);
 
+	if (now >= currentLockDeadline) {
+		throw error(423, 'Preferences are locked for current scheduling cycle');
+	}
+
 	// Validate that all route IDs exist
 	if (preferredRoutes.length > 0) {
 		const validRoutes = await db

@@ -31,6 +31,7 @@ const warehousesTable = {
 };
 
 let PUT: PreferencesRouteModule['PUT'];
+let mockedCurrentLockDeadline: Date;
 
 let insertReturningMock: ReturnType<
 	typeof vi.fn<(shape?: Record<string, unknown>) => Promise<PreferenceRow[]>>
@@ -70,6 +71,7 @@ let selectMock: ReturnType<
 
 beforeEach(async () => {
 	vi.resetModules();
+	mockedCurrentLockDeadline = new Date('2099-01-01T00:00:00.000Z');
 
 	insertReturningMock = vi.fn(async () => []);
 	insertOnConflictDoUpdateMock = vi.fn(() => ({ returning: insertReturningMock }));
@@ -109,6 +111,12 @@ beforeEach(async () => {
 		}))
 	}));
 
+	vi.doMock('$lib/server/time/preferenceLock', () => ({
+		getCurrentPreferenceLockDeadline: vi.fn(() => mockedCurrentLockDeadline),
+		getNextPreferenceLockDeadline: vi.fn(() => mockedCurrentLockDeadline),
+		isCurrentPreferenceCycleLocked: vi.fn(() => false)
+	}));
+
 	vi.doMock('drizzle-orm', () => ({
 		eq: (left: unknown, right: unknown) => ({ left, right }),
 		inArray: (left: unknown, right: unknown[]) => ({ left, right }),
@@ -126,10 +134,26 @@ afterEach(() => {
 	vi.doUnmock('$lib/server/db');
 	vi.doUnmock('$lib/server/db/schema');
 	vi.doUnmock('$lib/server/org-scope');
+	vi.doUnmock('$lib/server/time/preferenceLock');
 	vi.doUnmock('drizzle-orm');
 });
 
 describe('PUT /api/preferences lock enforcement', () => {
+	it('rejects writes when current cycle lock deadline has passed', async () => {
+		mockedCurrentLockDeadline = new Date('2020-01-01T00:00:00.000Z');
+
+		const event = createRequestEvent({
+			method: 'PUT',
+			body: {
+				preferredDays: [1, 3],
+				preferredRoutes: []
+			}
+		});
+
+		await expect(PUT(event as Parameters<typeof PUT>[0])).rejects.toMatchObject({ status: 423 });
+		expect(insertMock).not.toHaveBeenCalled();
+	});
+
 	it('rejects writes when atomic upsert returns no row', async () => {
 		insertReturningMock.mockResolvedValueOnce([]);
 
