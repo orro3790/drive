@@ -145,6 +145,16 @@ jobs:
           mkdir -p logs/ci/integration-smoke tests/integration/.evidence
           pnpm test:integration:smoke 2>&1 | tee logs/ci/integration-smoke/vitest.log
 
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Playwright UI smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p logs/ci/integration-smoke
+          pnpm test:e2e:smoke 2>&1 | tee logs/ci/integration-smoke/playwright.log
+
       - name: Record runtime
         if: always()
         shell: bash
@@ -182,5 +192,7 @@ jobs:
           path: |
             logs/ci/integration-smoke/**
             tests/integration/.evidence/**
+            playwright-report/**
+            test-results/**
           if-no-files-found: ignore
           retention-days: 14

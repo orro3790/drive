@@ -1,0 +1,78 @@
+import { expect, test } from '@playwright/test';
+
+import { assertNoCrossTenantLeakage, login, seedUiBaseline, withDb } from './harness/world';
+
+const ORG_A_ASSIGNMENT_ID = '4c703273-513f-42f6-a06d-ed89c6722e1d';
+const ORG_B_ASSIGNMENT_ID = '8ff479e8-f5ce-4c8d-9cf5-e2b9fba2f5da';
+
+test.describe('UI-002 manager override critical journey', () => {
+	test('UI-002 @smoke: manager suspend route applies in-org and does not bleed tenants', async ({
+		page
+	}) => {
+		const baseline = await withDb(async (pool) => {
+			const seeded = await seedUiBaseline(pool);
+
+			await pool.query(
+				`INSERT INTO assignments (id, route_id, warehouse_id, date, status, user_id)
+				 VALUES
+				 ($1, $2, $3, $4, $5, $6),
+				 ($7, $8, $9, $10, $11, $12);`,
+				[
+					ORG_A_ASSIGNMENT_ID,
+					seeded.route.a.id,
+					seeded.warehouse.a.id,
+					'2026-03-18',
+					'scheduled',
+					seeded.user.driverA2.id,
+					ORG_B_ASSIGNMENT_ID,
+					seeded.route.b.id,
+					seeded.warehouse.b.id,
+					'2026-03-18',
+					'scheduled',
+					seeded.user.driverB1.id
+				]
+			);
+
+			return seeded;
+		});
+
+		await login(page, baseline.user.managerA.email);
+		await page.goto('/routes');
+		await page.getByText('Route A', { exact: false }).first().click();
+		await page
+			.getByRole('button', { name: /suspend/i })
+			.first()
+			.click();
+		await page
+			.getByRole('button', { name: /suspend/i })
+			.last()
+			.click();
+
+		await expect(page.getByText(/suspended/i)).toBeVisible();
+
+		await withDb(async (pool) => {
+			const assignments = await pool.query<{
+				id: string;
+				status: string;
+				user_id: string | null;
+			}>(
+				`SELECT id, status, user_id
+				 FROM assignments
+				 WHERE id IN ($1, $2);`,
+				[ORG_A_ASSIGNMENT_ID, ORG_B_ASSIGNMENT_ID]
+			);
+
+			const byId = new Map(assignments.rows.map((row) => [row.id, row]));
+			expect(byId.get(ORG_A_ASSIGNMENT_ID)).toMatchObject({
+				status: 'cancelled',
+				user_id: null
+			});
+			expect(byId.get(ORG_B_ASSIGNMENT_ID)).toMatchObject({
+				status: 'scheduled',
+				user_id: baseline.user.driverB1.id
+			});
+
+			await assertNoCrossTenantLeakage(pool);
+		});
+	});
+});
