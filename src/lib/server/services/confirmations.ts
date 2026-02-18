@@ -13,23 +13,14 @@ import { broadcastAssignmentUpdated } from '$lib/server/realtime/managerSse';
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
-import {
-	addDaysToDateString,
-	getTorontoDateTimeInstant,
-	toTorontoDateString
-} from '$lib/server/time/toronto';
+import { toTorontoDateString } from '$lib/server/time/toronto';
+import { calculateConfirmationWindow } from '$lib/server/services/assignmentLifecycle';
 
 /** Set to the date confirmations go live. Pre-existing assignments are skipped. */
 export const CONFIRMATION_DEPLOYMENT_DATE = dispatchPolicy.confirmation.deploymentDate;
 
 function getNowToronto(): Date {
 	return new Date();
-}
-
-function getShiftStart(dateString: string): Date {
-	return getTorontoDateTimeInstant(dateString, {
-		hours: dispatchPolicy.shifts.startHourLocal
-	});
 }
 
 export interface ConfirmationWindow {
@@ -40,21 +31,11 @@ export interface ConfirmationWindow {
 /**
  * Calculate the confirmation window for an assignment date.
  *
- * - Opens: 7 days before shift start (07:00 Toronto)
+ * - Opens: 7 days (168h) before shift start instant
  * - Deadline: 48 hours before shift start
  */
 export function calculateConfirmationDeadline(assignmentDate: string): ConfirmationWindow {
-	const opensAtDate = addDaysToDateString(
-		assignmentDate,
-		-dispatchPolicy.confirmation.windowDaysBeforeShift
-	);
-	const deadlineDate = addDaysToDateString(
-		assignmentDate,
-		-(dispatchPolicy.confirmation.deadlineHoursBeforeShift / 24)
-	);
-	const opensAt = getShiftStart(opensAtDate);
-	const deadline = getShiftStart(deadlineDate);
-	return { opensAt, deadline };
+	return calculateConfirmationWindow(assignmentDate);
 }
 
 export interface ConfirmShiftResult {
@@ -191,6 +172,18 @@ export interface UnconfirmedAssignment {
 	isConfirmable: boolean;
 }
 
+export interface UpcomingAssignment {
+	id: string;
+	date: string;
+	routeName: string;
+	routeStartTime: string;
+	warehouseName: string;
+	confirmationOpensAt: string;
+	confirmationDeadline: string;
+	isConfirmable: boolean;
+	confirmedAt: string | null;
+}
+
 /**
  * Get unconfirmed assignments for a driver that are within
  * the confirmation window (7 days to 48h before shift).
@@ -237,6 +230,60 @@ export async function getUnconfirmedAssignments(userId: string): Promise<Unconfi
 				confirmationOpensAt: opensAt.toISOString(),
 				confirmationDeadline: deadline.toISOString(),
 				isConfirmable
+			});
+		}
+	}
+
+	return result;
+}
+
+/**
+ * Get upcoming (this week) assignments for a driver,
+ * including both confirmed and unconfirmed shifts.
+ * Used for the dashboard "This Week's Shifts" section.
+ */
+export async function getUpcomingAssignments(userId: string): Promise<UpcomingAssignment[]> {
+	const now = getNowToronto();
+	const todayString = toTorontoDateString(now);
+
+	const rows = await db
+		.select({
+			id: assignments.id,
+			date: assignments.date,
+			routeName: routes.name,
+			routeStartTime: routes.startTime,
+			warehouseName: warehouses.name,
+			confirmedAt: assignments.confirmedAt
+		})
+		.from(assignments)
+		.innerJoin(routes, eq(assignments.routeId, routes.id))
+		.innerJoin(warehouses, eq(routes.warehouseId, warehouses.id))
+		.where(
+			and(
+				eq(assignments.userId, userId),
+				eq(assignments.status, 'scheduled'),
+				gte(assignments.date, todayString)
+			)
+		);
+
+	const result: UpcomingAssignment[] = [];
+
+	for (const row of rows) {
+		const { opensAt, deadline } = calculateConfirmationDeadline(row.date);
+		const isConfirmable = !row.confirmedAt && now >= opensAt && now <= deadline;
+
+		// Only include assignments within or approaching the confirmation window
+		if (now <= deadline) {
+			result.push({
+				id: row.id,
+				date: row.date,
+				routeName: row.routeName,
+				routeStartTime: row.routeStartTime,
+				warehouseName: row.warehouseName,
+				confirmationOpensAt: opensAt.toISOString(),
+				confirmationDeadline: deadline.toISOString(),
+				isConfirmable,
+				confirmedAt: row.confirmedAt?.toISOString() ?? null
 			});
 		}
 	}

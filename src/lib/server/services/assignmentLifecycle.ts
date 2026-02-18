@@ -2,11 +2,9 @@ import { fromZonedTime } from 'date-fns-tz';
 
 import { dispatchPolicy, parseRouteStartTime } from '$lib/config/dispatchPolicy';
 import type { AssignmentStatus } from '$lib/schemas/assignment';
-import {
-	addDaysToDateString,
-	getTorontoDateTimeInstant,
-	toTorontoDateString
-} from '$lib/server/time/toronto';
+import { getTorontoDateTimeInstant, toTorontoDateString } from '$lib/server/time/toronto';
+
+const HOUR_IN_MS = 60 * 60 * 1000;
 
 export interface AssignmentLifecycleContext {
 	nowToronto: Date;
@@ -47,14 +45,30 @@ export function createAssignmentLifecycleContext(
 	};
 }
 
-function getShiftStart(assignmentDate: string, timezone: string): Date {
-	if (timezone === dispatchPolicy.timezone.toronto) {
-		return getTorontoDateTimeInstant(assignmentDate, {
-			hours: dispatchPolicy.shifts.startHourLocal
-		});
+function parseShiftStartTime(startTime: string | null | undefined): {
+	hours: number;
+	minutes: number;
+} {
+	if (startTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
+		const [hours, minutes] = startTime.split(':').map(Number);
+		return { hours, minutes };
 	}
 
-	const localDateTime = `${assignmentDate}T${String(dispatchPolicy.shifts.startHourLocal).padStart(2, '0')}:00:00`;
+	return { hours: dispatchPolicy.shifts.startHourLocal, minutes: 0 };
+}
+
+function getShiftStart(
+	assignmentDate: string,
+	timezone: string,
+	routeStartTime?: string | null
+): Date {
+	const { hours, minutes } = parseShiftStartTime(routeStartTime);
+
+	if (timezone === dispatchPolicy.timezone.toronto) {
+		return getTorontoDateTimeInstant(assignmentDate, { hours, minutes });
+	}
+
+	const localDateTime = `${assignmentDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
 	return fromZonedTime(localDateTime, timezone);
 }
 
@@ -77,18 +91,16 @@ export function calculateArrivalDeadline(
 
 export function calculateConfirmationWindow(
 	assignmentDate: string,
-	timezone: string = dispatchPolicy.timezone.toronto
+	timezone: string = dispatchPolicy.timezone.toronto,
+	routeStartTime?: string | null
 ): { opensAt: Date; deadline: Date } {
-	const opensAtDate = addDaysToDateString(
-		assignmentDate,
-		-dispatchPolicy.confirmation.windowDaysBeforeShift
+	const shiftStart = getShiftStart(assignmentDate, timezone, routeStartTime);
+	const opensAt = new Date(
+		shiftStart.getTime() - dispatchPolicy.confirmation.windowDaysBeforeShift * 24 * HOUR_IN_MS
 	);
-	const deadlineDate = addDaysToDateString(
-		assignmentDate,
-		-(dispatchPolicy.confirmation.deadlineHoursBeforeShift / 24)
+	const deadline = new Date(
+		shiftStart.getTime() - dispatchPolicy.confirmation.deadlineHoursBeforeShift * HOUR_IN_MS
 	);
-	const opensAt = getShiftStart(opensAtDate, timezone);
-	const deadline = getShiftStart(deadlineDate, timezone);
 
 	return { opensAt, deadline };
 }
@@ -97,7 +109,11 @@ export function deriveAssignmentLifecycle(
 	input: AssignmentLifecycleInput,
 	context: AssignmentLifecycleContext
 ): AssignmentLifecycleOutput {
-	const { opensAt, deadline } = calculateConfirmationWindow(input.assignmentDate, context.timezone);
+	const { opensAt, deadline } = calculateConfirmationWindow(
+		input.assignmentDate,
+		context.timezone,
+		input.routeStartTime
+	);
 	const arrivalDeadline = calculateArrivalDeadline(
 		input.assignmentDate,
 		context.timezone,

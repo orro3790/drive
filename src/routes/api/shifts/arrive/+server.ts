@@ -23,7 +23,12 @@ import { requireDriverWithOrg } from '$lib/server/org-scope';
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const { user, organizationId } = requireDriverWithOrg(locals);
 
-	const body = await request.json();
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
 	const result = shiftArriveSchema.safeParse(body);
 
 	if (!result.success) {

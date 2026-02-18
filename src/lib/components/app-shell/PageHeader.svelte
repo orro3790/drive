@@ -209,6 +209,7 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 				tooltip={isSidebarExpanded ? m.sidebar_close() : m.sidebar_open()}
 				aria-label={isSidebarExpanded ? m.sidebar_close() : m.sidebar_open()}
 				onclick={() => appSidebarStore.toggle()}
+				compact
 			>
 				<Icon><Menu /></Icon>
 			</IconButton>
@@ -261,6 +262,7 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 					aria-label={unfilledAriaLabel}
 					isActive={currentPath.startsWith('/routes')}
 					onclick={handleUnfilledWindowsClick}
+					compact
 				>
 					<Icon><CalendarExclamation /></Icon>
 				</IconButton>
@@ -276,6 +278,7 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 					aria-label={unconfirmedShiftAriaLabel}
 					isActive={currentPath.startsWith('/dashboard')}
 					onclick={handleUnconfirmedShiftsClick}
+					compact
 				>
 					<Icon><CalendarExclamation /></Icon>
 				</IconButton>
@@ -291,6 +294,7 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 					aria-label={openBidsAriaLabel}
 					isActive={currentPath.startsWith('/bids')}
 					onclick={handleOpenBidsClick}
+					compact
 				>
 					<Icon><Gavel /></Icon>
 				</IconButton>
@@ -305,6 +309,7 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 				aria-label={notificationAriaLabel}
 				isActive={isNotificationsPage}
 				onclick={handleNotificationsClick}
+				compact
 			>
 				<Icon><BellRinging /></Icon>
 			</IconButton>
@@ -332,6 +337,13 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 		font-weight: var(--font-weight-medium);
 		z-index: 2;
 		position: relative;
+	}
+
+	/* Mobile: reduce left padding so hamburger sits flush */
+	@media (max-width: 640px) {
+		.page-header {
+			padding-left: var(--spacing-2);
+		}
 	}
 
 	.header-left {

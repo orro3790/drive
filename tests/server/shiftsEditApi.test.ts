@@ -65,6 +65,8 @@ const shiftsTable = {
 
 let PATCH: EditRouteModule['PATCH'];
 
+const VALID_ASSIGNMENT_ID = '11111111-1111-4111-8111-111111111111';
+
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<unknown[]>>>;
 let selectChainMock: {
 	from: ReturnType<typeof vi.fn>;
@@ -256,7 +258,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 	it('returns 401 when no user is present', async () => {
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			body: { parcelsReturned: 1 }
 		});
 
@@ -269,7 +271,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 	it('returns 403 for non-driver role', async () => {
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('manager', 'manager-1') },
 			body: { parcelsReturned: 1 }
 		});
@@ -283,9 +285,23 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 	it('returns 400 for invalid schema body', async () => {
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { parcelsStart: 0 }
+		});
+
+		await expect(PATCH(event as Parameters<typeof PATCH>[0])).rejects.toMatchObject({
+			status: 400
+		});
+		expect(selectMock).not.toHaveBeenCalled();
+	});
+
+	it('returns 400 for invalid assignment ID param', async () => {
+		const event = createRequestEvent({
+			method: 'PATCH',
+			params: { assignmentId: 'assignment-1' },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { parcelsReturned: 1 }
 		});
 
 		await expect(PATCH(event as Parameters<typeof PATCH>[0])).rejects.toMatchObject({
@@ -297,7 +313,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 	it('returns 400 when no editable fields are provided', async () => {
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: {}
 		});
@@ -313,7 +329,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { parcelsReturned: 1 }
 		});
@@ -328,7 +344,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { parcelsReturned: 1 }
 		});
@@ -344,7 +360,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { parcelsReturned: 1 }
 		});
@@ -361,7 +377,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { parcelsReturned: 1 }
 		});
@@ -382,7 +398,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { parcelsReturned: 1 }
 		});
@@ -399,7 +415,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { parcelsReturned: 2 }
 		});
@@ -416,7 +432,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { parcelsReturned: 11 }
 		});
@@ -433,7 +449,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { exceptedReturns: 4 }
 		});
@@ -450,7 +466,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { exceptedReturns: 1, exceptionNotes: '   ' }
 		});
@@ -480,7 +496,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { parcelsReturned: 3 }
 		});
@@ -528,7 +544,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { exceptedReturns: 1, exceptionNotes: 'Damaged parcel' }
 		});
@@ -571,7 +587,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { exceptedReturns: 2, exceptionNotes: 'Updated notes' }
 		});
@@ -601,7 +617,7 @@ describe('PATCH /api/shifts/[assignmentId]/edit contract', () => {
 
 		const event = createRequestEvent({
 			method: 'PATCH',
-			params: { assignmentId: 'assignment-1' },
+			params: { assignmentId: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { exceptedReturns: 1, exceptionNotes: 'Damaged parcel' }
 		});

@@ -217,6 +217,9 @@ Invariant ids must be stable, searchable, and map to a single responsibility. Re
 | `TENANT-003` | Bid window resolved to cross-org winner (warehouse org must match winner org) | `tests/integration/invariants/tenantIsolation.ts`     |
 | `ASSIGN-001` | Assignment missing or not scheduled/assigned to expected driver               | `tests/integration/invariants/assignmentIntegrity.ts` |
 | `ASSIGN-002` | Bid window missing or not resolved to expected winner                         | `tests/integration/invariants/assignmentIntegrity.ts` |
+| `IDEMP-001`  | Duplicate open bid windows for the same assignment                            | `tests/integration/invariants/idempotency.ts`         |
+| `IDEMP-002`  | Duplicate manager no-show alerts for the same route/date                      | `tests/integration/invariants/idempotency.ts`         |
+| `IDEMP-003`  | Multiple winning bids recorded for a single bid window                        | `tests/integration/invariants/idempotency.ts`         |
 
 If the invariant id is present but the meaning is unclear, treat that as a documentation gap and update this runbook (or the invariant itself) so the next responder does not have to reverse-engineer it.
 
@@ -248,7 +251,7 @@ Title: `Integration failure: <scenarioId> / <invariantId> (<short symptom>)`
 
 Create the bead (CLI):
 
-If you're on Windows and `bd` is not available on your PATH as `bd`, use `bd.exe`.
+Use `bd` for CRUD operations.
 
 ### Bash (macOS/Linux/Git Bash)
 
@@ -291,7 +294,7 @@ Key entity ids: <orgId, driverId, assignmentId, bidWindowId, ...>
 Owner guess: <infra | harness | algorithm | schema>
 "@
 
-$body | bd.exe create `
+$body | bd create `
   --type bug `
   --labels e2e,nightly `
   --title "Integration failure: <scenarioId> / <invariantId> (<short symptom>)" `

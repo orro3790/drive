@@ -12,11 +12,17 @@ import { assignments, routes, shifts, user, warehouses } from '$lib/server/db/sc
 import { and, eq, inArray, desc } from 'drizzle-orm';
 import type { DriverShiftHistoryResponse } from '$lib/schemas/driverShiftHistory';
 import { requireManagerWithOrg } from '$lib/server/org-scope';
+import { driverIdParamsSchema } from '$lib/schemas/driver';
 
 export const GET: RequestHandler = async ({ locals, params }) => {
 	const { organizationId } = requireManagerWithOrg(locals);
+	const paramsResult = driverIdParamsSchema.safeParse(params);
 
-	const { id } = params;
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid driver ID');
+	}
+
+	const { id } = paramsResult.data;
 
 	// Verify target user exists, is a driver, and is in the same org
 	const [target] = await db

@@ -30,6 +30,38 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:5173 2>/dev/null || echo
 
 **Do NOT attempt to start the server yourself.** Background processes in agent shells are unreliable.
 
+## Mobile Development (USB)
+
+For testing on a physical Android device connected via USB:
+
+```bash
+pnpm dev:mobile
+```
+
+This single command:
+
+1. Sets up ADB port forwarding (`adb reverse tcp:5173 tcp:5173`)
+2. Starts the dev server with `--host`
+
+### First-Time Setup
+
+Before `pnpm dev:mobile` works, sync the app once to point at localhost:
+
+```bash
+pnpm mobile:android:sync:usb
+pnpm mobile:android:open  # Install on device via Android Studio
+```
+
+After that, just run `pnpm dev:mobile` — changes hot-reload instantly.
+
+### Summary of Sync Commands
+
+| Command                         | Use Case                           |
+| ------------------------------- | ---------------------------------- |
+| `pnpm mobile:android:sync:usb`  | Local dev with USB-connected phone |
+| `pnpm mobile:android:sync:dev`  | Android emulator (10.0.2.2)        |
+| `pnpm mobile:android:sync:prod` | Production build (uses .env URL)   |
+
 ## Why User-Started?
 
 - Agent shells have stdin/TTY issues with long-running processes

@@ -12,7 +12,7 @@ import { toZonedTime, format } from 'date-fns-tz';
 import { parseISO } from 'date-fns';
 import logger, { toSafeErrorMessage } from '$lib/server/logger';
 import { getRouteManager } from './managers';
-import { getWeekStart, canDriverTakeAssignment } from './scheduling';
+import { canDriverTakeAssignment, getWeekStartForDateString } from './scheduling';
 import {
 	FIREBASE_PROJECT_ID,
 	FIREBASE_CLIENT_EMAIL,
@@ -210,8 +210,105 @@ export interface SendNotificationResult {
 	inAppCreated: boolean;
 	/** Whether push notification was sent */
 	pushSent: boolean;
-	/** Error message if push failed */
-	pushError?: string;
+	/** Error category when push fails */
+	pushError?: 'push_failed_transient' | 'push_failed_terminal';
+	/** Provider error code when available */
+	pushErrorCode?: string;
+	/** Whether the failure is retryable */
+	retryable?: boolean;
+	/** Whether an invalid token was removed */
+	tokenInvalidated?: boolean;
+}
+
+interface PushFailureClassification {
+	category: 'transient' | 'terminal';
+	code: string;
+	retryable: boolean;
+	invalidToken: boolean;
+	errorCategory: string;
+}
+
+const FCM_INVALID_TOKEN_CODES = new Set([
+	'messaging/registration-token-not-registered',
+	'messaging/invalid-registration-token'
+]);
+
+const FCM_TRANSIENT_CODES = new Set([
+	'messaging/internal-error',
+	'messaging/server-unavailable',
+	'messaging/quota-exceeded',
+	'messaging/device-message-rate-exceeded',
+	'messaging/message-rate-exceeded',
+	'messaging/unavailable'
+]);
+
+const FCM_TERMINAL_CODES = new Set([
+	'messaging/invalid-argument',
+	'messaging/mismatched-credential',
+	'messaging/authentication-error',
+	'messaging/sender-id-mismatch',
+	'messaging/third-party-auth-error',
+	'messaging/too-many-topics'
+]);
+
+function extractErrorCode(error: unknown): string | undefined {
+	if (!error || typeof error !== 'object') {
+		return undefined;
+	}
+
+	const maybeError = error as { code?: unknown; errorInfo?: { code?: unknown } };
+	if (typeof maybeError.code === 'string' && maybeError.code.length > 0) {
+		return maybeError.code;
+	}
+
+	if (typeof maybeError.errorInfo?.code === 'string' && maybeError.errorInfo.code.length > 0) {
+		return maybeError.errorInfo.code;
+	}
+
+	return undefined;
+}
+
+function classifyPushFailure(error: unknown): PushFailureClassification {
+	const code = extractErrorCode(error) ?? 'unknown';
+	const errorCategory = toSafeErrorMessage(error);
+
+	if (FCM_INVALID_TOKEN_CODES.has(code)) {
+		return {
+			category: 'terminal',
+			code,
+			retryable: false,
+			invalidToken: true,
+			errorCategory
+		};
+	}
+
+	if (FCM_TRANSIENT_CODES.has(code)) {
+		return {
+			category: 'transient',
+			code,
+			retryable: true,
+			invalidToken: false,
+			errorCategory
+		};
+	}
+
+	if (FCM_TERMINAL_CODES.has(code)) {
+		return {
+			category: 'terminal',
+			code,
+			retryable: false,
+			invalidToken: false,
+			errorCategory
+		};
+	}
+
+	return {
+		category: 'terminal',
+		code,
+		retryable: false,
+		invalidToken: false,
+		errorCategory
+	};
 }
 
 function sanitizePushData(data?: Record<string, string>): Record<string, string> | undefined {
@@ -334,12 +431,38 @@ export async function sendNotification(
 	} catch (error) {
 		// FCM errors are common (invalid token, user uninstalled app, etc.)
 		// Log but don't throw - the in-app notification is still created
-		const errorCategory = toSafeErrorMessage(error);
-		result.pushError = 'push_failed';
-		log.warn({ errorCategory }, 'Failed to send push notification');
+		const failure = classifyPushFailure(error);
+		result.pushError =
+			failure.category === 'transient' ? 'push_failed_transient' : 'push_failed_terminal';
+		result.pushErrorCode = failure.code;
+		result.retryable = failure.retryable;
+		result.tokenInvalidated = false;
 
-		// If token is invalid, we could clear it from the user record
-		// but that's better handled by the client re-registering on app open
+		if (failure.invalidToken) {
+			try {
+				await db
+					.update(user)
+					.set({ fcmToken: null })
+					.where(and(eq(user.id, userId), eq(user.fcmToken, recipient.fcmToken)));
+				result.tokenInvalidated = true;
+			} catch (cleanupError) {
+				log.warn(
+					{ cleanupErrorCategory: toSafeErrorMessage(cleanupError), fcmCode: failure.code },
+					'Failed to clear invalid FCM token after terminal push failure'
+				);
+			}
+		}
+
+		log.warn(
+			{
+				errorCategory: failure.errorCategory,
+				fcmCode: failure.code,
+				retryable: failure.retryable,
+				terminal: failure.category === 'terminal',
+				tokenInvalidated: result.tokenInvalidated
+			},
+			'Failed to send push notification'
+		);
 	}
 
 	return result;
@@ -357,6 +480,7 @@ export async function sendBulkNotifications(
 	type: NotificationType,
 	options: SendNotificationOptions = {}
 ): Promise<Map<string, SendNotificationResult>> {
+	const log = logger.child({ operation: 'sendBulkNotifications', type });
 	const results = new Map<string, SendNotificationResult>();
 
 	// Send notifications in parallel (but limit concurrency to avoid overwhelming FCM)
@@ -374,6 +498,46 @@ export async function sendBulkNotifications(
 			results.set(userId, result);
 		}
 	}
+
+	let inAppCreated = 0;
+	let pushSent = 0;
+	let pushFailedTransient = 0;
+	let pushFailedTerminal = 0;
+	let tokensInvalidated = 0;
+
+	for (const result of results.values()) {
+		if (result.inAppCreated) {
+			inAppCreated++;
+		}
+
+		if (result.pushSent) {
+			pushSent++;
+		}
+
+		if (result.pushError === 'push_failed_transient') {
+			pushFailedTransient++;
+		}
+
+		if (result.pushError === 'push_failed_terminal') {
+			pushFailedTerminal++;
+		}
+
+		if (result.tokenInvalidated) {
+			tokensInvalidated++;
+		}
+	}
+
+	log.info(
+		{
+			attempted: userIds.length,
+			inAppCreated,
+			pushSent,
+			pushFailedTransient,
+			pushFailedTerminal,
+			tokensInvalidated
+		},
+		'Bulk notification outcome summary'
+	);
 
 	return results;
 }
@@ -531,7 +695,7 @@ export async function notifyAvailableDriversForEmergency(
 	}
 
 	// Filter by weekly cap
-	const assignmentWeekStart = getWeekStart(parseISO(date));
+	const assignmentWeekStart = getWeekStartForDateString(date);
 	const eligibleDriverIds: string[] = [];
 	for (const driver of drivers) {
 		const canTake = await canDriverTakeAssignment(driver.id, assignmentWeekStart, organizationId);

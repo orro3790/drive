@@ -4,12 +4,13 @@ import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import logger from './logger';
 import { db } from '$lib/server/db';
-import { rateLimit as authRateLimit } from './db/auth-schema';
+import { rateLimit as authRateLimit, user as authUser } from './db/auth-schema';
 import { releaseProductionSignupAuthorizationReservation } from './services/onboarding';
 import {
 	prepareOrganizationCreateSignup,
 	finalizeOrganizationCreateSignup,
 	finalizeOrganizationJoinSignup,
+	getReservedOrganizationJoinSignup,
 	reserveOrganizationJoinSignup
 } from './services/organizationSignup';
 import {
@@ -56,8 +57,10 @@ export interface SignupAbuseGuardDependencies {
 	reserveOrganizationJoinSignup?: typeof reserveOrganizationJoinSignup;
 	prepareOrganizationCreateSignup?: typeof prepareOrganizationCreateSignup;
 	finalizeOrganizationJoinSignup?: typeof finalizeOrganizationJoinSignup;
+	getReservedOrganizationJoinSignup?: typeof getReservedOrganizationJoinSignup;
 	finalizeOrganizationCreateSignup?: typeof finalizeOrganizationCreateSignup;
 	releaseProductionSignupAuthorizationReservation?: typeof releaseProductionSignupAuthorizationReservation;
+	rollbackSignupUser?: (input: { userId: string }) => Promise<void> | void;
 	recordSignupFinalizeReconciliation?: (
 		input: SignupFinalizeReconciliationInput
 	) => Promise<void> | void;
@@ -617,6 +620,20 @@ async function reportCreateOrganizationFinalizeReconciliation(
 	}
 }
 
+async function rollbackSignupUser(input: { userId: string }): Promise<void> {
+	const [deletedUser] = await db
+		.delete(authUser)
+		.where(eq(authUser.id, input.userId))
+		.returning({ id: authUser.id });
+
+	if (!deletedUser) {
+		logger.error(
+			{ event: 'auth.signup.rollback.user_missing', userId: input.userId },
+			'auth_signup_rollback_user_missing'
+		);
+	}
+}
+
 type SignupDatabaseHookContext = {
 	path?: string;
 	body?: unknown;
@@ -644,6 +661,8 @@ export function createSignupOrganizationAssignmentDbHook(
 ) {
 	const provisionCreateOrganization =
 		dependencies.prepareOrganizationCreateSignup ?? prepareOrganizationCreateSignup;
+	const loadReservedJoinSignup =
+		dependencies.getReservedOrganizationJoinSignup ?? getReservedOrganizationJoinSignup;
 
 	return async (
 		userData: Record<string, unknown>,
@@ -678,10 +697,26 @@ export function createSignupOrganizationAssignmentDbHook(
 					throw new APIError('BAD_REQUEST', { message: MISSING_SIGNUP_ASSIGNMENT_MESSAGE });
 				}
 
+				const activeReservation = await loadReservedJoinSignup({ reservationId });
+				if (!activeReservation) {
+					throw new APIError('BAD_REQUEST', { message: SIGN_UP_BLOCKED_MESSAGE });
+				}
+
+				if (
+					activeReservation.organizationId !== assignment.organizationId ||
+					activeReservation.targetRole !== assignment.role
+				) {
+					logger.error(
+						{ event: 'auth.signup.assignment.join_context_mismatch', path, reservationId },
+						'auth_signup_assignment_join_context_mismatch'
+					);
+					throw new APIError('BAD_REQUEST', { message: MISSING_SIGNUP_ASSIGNMENT_MESSAGE });
+				}
+
 				return {
 					data: {
-						organizationId: assignment.organizationId,
-						role: assignment.role
+						organizationId: activeReservation.organizationId,
+						role: activeReservation.targetRole
 					}
 				};
 			}
@@ -904,6 +939,7 @@ export function createSignupOnboardingConsumer(
 	const releaseReservation =
 		dependencies.releaseProductionSignupAuthorizationReservation ??
 		releaseProductionSignupAuthorizationReservation;
+	const rollbackUser = dependencies.rollbackSignupUser ?? rollbackSignupUser;
 	const recordFinalizeReconciliation =
 		dependencies.recordSignupFinalizeReconciliation ?? logSignupFinalizeNeedsReconciliation;
 	const recordCreateOrganizationFinalizeReconciliation =
@@ -995,45 +1031,52 @@ export function createSignupOnboardingConsumer(
 		}
 
 		if (signupOrganization.mode === 'create') {
-			if (!signupAssignment || signupAssignment.source !== 'create_provision') {
+			const rollbackUserAndBlockCreateSignup = async (
+				reconciliationError?: unknown
+			): Promise<never> => {
 				await reportCreateOrganizationFinalizeReconciliation(
 					recordCreateOrganizationFinalizeReconciliation,
 					{
 						userId: signedUpUser.id,
 						email: signedUpUser.email,
 						organizationName: signupOrganization.organizationName,
-						error: new Error('signup_create_assignment_missing')
+						...(reconciliationError ? { error: reconciliationError } : {})
 					}
 				);
-				return;
+
+				try {
+					await rollbackUser({ userId: signedUpUser.id });
+				} catch (rollbackError) {
+					logger.error(
+						{
+							event: 'auth.signup.rollback.user_failed',
+							organizationName: signupOrganization.organizationName,
+							userId: signedUpUser.id,
+							error: rollbackError
+						},
+						'auth_signup_rollback_user_failed'
+					);
+				}
+
+				throw new APIError('BAD_REQUEST', { message: SIGN_UP_BLOCKED_MESSAGE });
+			};
+
+			const createProvisionAssignment = signupAssignment;
+			if (!createProvisionAssignment || createProvisionAssignment.source !== 'create_provision') {
+				await rollbackUserAndBlockCreateSignup(new Error('signup_create_assignment_missing'));
 			}
 
 			try {
 				const finalized = await finalizeCreateOrganization({
 					userId: signedUpUser.id,
-					organizationId: signupAssignment.organizationId
+					organizationId: createProvisionAssignment!.organizationId
 				});
 
 				if (!finalized) {
-					await reportCreateOrganizationFinalizeReconciliation(
-						recordCreateOrganizationFinalizeReconciliation,
-						{
-							userId: signedUpUser.id,
-							email: signedUpUser.email,
-							organizationName: signupOrganization.organizationName
-						}
-					);
+					await rollbackUserAndBlockCreateSignup();
 				}
 			} catch (error) {
-				await reportCreateOrganizationFinalizeReconciliation(
-					recordCreateOrganizationFinalizeReconciliation,
-					{
-						userId: signedUpUser.id,
-						email: signedUpUser.email,
-						organizationName: signupOrganization.organizationName,
-						error
-					}
-				);
+				await rollbackUserAndBlockCreateSignup(error);
 			}
 
 			return;
@@ -1050,26 +1093,43 @@ export function createSignupOnboardingConsumer(
 			return;
 		}
 
-		try {
-			const finalized = await finalizeJoinReservation({
-				reservationId,
-				userId: signedUpUser.id
-			});
-
-			if (!finalized) {
-				await reportFinalizeReconciliation(recordFinalizeReconciliation, {
-					reservationId,
-					userId: signedUpUser.id,
-					email: signedUpUser.email
-				});
-			}
-		} catch (error) {
+		const rollbackUserAndBlockSignup = async (reconciliationError?: unknown) => {
 			await reportFinalizeReconciliation(recordFinalizeReconciliation, {
 				reservationId,
 				userId: signedUpUser.id,
 				email: signedUpUser.email,
-				error
+				...(reconciliationError ? { error: reconciliationError } : {})
 			});
+
+			try {
+				await rollbackUser({ userId: signedUpUser.id });
+			} catch (rollbackError) {
+				logger.error(
+					{
+						event: 'auth.signup.rollback.user_failed',
+						reservationId,
+						userId: signedUpUser.id,
+						error: rollbackError
+					},
+					'auth_signup_rollback_user_failed'
+				);
+			}
+
+			throw new APIError('BAD_REQUEST', { message: SIGN_UP_BLOCKED_MESSAGE });
+		};
+
+		let finalized: Awaited<ReturnType<typeof finalizeJoinReservation>> | null = null;
+		try {
+			finalized = await finalizeJoinReservation({
+				reservationId,
+				userId: signedUpUser.id
+			});
+		} catch (error) {
+			await rollbackUserAndBlockSignup(error);
+		}
+
+		if (!finalized) {
+			await rollbackUserAndBlockSignup();
 		}
 	});
 }

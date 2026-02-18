@@ -7,6 +7,8 @@ description: Converts specifications or implementation plans into actionable BEA
 
 Convert product specifications or implementation plans into actionable BEADS.
 
+Note: Use `bd` for all BEADS operations.
+
 ## Usage
 
 ```
@@ -34,8 +36,18 @@ Accepts:
 For each unit of work, create a bead with:
 
 ```bash
-bd.exe create "<clear title>" -d "<detailed body>"
+bd create "<clear title>" -d "<detailed body>"
 ```
+
+### 2.5 Create an Umbrella Parent (REQUIRED for multi-bead plans)
+
+If the source produces 3+ beads, create one parent epic/program bead first, then attach all generated beads as children.
+
+```bash
+bd create "Program: <spec title>" -t epic -p 1 -d "Source: <spec-file>\n\n<program objective + completion rule>"
+```
+
+This prevents partial/orphaned work and gives a single progress roll-up.
 
 ### Source Traceability (REQUIRED)
 
@@ -88,8 +100,26 @@ Each bead MUST include:
 Link related beads:
 
 ```bash
-bd.exe dep add <child-id> <parent-id>
+bd dep add <child-id> <parent-epic-id> -t parent-child
+bd dep add <downstream-id> <prerequisite-id> -t blocks
 ```
+
+Dependency rules:
+
+1. **Hierarchy**: Every generated work bead must be attached to the umbrella epic with `-t parent-child`.
+2. **Execution order**: Use `-t blocks` only for prerequisite sequencing among siblings.
+3. **Never rely on default dep type** for parent grouping.
+
+### 3.5 Validate Dependency Topology (REQUIRED)
+
+Run validation commands immediately after dependency creation:
+
+```bash
+bd show <parent-epic-id>
+bd epic status
+```
+
+The parent bead must display `Children (N)` with all generated beads.
 
 ### 4. Validate Completeness
 
@@ -101,6 +131,8 @@ For each bead, verify:
 - [ ] Are all function signatures defined?
 - [ ] Are edge cases enumerated?
 - [ ] Are error handling requirements specified?
+- [ ] Are all generated beads attached to one umbrella parent via `parent-child`?
+- [ ] Do sequencing dependencies use explicit `blocks` links where needed?
 
 **If ANY answer is NO:** The bead is underdeveloped.
 

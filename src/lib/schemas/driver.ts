@@ -63,4 +63,8 @@ export const driverUpdateSchema = z
 		message: 'At least one field must be provided'
 	});
 
+export const driverIdParamsSchema = z.object({
+	id: z.string().uuid()
+});
+
 export type DriverUpdate = z.infer<typeof driverUpdateSchema>;

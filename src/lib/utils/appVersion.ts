@@ -65,6 +65,16 @@ export async function checkVersion(): Promise<VersionCheckState> {
 
 		return { status: 'allowed', appVersion, serverInfo };
 	} catch (err) {
+		// In dev mode (localhost), pass through on version check errors
+		// This allows USB debugging without requiring GitHub releases
+		if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+			return {
+				status: 'allowed',
+				appVersion,
+				serverInfo: { minVersion: 0, currentVersion: appVersion, downloadUrl: '' }
+			};
+		}
+
 		const message = err instanceof Error ? err.message : 'Connection error';
 		return { status: 'error', message };
 	}

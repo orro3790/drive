@@ -51,6 +51,9 @@ const createAuditLogMock = vi.fn(
 const sendNotificationMock = vi.fn(async () => ({ inAppCreated: true, pushSent: false }));
 const sendBulkNotificationsMock = vi.fn(async () => undefined);
 const sendManagerAlertMock = vi.fn(async () => true);
+const broadcastAssignmentUpdatedMock = vi.fn();
+const broadcastBidWindowClosedMock = vi.fn();
+const broadcastBidWindowOpenedMock = vi.fn();
 
 let createBidWindow: BiddingModule['createBidWindow'];
 let getExpiredBidWindows: BiddingModule['getExpiredBidWindows'];
@@ -99,14 +102,16 @@ beforeAll(async () => {
 	}));
 
 	vi.doMock('$lib/server/services/scheduling', () => ({
-		getWeekStart: vi.fn((date: Date) => date),
+		getWeekStartForDateString: vi.fn(
+			(dateString: string) => new Date(`${dateString}T00:00:00.000Z`)
+		),
 		canDriverTakeAssignment: vi.fn(async () => true)
 	}));
 
 	vi.doMock('$lib/server/realtime/managerSse', () => ({
-		broadcastAssignmentUpdated: vi.fn(),
-		broadcastBidWindowClosed: vi.fn(),
-		broadcastBidWindowOpened: vi.fn()
+		broadcastAssignmentUpdated: broadcastAssignmentUpdatedMock,
+		broadcastBidWindowClosed: broadcastBidWindowClosedMock,
+		broadcastBidWindowOpened: broadcastBidWindowOpenedMock
 	}));
 
 	vi.doMock('$lib/server/logger', () => ({
@@ -139,6 +144,9 @@ beforeEach(() => {
 	sendNotificationMock.mockClear();
 	sendBulkNotificationsMock.mockClear();
 	sendManagerAlertMock.mockClear();
+	broadcastAssignmentUpdatedMock.mockClear();
+	broadcastBidWindowClosedMock.mockClear();
+	broadcastBidWindowOpenedMock.mockClear();
 });
 
 afterEach(() => {
@@ -207,6 +215,176 @@ describe('bidding service boundaries', () => {
 			reason: 'Shift has already passed'
 		});
 		expect(insertMock).not.toHaveBeenCalled();
+	});
+
+	it('creates assignment update/audit and bid-window insert in one transaction', async () => {
+		setSelectResults([
+			[
+				{
+					id: 'assignment-atomic',
+					routeId: 'route-atomic',
+					date: '2026-02-22',
+					status: 'scheduled',
+					userId: 'driver-atomic',
+					organizationId: 'org-a'
+				}
+			],
+			[],
+			[{ name: 'Atomic Route' }]
+		]);
+
+		const txUpdateWhereMock = vi.fn(async (_condition: unknown) => undefined);
+		const txUpdateSetMock = vi.fn((_values: Record<string, unknown>) => ({
+			where: txUpdateWhereMock
+		}));
+		const txUpdateMock = vi.fn((_table: unknown) => ({ set: txUpdateSetMock }));
+
+		const txInsertReturningMock = vi.fn(async () => {
+			throw new Error('insert_failed');
+		});
+		const txInsertValuesMock = vi.fn((_values: Record<string, unknown>) => ({
+			returning: txInsertReturningMock
+		}));
+		const txInsertMock = vi.fn((_table: unknown) => ({ values: txInsertValuesMock }));
+
+		transactionMock.mockImplementationOnce(async (runner: unknown) => {
+			if (typeof runner !== 'function') {
+				throw new Error('runner_missing');
+			}
+
+			const tx = {
+				update: txUpdateMock,
+				insert: txInsertMock
+			};
+
+			return runner(tx);
+		});
+
+		await expect(createBidWindow('assignment-atomic', { trigger: 'auto_drop' })).resolves.toEqual({
+			success: false,
+			reason: 'Failed to create bid window'
+		});
+
+		expect(transactionMock).toHaveBeenCalledTimes(1);
+		expect(txUpdateMock).toHaveBeenCalledTimes(1);
+		expect(createAuditLogMock).toHaveBeenCalledWith(
+			expect.objectContaining({ entityId: 'assignment-atomic', action: 'unfilled' }),
+			expect.objectContaining({ insert: expect.any(Function), update: expect.any(Function) })
+		);
+		expect(insertMock).not.toHaveBeenCalled();
+	});
+
+	it('creates bid window successfully via transaction path', async () => {
+		setSelectResults([
+			[
+				{
+					id: 'assignment-success',
+					routeId: 'route-success',
+					date: '2026-02-22',
+					status: 'scheduled',
+					userId: 'driver-success',
+					organizationId: 'org-a'
+				}
+			],
+			[],
+			[{ name: 'Success Route' }],
+			[]
+		]);
+
+		const txUpdateWhereMock = vi.fn(async (_condition: unknown) => undefined);
+		const txUpdateSetMock = vi.fn((_values: Record<string, unknown>) => ({
+			where: txUpdateWhereMock
+		}));
+		const txUpdateMock = vi.fn((_table: unknown) => ({ set: txUpdateSetMock }));
+
+		const txInsertReturningMock = vi.fn(async () => [{ id: 'window-success' }]);
+		const txInsertValuesMock = vi.fn((_values: Record<string, unknown>) => ({
+			returning: txInsertReturningMock
+		}));
+		const txInsertMock = vi.fn((_table: unknown) => ({ values: txInsertValuesMock }));
+
+		transactionMock.mockImplementationOnce(async (runner: unknown) => {
+			if (typeof runner !== 'function') {
+				throw new Error('runner_missing');
+			}
+
+			return runner({
+				update: txUpdateMock,
+				insert: txInsertMock
+			});
+		});
+
+		await expect(createBidWindow('assignment-success')).resolves.toEqual({
+			success: true,
+			bidWindowId: 'window-success',
+			notifiedCount: 0
+		});
+
+		expect(transactionMock).toHaveBeenCalledTimes(1);
+		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps durable create successful when fanout side effects fail', async () => {
+		setSelectResults([
+			[
+				{
+					id: 'assignment-side-effects',
+					routeId: 'route-side-effects',
+					date: '2026-02-22',
+					status: 'scheduled',
+					userId: 'driver-side-effects',
+					organizationId: 'org-a'
+				}
+			],
+			[],
+			[{ name: 'Side Effect Route' }],
+			[{ id: 'driver-eligible' }]
+		]);
+
+		const txUpdateWhereMock = vi.fn(async (_condition: unknown) => undefined);
+		const txUpdateSetMock = vi.fn((_values: Record<string, unknown>) => ({
+			where: txUpdateWhereMock
+		}));
+		const txUpdateMock = vi.fn((_table: unknown) => ({ set: txUpdateSetMock }));
+
+		const txInsertReturningMock = vi.fn(async () => [{ id: 'window-side-effects' }]);
+		const txInsertValuesMock = vi.fn((_values: Record<string, unknown>) => ({
+			returning: txInsertReturningMock
+		}));
+		const txInsertMock = vi.fn((_table: unknown) => ({ values: txInsertValuesMock }));
+
+		transactionMock.mockImplementationOnce(async (runner: unknown) => {
+			if (typeof runner !== 'function') {
+				throw new Error('runner_missing');
+			}
+
+			return runner({
+				update: txUpdateMock,
+				insert: txInsertMock
+			});
+		});
+
+		insertValuesMock.mockImplementationOnce((_values: Record<string, unknown>) => {
+			throw new Error('notification_insert_failed');
+		});
+		broadcastBidWindowOpenedMock.mockImplementationOnce(() => {
+			throw new Error('broadcast_open_failed');
+		});
+		broadcastAssignmentUpdatedMock.mockImplementationOnce(() => {
+			throw new Error('broadcast_assignment_failed');
+		});
+
+		await expect(createBidWindow('assignment-side-effects')).resolves.toEqual({
+			success: true,
+			bidWindowId: 'window-side-effects',
+			notifiedCount: 0
+		});
+
+		expect(transactionMock).toHaveBeenCalledTimes(1);
+		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
+		expect(insertMock).toHaveBeenCalledTimes(1);
+		expect(broadcastBidWindowOpenedMock).toHaveBeenCalledTimes(1);
+		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledTimes(1);
 	});
 
 	it('supports warehouse-scoped and organization-scoped expired-window lookups', async () => {

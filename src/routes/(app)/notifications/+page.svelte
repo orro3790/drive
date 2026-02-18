@@ -98,17 +98,6 @@ Uses notificationsStore for data loading and optimistic read updates.
 				<h1>{m.notifications_page_title()}</h1>
 				<p>{m.notifications_page_description()}</p>
 			</div>
-			<div class="header-actions">
-				<IconButton
-					tooltip={m.notifications_mark_all()}
-					onclick={handleMarkAllRead}
-					disabled={!hasUnread || notificationsStore.isMarkingAll}
-				>
-					<Icon size="medium">
-						<ClearAll />
-					</Icon>
-				</IconButton>
-			</div>
 		</div>
 
 		{#if notificationsStore.isLoading}
@@ -125,6 +114,23 @@ Uses notificationsStore for data loading and optimistic read updates.
 				<p>{m.notifications_empty_message()}</p>
 			</div>
 		{:else}
+			{#if hasUnread}
+				<div class="unread-row">
+					<span class="unread-label"
+						>{m.notifications_unread_label()} ({notificationsStore.unreadCount})</span
+					>
+					<IconButton
+						tooltip={m.notifications_mark_all()}
+						onclick={handleMarkAllRead}
+						disabled={notificationsStore.isMarkingAll}
+						compact
+					>
+						<Icon size="small">
+							<ClearAll />
+						</Icon>
+					</IconButton>
+				</div>
+			{/if}
 			<div class="notifications-groups">
 				{#each groupedNotifications as group (group.key)}
 					<div class="notification-group">
@@ -190,10 +196,19 @@ Uses notificationsStore for data loading and optimistic read updates.
 		font-size: var(--font-size-sm);
 	}
 
-	.header-actions {
+	.unread-row {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-2);
+		justify-content: space-between;
+		padding: 0 var(--spacing-3);
+		margin-bottom: var(--spacing-3);
+	}
+
+	.unread-label {
+		font-size: var(--font-size-xs);
+		color: var(--text-faint);
+		text-transform: uppercase;
+		letter-spacing: var(--letter-spacing-sm);
 	}
 
 	.notifications-loading {

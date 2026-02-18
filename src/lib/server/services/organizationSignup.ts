@@ -61,6 +61,17 @@ export interface FinalizeOrganizationJoinSignupResult {
 	targetRole: SignupOrganizationRole;
 }
 
+export interface GetReservedOrganizationJoinSignupInput {
+	reservationId: string;
+	now?: Date;
+}
+
+export interface GetReservedOrganizationJoinSignupResult {
+	reservationId: string;
+	organizationId: string;
+	targetRole: SignupOrganizationRole;
+}
+
 export interface PrepareOrganizationCreateSignupInput {
 	organizationName: string;
 	now?: Date;
@@ -582,6 +593,49 @@ export async function finalizeOrganizationJoinSignup(
 
 		return null;
 	});
+}
+
+export async function getReservedOrganizationJoinSignup(
+	input: GetReservedOrganizationJoinSignupInput,
+	dbClient: DbClient = db
+): Promise<GetReservedOrganizationJoinSignupResult | null> {
+	const reservationId = normalizeReservationId(input.reservationId);
+	if (!reservationId) {
+		return null;
+	}
+
+	const now = input.now ?? new Date();
+
+	const [reservation] = await dbClient
+		.select({
+			id: signupOnboarding.id,
+			organizationId: signupOnboarding.organizationId,
+			targetRole: signupOnboarding.targetRole,
+			status: signupOnboarding.status,
+			expiresAt: signupOnboarding.expiresAt
+		})
+		.from(signupOnboarding)
+		.where(and(eq(signupOnboarding.id, reservationId), eq(signupOnboarding.kind, 'approval')))
+		.limit(1);
+
+	if (!reservation?.organizationId || reservation.status !== 'reserved') {
+		return null;
+	}
+
+	if (reservation.expiresAt && reservation.expiresAt.getTime() <= now.getTime()) {
+		return null;
+	}
+
+	const parsedTargetRole = signupOrganizationRoleSchema.safeParse(reservation.targetRole);
+	if (!parsedTargetRole.success) {
+		return null;
+	}
+
+	return {
+		reservationId: reservation.id,
+		organizationId: reservation.organizationId,
+		targetRole: parsedTargetRole.data
+	};
 }
 
 export async function cleanupStaleSignupOrganizations(

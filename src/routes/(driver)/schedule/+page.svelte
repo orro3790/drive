@@ -8,7 +8,7 @@
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
-	import { addDays, format, getWeek, parseISO } from 'date-fns';
+	import { addDays, differenceInDays, format, getWeek, parseISO, startOfDay } from 'date-fns';
 	import type { Component } from 'svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
@@ -66,6 +66,8 @@
 
 	const activeAssignments = $derived(sortedAssignments.filter((a) => a.status === 'active'));
 
+	const today = $derived(format(startOfDay(new Date()), 'yyyy-MM-dd'));
+
 	const thisWeekAssignments = $derived.by(() => {
 		const weekStart = scheduleStore.weekStart;
 		const nextWeekStart = scheduleStore.nextWeekStart;
@@ -73,8 +75,10 @@
 		return sortedAssignments.filter(
 			(assignment) =>
 				assignment.status !== 'active' &&
+				assignment.status !== 'completed' &&
 				assignment.date >= weekStart &&
-				assignment.date < nextWeekStart
+				assignment.date < nextWeekStart &&
+				assignment.date >= today
 		);
 	});
 
@@ -82,7 +86,10 @@
 		const nextWeekStart = scheduleStore.nextWeekStart;
 		if (!nextWeekStart) return [];
 		return sortedAssignments.filter(
-			(assignment) => assignment.status !== 'active' && assignment.date >= nextWeekStart
+			(assignment) =>
+				assignment.status !== 'active' &&
+				assignment.status !== 'completed' &&
+				assignment.date >= nextWeekStart
 		);
 	});
 
@@ -366,8 +373,15 @@
 							{/if}
 						</div>
 					{/if}
-				{:else if assignment.status !== 'active'}
-					<span class="assignment-status">{statusLabels[assignment.status]}</span>
+				{:else if assignment.status === 'cancelled'}
+					<Chip variant="status" status="error" size="xs" label={statusLabels[assignment.status]} />
+				{:else if assignment.status === 'unfilled'}
+					<Chip
+						variant="status"
+						status="warning"
+						size="xs"
+						label={statusLabels[assignment.status]}
+					/>
 				{/if}
 				{#each otherActions as actionId (actionId)}
 					<Button
@@ -389,10 +403,18 @@
 							+{deltas.confirmedOnTime}
 						</span>
 					</span>
-				{:else if confirmState === 'confirmable' || confirmState === 'not_open'}
+				{:else if confirmState === 'not_open'}
+					{@const daysUntilOpen = differenceInDays(
+						parseISO(assignment.confirmationOpensAt),
+						new Date()
+					)}
+					<span class="header-opens-soon">
+						{m.schedule_confirm_opens_chip({ days: Math.max(1, daysUntilOpen) })}
+					</span>
+				{:else if confirmState === 'confirmable'}
 					<span class="header-confirm-by">
 						{m.schedule_confirm_by_chip({
-							date: format(parseISO(assignment.confirmationDeadline), 'MMM d')
+							datetime: format(parseISO(assignment.confirmationDeadline), 'MMM d, h:mm a')
 						})}
 					</span>
 				{:else if confirmState === 'overdue'}
@@ -789,8 +811,8 @@
 	}
 
 	.icon-circle :global(svg) {
-		width: 20px;
-		height: 20px;
+		width: 24px;
+		height: 24px;
 	}
 
 	/* Content */
@@ -803,7 +825,7 @@
 
 	.assignment-header {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: var(--spacing-2);
 	}
 
@@ -839,13 +861,6 @@
 		line-height: 1.2;
 	}
 
-	.assignment-status {
-		font-size: var(--font-size-xs);
-		color: var(--text-faint);
-		flex-shrink: 0;
-		font-weight: var(--font-weight-medium);
-	}
-
 	.assignment-item.overdue {
 		opacity: 0.55;
 	}
@@ -873,6 +888,14 @@
 		gap: var(--spacing-1);
 		font-size: var(--font-size-xs);
 		color: var(--status-warning);
+	}
+
+	.header-opens-soon {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		font-size: var(--font-size-xs);
+		color: var(--text-muted);
 	}
 
 	.header-overdue {
@@ -1003,8 +1026,8 @@
 		}
 
 		.icon-circle :global(svg) {
-			width: 14px;
-			height: 14px;
+			width: 22px;
+			height: 22px;
 		}
 
 		.modal-actions {

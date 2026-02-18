@@ -539,21 +539,6 @@
 			background-color 0.45s var(--transition-ease);
 	}
 
-	/* Charging animation */
-	.score-bar-fill.charging {
-		animation: chargePulse 2s ease-in-out infinite;
-	}
-
-	@keyframes chargePulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.6;
-		}
-	}
-
 	/* Dollar threshold marker */
 	.elite-marker {
 		position: absolute;
@@ -578,10 +563,6 @@
 
 	.elite-marker.elite-marker-loading {
 		background: color-mix(in srgb, var(--interactive-hover) 78%, transparent);
-	}
-
-	.elite-marker.elite-marker-charging {
-		animation: chargePulse 2s ease-in-out infinite;
 	}
 
 	.elite-marker :global(svg) {

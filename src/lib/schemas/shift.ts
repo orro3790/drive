@@ -73,4 +73,8 @@ export const shiftEditSchema = z
 		}
 	);
 
+export const shiftAssignmentIdParamsSchema = z.object({
+	assignmentId: z.string().uuid()
+});
+
 export type ShiftEditInput = z.infer<typeof shiftEditSchema>;

@@ -40,6 +40,7 @@ A 28×28px icon-only button with tooltip support and multiple visual states.
 		display = false,
 		noBackground = false,
 		attention = false,
+		compact = false,
 		ariaPressed = undefined as boolean | undefined,
 		ariaExpanded = undefined as boolean | undefined,
 		ariaControls = undefined as string | undefined,
@@ -64,6 +65,8 @@ A 28×28px icon-only button with tooltip support and multiple visual states.
 		display?: boolean;
 		noBackground?: boolean;
 		attention?: boolean;
+		/** Compact size - smaller button and touch target for tight spaces like headers */
+		compact?: boolean;
 		ariaPressed?: boolean;
 		ariaExpanded?: boolean;
 		ariaControls?: string;
@@ -144,6 +147,7 @@ A 28×28px icon-only button with tooltip support and multiple visual states.
 			class:no-background={noBackground}
 			class:aria-disabled={ariaDisabled}
 			class:attention
+			class:compact
 			class:success={isSuccess && successFeedback}
 			{disabled}
 			onclick={handleClick}
@@ -290,11 +294,23 @@ A 28×28px icon-only button with tooltip support and multiple visual states.
 		}
 	}
 
+	/* Compact variant - smaller button for tight spaces like headers */
+	.icon-button.compact {
+		width: 32px;
+		height: 32px;
+	}
+
 	/* Touch target expansion for mobile accessibility (WCAG 2.5.5) */
 	@media (pointer: coarse), (hover: none) {
 		.icon-button {
 			min-width: 44px;
 			min-height: 44px;
+		}
+
+		/* Compact mode uses smaller touch target */
+		.icon-button.compact {
+			min-width: 36px;
+			min-height: 36px;
 		}
 	}
 </style>

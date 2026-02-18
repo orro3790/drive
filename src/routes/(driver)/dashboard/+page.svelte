@@ -15,18 +15,27 @@
 	import * as m from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { format, parseISO, formatDistanceToNow, differenceInMinutes } from 'date-fns';
+	import {
+		differenceInDays,
+		format,
+		parseISO,
+		formatDistanceToNow,
+		differenceInMinutes
+	} from 'date-fns';
 	import type { Component } from 'svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import IconBase from '$lib/components/primitives/Icon.svelte';
 	import IconButton from '$lib/components/primitives/IconButton.svelte';
+	import IconCircle from '$lib/components/primitives/IconCircle.svelte';
 	import InlineEditor from '$lib/components/InlineEditor.svelte';
 	import Modal from '$lib/components/primitives/Modal.svelte';
 	import Spinner from '$lib/components/primitives/Spinner.svelte';
 	import HealthCard from '$lib/components/driver/HealthCard.svelte';
 	import Announcement from '$lib/components/icons/Announcement.svelte';
+	import CalendarCheck from '$lib/components/icons/CalendarCheck.svelte';
 	import CalendarX from '$lib/components/icons/CalendarX.svelte';
+	import HealthLine from '$lib/components/icons/HealthLine.svelte';
 	import CheckCircleIcon from '$lib/components/icons/CheckCircleIcon.svelte';
 	import CheckInProgress from '$lib/components/icons/CheckInProgress.svelte';
 	import CircleCheckFill from '$lib/components/icons/CircleCheckFill.svelte';
@@ -103,6 +112,8 @@
 	let completingStep = $state(false);
 
 	const todayLifecycleState = $derived.by(() => {
+		// Read tick to force re-computation when store refreshes
+		void dashboardStore.tick;
 		const shift = dashboardStore.todayShift;
 		if (!shift) return null;
 
@@ -110,6 +121,8 @@
 	});
 
 	const todayActions = $derived.by(() => {
+		// Read tick to force re-computation when store refreshes
+		void dashboardStore.tick;
 		const shift = dashboardStore.todayShift;
 		if (!shift) {
 			return [] as DashboardActionId[];
@@ -475,11 +488,29 @@
 		window.localStorage.setItem(NEW_DRIVER_BANNER_DISMISS_KEY, '1');
 	}
 
-	const sortedUnconfirmedShifts = $derived(
-		[...dashboardStore.unconfirmedShifts]
-			.filter((s) => s.isConfirmable)
-			.sort((a, b) => a.date.localeCompare(b.date))
-	);
+	const sortedUpcomingShifts = $derived.by(() => {
+		// Read tick to force re-computation when store refreshes
+		void dashboardStore.tick;
+		const thisWeek = dashboardStore.thisWeek?.assignments ?? [];
+		const nextWeek = dashboardStore.nextWeek?.assignments ?? [];
+		const allAssignments = [...thisWeek, ...nextWeek];
+		const todayShiftId = dashboardStore.todayShift?.id;
+		const today = format(new Date(), 'yyyy-MM-dd');
+		const sevenDaysOut = format(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+		// Show shifts in the next 7 days, excluding:
+		// - Today's shift (shown separately)
+		// - Completed/cancelled shifts
+		return allAssignments
+			.filter(
+				(a) =>
+					a.id !== todayShiftId &&
+					a.date > today &&
+					a.date <= sevenDaysOut &&
+					a.status !== 'completed' &&
+					a.status !== 'cancelled'
+			)
+			.sort((a, b) => a.date.localeCompare(b.date));
+	});
 
 	onMount(() => {
 		loadDismissedBannerPreference();
@@ -524,13 +555,9 @@
 				<!-- New Driver Banner -->
 				{#if showNewDriverBanner}
 					<div class="banner-item" role="note" aria-label={m.dashboard_new_driver_title()}>
-						<div
-							class="icon-circle"
-							style="--icon-accent: var(--interactive-accent);"
-							aria-hidden="true"
-						>
+						<IconCircle color="--interactive-accent">
 							<Announcement />
-						</div>
+						</IconCircle>
 						<div class="banner-content">
 							<div class="banner-header">
 								<h3>{m.dashboard_new_driver_title()}</h3>
@@ -546,35 +573,23 @@
 				<!-- Today's Shift -->
 				<section class="dashboard-section">
 					<div class="section-header">
-						<h2>
-							{m.dashboard_today_section()} ({format(new Date(), 'EEE, MMM d').toUpperCase()})
-						</h2>
+						<h2>{m.dashboard_today_section()}</h2>
 					</div>
 
 					{#if dashboardStore.todayShift}
 						{@const todayShift = dashboardStore.todayShift}
 						{@const TodayIcon = todayShiftIcon}
-						<div class="today-item" style="--icon-accent: var({todayShiftAccent});">
-							<div
-								class="icon-circle"
-								class:icon-in-progress={!isTodayShiftCompleted}
-								class:icon-completed={isTodayShiftCompleted}
-								aria-hidden="true"
-							>
+						<div class="today-item">
+							<IconCircle color={todayShiftAccent}>
 								<TodayIcon />
-							</div>
+							</IconCircle>
 							<div class="today-content">
 								<div class="assignment-header">
-									<div class="assignment-date-group">
-										<div class="assignment-when">
-											<span class="assignment-date">{formatAssignmentDate(todayShift.date)}</span>
-											<span class="assignment-time"
-												>{formatRouteStartTime(todayShift.routeStartTime)}</span
-											>
-										</div>
-										{#if isTodayShiftInProgress}
-											<Chip label="In Progress" variant="status" status="warning" size="xs" />
-										{/if}
+									<div class="assignment-when">
+										<span class="assignment-date">{formatAssignmentDate(todayShift.date)}</span>
+										<span class="assignment-time"
+											>{formatRouteStartTime(todayShift.routeStartTime)}</span
+										>
 									</div>
 									{#if todayPrimaryAction && todayPrimaryAction !== 'cancel_shift'}
 										{#if todayPrimaryAction === 'edit_completion'}
@@ -582,6 +597,7 @@
 												tooltip={getTodayActionLabel(todayPrimaryAction)}
 												disabled={dashboardStore.isEditingShift}
 												onclick={() => handleTodayAction(todayPrimaryAction)}
+												compact
 											>
 												<IconBase size="small"><Pencil /></IconBase>
 											</IconButton>
@@ -590,6 +606,7 @@
 												tooltip={getTodayActionLabel(todayPrimaryAction)}
 												disabled={dashboardStore.isCompletingShift}
 												onclick={() => handleTodayAction(todayPrimaryAction)}
+												compact
 											>
 												<IconBase size="small"><CheckCircleIcon /></IconBase>
 											</IconButton>
@@ -603,14 +620,29 @@
 												{getTodayActionLabel(todayPrimaryAction)}
 											</Button>
 										{/if}
+									{:else if isTodayShiftInProgress}
+										<Chip label="In Progress" variant="status" status="warning" size="xs" />
+									{:else if todayShift.status === 'completed'}
+										<Chip
+											label={statusLabels[todayShift.status]}
+											variant="status"
+											status="success"
+											size="xs"
+										/>
 									{:else}
-										<span class="assignment-status">{statusLabels[todayShift.status]}</span>
+										<Chip
+											label={statusLabels[todayShift.status]}
+											variant="status"
+											status="neutral"
+											size="xs"
+										/>
 									{/if}
 									{#if hasTodayAction('cancel_shift')}
 										<IconButton
 											tooltip={m.common_cancel()}
 											disabled={dashboardStore.isCancelling}
 											onclick={() => handleTodayAction('cancel_shift')}
+											compact
 										>
 											<IconBase size="small"><CalendarX /></IconBase>
 										</IconButton>
@@ -621,15 +653,6 @@
 										{m.shift_delivering_status({
 											count: String(todayShift.shift?.parcelsStart ?? 0)
 										})}
-									</span>
-								{:else}
-									<span class="today-status">
-										<span class="today-status-label">Status:</span>
-										{#if todayShift.status === 'completed'}
-											<span class="day-chip completed">{statusLabels[todayShift.status]}</span>
-										{:else}
-											{statusLabels[todayShift.status]}
-										{/if}
 									</span>
 								{/if}
 								<div class="assignment-meta">
@@ -1014,20 +1037,33 @@
 					{/if}
 				</section>
 
-				<!-- Needs Confirmation -->
-				{#if sortedUnconfirmedShifts.length > 0}
-					<section class="dashboard-section" id="needs-confirmation">
+				<!-- This Week's Shifts -->
+				{#if sortedUpcomingShifts.length > 0}
+					<section class="dashboard-section" id="this-week-shifts">
 						<div class="section-header">
-							<h2>{m.dashboard_confirm_section()} ({sortedUnconfirmedShifts.length})</h2>
+							<h2>{m.dashboard_coming_up_section()} ({sortedUpcomingShifts.length})</h2>
 						</div>
 
 						<div class="assignment-list">
-							{#each sortedUnconfirmedShifts as shift (shift.id)}
+							{#each sortedUpcomingShifts as shift (shift.id)}
+								{@const isConfirmed = !!shift.confirmedAt}
+								{@const isConfirmable = shift.isConfirmable}
+								{@const daysUntilOpen = differenceInDays(
+									parseISO(shift.confirmationOpensAt),
+									new Date()
+								)}
 								{@const confirmInfo = formatConfirmDeadline(shift.confirmationDeadline)}
-								<div class="assignment-item" style="--icon-accent: var(--status-warning);">
-									<div class="icon-circle" aria-hidden="true">
-										<QuestionMark />
-									</div>
+								{@const deltas = dispatchPolicy.health.displayDeltas}
+								<div class="assignment-item">
+									{#if isConfirmed}
+										<IconCircle color="--status-success">
+											<CalendarCheck />
+										</IconCircle>
+									{:else}
+										<IconCircle color="--status-warning">
+											<QuestionMark />
+										</IconCircle>
+									{/if}
 									<div class="assignment-content">
 										<div class="assignment-header">
 											<div class="assignment-when">
@@ -1036,26 +1072,44 @@
 													>{formatRouteStartTime(shift.routeStartTime)}</span
 												>
 											</div>
-											<div class="assignment-actions">
-												<IconButton
-													tooltip={m.dashboard_confirm_button()}
-													disabled={dashboardStore.isConfirming || dashboardStore.isCancelling}
-													onclick={() => dashboardStore.confirmShift(shift.id)}
-												>
-													<IconBase size="small"><CheckCircleIcon /></IconBase>
-												</IconButton>
-												<IconButton
-													tooltip={m.common_cancel()}
-													disabled={dashboardStore.isConfirming || dashboardStore.isCancelling}
-													onclick={() => openCancelModal({ id: shift.id, isLateCancel: false })}
-												>
-													<IconBase size="small"><CalendarX /></IconBase>
-												</IconButton>
-											</div>
+											{#if !isConfirmed && isConfirmable}
+												<div class="assignment-actions">
+													<IconButton
+														tooltip={m.dashboard_confirm_button()}
+														disabled={dashboardStore.isConfirming || dashboardStore.isCancelling}
+														onclick={() => dashboardStore.confirmShift(shift.id)}
+														compact
+													>
+														<IconBase size="small"><CheckCircleIcon /></IconBase>
+													</IconButton>
+													<IconButton
+														tooltip={m.common_cancel()}
+														disabled={dashboardStore.isConfirming || dashboardStore.isCancelling}
+														onclick={() => openCancelModal({ id: shift.id, isLateCancel: false })}
+														compact
+													>
+														<IconBase size="small"><CalendarX /></IconBase>
+													</IconButton>
+												</div>
+											{/if}
 										</div>
-										<span class={confirmInfo.overdue ? 'header-overdue' : 'header-confirm-by'}>
-											{confirmInfo.text}
-										</span>
+										{#if isConfirmed}
+											<span class="header-confirmed">
+												{m.schedule_confirmed_chip()}
+												<span class="health-delta positive">
+													<IconBase size="small"><HealthLine /></IconBase>
+													+{deltas.confirmedOnTime}
+												</span>
+											</span>
+										{:else if isConfirmable}
+											<span class={confirmInfo.overdue ? 'header-overdue' : 'header-confirm-by'}>
+												{confirmInfo.text}
+											</span>
+										{:else}
+											<span class="header-opens-soon">
+												{m.schedule_confirm_opens_chip({ days: Math.max(1, daysUntilOpen) })}
+											</span>
+										{/if}
 										<div class="assignment-meta">
 											<Chip
 												variant="tag"
@@ -1094,9 +1148,14 @@
 								</p>
 								<div class="week-days">
 									{#each dashboardStore.thisWeek.assignments as assignment (assignment.id)}
-										<div class="day-chip" class:completed={assignment.status === 'completed'}>
+										<button
+											type="button"
+											class="day-chip"
+											class:completed={assignment.status === 'completed'}
+											onclick={() => goto('/schedule')}
+										>
 											{format(parseISO(assignment.date), 'EEE d')}
-										</div>
+										</button>
 									{/each}
 								</div>
 							</div>
@@ -1120,9 +1179,14 @@
 								</p>
 								<div class="week-days">
 									{#each dashboardStore.nextWeek.assignments as assignment (assignment.id)}
-										<div class="day-chip" class:completed={assignment.status === 'completed'}>
+										<button
+											type="button"
+											class="day-chip"
+											class:completed={assignment.status === 'completed'}
+											onclick={() => goto('/schedule')}
+										>
 											{format(parseISO(assignment.date), 'EEE d')}
-										</div>
+										</button>
 									{/each}
 								</div>
 							</div>
@@ -1153,10 +1217,10 @@
 					{:else}
 						<div class="assignment-list">
 							{#each dashboardStore.pendingBids.slice(0, 3) as bid (bid.id)}
-								<div class="assignment-item" style="--icon-accent: var(--status-info);">
-									<div class="icon-circle" aria-hidden="true">
+								<div class="assignment-item">
+									<IconCircle color="--status-info">
 										<Gavel />
-									</div>
+									</IconCircle>
 									<div class="assignment-content">
 										<div class="assignment-header">
 											<div class="header-left">
@@ -1324,24 +1388,6 @@
 		letter-spacing: var(--letter-spacing-sm);
 	}
 
-	/* Icon circle — tinted with accent color */
-	.icon-circle {
-		position: relative;
-		width: 32px;
-		height: 32px;
-		border-radius: var(--radius-full);
-		display: grid;
-		place-items: center;
-		background: color-mix(in srgb, var(--icon-accent) 12%, transparent);
-		color: var(--icon-accent);
-		flex-shrink: 0;
-	}
-
-	.icon-circle :global(svg) {
-		width: 20px;
-		height: 20px;
-	}
-
 	/* New Driver Banner — flat row with icon circle */
 	.banner-item {
 		display: grid;
@@ -1409,11 +1455,6 @@
 		gap: var(--spacing-3);
 		padding: var(--spacing-3);
 		border-radius: var(--radius-lg);
-		transition: background 150ms ease;
-	}
-
-	.assignment-item:hover {
-		background: color-mix(in srgb, var(--text-normal) 4%, transparent);
 	}
 
 	.assignment-content {
@@ -1425,7 +1466,7 @@
 
 	.assignment-header {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: var(--spacing-2);
 	}
 
@@ -1435,20 +1476,8 @@
 
 	.assignment-actions {
 		display: inline-flex;
-		align-items: center;
-		gap: 2px;
-	}
-
-	.assignment-date-group {
-		display: flex;
 		align-items: flex-start;
-		gap: var(--spacing-2);
-		margin-right: auto;
-		min-width: 0;
-	}
-
-	.assignment-date-group .assignment-date {
-		margin-right: 0;
+		gap: 2px;
 	}
 
 	.assignment-when {
@@ -1472,16 +1501,6 @@
 		line-height: 1.2;
 	}
 
-	.assignment-date-group :global(.chip[data-status='warning']) {
-		background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
-		color: var(--interactive-accent);
-	}
-
-	:global([data-theme='dark']) .assignment-date-group :global(.chip[data-status='warning']) {
-		background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
-		color: var(--interactive-accent);
-	}
-
 	.assignment-status {
 		font-size: var(--font-size-xs);
 		color: var(--text-faint);
@@ -1496,10 +1515,6 @@
 		color: var(--text-muted);
 	}
 
-	.today-status-label {
-		color: var(--text-muted);
-	}
-
 	.header-confirm-by {
 		font-size: var(--font-size-xs);
 		color: var(--status-warning);
@@ -1508,6 +1523,33 @@
 	.header-overdue {
 		font-size: var(--font-size-xs);
 		color: var(--status-error);
+	}
+
+	.header-confirmed {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-1);
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		color: var(--status-success);
+	}
+
+	.header-opens-soon {
+		font-size: var(--font-size-xs);
+		color: var(--text-muted);
+	}
+
+	.health-delta {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		margin-left: var(--spacing-1);
+	}
+
+	.health-delta.positive {
+		color: var(--status-success);
 	}
 
 	.header-muted {
@@ -1572,68 +1614,6 @@
 		font-size: var(--font-size-xs);
 		color: var(--text-muted);
 		text-align: left;
-	}
-
-	.icon-circle.icon-in-progress {
-		animation: none;
-	}
-
-	.icon-circle.icon-in-progress::before,
-	.icon-circle.icon-in-progress::after {
-		content: '';
-		position: absolute;
-		inset: -3px;
-		border-radius: inherit;
-		pointer-events: none;
-		background: radial-gradient(
-			circle at 42% 42%,
-			color-mix(in srgb, var(--icon-accent) 16%, transparent) 0%,
-			color-mix(in srgb, var(--icon-accent) 9%, transparent) 38%,
-			transparent 72%
-		);
-		filter: blur(3px);
-		opacity: 0;
-		transform: scale(0.92);
-	}
-
-	.icon-circle.icon-in-progress::before {
-		animation: today-progress-wave 2.8s ease-out infinite;
-	}
-
-	.icon-circle.icon-in-progress::after {
-		animation: today-progress-wave 2.8s ease-out infinite 1.4s;
-	}
-
-	.icon-circle.icon-completed {
-		animation: none;
-	}
-
-	.icon-circle.icon-completed::after {
-		content: none;
-	}
-
-	@keyframes today-progress-wave {
-		0% {
-			opacity: 0;
-			transform: scale(0.92);
-		}
-
-		25% {
-			opacity: 0.18;
-		}
-
-		100% {
-			opacity: 0;
-			transform: scale(1.14);
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.icon-circle.icon-in-progress::before,
-		.icon-circle.icon-in-progress::after {
-			animation: none;
-			opacity: 0;
-		}
 	}
 
 	.edit-locked {
@@ -1737,16 +1717,27 @@
 		display: inline-flex;
 		align-items: center;
 		padding: 2px var(--spacing-2);
+		border: none;
 		border-radius: var(--radius-full);
 		background: var(--interactive-normal);
 		font-size: var(--font-size-xs);
 		font-weight: var(--font-weight-medium);
 		color: var(--text-normal);
+		cursor: pointer;
+		transition: background 150ms ease;
+	}
+
+	.day-chip:hover {
+		background: var(--interactive-hover);
 	}
 
 	.day-chip.completed {
 		background: color-mix(in srgb, var(--status-success) 15%, transparent);
 		color: var(--status-success);
+	}
+
+	.day-chip.completed:hover {
+		background: color-mix(in srgb, var(--status-success) 25%, transparent);
 	}
 
 	/* Form Styles */
@@ -1787,16 +1778,6 @@
 		.assignment-item {
 			gap: var(--spacing-2);
 			padding: var(--spacing-3);
-		}
-
-		.icon-circle {
-			width: 28px;
-			height: 28px;
-		}
-
-		.icon-circle :global(svg) {
-			width: 14px;
-			height: 14px;
 		}
 
 		.week-row {

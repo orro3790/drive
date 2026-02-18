@@ -35,8 +35,8 @@
 	<div class="version-gate-blocked">
 		<div class="blocked-content">
 			<h1 class="blocked-title">{m.app_update_required_title()}</h1>
-			<NoticeBanner variant="warning">
-				<p>{m.app_update_required_message()}</p>
+			<NoticeBanner variant="warning" align="start">
+				{m.app_update_required_message()}
 			</NoticeBanner>
 			<div class="version-info">
 				<p class="version-line">
@@ -55,8 +55,8 @@
 	<div class="version-gate-blocked">
 		<div class="blocked-content">
 			<h1 class="blocked-title">{m.app_connection_required_title()}</h1>
-			<NoticeBanner variant="warning">
-				<p>{m.app_connection_required_message()}</p>
+			<NoticeBanner variant="warning" align="start">
+				{m.app_connection_required_message()}
 			</NoticeBanner>
 			<p class="error-detail">{state.message}</p>
 			<Button variant="primary" size="large" onclick={doCheck}>
@@ -133,5 +133,10 @@
 		font-size: var(--font-size-sm);
 		color: var(--text-muted);
 		margin: 0;
+	}
+
+	/* NoticeBanner content should be left-aligned */
+	.blocked-content :global(.notice-banner) {
+		text-align: left;
 	}
 </style>

@@ -33,8 +33,11 @@ if (mode === 'dev') {
 	console.error(`❌ Unknown mode: ${mode}`);
 	console.error('   Usage: cap-sync.mjs [dev|prod]');
 	process.exit(1);
+} else if (process.env.CAP_SERVER_URL) {
+	// CAP_SERVER_URL passed via environment (e.g., USB dev mode)
+	console.log(`📱 USB mode: Syncing with ${process.env.CAP_SERVER_URL}`);
 } else {
-	// No mode = clear server URL (use bundled shell)
+	// No mode and no URL = clear server URL (use bundled shell)
 	delete process.env.CAP_SERVER_URL;
 	console.log('📦 Shell mode: Syncing without server URL (uses mobile-shell fallback)');
 }

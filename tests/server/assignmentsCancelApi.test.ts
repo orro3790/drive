@@ -14,6 +14,7 @@ interface AssignmentRow {
 	date: string;
 	status: AssignmentStatus;
 	confirmedAt: Date | null;
+	routeStartTime: string | null;
 }
 
 interface UpdatedAssignmentRow {
@@ -43,6 +44,11 @@ const assignmentsTable = {
 	updatedAt: 'assignments.updatedAt'
 };
 
+const routesTable = {
+	id: 'routes.id',
+	startTime: 'routes.startTime'
+};
+
 const driverMetricsTable = {
 	userId: 'driver_metrics.userId',
 	lateCancellations: 'driver_metrics.lateCancellations',
@@ -51,10 +57,23 @@ const driverMetricsTable = {
 
 let POST: CancelRouteModule['POST'];
 
+const VALID_ASSIGNMENT_ID = '11111111-1111-4111-8111-111111111111';
+const VALID_MISSING_ASSIGNMENT_ID = '22222222-2222-4222-8222-222222222222';
+
 let selectWhereMock: ReturnType<typeof vi.fn<(whereClause: unknown) => Promise<AssignmentRow[]>>>;
 let selectFromMock: ReturnType<
 	typeof vi.fn<
 		(table: unknown) => {
+			leftJoin: typeof selectLeftJoinMock;
+		}
+	>
+>;
+let selectLeftJoinMock: ReturnType<
+	typeof vi.fn<
+		(
+			joinTable: unknown,
+			onClause: unknown
+		) => {
 			where: typeof selectWhereMock;
 		}
 	>
@@ -157,8 +176,13 @@ beforeEach(async () => {
 	vi.resetModules();
 
 	selectWhereMock = vi.fn<(whereClause: unknown) => Promise<AssignmentRow[]>>(async () => []);
-	selectFromMock = vi.fn<(table: unknown) => { where: typeof selectWhereMock }>(() => ({
+	selectLeftJoinMock = vi.fn<
+		(joinTable: unknown, onClause: unknown) => { where: typeof selectWhereMock }
+	>(() => ({
 		where: selectWhereMock
+	}));
+	selectFromMock = vi.fn<(table: unknown) => { leftJoin: typeof selectLeftJoinMock }>(() => ({
+		leftJoin: selectLeftJoinMock
 	}));
 	selectMock = vi.fn<(shape: Record<string, unknown>) => { from: typeof selectFromMock }>(() => ({
 		from: selectFromMock
@@ -193,7 +217,7 @@ beforeEach(async () => {
 
 	createAssignmentLifecycleContextMock = vi.fn(() => ({ torontoToday: '2026-02-09' }));
 	deriveAssignmentLifecycleMock = vi.fn(() => createLifecycleOutput());
-	createBidWindowMock = vi.fn(async () => ({ success: true }));
+	createBidWindowMock = vi.fn(async () => ({ success: true, bidWindowId: 'bid-window-1' }));
 	sendManagerAlertMock = vi.fn(async () => undefined);
 	createAuditLogMock = vi.fn(async () => undefined);
 	broadcastAssignmentUpdatedMock = vi.fn();
@@ -210,7 +234,8 @@ beforeEach(async () => {
 
 	vi.doMock('$lib/server/db/schema', () => ({
 		assignments: assignmentsTable,
-		driverMetrics: driverMetricsTable
+		driverMetrics: driverMetricsTable,
+		routes: routesTable
 	}));
 
 	vi.doMock('drizzle-orm', () => ({
@@ -264,7 +289,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 	it('returns 401 when no user is present', async () => {
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			body: { reason: 'other' }
 		});
 
@@ -275,7 +300,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 	it('returns 403 for non-driver role', async () => {
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('manager', 'manager-1') },
 			body: { reason: 'other' }
 		});
@@ -287,9 +312,21 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 	it('returns 400 for invalid request body', async () => {
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'invalid_reason' }
+		});
+
+		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
+		expect(selectMock).not.toHaveBeenCalled();
+	});
+
+	it('returns 400 for invalid assignment ID param', async () => {
+		const event = createRequestEvent({
+			method: 'POST',
+			params: { id: 'assignment-1' },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { reason: 'other' }
 		});
 
 		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 400 });
@@ -301,7 +338,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-missing' },
+			params: { id: VALID_MISSING_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
@@ -317,13 +354,14 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				routeId: 'route-1',
 				date: '2026-02-10',
 				status: 'scheduled',
-				confirmedAt: null
+				confirmedAt: null,
+				routeStartTime: '09:00'
 			}
 		]);
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
@@ -331,7 +369,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 403 });
 	});
 
-	it('returns 409 when assignment is already cancelled', async () => {
+	it('returns 200 for idempotent replay when assignment is already cancelled', async () => {
 		selectWhereMock.mockResolvedValue([
 			{
 				id: 'assignment-1',
@@ -339,18 +377,38 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				routeId: 'route-1',
 				date: '2026-02-10',
 				status: 'cancelled',
-				confirmedAt: null
+				confirmedAt: null,
+				routeStartTime: '09:00'
 			}
 		]);
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
 
-		await expect(POST(event as Parameters<typeof POST>[0])).rejects.toMatchObject({ status: 409 });
+		const response = await POST(event as Parameters<typeof POST>[0]);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			assignment: {
+				id: 'assignment-1',
+				status: 'cancelled'
+			},
+			alreadyCancelled: true,
+			replacementWindow: {
+				status: 'created',
+				bidWindowId: 'bid-window-1',
+				reason: null
+			}
+		});
+
+		expect(createBidWindowMock).toHaveBeenCalledWith('assignment-1', {
+			organizationId: 'org-test',
+			trigger: 'cancellation'
+		});
 	});
 
 	it('returns 400 when lifecycle marks assignment as not cancelable', async () => {
@@ -363,13 +421,14 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				routeId: 'route-1',
 				date: '2026-02-09',
 				status: 'scheduled',
-				confirmedAt: new Date('2026-02-08T12:00:00.000Z')
+				confirmedAt: new Date('2026-02-08T12:00:00.000Z'),
+				routeStartTime: '09:00'
 			}
 		]);
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
@@ -386,14 +445,15 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				routeId: 'route-1',
 				date: '2026-02-10',
 				status: 'scheduled',
-				confirmedAt: null
+				confirmedAt: null,
+				routeStartTime: '11:00'
 			}
 		]);
 		assignmentUpdateReturningMock.mockResolvedValue([{ id: 'assignment-1', status: 'cancelled' }]);
 
 		const event = createRequestEvent({
 			method: 'POST',
-			params: { id: 'assignment-1' },
+			params: { id: VALID_ASSIGNMENT_ID },
 			locals: { user: createUser('driver', 'driver-1') },
 			body: { reason: 'other' }
 		});
@@ -405,6 +465,11 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 			assignment: {
 				id: 'assignment-1',
 				status: 'cancelled'
+			},
+			replacementWindow: {
+				status: 'created',
+				bidWindowId: 'bid-window-1',
+				reason: null
 			}
 		});
 
@@ -412,6 +477,13 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 			organizationId: 'org-test',
 			trigger: 'cancellation'
 		});
+		expect(deriveAssignmentLifecycleMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				assignmentDate: '2026-02-10',
+				routeStartTime: '11:00'
+			}),
+			expect.any(Object)
+		);
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
 		expect(sendManagerAlertMock).toHaveBeenCalledTimes(1);
 		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
@@ -423,5 +495,89 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 			})
 		);
 		expect(metricsUpdateWhereMock).not.toHaveBeenCalled();
+	});
+
+	it('returns 200 when replacement window already exists', async () => {
+		freezeTime('2026-02-09T12:00:00.000Z');
+		selectWhereMock.mockResolvedValue([
+			{
+				id: 'assignment-1',
+				userId: 'driver-1',
+				routeId: 'route-1',
+				date: '2026-02-10',
+				status: 'scheduled',
+				confirmedAt: null,
+				routeStartTime: '09:00'
+			}
+		]);
+		assignmentUpdateReturningMock.mockResolvedValue([{ id: 'assignment-1', status: 'cancelled' }]);
+		createBidWindowMock.mockResolvedValue({
+			success: false,
+			reason: 'Open bid window already exists for this assignment'
+		});
+
+		const event = createRequestEvent({
+			method: 'POST',
+			params: { id: VALID_ASSIGNMENT_ID },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { reason: 'other' }
+		});
+
+		const response = await POST(event as Parameters<typeof POST>[0]);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			assignment: {
+				id: 'assignment-1',
+				status: 'cancelled'
+			},
+			replacementWindow: {
+				status: 'already_open',
+				bidWindowId: null,
+				reason: 'Open bid window already exists for this assignment'
+			}
+		});
+	});
+
+	it('returns 200 even when replacement window creation fails', async () => {
+		freezeTime('2026-02-09T12:00:00.000Z');
+		selectWhereMock.mockResolvedValue([
+			{
+				id: 'assignment-1',
+				userId: 'driver-1',
+				routeId: 'route-1',
+				date: '2026-02-10',
+				status: 'scheduled',
+				confirmedAt: null,
+				routeStartTime: '09:00'
+			}
+		]);
+		assignmentUpdateReturningMock.mockResolvedValue([{ id: 'assignment-1', status: 'cancelled' }]);
+		createBidWindowMock.mockResolvedValue({
+			success: false,
+			reason: 'Failed to create bid window'
+		});
+
+		const event = createRequestEvent({
+			method: 'POST',
+			params: { id: VALID_ASSIGNMENT_ID },
+			locals: { user: createUser('driver', 'driver-1') },
+			body: { reason: 'other' }
+		});
+
+		const response = await POST(event as Parameters<typeof POST>[0]);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			assignment: {
+				id: 'assignment-1',
+				status: 'cancelled'
+			},
+			replacementWindow: {
+				status: 'not_created',
+				bidWindowId: null,
+				reason: 'Failed to create bid window'
+			}
+		});
 	});
 });

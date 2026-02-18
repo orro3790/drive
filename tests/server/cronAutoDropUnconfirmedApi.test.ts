@@ -327,6 +327,103 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 		expect(createAuditLogMock).toHaveBeenCalledTimes(2);
 	});
 
+	it('uses confirmation deadline timing during spring-forward week', async () => {
+		const candidate: AutoDropCandidate = {
+			id: 'assignment-spring-forward',
+			userId: 'driver-spring',
+			routeId: 'route-spring',
+			date: '2026-03-08',
+			routeName: 'Route Spring',
+			organizationId: 'org-1'
+		};
+
+		selectWhereMock.mockResolvedValue([candidate]);
+		createBidWindowMock.mockResolvedValue({ success: true, bidWindowId: 'window-spring' });
+
+		freezeTime('2026-03-06T10:59:59.000Z');
+		const beforeDeadlineResponse = await GET(
+			createRequestEvent({
+				method: 'GET',
+				headers: {
+					authorization: 'Bearer test-cron-secret'
+				}
+			}) as Parameters<typeof GET>[0]
+		);
+
+		await expect(beforeDeadlineResponse.json()).resolves.toMatchObject({
+			success: true,
+			dropped: 0,
+			bidWindowsCreated: 0
+		});
+		expect(createBidWindowMock).not.toHaveBeenCalled();
+
+		freezeTime('2026-03-06T11:00:00.000Z');
+		const atDeadlineResponse = await GET(
+			createRequestEvent({
+				method: 'GET',
+				headers: {
+					authorization: 'Bearer test-cron-secret'
+				}
+			}) as Parameters<typeof GET>[0]
+		);
+
+		await expect(atDeadlineResponse.json()).resolves.toMatchObject({
+			success: true,
+			dropped: 1,
+			bidWindowsCreated: 1
+		});
+		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('uses confirmation deadline timing during fall-back week', async () => {
+		const candidate: AutoDropCandidate = {
+			id: 'assignment-fall-back',
+			userId: 'driver-fall',
+			routeId: 'route-fall',
+			date: '2026-11-01',
+			routeName: 'Route Fall',
+			organizationId: 'org-1'
+		};
+
+		selectWhereMock.mockResolvedValue([candidate]);
+		createBidWindowMock.mockResolvedValue({ success: true, bidWindowId: 'window-fall' });
+
+		freezeTime('2026-10-30T11:59:59.000Z');
+		const beforeDeadlineResponse = await GET(
+			createRequestEvent({
+				method: 'GET',
+				headers: {
+					authorization: 'Bearer test-cron-secret'
+				}
+			}) as Parameters<typeof GET>[0]
+		);
+
+		await expect(beforeDeadlineResponse.json()).resolves.toMatchObject({
+			success: true,
+			dropped: 0,
+			bidWindowsCreated: 0
+		});
+		expect(createBidWindowMock).not.toHaveBeenCalled();
+
+		freezeTime('2026-10-30T12:00:00.000Z');
+
+		const response = await GET(
+			createRequestEvent({
+				method: 'GET',
+				headers: {
+					authorization: 'Bearer test-cron-secret'
+				}
+			}) as Parameters<typeof GET>[0]
+		);
+
+		await expect(response.json()).resolves.toMatchObject({
+			success: true,
+			dropped: 1,
+			bidWindowsCreated: 1
+		});
+		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
+	});
+
 	it('stays idempotent when the cron handler runs twice for the same assignment', async () => {
 		freezeTime('2026-03-10T11:00:00.000Z');
 

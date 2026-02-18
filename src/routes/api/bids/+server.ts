@@ -14,9 +14,10 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { bids, bidWindows, assignments, user, warehouses } from '$lib/server/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { parseISO, set, startOfDay } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
-import { getWeekStart, canDriverTakeAssignment } from '$lib/server/services/scheduling';
+import {
+	canDriverTakeAssignment,
+	getWeekStartForDateString
+} from '$lib/server/services/scheduling';
 import { instantAssign } from '$lib/server/services/bidding';
 import {
 	broadcastAssignmentUpdated,
@@ -27,6 +28,7 @@ import { bidSubmissionSchema } from '$lib/schemas/api/bidding';
 import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { requireDriverWithOrg } from '$lib/server/org-scope';
+import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
 
 const INSTANT_MODE_CUTOFF_MS = dispatchPolicy.bidding.instantModeCutoffHours * 60 * 60 * 1000;
 const PG_UNIQUE_VIOLATION = '23505';
@@ -119,20 +121,17 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	// Check weekly cap for the assignment's week
-	const assignmentWeekStart = getWeekStart(parseISO(window.assignmentDate));
+	const assignmentWeekStart = getWeekStartForDateString(window.assignmentDate);
 	const canTake = await canDriverTakeAssignment(driverId, assignmentWeekStart, organizationId);
 	if (!canTake) {
 		throw error(400, 'You have reached your weekly cap for that week');
 	}
 
 	// Belt-and-suspenders: if < 24h to shift, treat as instant regardless of stored mode
-	const parsedAssignmentDate = parseISO(window.assignmentDate);
-	const toronto = toZonedTime(parsedAssignmentDate, dispatchPolicy.timezone.toronto);
-	const shiftStart = set(startOfDay(toronto), {
+	const shiftStart = getTorontoDateTimeInstant(window.assignmentDate, {
 		hours: dispatchPolicy.shifts.startHourLocal,
 		minutes: 0,
-		seconds: 0,
-		milliseconds: 0
+		seconds: 0
 	});
 	const timeUntilShiftMs = shiftStart.getTime() - now.getTime();
 	const effectiveMode =

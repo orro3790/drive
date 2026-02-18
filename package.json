@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
+		"dev:mobile": "node scripts/mobile/dev-mobile.mjs",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "husky",
@@ -28,12 +29,14 @@
 		"seed:staging": "tsx scripts/seed.ts --staging",
 		"mobile:android:sync": "node scripts/mobile/cap-sync.mjs",
 		"mobile:android:sync:dev": "node scripts/mobile/cap-sync.mjs dev",
+		"mobile:android:sync:usb": "cross-env CAP_SERVER_URL=http://localhost:5173 node scripts/mobile/cap-sync.mjs",
 		"mobile:android:sync:prod": "node scripts/mobile/cap-sync.mjs prod",
 		"mobile:android:copy": "pnpm exec cap copy android",
 		"mobile:android:open": "pnpm exec cap open android",
 		"mobile:android:doctor": "pnpm exec cap doctor",
 		"mobile:android:bundle:release": "node scripts/mobile/android-gradle.mjs bundleRelease",
-		"mobile:android:apk:release": "node scripts/mobile/android-gradle.mjs assembleRelease"
+		"mobile:android:apk:release": "node scripts/mobile/android-gradle.mjs assembleRelease",
+		"mobile:screenshot": "node scripts/mobile/screenshot.mjs"
 	},
 	"devDependencies": {
 		"@capacitor/assets": "^3.0.5",

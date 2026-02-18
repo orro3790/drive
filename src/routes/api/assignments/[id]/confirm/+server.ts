@@ -8,11 +8,17 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { confirmShift } from '$lib/server/services/confirmations';
 import { requireDriverWithOrg } from '$lib/server/org-scope';
+import { assignmentIdParamsSchema } from '$lib/schemas/assignment';
 
 export const POST: RequestHandler = async ({ locals, params }) => {
 	const { user } = requireDriverWithOrg(locals);
+	const paramsResult = assignmentIdParamsSchema.safeParse(params);
 
-	const result = await confirmShift(params.id, user.id);
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid assignment ID');
+	}
+
+	const result = await confirmShift(paramsResult.data.id, user.id);
 
 	if (!result.success) {
 		const status =

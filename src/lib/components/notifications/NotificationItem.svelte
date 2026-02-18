@@ -2,8 +2,10 @@
 	import type { Notification, NotificationType } from '$lib/schemas/api/notifications';
 	import { notificationTypeConfig } from '$lib/config/notificationTypes';
 	import { formatRelativeTime } from '$lib/utils/date/formatting';
+	import { goto } from '$app/navigation';
 	import * as m from '$lib/paraglide/messages.js';
 	import Chip from '$lib/components/primitives/Chip.svelte';
+	import IconCircle from '$lib/components/primitives/IconCircle.svelte';
 	import IconBase from '$lib/components/primitives/Icon.svelte';
 	import Increase from '$lib/components/icons/Increase.svelte';
 	import Dollar from '$lib/components/icons/Dollar.svelte';
@@ -52,29 +54,69 @@
 		);
 	});
 
-	const cta = $derived.by(() => {
+	// Navigation target for the notification — makes whole item clickable
+	const navTarget = $derived.by((): string | null => {
 		switch (notification.type) {
-			case 'bid_open':
-				// Only actionable if from today — bid windows close quickly
-				return isFromToday ? { href: '/bids', label: m.notifications_cta_view() } : null;
+			// Dashboard targets — shift-related notifications
 			case 'shift_reminder':
-				// Only actionable if from today — shift is today
-				return isFromToday ? { href: '/dashboard', label: m.notifications_cta_view() } : null;
+			case 'stale_shift_reminder':
+			case 'confirmation_reminder':
+				return isFromToday ? '/dashboard' : null;
+			case 'bid_won':
+			case 'assignment_confirmed':
+			case 'streak_advanced':
+			case 'streak_reset':
+			case 'bonus_eligible':
+			case 'corrective_warning':
+			case 'warning':
+				return '/dashboard';
+
+			// Bids targets — bidding-related notifications
+			case 'bid_open':
+			case 'emergency_route_available':
+				return isFromToday ? '/bids' : null;
+			case 'bid_lost':
+			case 'shift_auto_dropped':
+				return '/bids';
+
+			// Schedule targets
+			case 'shift_cancelled':
+			case 'route_cancelled':
+				return '/schedule';
+
+			// Preferences
 			case 'schedule_locked':
-				// Always actionable — preferences are always viewable
-				return { href: '/preferences', label: m.notifications_cta_view() };
+				return '/preferences';
+
+			// No navigation for generic or manager-only notifications
+			case 'manual':
+			case 'route_unfilled':
+			case 'driver_no_show':
+			case 'return_exception':
 			default:
 				return null;
 		}
 	});
+
+	const isClickable = $derived(navTarget !== null);
 
 	function handleMarkRead() {
 		if (notification.read) return;
 		onMarkRead(notification.id);
 	}
 
-	function handleCtaClick() {
+	function handleClick() {
 		handleMarkRead();
+		if (navTarget) {
+			goto(navTarget);
+		}
+	}
+
+	function handleKeyDown(event: KeyboardEvent) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			handleClick();
+		}
 	}
 </script>
 
@@ -97,34 +139,30 @@
 	data-notification-type={notification.type}
 	class:unread={isUnread}
 	class:read={!isUnread}
+	class:clickable={isClickable}
 	style={`--notification-accent: var(${effectiveColor});`}
+	onclick={isClickable ? handleClick : undefined}
+	onkeydown={isClickable ? handleKeyDown : undefined}
+	role={isClickable ? 'button' : undefined}
+	tabindex={isClickable ? 0 : undefined}
 >
-	<div class="icon-circle" aria-hidden="true">
+	<IconCircle color={effectiveColor} variant={isUnread ? 'default' : 'muted'}>
 		<Icon />
-	</div>
+	</IconCircle>
 	<div class="notification-content">
 		<div class="notification-header">
-			<div class="notification-title-group">
-				<span class="notification-title">
-					{notification.title}
-					{#if isPremium}
-						<span class="premium-badge">
-							{notification.data?.payBonusPercent ?? '20'}%
-							<Increase fill="currentColor" />
-						</span>
-					{/if}
-				</span>
-				{#if timeLabel}
-					<span class="notification-time">{timeLabel}</span>
+			<span class="notification-title">
+				{notification.title}
+				{#if isPremium}
+					<span class="premium-badge">
+						{notification.data?.payBonusPercent ?? '20'}%
+						<Increase fill="currentColor" />
+					</span>
 				{/if}
-			</div>
-			<div class="notification-actions">
-				{#if cta}
-					<a class="notification-cta" href={cta.href} onclick={handleCtaClick}>
-						<Chip variant="tag" size="xs" label={cta.label} />
-					</a>
-				{/if}
-			</div>
+			</span>
+			{#if timeLabel}
+				<span class="notification-time">{timeLabel}</span>
+			{/if}
 		</div>
 		<p class="notification-body">{notification.body}</p>
 		{#if metadataChips.length}
@@ -175,59 +213,26 @@
 		background: color-mix(in srgb, var(--text-normal) 4%, transparent);
 	}
 
-	.icon-circle {
-		position: relative;
-		width: 32px;
-		height: 32px;
-		border-radius: var(--radius-full);
-		display: grid;
-		place-items: center;
-		background: color-mix(in srgb, var(--notification-accent) 12%, transparent);
-		color: var(--notification-accent);
+	.notification-item.clickable {
+		cursor: pointer;
 	}
 
-	.notification-item.unread .icon-circle::after {
-		content: '';
-		position: absolute;
-		top: -2px;
-		right: -2px;
-		width: 6px;
-		height: 6px;
-		border-radius: var(--radius-full);
-		background: var(--notification-accent);
-	}
-
-	.icon-circle :global(svg) {
-		width: 20px;
-		height: 20px;
+	.notification-item.clickable:focus-visible {
+		outline: 2px solid var(--interactive-accent);
+		outline-offset: 2px;
 	}
 
 	.notification-content {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-2);
+		gap: var(--spacing-1);
 		min-width: 0;
 	}
 
 	.notification-header {
 		display: flex;
-		justify-content: space-between;
-		align-items: first baseline;
-		gap: var(--spacing-2);
-	}
-
-	.notification-title-group {
-		display: flex;
-		align-items: baseline;
-		gap: var(--spacing-2);
-		min-width: 0;
-	}
-
-	.notification-actions {
-		display: flex;
-		align-items: center;
+		flex-direction: column;
 		gap: var(--spacing-1);
-		flex-shrink: 0;
 	}
 
 	.notification-title {
@@ -242,6 +247,12 @@
 
 	.notification-item.read .notification-title {
 		color: var(--text-muted);
+	}
+
+	.notification-time {
+		font-size: var(--font-size-xs);
+		color: var(--text-faint);
+		font-weight: var(--font-weight-medium);
 	}
 
 	.premium-badge {
@@ -271,15 +282,6 @@
 		color: var(--text-faint);
 		font-weight: var(--font-weight-medium);
 		flex-shrink: 0;
-	}
-
-	.notification-cta {
-		text-decoration: none;
-		flex-shrink: 0;
-	}
-
-	.notification-cta:hover :global(.chip) {
-		background: var(--interactive-hover);
 	}
 
 	.notification-body {
@@ -385,8 +387,8 @@
 		}
 
 		.icon-circle :global(svg) {
-			width: 18px;
-			height: 18px;
+			width: 20px;
+			height: 20px;
 		}
 	}
 </style>

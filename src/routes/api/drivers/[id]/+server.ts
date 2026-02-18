@@ -14,16 +14,26 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { driverHealthState, driverMetrics, user } from '$lib/server/db/schema';
-import { driverUpdateSchema } from '$lib/schemas/driver';
+import { driverIdParamsSchema, driverUpdateSchema } from '$lib/schemas/driver';
 import { and, eq } from 'drizzle-orm';
 import { createAuditLog } from '$lib/server/services/audit';
 import { requireManagerWithOrg } from '$lib/server/org-scope';
 
 export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 	const { user: manager, organizationId } = requireManagerWithOrg(locals);
+	const paramsResult = driverIdParamsSchema.safeParse(params);
 
-	const { id } = params;
-	const body = await request.json();
+	if (!paramsResult.success) {
+		throw error(400, 'Invalid driver ID');
+	}
+
+	const { id } = paramsResult.data;
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
 	const result = driverUpdateSchema.safeParse(body);
 
 	if (!result.success) {

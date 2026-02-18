@@ -348,8 +348,8 @@
 	}
 
 	.icon-circle :global(svg) {
-		width: 20px;
-		height: 20px;
+		width: 24px;
+		height: 24px;
 	}
 
 	/* Assignment items */
@@ -576,8 +576,8 @@
 		}
 
 		.icon-circle :global(svg) {
-			width: 14px;
-			height: 14px;
+			width: 22px;
+			height: 22px;
 		}
 	}
 

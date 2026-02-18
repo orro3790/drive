@@ -27,9 +27,9 @@ import {
 } from '$lib/server/services/notifications';
 import { createAuditLog, type AuditActor } from '$lib/server/services/audit';
 import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
-import { addHours, differenceInMonths, parseISO } from 'date-fns';
+import { addHours, differenceInMonths } from 'date-fns';
 import logger, { toSafeErrorMessage } from '$lib/server/logger';
-import { getWeekStart, canDriverTakeAssignment } from './scheduling';
+import { canDriverTakeAssignment, getWeekStartForDateString } from './scheduling';
 import {
 	broadcastAssignmentUpdated,
 	broadcastBidWindowClosed,
@@ -276,50 +276,56 @@ export async function createBidWindow(
 		.where(and(eq(routes.id, assignment.routeId), eq(warehouses.organizationId, organizationId)));
 	const routeName = route?.name ?? 'Unknown Route';
 
-	if (assignment.status !== 'unfilled' || assignment.userId !== null) {
-		const updatedAt = new Date();
-		await db
-			.update(assignments)
-			.set({ status: 'unfilled', userId: null, updatedAt })
-			.where(eq(assignments.id, assignmentId));
-
-		await createAuditLog({
-			entityType: 'assignment',
-			entityId: assignmentId,
-			action: 'unfilled',
-			actorType: 'system',
-			actorId: null,
-			changes: {
-				before: { status: assignment.status, userId: assignment.userId },
-				after: { status: 'unfilled', userId: null },
-				reason: 'bid_window_opened',
-				trigger: options.trigger
-			}
-		});
-	}
-
 	let bidWindowId: string;
 
 	try {
-		const [bidWindow] = await db
-			.insert(bidWindows)
-			.values({
-				assignmentId,
-				mode,
-				trigger: options.trigger ?? null,
-				payBonusPercent: options.payBonusPercent ?? 0,
-				opensAt: new Date(),
-				closesAt,
-				status: 'open'
-			})
-			.returning({ id: bidWindows.id });
+		const transactionResult = await db.transaction(async (tx) => {
+			if (assignment.status !== 'unfilled' || assignment.userId !== null) {
+				const updatedAt = new Date();
+				await tx
+					.update(assignments)
+					.set({ status: 'unfilled', userId: null, updatedAt })
+					.where(eq(assignments.id, assignmentId));
 
-		if (!bidWindow) {
-			log.info('Open bid window already exists');
-			return { success: false, reason: 'Open bid window already exists for this assignment' };
-		}
+				await createAuditLog(
+					{
+						entityType: 'assignment',
+						entityId: assignmentId,
+						action: 'unfilled',
+						actorType: 'system',
+						actorId: null,
+						changes: {
+							before: { status: assignment.status, userId: assignment.userId },
+							after: { status: 'unfilled', userId: null },
+							reason: 'bid_window_opened',
+							trigger: options.trigger
+						}
+					},
+					tx
+				);
+			}
 
-		bidWindowId = bidWindow.id;
+			const [bidWindow] = await tx
+				.insert(bidWindows)
+				.values({
+					assignmentId,
+					mode,
+					trigger: options.trigger ?? null,
+					payBonusPercent: options.payBonusPercent ?? 0,
+					opensAt: new Date(),
+					closesAt,
+					status: 'open'
+				})
+				.returning({ id: bidWindows.id });
+
+			if (!bidWindow) {
+				throw new Error('Bid window insert returned no rows');
+			}
+
+			return { bidWindowId: bidWindow.id };
+		});
+
+		bidWindowId = transactionResult.bidWindowId;
 	} catch (err) {
 		if (isPgUniqueViolation(err, OPEN_WINDOW_CONSTRAINT)) {
 			log.info('Open bid window already exists');
@@ -332,32 +338,48 @@ export async function createBidWindow(
 
 	log.info({ mode, closesAt }, 'Bid window created');
 
-	const notifiedCount = await notifyEligibleDrivers({
-		organizationId,
-		assignmentId,
-		assignmentDate: assignment.date,
-		routeName,
-		closesAt,
-		mode,
-		payBonusPercent: options.payBonusPercent ?? 0
-	});
+	let notifiedCount = 0;
+	try {
+		notifiedCount = await notifyEligibleDrivers({
+			organizationId,
+			assignmentId,
+			assignmentDate: assignment.date,
+			routeName,
+			closesAt,
+			mode,
+			payBonusPercent: options.payBonusPercent ?? 0
+		});
+	} catch (err) {
+		log.warn(
+			getErrorLogContext(err),
+			'Eligible driver fanout failed after durable bid window create'
+		);
+	}
 
-	broadcastBidWindowOpened(organizationId, {
-		assignmentId,
-		routeId: assignment.routeId,
-		routeName,
-		assignmentDate: assignment.date,
-		closesAt: closesAt.toISOString()
-	});
+	try {
+		broadcastBidWindowOpened(organizationId, {
+			assignmentId,
+			routeId: assignment.routeId,
+			routeName,
+			assignmentDate: assignment.date,
+			closesAt: closesAt.toISOString()
+		});
+	} catch (err) {
+		log.warn(getErrorLogContext(err), 'Bid window open broadcast failed after durable create');
+	}
 
-	broadcastAssignmentUpdated(organizationId, {
-		assignmentId,
-		status: 'unfilled',
-		driverId: null,
-		driverName: null,
-		routeId: assignment.routeId,
-		bidWindowClosesAt: closesAt.toISOString()
-	});
+	try {
+		broadcastAssignmentUpdated(organizationId, {
+			assignmentId,
+			status: 'unfilled',
+			driverId: null,
+			driverName: null,
+			routeId: assignment.routeId,
+			bidWindowClosesAt: closesAt.toISOString()
+		});
+	} catch (err) {
+		log.warn(getErrorLogContext(err), 'Assignment update broadcast failed after durable create');
+	}
 
 	return {
 		success: true,
@@ -416,7 +438,7 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 		return 0;
 	}
 
-	const assignmentWeekStart = getWeekStart(parseISO(assignmentDate));
+	const assignmentWeekStart = getWeekStartForDateString(assignmentDate);
 
 	const eligibleDriverIds: string[] = [];
 	for (const driver of drivers) {
