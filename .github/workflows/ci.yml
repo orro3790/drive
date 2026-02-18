@@ -194,6 +194,29 @@ jobs:
       - name: Apply schema for e2e database
         run: pnpm db:push
 
+      - name: Ensure auth rate-limit table exists
+        run: |
+          node - <<'NODE'
+          const { Client } = require('pg');
+
+          (async () => {
+            const client = new Client({ connectionString: process.env.DATABASE_URL });
+            await client.connect();
+            await client.query(`
+              CREATE TABLE IF NOT EXISTS rate_limit (
+                id text PRIMARY KEY,
+                key text NOT NULL UNIQUE,
+                count integer NOT NULL,
+                last_request bigint NOT NULL
+              );
+            `);
+            await client.end();
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
 
@@ -202,7 +225,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p logs/ci/e2e-smoke
-          pnpm test:e2e:smoke 2>&1 | tee logs/ci/e2e-smoke/playwright.log
+          pnpm exec playwright test --grep @smoke --workers=1 2>&1 | tee logs/ci/e2e-smoke/playwright.log
 
       - name: Upload smoke artifacts (on failure)
         if: failure()
