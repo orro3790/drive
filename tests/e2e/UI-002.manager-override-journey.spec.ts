@@ -38,11 +38,17 @@ test.describe('UI-002 manager override critical journey', () => {
 
 		await login(page, baseline.user.managerA.email);
 		await page.goto('/routes');
+		// Wait for routes table to load
+		await page.waitForSelector('table tbody tr', { timeout: 10000 });
 		await page.getByText('Route A', { exact: false }).first().click();
+		// Wait for detail panel to appear with suspend button
+		await page.waitForSelector('button:has-text("Suspend")', { timeout: 5000 });
 		await page
 			.getByRole('button', { name: /suspend/i })
 			.first()
 			.click();
+		// Wait for confirmation dialog
+		await page.waitForSelector('[role="dialog"]', { timeout: 3000 });
 		await page
 			.getByRole('button', { name: /suspend/i })
 			.last()

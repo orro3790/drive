@@ -56,7 +56,11 @@ test.describe('UI-001 manager/driver critical journey', () => {
 
 		await login(page, baseline.user.driverA1.email);
 		await page.goto('/bids');
-		await page.locator('#available-bids button').first().click();
+		// Wait for bids to load - button appears when bids are available
+		await page.waitForSelector('#available-bids .assignment-list button', { timeout: 10000 });
+		await page.locator('#available-bids .assignment-list button').first().click();
+		// Wait for bid acceptance to complete (button disappears or toast appears)
+		await page.waitForTimeout(500);
 
 		await page.goto('/schedule');
 		await page.waitForSelector('[data-testid="schedule-list"][data-loaded="true"]');
