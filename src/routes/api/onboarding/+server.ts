@@ -20,7 +20,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	const body = await request.json().catch(() => null);
 	if (body === null) {
-		return json({ error: 'invalid_json' }, { status: 400 });
+		throw error(400, 'Invalid JSON body');
 	}
 
 	const parsed = onboardingCreateSchema.safeParse(body);
@@ -35,7 +35,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	});
 
 	if (result.alreadyExists) {
-		return json({ error: 'entry_already_pending', entry: result.entry }, { status: 409 });
+		return json({ message: 'entry_already_pending', entry: result.entry }, { status: 409 });
 	}
 
 	return json({ entry: result.entry }, { status: 201 });

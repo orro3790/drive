@@ -2,6 +2,7 @@
 	import type { Notification, NotificationType } from '$lib/schemas/api/notifications';
 	import { notificationTypeConfig } from '$lib/config/notificationTypes';
 	import { formatRelativeTime } from '$lib/utils/date/formatting';
+	import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
 	import { goto } from '$app/navigation';
 	import * as m from '$lib/paraglide/messages.js';
 	import Chip from '$lib/components/primitives/Chip.svelte';
@@ -41,6 +42,11 @@
 			chips.push({ label: notification.data.warehouseName, type: 'warehouse' });
 		}
 		return chips;
+	});
+	const shiftContextLabel = $derived.by(() => {
+		const assignmentDate = notification.data?.assignmentDate ?? notification.data?.date;
+		const routeStartTime = notification.data?.routeStartTime;
+		return formatNotificationShiftContext(assignmentDate, routeStartTime);
 	});
 	const timeLabel = $derived.by(() => formatRelativeTime(notification.createdAt) || '');
 
@@ -165,6 +171,11 @@
 			{/if}
 		</div>
 		<p class="notification-body">{notification.body}</p>
+		{#if shiftContextLabel}
+			<div class="notification-shift-context">
+				<Chip variant="tag" size="xs" color="var(--text-muted)" label={shiftContextLabel} />
+			</div>
+		{/if}
 		{#if metadataChips.length}
 			<div class="notification-meta">
 				{#each metadataChips as chip (chip.label)}
@@ -296,6 +307,10 @@
 		flex-wrap: wrap;
 		gap: var(--spacing-1);
 		align-items: center;
+	}
+
+	.notification-shift-context {
+		display: flex;
 	}
 
 	/* Premium attention ring — spinning green border on the badge itself */

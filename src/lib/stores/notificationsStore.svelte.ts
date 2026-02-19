@@ -37,6 +37,7 @@ const state = $state<{
 	emergencyUnreadCount: number;
 	pagination: PaginationState;
 	hasMore: boolean;
+	hasLoaded: boolean;
 	isLoading: boolean;
 	isLoadingMore: boolean;
 	isMarkingAll: boolean;
@@ -52,6 +53,7 @@ const state = $state<{
 		pageCount: 1
 	},
 	hasMore: true,
+	hasLoaded: false,
 	isLoading: false,
 	isLoadingMore: false,
 	isMarkingAll: false,
@@ -85,6 +87,9 @@ export const notificationsStore = {
 	},
 	get hasMore() {
 		return state.hasMore;
+	},
+	get hasLoaded() {
+		return state.hasLoaded;
 	},
 	get isLoading() {
 		return state.isLoading;
@@ -139,6 +144,7 @@ export const notificationsStore = {
 			toastStore.error(m.notifications_load_error());
 		} finally {
 			state.isLoading = false;
+			state.hasLoaded = true;
 		}
 	},
 

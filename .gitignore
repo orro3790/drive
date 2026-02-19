@@ -60,3 +60,7 @@ tmp/release-apk/
 
 # Nightly cron drill artifacts (generated at runtime)
 logs/nightly/**
+
+# Playwright artifacts
+playwright-report/
+test-results/

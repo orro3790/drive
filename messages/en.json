@@ -368,6 +368,8 @@
 	"preferences_routes_placeholder": "Search routes...",
 	"preferences_routes_aria_label": "Add preferred route",
 	"preferences_routes_max": "Maximum 3 routes",
+	"preferences_routes_status_complete": "Route preferences set ({current}/{max})",
+	"preferences_routes_status_remaining": "{remaining} routes remaining ({current}/{max})",
 	"preferences_lock_countdown": "Locks in {time}",
 	"preferences_locked_message": "Preferences are locked until the next scheduling cycle.",
 	"preferences_locked_until": "Locked until {date}",

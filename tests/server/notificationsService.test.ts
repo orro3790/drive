@@ -137,6 +137,38 @@ describe('notification service org scoping', () => {
 		);
 	});
 
+	it('persists shift metadata and includes shift context in push payload', async () => {
+		setSelectResults([[{ fcmToken: 'token-1', organizationId: 'org-a' }]]);
+		const shiftData = {
+			assignmentId: 'assignment-1',
+			assignmentDate: '2026-02-10',
+			routeStartTime: '09:00'
+		};
+		const shiftBody = 'Your shift starts Mon, Feb 10 at 9:00 AM.';
+
+		const result = await sendNotification('driver-shift', 'shift_reminder', {
+			organizationId: 'org-a',
+			customBody: shiftBody,
+			data: shiftData
+		});
+
+		expect(result).toMatchObject({ inAppCreated: true, pushSent: true });
+		expect(insertValuesMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				userId: 'driver-shift',
+				type: 'shift_reminder',
+				body: shiftBody,
+				data: shiftData
+			})
+		);
+		expect(messagingSendMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				notification: expect.objectContaining({ body: shiftBody }),
+				data: expect.objectContaining(shiftData)
+			})
+		);
+	});
+
 	it('skips cross-org notifications when recipient org mismatches', async () => {
 		setSelectResults([[{ fcmToken: null, organizationId: 'org-b' }]]);
 

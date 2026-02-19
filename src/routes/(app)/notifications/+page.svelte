@@ -91,7 +91,7 @@ Uses notificationsStore for data loading and optimistic read updates.
 	<div
 		class="page-stage"
 		data-testid="notifications-list"
-		data-loaded={notificationsStore.isLoading ? 'false' : 'true'}
+		data-loaded={notificationsStore.hasLoaded && !notificationsStore.isLoading ? 'true' : 'false'}
 	>
 		<div class="page-header">
 			<div class="header-text">

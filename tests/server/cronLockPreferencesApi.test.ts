@@ -309,7 +309,7 @@ describe('GET /api/cron/lock-preferences contract', () => {
 		const response = await GET(createRequestEvent({ method: 'GET' }) as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(401);
-		await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
+		await expect(response.json()).resolves.toEqual({ message: 'Unauthorized' });
 		expect(updateMock).not.toHaveBeenCalled();
 	});
 
@@ -450,6 +450,6 @@ describe('GET /api/cron/lock-preferences contract', () => {
 		const response = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(500);
-		await expect(response.json()).resolves.toEqual({ error: 'Internal server error' });
+		await expect(response.json()).resolves.toEqual({ message: 'Internal server error' });
 	});
 });

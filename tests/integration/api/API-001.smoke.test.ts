@@ -4,6 +4,10 @@ import { createRequestEvent } from '../../harness/requestEvent';
 import { useIntegrationHarness } from '../harness/setup';
 
 import { GET } from '../../../src/routes/api/warehouses/[id]/+server';
+import {
+	assertNoCrossOrgAssignmentLeakage,
+	assertNoCrossOrgNotificationLeakage
+} from '../invariants/tenantIsolation';
 
 describe('API-001 (smoke)', () => {
 	const h = useIntegrationHarness();
@@ -33,6 +37,8 @@ describe('API-001 (smoke)', () => {
 		}) as Parameters<typeof GET>[0];
 
 		await expect(GET(event)).rejects.toMatchObject({ status: 403 });
+		await assertNoCrossOrgAssignmentLeakage();
+		await assertNoCrossOrgNotificationLeakage();
 	});
 
 	it('allows manager access to an in-org warehouse', async () => {
@@ -54,5 +60,8 @@ describe('API-001 (smoke)', () => {
 				id: h.baseline.warehouse.a.id
 			}
 		});
+
+		await assertNoCrossOrgAssignmentLeakage();
+		await assertNoCrossOrgNotificationLeakage();
 	});
 });

@@ -12,7 +12,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { bids, bidWindows, assignments, user, warehouses } from '$lib/server/db/schema';
+import { bids, bidWindows, assignments, routes, user, warehouses } from '$lib/server/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import {
 	canDriverTakeAssignment,
@@ -29,6 +29,7 @@ import logger from '$lib/server/logger';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { requireDriverWithOrg } from '$lib/server/org-scope';
 import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
+import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
 
 const INSTANT_MODE_CUTOFF_MS = dispatchPolicy.bidding.instantModeCutoffHours * 60 * 60 * 1000;
 const PG_UNIQUE_VIOLATION = '23505';
@@ -86,10 +87,13 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			payBonusPercent: bidWindows.payBonusPercent,
 			closesAt: bidWindows.closesAt,
 			assignmentDate: assignments.date,
-			routeId: assignments.routeId
+			routeId: assignments.routeId,
+			routeName: routes.name,
+			routeStartTime: routes.startTime
 		})
 		.from(bidWindows)
 		.innerJoin(assignments, eq(bidWindows.assignmentId, assignments.id))
+		.innerJoin(routes, eq(assignments.routeId, routes.id))
 		.innerJoin(warehouses, eq(assignments.warehouseId, warehouses.id))
 		.where(
 			and(
@@ -181,8 +185,19 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		}
 
 		try {
+			const shiftContext = formatNotificationShiftContext(
+				window.assignmentDate,
+				window.routeStartTime
+			);
 			await sendNotification(driverId, 'bid_won', {
-				data: { assignmentId, bidWindowId: window.id },
+				customBody: `You won ${window.routeName} for ${shiftContext}`,
+				data: {
+					assignmentId,
+					bidWindowId: window.id,
+					routeName: window.routeName,
+					routeStartTime: window.routeStartTime,
+					assignmentDate: window.assignmentDate
+				},
 				organizationId
 			});
 		} catch (err) {

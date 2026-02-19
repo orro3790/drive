@@ -4,23 +4,12 @@ import { assignments, bids, bidWindows, routes, user, warehouses } from '$lib/se
 import { createAuditLog } from '$lib/server/services/audit';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
+import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
 import {
 	getDriverWeeklyAssignmentCount,
 	getWeekStartForDateString
 } from '$lib/server/services/scheduling';
 import type { AssignmentStatus } from '$lib/schemas/assignment';
-
-function formatRouteStartTimeLabel(startTime: string | null | undefined): string {
-	if (!startTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
-		return '9:00 AM';
-	}
-
-	const [hour24, minute] = startTime.split(':').map(Number);
-	const period = hour24 >= 12 ? 'PM' : 'AM';
-	const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-
-	return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
-}
 
 export type ManualAssignErrorCode =
 	| 'assignment_not_found'
@@ -233,9 +222,10 @@ export async function manualAssignDriverToAssignment(params: {
 	if (transactionResult.bidWindowId) {
 		notificationData.bidWindowId = transactionResult.bidWindowId;
 	}
+	const shiftContext = formatNotificationShiftContext(assignment.date, assignment.routeStartTime);
 
 	await sendNotification(driver.id, 'assignment_confirmed', {
-		customBody: `You were assigned ${assignment.routeName} for ${assignment.date} at ${formatRouteStartTimeLabel(assignment.routeStartTime)}.`,
+		customBody: `You were assigned ${assignment.routeName} for ${shiftContext}.`,
 		data: notificationData,
 		organizationId: assignmentOrganizationId
 	});
@@ -245,7 +235,7 @@ export async function manualAssignDriverToAssignment(params: {
 		.map((bid) => bid.userId);
 	if (loserIds.length > 0) {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
-			customBody: `${assignment.routeName} for ${assignment.date} at ${formatRouteStartTimeLabel(assignment.routeStartTime)} was assigned by a manager.`,
+			customBody: `${assignment.routeName} for ${shiftContext} was assigned by a manager.`,
 			data: notificationData,
 			organizationId: assignmentOrganizationId
 		});

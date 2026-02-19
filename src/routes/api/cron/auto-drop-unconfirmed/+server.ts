@@ -25,6 +25,7 @@ import { createAuditLog } from '$lib/server/services/audit';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { calculateConfirmationWindow } from '$lib/server/services/assignmentLifecycle';
 import { verifyCronAuth } from '$lib/server/cron/auth';
+import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
 
 export const GET: RequestHandler = async ({ request }) => {
 	const authError = verifyCronAuth(request);
@@ -71,7 +72,8 @@ export const GET: RequestHandler = async ({ request }) => {
 					userId: assignments.userId,
 					routeId: assignments.routeId,
 					date: assignments.date,
-					routeName: routes.name
+					routeName: routes.name,
+					routeStartTime: routes.startTime
 				})
 				.from(assignments)
 				.innerJoin(routes, eq(assignments.routeId, routes.id))
@@ -151,12 +153,18 @@ export const GET: RequestHandler = async ({ request }) => {
 
 					// Notify the original driver
 					try {
+						const shiftContext = formatNotificationShiftContext(
+							candidate.date,
+							candidate.routeStartTime
+						);
 						await sendNotification(originalUserId, 'shift_auto_dropped', {
-							customBody: `Your shift on ${candidate.date} at ${candidate.routeName} was dropped because it wasn't confirmed in time.`,
+							customBody: `Your shift on ${candidate.routeName} for ${shiftContext} was dropped because it wasn't confirmed in time.`,
 							organizationId,
 							data: {
 								assignmentId: candidate.id,
 								routeName: candidate.routeName,
+								routeStartTime: candidate.routeStartTime,
+								assignmentDate: candidate.date,
 								date: candidate.date
 							}
 						});
@@ -200,6 +208,6 @@ export const GET: RequestHandler = async ({ request }) => {
 		});
 	} catch (err) {
 		log.error({ error: err }, 'Auto-drop cron failed');
-		return json({ error: 'Internal server error' }, { status: 500 });
+		return json({ message: 'Internal server error' }, { status: 500 });
 	}
 };

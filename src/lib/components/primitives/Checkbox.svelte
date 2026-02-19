@@ -201,6 +201,18 @@ save operations, use the toast system.
 		color: var(--text-normal);
 	}
 
+	@media (pointer: coarse), (hover: none) {
+		.checkbox-container {
+			min-width: 44px;
+			min-height: 44px;
+		}
+
+		.icon-toggle {
+			min-width: 44px;
+			min-height: 44px;
+		}
+	}
+
 	/* Respect reduced motion preferences */
 	@media (prefers-reduced-motion: reduce) {
 		.indeterminate-bar,

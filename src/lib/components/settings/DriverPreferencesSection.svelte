@@ -48,10 +48,17 @@ DriverPreferencesSection - Preference controls for driver settings.
 	const routeLimitReached = $derived(selectedRouteIds.length >= 3);
 	const routesStatusText = $derived.by(() => {
 		if (hasAllRoutePreferences) {
-			return 'Route preferences set (3/3)';
+			return m.preferences_routes_status_complete({
+				current: String(selectedRouteCount),
+				max: '3'
+			});
 		}
 
-		return `${remainingRouteCount} route${remainingRouteCount === 1 ? '' : 's'} remaining (${selectedRouteCount}/3)`;
+		return m.preferences_routes_status_remaining({
+			remaining: String(remainingRouteCount),
+			current: String(selectedRouteCount),
+			max: '3'
+		});
 	});
 
 	const lockStatus = $derived.by(() => {

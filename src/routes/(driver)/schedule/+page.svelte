@@ -455,7 +455,7 @@
 	<div
 		class="page-stage"
 		data-testid="schedule-list"
-		data-loaded={scheduleStore.isLoading ? 'false' : 'true'}
+		data-loaded={scheduleStore.hasLoaded && !scheduleStore.isLoading ? 'true' : 'false'}
 	>
 		<div class="page-header">
 			<div class="header-text">

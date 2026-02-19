@@ -16,6 +16,7 @@ import { getBidWindowDetail } from '$lib/server/services/bidding';
 import { bidWindowIdParamsSchema } from '$lib/schemas/api/bidding';
 import { createAuditLog } from '$lib/server/services/audit';
 import { requireManagerWithOrg } from '$lib/server/org-scope';
+import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
 import {
 	broadcastAssignmentUpdated,
 	broadcastBidWindowClosed
@@ -81,6 +82,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			assignmentDate: assignments.date,
 			routeId: assignments.routeId,
 			routeName: routes.name,
+			routeStartTime: routes.startTime,
 			warehouseId: assignments.warehouseId
 		})
 		.from(bidWindows)
@@ -217,11 +219,13 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		assignmentId: window.assignmentId,
 		bidWindowId: window.id,
 		routeName: window.routeName,
+		routeStartTime: window.routeStartTime,
 		assignmentDate: window.assignmentDate
 	};
+	const shiftContext = formatNotificationShiftContext(window.assignmentDate, window.routeStartTime);
 
 	await sendNotification(driver.id, 'assignment_confirmed', {
-		customBody: `You were assigned ${window.routeName} for ${window.assignmentDate}.`,
+		customBody: `You were assigned ${window.routeName} for ${shiftContext}.`,
 		data: notificationData,
 		organizationId
 	});
@@ -230,7 +234,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	if (loserIds.length > 0) {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
-			customBody: `${window.routeName} for ${window.assignmentDate} was assigned by a manager.`,
+			customBody: `${window.routeName} for ${shiftContext} was assigned by a manager.`,
 			data: notificationData,
 			organizationId
 		});

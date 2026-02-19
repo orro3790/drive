@@ -54,5 +54,5 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const authMessage = await readAuthErrorMessage(authResponse);
 	const mappedFailure = mapChangePasswordFailure(authMessage, authResponse.status);
 
-	return json({ error: mappedFailure.error }, { status: mappedFailure.status });
+	return json({ message: mappedFailure.message }, { status: mappedFailure.status });
 };

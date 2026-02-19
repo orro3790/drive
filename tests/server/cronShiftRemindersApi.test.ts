@@ -67,6 +67,7 @@ let sendNotificationMock: ReturnType<
 					assignmentId: string;
 					routeName: string;
 					warehouseName: string;
+					assignmentDate: string;
 					date: string;
 					dedupeKey: string;
 				};
@@ -189,7 +190,7 @@ describe('GET /api/cron/shift-reminders contract', () => {
 		const response = await GET(createRequestEvent({ method: 'GET' }) as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(401);
-		await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
+		await expect(response.json()).resolves.toEqual({ message: 'Unauthorized' });
 		expect(selectMock).not.toHaveBeenCalled();
 	});
 
@@ -197,7 +198,7 @@ describe('GET /api/cron/shift-reminders contract', () => {
 		const response = await GET(createAuthorizedEvent('wrong-token') as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(401);
-		await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
+		await expect(response.json()).resolves.toEqual({ message: 'Unauthorized' });
 		expect(selectMock).not.toHaveBeenCalled();
 	});
 
@@ -250,25 +251,27 @@ describe('GET /api/cron/shift-reminders contract', () => {
 
 		expect(sendNotificationMock).toHaveBeenCalledTimes(2);
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(1, 'driver-1', 'shift_reminder', {
-			customBody: 'Your shift on route Route A at Warehouse A starts at 9:00 AM today.',
+			customBody: 'Your shift on route Route A at Warehouse A starts Mon, Feb 9 at 9:00 AM.',
 			organizationId: 'org-1',
 			data: {
 				assignmentId: 'assignment-1',
 				routeName: 'Route A',
 				routeStartTime: '09:00',
 				warehouseName: 'Warehouse A',
+				assignmentDate: '2026-02-09',
 				date: '2026-02-09',
 				dedupeKey: 'shift_reminder:org-1:assignment-1:driver-1:2026-02-09'
 			}
 		});
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(2, 'driver-3', 'shift_reminder', {
-			customBody: 'Your shift on route Route C at Warehouse C starts at 9:00 AM today.',
+			customBody: 'Your shift on route Route C at Warehouse C starts Mon, Feb 9 at 9:00 AM.',
 			organizationId: 'org-1',
 			data: {
 				assignmentId: 'assignment-3',
 				routeName: 'Route C',
 				routeStartTime: '09:00',
 				warehouseName: 'Warehouse C',
+				assignmentDate: '2026-02-09',
 				date: '2026-02-09',
 				dedupeKey: 'shift_reminder:org-1:assignment-3:driver-3:2026-02-09'
 			}
@@ -400,7 +403,7 @@ describe('GET /api/cron/shift-reminders contract', () => {
 		const response = await GET(createAuthorizedEvent() as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(500);
-		await expect(response.json()).resolves.toEqual({ error: 'Internal server error' });
+		await expect(response.json()).resolves.toEqual({ message: 'Internal server error' });
 		expect(sendNotificationMock).not.toHaveBeenCalled();
 	});
 });

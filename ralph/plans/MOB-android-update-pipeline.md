@@ -81,7 +81,7 @@ Requests to GitHub must:
 - Set headers:
   - `Accept: application/vnd.github+json`
   - `User-Agent: drive-app-version-endpoint`
-  - `X-GitHub-Api-Version: 2022-11-28` (recommended)
+  - `X-GitHub-Api-Version: 2022-11-28`
 - Use `Authorization: Bearer <token>` when `GITHUB_TOKEN` is present on the server.
 - Use an explicit timeout (AbortController), e.g. 5-10 seconds.
 
@@ -90,7 +90,7 @@ Requests to GitHub must:
 When GitHub API calls fail (network, 403 rate limit, 5xx):
 
 - Prefer returning the last-known-good resolved payload from an in-memory cache.
-- If no cached payload exists, return HTTP 503 with `Retry-After: 60` and a JSON body that AppVersionGate can treat as a connectivity problem.
+- If no cached payload exists, return HTTP 503 with `Retry-After: 60` and a JSON body with a human-readable `message` that AppVersionGate can treat as a connectivity problem.
 
 ### CI / Release Workflow Requirements
 

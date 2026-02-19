@@ -237,6 +237,6 @@ export const GET: RequestHandler = async ({ request }) => {
 		});
 	} catch (error) {
 		log.error({ error }, 'Preference lock cron job failed');
-		return json({ error: 'Internal server error' }, { status: 500 });
+		return json({ message: 'Internal server error' }, { status: 500 });
 	}
 };

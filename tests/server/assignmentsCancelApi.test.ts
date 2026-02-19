@@ -11,6 +11,7 @@ interface AssignmentRow {
 	id: string;
 	userId: string | null;
 	routeId: string;
+	routeName?: string | null;
 	date: string;
 	status: AssignmentStatus;
 	confirmedAt: Date | null;
@@ -46,6 +47,7 @@ const assignmentsTable = {
 
 const routesTable = {
 	id: 'routes.id',
+	name: 'routes.name',
 	startTime: 'routes.startTime'
 };
 
@@ -443,6 +445,7 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 				id: 'assignment-1',
 				userId: 'driver-1',
 				routeId: 'route-1',
+				routeName: 'Downtown Loop',
 				date: '2026-02-10',
 				status: 'scheduled',
 				confirmedAt: null,
@@ -486,6 +489,17 @@ describe('POST /api/assignments/[id]/cancel contract', () => {
 		);
 		expect(createAuditLogMock).toHaveBeenCalledTimes(1);
 		expect(sendManagerAlertMock).toHaveBeenCalledTimes(1);
+		expect(sendManagerAlertMock).toHaveBeenCalledWith(
+			'route-1',
+			'route_cancelled',
+			expect.objectContaining({
+				routeName: 'Downtown Loop',
+				driverName: 'driver-driver-1',
+				date: '2026-02-10',
+				routeStartTime: '11:00'
+			}),
+			'org-test'
+		);
 		expect(broadcastAssignmentUpdatedMock).toHaveBeenCalledWith(
 			'org-test',
 			expect.objectContaining({
