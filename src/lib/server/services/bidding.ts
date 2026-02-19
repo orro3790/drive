@@ -109,6 +109,46 @@ function getTorontoEndOfDayInstant(instant: Date): Date {
 	return getTorontoDateTimeInstant(torontoDate, { hours: 23, minutes: 59, seconds: 0 });
 }
 
+function getNestedPgField(error: unknown, field: 'code' | 'constraint'): string | undefined {
+	if (typeof error !== 'object' || error === null) {
+		return undefined;
+	}
+
+	const visited = new Set<object>();
+	let current: unknown = error;
+
+	while (typeof current === 'object' && current !== null) {
+		if (visited.has(current)) {
+			break;
+		}
+		visited.add(current);
+
+		if (field in current) {
+			const value = (current as Record<string, unknown>)[field];
+			if (typeof value === 'string') {
+				return value;
+			}
+		}
+
+		if ('cause' in current) {
+			current = (current as { cause?: unknown }).cause;
+			continue;
+		}
+
+		break;
+	}
+
+	return undefined;
+}
+
+function getPgErrorCode(error: unknown): string | undefined {
+	return getNestedPgField(error, 'code');
+}
+
+function getPgConstraintName(error: unknown): string | undefined {
+	return getNestedPgField(error, 'constraint');
+}
+
 function getErrorLogContext(error: unknown): {
 	errorName: string;
 	errorMessage: string;
@@ -118,35 +158,13 @@ function getErrorLogContext(error: unknown): {
 	const fallbackMessage = toSafeErrorMessage(error);
 	const errorMessage =
 		error instanceof Error && error.message.trim().length > 0 ? error.message : fallbackMessage;
-	const errorCode =
-		typeof error === 'object' &&
-		error !== null &&
-		'code' in error &&
-		typeof (error as { code?: unknown }).code === 'string'
-			? ((error as { code: string }).code ?? undefined)
-			: undefined;
+	const errorCode = getPgErrorCode(error);
 
 	return { errorName, errorMessage, errorCode };
 }
 
-function getPgConstraintName(error: unknown): string | undefined {
-	if (
-		typeof error === 'object' &&
-		error !== null &&
-		'constraint' in error &&
-		typeof (error as { constraint?: unknown }).constraint === 'string'
-	) {
-		return (error as { constraint: string }).constraint;
-	}
-
-	return undefined;
-}
-
 function isPgUniqueViolation(error: unknown, constraint?: string): boolean {
-	const errorCode =
-		typeof error === 'object' && error !== null && 'code' in error
-			? (error as { code?: unknown }).code
-			: undefined;
+	const errorCode = getPgErrorCode(error);
 
 	if (errorCode !== PG_UNIQUE_VIOLATION) {
 		return false;
