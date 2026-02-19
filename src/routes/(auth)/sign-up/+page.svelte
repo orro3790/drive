@@ -408,4 +408,15 @@
 	.icon-toggle:focus-visible {
 		box-shadow: 0 0 0 2px var(--interactive-accent);
 	}
+
+	@media (pointer: coarse), (hover: none) {
+		.icon-toggle {
+			min-width: 44px;
+			min-height: 44px;
+		}
+
+		.mode-option {
+			min-height: 44px;
+		}
+	}
 </style>

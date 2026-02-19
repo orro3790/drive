@@ -342,6 +342,13 @@
 		box-shadow: 0 0 0 2px var(--interactive-accent);
 	}
 
+	@media (pointer: coarse), (hover: none) {
+		.icon-toggle {
+			min-width: 44px;
+			min-height: 44px;
+		}
+	}
+
 	@media (max-width: 600px) {
 		.auth-card {
 			padding: 0;

@@ -106,13 +106,13 @@ html[data-android-native='true'] {
 	--font-weight-medium: 500; /* section headers, modal headers, titles, notice banners */
 	--font-weight-bold: 700; /* page titles (--font-size-xl), low-visibility special chars */
 
-	/* Font Sizes — Major Second Scale (root html is 14px) */
-	--font-size-xs: 0.75rem; /* ~10px — used very sparingly; pair with font-size-bold */
-	--font-size-sm: 0.889rem; /* ~12px — pills, badges, labels; pair with --letter-spacing-sm */
-	--font-size-base: 1rem; /* 14px — body text */
-	--font-size-md: 1.26rem; /* ~18px — subsection headers */
-	--font-size-lg: 1.602rem; /* ~22px — section headers */
-	--font-size-xl: 2.027rem; /* ~28px — page titles */
+	/* Font Sizes — Major Second Scale (root html is 16px) */
+	--font-size-xs: 0.75rem; /* 12px — sparingly; pair with font-weight-bold */
+	--font-size-sm: 0.889rem; /* ~14px — pills, badges, labels, secondary meta */
+	--font-size-base: 1rem; /* 16px — body text, paragraph copy */
+	--font-size-md: 1.26rem; /* ~20px — subsection headers */
+	--font-size-lg: 1.602rem; /* ~26px — section headers */
+	--font-size-xl: 2.027rem; /* ~32px — page titles */
 
 	--letter-spacing-sm: 0.02rem; /* always pair with --font-size-sm */
 
