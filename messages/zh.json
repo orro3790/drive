@@ -534,6 +534,8 @@
 	"settings_passkey_registered": "注册于 {date}",
 	"settings_passkey_name_placeholder": "我的手机",
 	"settings_passkey_name_label": "通行密钥名称",
+	"settings_passkey_name_fallback": "通行密钥",
+	"common_breadcrumb": "面包屑导航",
 
 	"auth_passkey_button": "使用通行密钥登录",
 	"auth_passkey_signing_in": "验证中...",

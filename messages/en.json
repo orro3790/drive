@@ -963,6 +963,8 @@
 	"settings_passkey_registered": "Registered {date}",
 	"settings_passkey_name_placeholder": "My Phone",
 	"settings_passkey_name_label": "Passkey name",
+	"settings_passkey_name_fallback": "Passkey",
+	"common_breadcrumb": "Breadcrumb",
 
 	"auth_passkey_button": "Sign in with Passkey",
 	"auth_passkey_signing_in": "Authenticating...",

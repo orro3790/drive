@@ -956,6 +956,8 @@
 	"settings_passkey_registered": "{date}에 등록됨",
 	"settings_passkey_name_placeholder": "내 전화기",
 	"settings_passkey_name_label": "패스키 이름",
+	"settings_passkey_name_fallback": "패스키",
+	"common_breadcrumb": "이동 경로",
 
 	"auth_passkey_button": "패스키로 로그인",
 	"auth_passkey_signing_in": "인증 중...",

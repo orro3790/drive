@@ -840,6 +840,8 @@
 	"settings_passkey_registered": "註冊於 {date}",
 	"settings_passkey_name_placeholder": "我的手機",
 	"settings_passkey_name_label": "通行密鑰名稱",
+	"settings_passkey_name_fallback": "通行密鑰",
+	"common_breadcrumb": "麵包屑導覽",
 
 	"auth_passkey_button": "使用通行密鑰登入",
 	"auth_passkey_signing_in": "驗證中...",
