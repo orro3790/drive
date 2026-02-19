@@ -25,6 +25,10 @@ import {
 	sendManagerAlert,
 	sendNotification
 } from '$lib/server/services/notifications';
+import {
+	formatNotificationRouteStartTime,
+	formatNotificationShiftContext
+} from '$lib/utils/notifications/shiftContext';
 import { createAuditLog, type AuditActor } from '$lib/server/services/audit';
 import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
 import { addHours, differenceInMonths } from 'date-fns';
@@ -43,18 +47,6 @@ const PG_UNIQUE_VIOLATION = '23505';
 const PG_SERIALIZATION_FAILURE = '40001';
 const OPEN_WINDOW_CONSTRAINT = 'uq_bid_windows_open_assignment';
 const ACTIVE_ASSIGNMENT_CONSTRAINT = 'uq_assignments_active_user_date';
-
-function formatRouteStartTimeLabel(startTime: string | null | undefined): string {
-	if (!startTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
-		return '9:00 AM';
-	}
-
-	const [hour24, minute] = startTime.split(':').map(Number);
-	const period = hour24 >= 12 ? 'PM' : 'AM';
-	const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-
-	return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
-}
 
 export type BidWindowMode = 'competitive' | 'instant' | 'emergency';
 export type BidWindowTrigger = 'cancellation' | 'auto_drop' | 'no_show' | 'manager';
@@ -806,16 +798,16 @@ export async function resolveBidWindow(
 			continue;
 		}
 
-		const formattedDate = assignment.date;
-		const routeStartTimeLabel = formatRouteStartTimeLabel(assignment.routeStartTime);
-		const winnerBody = `You won ${assignment.routeName} for ${formattedDate} at ${routeStartTimeLabel}`;
+		const shiftContext = formatNotificationShiftContext(assignment.date, assignment.routeStartTime);
+		const routeStartTimeLabel = formatNotificationRouteStartTime(assignment.routeStartTime);
+		const winnerBody = `You won ${assignment.routeName} for ${shiftContext}`;
 		const loserBody = `${assignment.routeName} at ${routeStartTimeLabel} was assigned to another driver`;
 		const notificationData = {
 			assignmentId: assignment.id,
 			bidWindowId,
 			routeName: assignment.routeName,
 			routeStartTime: assignment.routeStartTime,
-			assignmentDate: formattedDate
+			assignmentDate: assignment.date
 		};
 
 		try {
