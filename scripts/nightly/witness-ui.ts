@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
-import path from 'node:path';
+import path, { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { config as loadDotenv } from 'dotenv';
 import { Client as NodePgClient } from 'pg';
@@ -55,7 +56,7 @@ type CronE2EReport = {
 		database?: { hostname?: string; database?: string };
 	};
 	witnesses?: CronE2EWitnesses;
-	overall?: { passed?: boolean };
+	overall?: { passed?: unknown };
 };
 
 type WitnessCheckOutcome = {
@@ -88,6 +89,29 @@ type WitnessUiReport = {
 		failedFlows: string[];
 	};
 };
+
+export const UPSTREAM_CRON_FAILED = 'UPSTREAM_CRON_FAILED';
+
+export function computeWitnessOverall(params: {
+	cronOverallPassed: unknown;
+	failedFlowIds: string[];
+}): WitnessUiReport['overall'] {
+	const failedFlows = [...params.failedFlowIds];
+	if (params.cronOverallPassed !== true && !failedFlows.includes(UPSTREAM_CRON_FAILED)) {
+		failedFlows.unshift(UPSTREAM_CRON_FAILED);
+	}
+
+	return {
+		passed: failedFlows.length === 0,
+		failedFlows
+	};
+}
+
+export function assertWitnessOverallPassed(overall: WitnessUiReport['overall']): void {
+	if (!overall.passed) {
+		throw new Error(`Witness UI verification failed: ${overall.failedFlows.join(', ')}`);
+	}
+}
 
 const VIEWPORT = { width: 390, height: 844 };
 const SEED_PASSWORD = 'test1234';
@@ -1086,7 +1110,11 @@ async function run(): Promise<void> {
 	}
 
 	const finishedAt = new Date().toISOString();
-	const failedFlows = flows.filter((f) => !f.passed).map((f) => f.flowId);
+	const failedFlowIds = flows.filter((f) => !f.passed).map((f) => f.flowId);
+	const overall = computeWitnessOverall({
+		cronOverallPassed: cronReport.overall?.passed,
+		failedFlowIds
+	});
 	const witnessReport: WitnessUiReport = {
 		run: {
 			artifactDate,
@@ -1097,10 +1125,7 @@ async function run(): Promise<void> {
 			database: dbFingerprint
 		},
 		flows,
-		overall: {
-			passed: failedFlows.length === 0,
-			failedFlows
-		}
+		overall
 	};
 
 	await writeFileAtomic(witnessJsonPath, `${JSON.stringify(witnessReport, null, 2)}\n`);
@@ -1128,12 +1153,17 @@ async function run(): Promise<void> {
 		await writeFileAtomic(reportMdPath, next);
 	}
 
-	if (!witnessReport.overall.passed) {
-		throw new Error(`Witness UI verification failed: ${failedFlows.join(', ')}`);
-	}
+	assertWitnessOverallPassed(witnessReport.overall);
 }
 
-run().catch((err) => {
-	console.error(`[witness-ui] ${err instanceof Error ? err.message : String(err)}`);
-	process.exitCode = 1;
-});
+function isMainModule(): boolean {
+	if (!process.argv[1]) return false;
+	return resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+}
+
+if (isMainModule()) {
+	run().catch((err) => {
+		console.error(`[witness-ui] ${err instanceof Error ? err.message : String(err)}`);
+		process.exitCode = 1;
+	});
+}
