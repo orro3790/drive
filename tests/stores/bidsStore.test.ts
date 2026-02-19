@@ -59,6 +59,23 @@ function makeAvailableWindow(overrides: Partial<Record<string, unknown>> = {}) {
 	};
 }
 
+function makeDriverBid(overrides: Partial<Record<string, unknown>> = {}) {
+	return {
+		id: 'bid-1',
+		assignmentId: 'assignment-1',
+		assignmentDate: '2026-02-12',
+		routeName: 'Downtown',
+		routeStartTime: '09:00',
+		warehouseName: 'Main Warehouse',
+		status: 'pending',
+		score: null,
+		bidAt: '2026-02-10T09:10:00.000Z',
+		windowClosesAt: '2026-02-10T10:00:00.000Z',
+		resolvedAt: null,
+		...overrides
+	};
+}
+
 async function importBidsStore() {
 	vi.resetModules();
 	const module = await import('../../src/lib/stores/bidsStore.svelte.ts');
@@ -94,6 +111,51 @@ describe('bidsStore', () => {
 		expect(store.availableWindows).toHaveLength(0);
 		expect(store.error).toBe('Invalid available bids response');
 		expect(mocked.toastError).toHaveBeenCalledWith('bids_load_available_error');
+	});
+
+	it('rejects malformed my-bids payloads before state assignment', async () => {
+		const store = await importBidsStore();
+
+		fetchMock.mockResolvedValueOnce(
+			jsonResponse({
+				bids: [
+					{
+						id: 'bid-1',
+						assignmentId: 'assignment-1',
+						assignmentDate: '2026-02-12',
+						routeName: 'Downtown',
+						warehouseName: 'Main Warehouse',
+						status: 'pending',
+						score: null,
+						bidAt: '2026-02-10T09:10:00.000Z',
+						windowClosesAt: '2026-02-10T10:00:00.000Z',
+						resolvedAt: null
+					}
+				]
+			})
+		);
+
+		await store.loadMyBids();
+
+		expect(store.myBids).toHaveLength(0);
+		expect(store.error).toBe('Invalid bids response');
+		expect(mocked.toastError).toHaveBeenCalledWith('bids_load_mine_error');
+	});
+
+	it('stores my bids including route start time when payload is valid', async () => {
+		const store = await importBidsStore();
+
+		fetchMock.mockResolvedValueOnce(
+			jsonResponse({
+				bids: [makeDriverBid({ routeStartTime: '09:30' })]
+			})
+		);
+
+		await store.loadMyBids();
+
+		expect(store.myBids).toHaveLength(1);
+		expect(store.myBids[0]?.routeStartTime).toBe('09:30');
+		expect(store.error).toBeNull();
 	});
 
 	it('ignores stale available-bids load responses that finish out of order', async () => {
