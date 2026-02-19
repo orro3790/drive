@@ -59,7 +59,7 @@ test.describe('UI-002 manager override critical journey', () => {
 		await dialog.waitFor({ timeout: 5000 });
 		await dialog.getByRole('button', { name: /suspend route/i }).click();
 
-		await expect(page.getByText(/suspended/i)).toBeVisible({ timeout: 10000 });
+		await expect(page.getByText(/suspended/i).first()).toBeVisible({ timeout: 10000 });
 
 		await withDb(async (pool) => {
 			const assignments = await pool.query<{
