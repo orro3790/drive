@@ -108,6 +108,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			id: assignments.id,
 			userId: assignments.userId,
 			routeId: assignments.routeId,
+			routeName: routes.name,
 			date: assignments.date,
 			status: assignments.status,
 			confirmedAt: assignments.confirmedAt,
@@ -232,8 +233,10 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			existing.routeId,
 			'route_cancelled',
 			{
+				routeName: existing.routeName ?? undefined,
 				driverName: user.name ?? 'A driver',
-				date: existing.date
+				date: existing.date,
+				routeStartTime: existing.routeStartTime ?? undefined
 			},
 			organizationId
 		);
