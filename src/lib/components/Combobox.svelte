@@ -787,6 +787,8 @@ The combobox border turns red when errors are present.
 		padding: var(--spacing-1) var(--spacing-2);
 		border-radius: var(--radius-base);
 		border: 1px solid var(--border-primary);
+		background: var(--surface-primary);
+		color: var(--text-normal);
 		font-size: var(--font-size-base);
 		box-sizing: border-box;
 	}

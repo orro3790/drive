@@ -18,7 +18,7 @@ Displays and updates user's account info, password, and preferences.
 	import EyeOff from '$lib/components/icons/EyeOff.svelte';
 	import Sun from '$lib/components/icons/Sun.svelte';
 	import Moon from '$lib/components/icons/Moon.svelte';
-	import Combobox from '$lib/components/Combobox.svelte';
+	import Select from '$lib/components/Select.svelte';
 	import DriverPreferencesSection from './DriverPreferencesSection.svelte';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
 	import type { User } from '$lib/types/user';
@@ -41,7 +41,8 @@ Displays and updates user's account info, password, and preferences.
 	const LANGUAGE_LABELS: Record<string, string> = {
 		en: 'English',
 		zh: '中文',
-		'zh-Hant': '粵語'
+		'zh-Hant': '粵語',
+		ko: '한국어'
 	};
 	const currentLocale = $derived(browser ? getLocale() : 'en');
 	const languageOptions = locales.map((locale) => ({
@@ -452,7 +453,7 @@ Displays and updates user's account info, password, and preferences.
 							<div class="desc">{m.settings_language_desc()}</div>
 						{/snippet}
 						{#snippet control()}
-							<Combobox
+							<Select
 								fitContent
 								id="ui-language"
 								name="uiLanguage"

@@ -135,7 +135,8 @@ Mobile: Hidden by default, hamburger in header opens overlay
 	const LANG_LABELS: Record<Locale, string> = {
 		en: 'EN',
 		zh: '中文',
-		'zh-Hant': '粵語'
+		'zh-Hant': '粵語',
+		ko: '한국어'
 	};
 
 	const LOCALE_CYCLE: Locale[] = ['en', 'zh', 'zh-Hant'];

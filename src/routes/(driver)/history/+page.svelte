@@ -150,6 +150,7 @@
 									variant="status"
 									status={isCompleted ? 'success' : 'neutral'}
 									label={statusLabels[item.status]}
+									size="xs"
 								/>
 							</div>
 							{#if item.shift && isCompleted}
@@ -315,7 +316,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--spacing-2);
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 	}
 
 	.parcel-stat {
