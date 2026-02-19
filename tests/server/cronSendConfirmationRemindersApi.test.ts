@@ -174,7 +174,7 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 		const response = await GET(event as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(401);
-		await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
+		await expect(response.json()).resolves.toEqual({ message: 'Unauthorized' });
 		expect(selectMock).not.toHaveBeenCalled();
 	});
 

@@ -147,6 +147,6 @@ export const GET: RequestHandler = async ({ request }) => {
 		return json({ success: true, sent, skippedDuplicates, errors, elapsedMs });
 	} catch (err) {
 		log.error({ error: err }, 'Stale shift reminder cron failed');
-		return json({ error: 'Internal server error' }, { status: 500 });
+		return json({ message: 'Internal server error' }, { status: 500 });
 	}
 };

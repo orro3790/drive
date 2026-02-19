@@ -111,6 +111,6 @@ describe('POST /api/users/password route contract', () => {
 		const response = await POST(event as Parameters<typeof POST>[0]);
 
 		expect(response.status).toBe(400);
-		await expect(response.json()).resolves.toEqual({ error: 'invalid_password' });
+		await expect(response.json()).resolves.toEqual({ message: 'invalid_password' });
 	});
 });

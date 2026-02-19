@@ -5,7 +5,7 @@ export type PasswordChangeErrorCode =
 
 export interface PasswordChangeFailure {
 	status: number;
-	error: PasswordChangeErrorCode;
+	message: PasswordChangeErrorCode;
 }
 
 export function mapChangePasswordFailure(
@@ -13,15 +13,15 @@ export function mapChangePasswordFailure(
 	fallbackStatus: number
 ): PasswordChangeFailure {
 	if (message === 'INVALID_PASSWORD') {
-		return { status: 400, error: 'invalid_password' };
+		return { status: 400, message: 'invalid_password' };
 	}
 
 	if (message === 'CREDENTIAL_ACCOUNT_NOT_FOUND') {
-		return { status: 400, error: 'no_credential_account' };
+		return { status: 400, message: 'no_credential_account' };
 	}
 
 	return {
 		status: fallbackStatus >= 400 && fallbackStatus < 600 ? fallbackStatus : 400,
-		error: 'password_update_failed'
+		message: 'password_update_failed'
 	};
 }

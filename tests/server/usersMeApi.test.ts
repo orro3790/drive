@@ -108,7 +108,7 @@ describe('PATCH /api/users/me route contract', () => {
 		const response = await PATCH(event as Parameters<typeof PATCH>[0]);
 
 		expect(response.status).toBe(409);
-		await expect(response.json()).resolves.toEqual({ error: 'email_taken' });
+		await expect(response.json()).resolves.toEqual({ message: 'email_taken' });
 		expect(childLoggerWarnMock).toHaveBeenCalledWith(
 			expect.objectContaining({ errorCode: 'USER_PROFILE_EMAIL_CONFLICT' }),
 			expect.any(String)

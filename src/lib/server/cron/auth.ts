@@ -12,7 +12,7 @@ export function verifyCronAuth(request: Request) {
 	const authHeader = request.headers.get('authorization')?.trim();
 	const expectedToken = (CRON_SECRET || env.CRON_SECRET)?.trim();
 	if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
-		return json({ error: 'Unauthorized' }, { status: 401 });
+		return json({ message: 'Unauthorized' }, { status: 401 });
 	}
 	return null;
 }

@@ -121,7 +121,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (pathname.startsWith('/api')) {
 			return finalizeResponse(
 				event,
-				json({ error: 'Unauthorized' }, { status: 401 }),
+				json({ message: 'Unauthorized' }, { status: 401 }),
 				requestId,
 				startedAt
 			);
