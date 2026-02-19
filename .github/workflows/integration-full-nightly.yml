@@ -144,3 +144,12 @@ jobs:
             tests/integration/.evidence/**
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Dispatch operational alert on nightly failures
+        if: always()
+        env:
+          NIGHTLY_ALERT_WEBHOOK_URL: ${{ secrets.NIGHTLY_ALERT_WEBHOOK_URL }}
+          NIGHTLY_ALERT_JOB_STATUS: ${{ job.status }}
+          NIGHTLY_ALERT_OWNER: CI/workflow maintainers
+          NIGHTLY_ALERT_ESCALATION_PATH: Escalate to engineering manager on-call if unacknowledged after 15 minutes
+        run: pnpm exec tsx scripts/nightly/operational-alert.cli.ts

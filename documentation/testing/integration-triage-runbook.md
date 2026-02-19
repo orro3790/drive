@@ -242,6 +242,26 @@ Escalate when:
 - You cannot classify within 20 minutes.
 - The failure impacts multiple scenario classes (likely harness or shared service regression).
 
+## Nightly Operational Alert Contract
+
+The scheduled workflow `.github/workflows/integration-full-nightly.yml` includes an explicit operational alert step:
+
+- Step: `Dispatch operational alert on nightly failures`
+- Implementation: `scripts/nightly/operational-alert.cli.ts`
+- Trigger contract:
+  - Alert when `job.status != success`, **or**
+  - Alert when required artifacts are missing (`logs/ci/integration-full/runtime.json`, `logs/ci/integration-full/vitest.log`)
+- Dedupe contract:
+  - Dedupe key is `<artifactDate>:<github.run_id>`
+  - First attempt dispatches at most one alert
+  - `github.run_attempt > 1` is treated as a rerun and alert dispatch is suppressed to avoid duplicate paging
+
+Owner and escalation path for this alert:
+
+- Primary owner: CI/workflow maintainers (`.github/workflows/**`)
+- Escalation path: engineering manager on-call if not acknowledged within 15 minutes
+- Required secret: `NIGHTLY_ALERT_WEBHOOK_URL` (missing secret on a first-attempt failure is treated as a workflow defect and fails the run)
+
 ## Defect Bead Template (copy/paste)
 
 Title: `Integration failure: <scenarioId> / <invariantId> (<short symptom>)`
