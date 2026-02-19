@@ -5,11 +5,18 @@ import { assertNoCrossTenantLeakage, login, seedUiBaseline, withDb } from './har
 const ORG_A_ASSIGNMENT_ID = 'c4ed4d8b-c5f5-4652-9ceb-f3beec925c97';
 const ORG_B_ASSIGNMENT_ID = '9b56cd63-6f0d-44ed-89f8-aae26da00a30';
 
+/** Today in YYYY-MM-DD (UTC) — keeps assignments inside the schedule API 2-week window. */
+function todayYmd(): string {
+	return new Date().toISOString().slice(0, 10);
+}
+
 test.describe('UI-001 manager/driver critical journey', () => {
 	test('UI-001 @smoke: driver accepts in-org bidding and foreign org remains isolated', async ({
 		page,
 		context
 	}) => {
+		const assignmentDate = todayYmd();
+
 		const baseline = await withDb(async (pool) => {
 			const seeded = await seedUiBaseline(pool);
 
@@ -22,12 +29,12 @@ test.describe('UI-001 manager/driver critical journey', () => {
 					ORG_A_ASSIGNMENT_ID,
 					seeded.route.a.id,
 					seeded.warehouse.a.id,
-					'2026-03-18',
+					assignmentDate,
 					'unfilled',
 					ORG_B_ASSIGNMENT_ID,
 					seeded.route.b.id,
 					seeded.warehouse.b.id,
-					'2026-03-18',
+					assignmentDate,
 					'unfilled'
 				]
 			);
@@ -56,14 +63,18 @@ test.describe('UI-001 manager/driver critical journey', () => {
 
 		await login(page, baseline.user.driverA1.email);
 		await page.goto('/bids');
-		// Wait for bids to load - button appears when bids are available
+		// Wait for bids to load — button appears when bids are available
 		await page.waitForSelector('#available-bids .assignment-list button', { timeout: 10000 });
 		await page.locator('#available-bids .assignment-list button').first().click();
-		// Wait for bid acceptance to complete (button disappears or toast appears)
-		await page.waitForTimeout(500);
+		// Wait for bid acceptance to complete — the accepted bid disappears from available list
+		await expect(page.locator('#available-bids .assignment-list .assignment-item')).toHaveCount(0, {
+			timeout: 10000
+		});
 
 		await page.goto('/schedule');
-		await page.waitForSelector('[data-testid="schedule-list"][data-loaded="true"]');
+		await page.waitForSelector('[data-testid="schedule-list"][data-loaded="true"]', {
+			timeout: 10000
+		});
 		await expect(page.locator(`[data-assignment-id="${ORG_A_ASSIGNMENT_ID}"]`)).toHaveCount(1);
 
 		await withDb(async (pool) => {
@@ -78,7 +89,9 @@ test.describe('UI-001 manager/driver critical journey', () => {
 		await context.clearCookies();
 		await login(page, baseline.user.driverB1.email);
 		await page.goto('/schedule');
-		await page.waitForSelector('[data-testid="schedule-list"][data-loaded="true"]');
+		await page.waitForSelector('[data-testid="schedule-list"][data-loaded="true"]', {
+			timeout: 10000
+		});
 		await expect(page.locator(`[data-assignment-id="${ORG_A_ASSIGNMENT_ID}"]`)).toHaveCount(0);
 	});
 });
