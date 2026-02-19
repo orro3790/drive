@@ -212,7 +212,7 @@ Displays and updates user's account info, password, and preferences.
 			});
 			const data = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				if (res.status === 409 && data?.error === 'email_taken') {
+				if (res.status === 409 && data?.message === 'email_taken') {
 					accountErrors = { ...accountErrors, email: [m.settings_account_email_taken()] };
 					return;
 				}
@@ -279,11 +279,11 @@ Displays and updates user's account info, password, and preferences.
 			});
 			const data = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				if (data?.error === 'invalid_password') {
+				if (data?.message === 'invalid_password') {
 					passwordErrors = { current: [m.settings_password_invalid_current()] };
 					return;
 				}
-				if (data?.error === 'no_credential_account') {
+				if (data?.message === 'no_credential_account') {
 					toastStore.error(m.settings_password_no_credentials());
 					return;
 				}

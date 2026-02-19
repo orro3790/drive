@@ -208,6 +208,6 @@ export const GET: RequestHandler = async ({ request }) => {
 		});
 	} catch (err) {
 		log.error({ error: err }, 'Auto-drop cron failed');
-		return json({ error: 'Internal server error' }, { status: 500 });
+		return json({ message: 'Internal server error' }, { status: 500 });
 	}
 };

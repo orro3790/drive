@@ -122,7 +122,7 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 				},
 				'Profile update rejected due to duplicate email'
 			);
-			return json({ error: 'email_taken' }, { status: 409 });
+			return json({ message: 'email_taken' }, { status: 409 });
 		}
 
 		log.error(
