@@ -429,6 +429,68 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
 	});
 
+	it('drops unconfirmed shift 1s after spring-forward deadline', async () => {
+		const candidate: AutoDropCandidate = {
+			id: 'assignment-spring-plus1',
+			userId: 'driver-spring-plus1',
+			routeId: 'route-spring',
+			date: '2026-03-08',
+			routeName: 'Route Spring',
+			organizationId: 'org-1'
+		};
+
+		selectWhereMock.mockResolvedValue([candidate]);
+		createBidWindowMock.mockResolvedValue({ success: true, bidWindowId: 'window-spring-plus1' });
+
+		freezeTime('2026-03-06T11:00:01.000Z');
+		const response = await GET(
+			createRequestEvent({
+				method: 'GET',
+				headers: {
+					authorization: 'Bearer test-cron-secret'
+				}
+			}) as Parameters<typeof GET>[0]
+		);
+
+		await expect(response.json()).resolves.toMatchObject({
+			success: true,
+			dropped: 1,
+			bidWindowsCreated: 1
+		});
+		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('drops unconfirmed shift 1s after fall-back deadline', async () => {
+		const candidate: AutoDropCandidate = {
+			id: 'assignment-fall-plus1',
+			userId: 'driver-fall-plus1',
+			routeId: 'route-fall',
+			date: '2026-11-01',
+			routeName: 'Route Fall',
+			organizationId: 'org-1'
+		};
+
+		selectWhereMock.mockResolvedValue([candidate]);
+		createBidWindowMock.mockResolvedValue({ success: true, bidWindowId: 'window-fall-plus1' });
+
+		freezeTime('2026-10-30T12:00:01.000Z');
+		const response = await GET(
+			createRequestEvent({
+				method: 'GET',
+				headers: {
+					authorization: 'Bearer test-cron-secret'
+				}
+			}) as Parameters<typeof GET>[0]
+		);
+
+		await expect(response.json()).resolves.toMatchObject({
+			success: true,
+			dropped: 1,
+			bidWindowsCreated: 1
+		});
+		expect(createBidWindowMock).toHaveBeenCalledTimes(1);
+	});
+
 	it('stays idempotent when the cron handler runs twice for the same assignment', async () => {
 		freezeTime('2026-03-10T11:00:00.000Z');
 

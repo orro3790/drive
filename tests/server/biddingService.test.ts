@@ -583,6 +583,69 @@ describe('bidding service boundaries', () => {
 		});
 	});
 
+	it('returns success with notifiedCount 0 when sendBulkNotifications throws during resolution', async () => {
+		setSelectResults([
+			[
+				{
+					id: 'window-1',
+					assignmentId: 'assignment-1',
+					status: 'open',
+					mode: 'competitive',
+					organizationId: 'org-a'
+				}
+			],
+			[
+				{
+					id: 'assignment-1',
+					date: '2026-02-20',
+					routeId: 'route-1',
+					routeName: 'Route One',
+					status: 'unfilled',
+					userId: null,
+					organizationId: 'org-a'
+				}
+			],
+			[
+				{ id: 'bid-winner', userId: 'driver-winner', bidAt: new Date('2026-02-10T10:00:00.000Z') },
+				{ id: 'bid-loser', userId: 'driver-loser', bidAt: new Date('2026-02-10T10:01:00.000Z') }
+			],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[],
+			[]
+		]);
+
+		transactionMock.mockImplementationOnce(async (runner: unknown) => {
+			if (typeof runner !== 'function') {
+				throw new Error('runner_missing');
+			}
+
+			const { txExecuteMock, txUpdateMock } = createResolveTransactionContext();
+			return runner({ execute: txExecuteMock, update: txUpdateMock });
+		});
+
+		sendBulkNotificationsMock.mockRejectedValueOnce(new Error('push_delivery_failed'));
+
+		await expect(resolveBidWindow('window-1')).resolves.toMatchObject({
+			resolved: true,
+			bidCount: 2,
+			winnerId: 'driver-winner'
+		});
+
+		expect(sendBulkNotificationsMock).toHaveBeenCalledTimes(1);
+		expect(sendNotificationMock).toHaveBeenCalledWith(
+			'driver-winner',
+			'bid_won',
+			expect.objectContaining({ data: expect.objectContaining({ bidWindowId: 'window-1' }) })
+		);
+	});
+
 	it('retries with the next bidder when first winner conflicts concurrently', async () => {
 		setSelectResults([
 			[
