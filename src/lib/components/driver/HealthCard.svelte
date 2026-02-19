@@ -220,7 +220,13 @@
 		<div class="score-section">
 			<div class="score-header">
 				<div class="score-stars">
-					<div class="stars-row" aria-label="{health.stars} of {health.maxStars} stars">
+					<div
+						class="stars-row"
+						aria-label={m.dashboard_health_stars_aria_label({
+							stars: String(health.stars),
+							total: String(health.maxStars)
+						})}
+					>
 						{#each Array(health.maxStars) as _, i (i)}
 							<span class="star star-slot" class:is-filled={i < displayStars} aria-hidden="true">
 								<span class="star-empty"><StarEmpty stroke="currentColor" /></span>
