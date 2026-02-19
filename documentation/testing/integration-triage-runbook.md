@@ -346,4 +346,4 @@ This runbook is usable when a responder can complete the following without triba
 
 Last validated:
 
-- YYYY-MM-DD (OS): PASS/FAIL - notes
+- 2026-02-18 (OS): PASS - initial audit validation
