@@ -14,7 +14,8 @@ export default defineConfig({
 		baseURL,
 		trace: 'retain-on-failure',
 		screenshot: 'only-on-failure',
-		video: 'retain-on-failure'
+		video: 'retain-on-failure',
+		serviceWorkers: 'block'
 	},
 	projects: [
 		{
@@ -28,6 +29,7 @@ export default defineConfig({
 		reuseExistingServer: !process.env.CI,
 		timeout: 120_000,
 		env: {
+			BETTER_AUTH_URL: baseURL,
 			BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? 'test-better-auth-secret',
 			CRON_SECRET: process.env.CRON_SECRET ?? 'test-cron-secret',
 			FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID ?? 'test-project',
