@@ -11,6 +11,7 @@ type AutoDropCandidate = {
 	routeId: string;
 	date: string;
 	routeName: string;
+	routeStartTime?: string | null;
 	organizationId: string;
 };
 
@@ -49,6 +50,8 @@ let sendNotificationMock: ReturnType<
 				data: {
 					assignmentId: string;
 					routeName: string;
+					routeStartTime?: string | null;
+					assignmentDate: string;
 					date: string;
 				};
 			}
@@ -107,6 +110,8 @@ beforeEach(async () => {
 				data: {
 					assignmentId: string;
 					routeName: string;
+					routeStartTime?: string | null;
+					assignmentDate: string;
 					date: string;
 				};
 			}
