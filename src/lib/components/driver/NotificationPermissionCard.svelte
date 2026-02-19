@@ -10,6 +10,7 @@
 	import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
 	import XIcon from '$lib/components/icons/XIcon.svelte';
 	import BellRinging from '$lib/components/icons/BellRinging.svelte';
+	import * as m from '$lib/paraglide/messages.js';
 	import {
 		isNativePlatform,
 		checkPushPermissionStatus,
@@ -49,14 +50,18 @@
 			<Icon size="medium"><BellRinging /></Icon>
 		</div>
 		<div class="content">
-			<h3>Enable Notifications</h3>
-			<p>Get notified about new shift assignments, bid windows, and important updates.</p>
+			<h3>{m.notification_permission_title()}</h3>
+			<p>{m.notification_permission_description()}</p>
 		</div>
 		<div class="actions">
-			<IconButton tooltip="Dismiss" onclick={handleDismiss}>
+			<IconButton tooltip={m.toast_dismiss_tooltip()} onclick={handleDismiss}>
 				<Icon size="small"><XIcon /></Icon>
 			</IconButton>
-			<IconButton tooltip="Enable notifications" onclick={handleEnable} disabled={isRequesting}>
+			<IconButton
+				tooltip={m.notification_permission_enable_tooltip()}
+				onclick={handleEnable}
+				disabled={isRequesting}
+			>
 				<Icon size="small"><CheckIcon /></Icon>
 			</IconButton>
 		</div>

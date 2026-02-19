@@ -88,16 +88,17 @@ export const warehouseStore = {
 		try {
 			const res = await fetch('/api/warehouses');
 			if (!res.ok) {
-				throw new Error('Failed to load warehouses');
+				throw new Error(m.warehouse_load_error());
 			}
 			const parsed = warehouseListResponseSchema.safeParse(await res.json());
 			if (!parsed.success) {
-				throw new Error('Invalid warehouses response');
+				throw new Error(m.warehouse_load_error());
 			}
 			state.warehouses = parsed.data.warehouses;
 		} catch (err) {
-			state.error = err instanceof Error ? err.message : 'Unknown error';
-			toastStore.error(state.error);
+			const message = err instanceof Error ? err.message : m.warehouse_load_error();
+			state.error = message;
+			toastStore.error(message);
 		} finally {
 			state.isLoading = false;
 		}

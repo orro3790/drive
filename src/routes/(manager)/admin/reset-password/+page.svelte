@@ -10,7 +10,13 @@
 	import Mail from '$lib/components/icons/Mail.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
-	let { form } = $props();
+	type ResetPasswordFormState = {
+		success?: boolean;
+		errorCode?: string;
+		email?: string;
+	};
+
+	let { form }: { form?: ResetPasswordFormState } = $props();
 
 	let email = $state('');
 	let newPassword = $state('');
@@ -42,6 +48,27 @@
 		newPassword = '';
 		confirmPassword = '';
 	}
+
+	function resolveErrorMessage(errorCode: string | undefined): string {
+		switch (errorCode) {
+			case 'admin_reset_password_error_email_required':
+				return m.admin_reset_password_error_email_required();
+			case 'admin_reset_password_error_password_short':
+				return m.admin_reset_password_error_password_short();
+			case 'admin_reset_password_error_password_mismatch':
+				return m.admin_reset_password_error_password_mismatch();
+			case 'admin_reset_password_error_user_not_found':
+				return m.admin_reset_password_error_user_not_found();
+			case 'admin_reset_password_error_no_password_account':
+				return m.admin_reset_password_error_no_password_account();
+			case 'admin_reset_password_error_access_denied':
+				return m.admin_reset_password_error_access_denied();
+			case 'admin_reset_password_error_password_long':
+				return m.admin_reset_password_error_password_long();
+			default:
+				return m.admin_reset_password_error_reset_failed();
+		}
+	}
 </script>
 
 <div class="admin-reset-container">
@@ -53,14 +80,14 @@
 
 		{#if form?.success}
 			<NoticeBanner variant="success">
-				{m.admin_reset_password_success({ email: form.email })}
+				{m.admin_reset_password_success({ email: form.email ?? '' })}
 			</NoticeBanner>
 			<Button variant="secondary" size="standard" fill={true} onclick={resetForm}>
-				Reset Another User
+				{m.admin_reset_password_reset_another_user()}
 			</Button>
 		{:else}
-			{#if form?.error}
-				<NoticeBanner variant="warning">{form.error}</NoticeBanner>
+			{#if form?.errorCode}
+				<NoticeBanner variant="warning">{resolveErrorMessage(form.errorCode)}</NoticeBanner>
 			{/if}
 
 			<form

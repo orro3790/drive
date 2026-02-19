@@ -227,7 +227,7 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 		const response = await GET(event as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(401);
-		await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
+		await expect(response.json()).resolves.toEqual({ message: 'Unauthorized' });
 		expect(selectMock).not.toHaveBeenCalled();
 	});
 
@@ -563,7 +563,7 @@ describe('LC-05 cron decision logic: GET /api/cron/auto-drop-unconfirmed', () =>
 		const response = await GET(event as Parameters<typeof GET>[0]);
 
 		expect(response.status).toBe(500);
-		await expect(response.json()).resolves.toEqual({ error: 'Internal server error' });
+		await expect(response.json()).resolves.toEqual({ message: 'Internal server error' });
 		expect(createBidWindowMock).not.toHaveBeenCalled();
 	});
 });

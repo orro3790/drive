@@ -676,12 +676,12 @@ export const dashboardStore = {
 
 			if (!res.ok) {
 				const data = await res.json().catch(() => null);
-				throw new Error(data?.message ?? 'Failed to confirm shift');
+				throw new Error(data?.message ?? m.shift_confirm_error());
 			}
 
 			const parsed = confirmShiftResponseSchema.safeParse(await res.json().catch(() => ({})));
 			if (!parsed.success) {
-				throw new Error('Failed to confirm shift');
+				throw new Error(m.shift_confirm_error());
 			}
 
 			// Mark the shift as confirmed in the upcoming shifts list (don't remove it)
@@ -712,10 +712,10 @@ export const dashboardStore = {
 				};
 			}
 
-			toastStore.success('Shift confirmed!');
+			toastStore.success(m.shift_confirm_success());
 			return true;
 		} catch (err) {
-			const message = err instanceof Error ? err.message : 'Failed to confirm shift';
+			const message = err instanceof Error ? err.message : m.shift_confirm_error();
 			toastStore.error(message);
 			return false;
 		} finally {

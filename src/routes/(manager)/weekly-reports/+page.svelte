@@ -7,6 +7,7 @@
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
+	import { getLocale } from '$lib/paraglide/runtime.js';
 	import { onMount } from 'svelte';
 	import {
 		DataTable,
@@ -30,28 +31,19 @@
 	import WeeklyReportDetailTable from '$lib/components/WeeklyReportDetailTable.svelte';
 	import type { WeekSummary } from '$lib/schemas/weeklyReports';
 
-	const MONTH_NAMES = [
-		'Jan',
-		'Feb',
-		'Mar',
-		'Apr',
-		'May',
-		'Jun',
-		'Jul',
-		'Aug',
-		'Sep',
-		'Oct',
-		'Nov',
-		'Dec'
-	];
-
 	function formatWeekDateRange(weekStart: string, weekEnd: string): string {
-		const [, sm, sd] = weekStart.split('-').map(Number);
-		const [, em, ed] = weekEnd.split('-').map(Number);
-		if (sm === em) {
-			return `${MONTH_NAMES[sm - 1]} ${sd}-${ed}`;
+		const start = new Date(`${weekStart}T00:00:00`);
+		const end = new Date(`${weekEnd}T00:00:00`);
+		if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+			return `${weekStart} - ${weekEnd}`;
 		}
-		return `${MONTH_NAMES[sm - 1]} ${sd}-${MONTH_NAMES[em - 1]} ${ed}`;
+
+		const formatter = new Intl.DateTimeFormat(getLocale(), {
+			month: 'short',
+			day: 'numeric'
+		});
+
+		return `${formatter.format(start)} - ${formatter.format(end)}`;
 	}
 
 	// Data state
@@ -213,7 +205,7 @@
 		// Load data
 		try {
 			const res = await fetch('/api/weekly-reports');
-			if (!res.ok) throw new Error('Failed to load weekly reports');
+			if (!res.ok) throw new Error('weekly-reports-load-failed');
 			const data = await res.json();
 			weeks = data.weeks ?? [];
 		} catch {
