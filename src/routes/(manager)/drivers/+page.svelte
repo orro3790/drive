@@ -222,14 +222,19 @@
 		getPaginationRowModel: getPaginationRowModel()
 	}));
 
-	const weeklyCapOptions: SelectOption[] = [
-		{ value: '1', label: '1 day' },
-		{ value: '2', label: '2 days' },
-		{ value: '3', label: '3 days' },
-		{ value: '4', label: '4 days' },
-		{ value: '5', label: '5 days' },
-		{ value: '6', label: '6 days' }
-	];
+	function formatWeeklyCapDaysLabel(days: number): string {
+		return days === 1
+			? m.drivers_weekly_cap_option_day({ count: days })
+			: m.drivers_weekly_cap_option_days({ count: days });
+	}
+
+	const weeklyCapOptions: SelectOption[] = Array.from({ length: 6 }, (_, index) => {
+		const days = index + 1;
+		return {
+			value: String(days),
+			label: formatWeeklyCapDaysLabel(days)
+		};
+	});
 
 	const selectedDriver = $derived.by(
 		() => driverStore.drivers.find((driver) => driver.id === selectedDriverId) ?? null
@@ -648,7 +653,7 @@
 					<span class="dt-with-tooltip">{m.drivers_detail_weekly_cap()}</span>
 				</Tooltip>
 			</dt>
-			<dd>{driver.weeklyCap} days</dd>
+			<dd>{formatWeeklyCapDaysLabel(driver.weeklyCap)}</dd>
 		</div>
 		<div class="detail-row">
 			<dt>

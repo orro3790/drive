@@ -358,16 +358,20 @@
 	}
 
 	function formatDateChipLabel(dateStr: string): string {
-		if (!dateStr) return 'Today';
+		if (!dateStr) return m.notifications_group_today();
 		const today = toLocalYmd();
-		if (dateStr === today) return 'Today';
+		if (dateStr === today) return m.notifications_group_today();
 		const [y, mo, d] = dateStr.split('-').map(Number);
 		const date = new Date(y, mo - 1, d);
 		const nowYear = new Date().getFullYear();
 		if (y !== nowYear) {
-			return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+			return date.toLocaleDateString(undefined, {
+				month: 'short',
+				day: 'numeric',
+				year: 'numeric'
+			});
 		}
-		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+		return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 	}
 
 	function formatTimestamp(isoString: string): string {

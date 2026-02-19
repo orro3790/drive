@@ -13,6 +13,19 @@ import logger from '$lib/server/logger';
 import { requireManagerWithOrg } from '$lib/server/org-scope';
 import type { Actions } from './$types';
 
+type ResetPasswordErrorKey =
+	| 'admin_reset_password_error_email_required'
+	| 'admin_reset_password_error_password_min_length'
+	| 'admin_reset_password_error_password_mismatch'
+	| 'admin_reset_password_error_user_not_found'
+	| 'admin_reset_password_error_no_password_account'
+	| 'admin_reset_password_error_access_denied'
+	| 'admin_reset_password_error_failed';
+
+function failWithError(status: number, errorKey: ResetPasswordErrorKey, email?: string) {
+	return fail(status, { errorKey, email });
+}
+
 async function readAuthErrorMessage(response: Response): Promise<string | null> {
 	const payload = await response
 		.clone()
@@ -38,15 +51,15 @@ export const actions: Actions = {
 
 		// Validation
 		if (!email) {
-			return fail(400, { error: 'Email is required', email });
+			return failWithError(400, 'admin_reset_password_error_email_required', email);
 		}
 
 		if (!newPassword || newPassword.length < 8) {
-			return fail(400, { error: 'Password must be at least 8 characters', email });
+			return failWithError(400, 'admin_reset_password_error_password_min_length', email);
 		}
 
 		if (newPassword !== confirmPassword) {
-			return fail(400, { error: 'Passwords do not match', email });
+			return failWithError(400, 'admin_reset_password_error_password_mismatch', email);
 		}
 
 		try {
@@ -60,7 +73,7 @@ export const actions: Actions = {
 				.limit(1);
 
 			if (!targetUser) {
-				return fail(404, { error: 'No user found with that email', email });
+				return failWithError(404, 'admin_reset_password_error_user_not_found', email);
 			}
 
 			// Find their credential account
@@ -76,10 +89,7 @@ export const actions: Actions = {
 				.limit(1);
 
 			if (!credentialAccount) {
-				return fail(400, {
-					error: 'User does not have a password-based account (may use OAuth)',
-					email
-				});
+				return failWithError(400, 'admin_reset_password_error_no_password_account', email);
 			}
 
 			const authResponse = await auth.api.setUserPassword({
@@ -93,12 +103,12 @@ export const actions: Actions = {
 
 			if (!authResponse.ok) {
 				if (authResponse.status === 401 || authResponse.status === 403) {
-					return fail(403, { error: 'Access denied', email });
+					return failWithError(403, 'admin_reset_password_error_access_denied', email);
 				}
 
 				const authMessage = await readAuthErrorMessage(authResponse);
 				if (authMessage === 'PASSWORD_TOO_SHORT') {
-					return fail(400, { error: 'Password must be at least 8 characters', email });
+					return failWithError(400, 'admin_reset_password_error_password_min_length', email);
 				}
 
 				if (authMessage === 'PASSWORD_TOO_LONG') {
@@ -115,7 +125,7 @@ export const actions: Actions = {
 					'Admin password reset failed via Better Auth'
 				);
 
-				return fail(500, { error: 'Failed to reset password. Please try again.', email });
+				return failWithError(500, 'admin_reset_password_error_failed', email);
 			}
 
 			logger.info(
@@ -129,7 +139,7 @@ export const actions: Actions = {
 				{ email, error: err instanceof Error ? err.message : 'unknown' },
 				'Admin password reset failed'
 			);
-			return fail(500, { error: 'Failed to reset password. Please try again.', email });
+			return failWithError(500, 'admin_reset_password_error_failed', email);
 		}
 	}
 };

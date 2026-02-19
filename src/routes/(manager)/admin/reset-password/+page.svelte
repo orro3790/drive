@@ -42,6 +42,30 @@
 		newPassword = '';
 		confirmPassword = '';
 	}
+
+	function getFormErrorMessage(
+		errorKey: string | null | undefined,
+		fallback?: string
+	): string | null {
+		switch (errorKey) {
+			case 'admin_reset_password_error_email_required':
+				return m.admin_reset_password_error_email_required();
+			case 'admin_reset_password_error_password_min_length':
+				return m.admin_reset_password_error_password_min_length();
+			case 'admin_reset_password_error_password_mismatch':
+				return m.admin_reset_password_error_password_mismatch();
+			case 'admin_reset_password_error_user_not_found':
+				return m.admin_reset_password_error_user_not_found();
+			case 'admin_reset_password_error_no_password_account':
+				return m.admin_reset_password_error_no_password_account();
+			case 'admin_reset_password_error_access_denied':
+				return m.admin_reset_password_error_access_denied();
+			case 'admin_reset_password_error_failed':
+				return m.admin_reset_password_error_failed();
+			default:
+				return fallback ?? null;
+		}
+	}
 </script>
 
 <div class="admin-reset-container">
@@ -56,11 +80,12 @@
 				{m.admin_reset_password_success({ email: form.email })}
 			</NoticeBanner>
 			<Button variant="secondary" size="standard" fill={true} onclick={resetForm}>
-				Reset Another User
+				{m.admin_reset_password_reset_another_user()}
 			</Button>
 		{:else}
-			{#if form?.error}
-				<NoticeBanner variant="warning">{form.error}</NoticeBanner>
+			{@const errorMessage = getFormErrorMessage(form?.errorKey, form?.error)}
+			{#if errorMessage}
+				<NoticeBanner variant="warning">{errorMessage}</NoticeBanner>
 			{/if}
 
 			<form

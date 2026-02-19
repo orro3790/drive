@@ -30,28 +30,19 @@
 	import WeeklyReportDetailTable from '$lib/components/WeeklyReportDetailTable.svelte';
 	import type { WeekSummary } from '$lib/schemas/weeklyReports';
 
-	const MONTH_NAMES = [
-		'Jan',
-		'Feb',
-		'Mar',
-		'Apr',
-		'May',
-		'Jun',
-		'Jul',
-		'Aug',
-		'Sep',
-		'Oct',
-		'Nov',
-		'Dec'
-	];
+	const monthFormatter = new Intl.DateTimeFormat(undefined, { month: 'short' });
+
+	function formatMonthDay(month: number, day: number): string {
+		return `${monthFormatter.format(new Date(2000, month - 1, 1))} ${day}`;
+	}
 
 	function formatWeekDateRange(weekStart: string, weekEnd: string): string {
 		const [, sm, sd] = weekStart.split('-').map(Number);
 		const [, em, ed] = weekEnd.split('-').map(Number);
 		if (sm === em) {
-			return `${MONTH_NAMES[sm - 1]} ${sd}-${ed}`;
+			return `${formatMonthDay(sm, sd)}-${ed}`;
 		}
-		return `${MONTH_NAMES[sm - 1]} ${sd}-${MONTH_NAMES[em - 1]} ${ed}`;
+		return `${formatMonthDay(sm, sd)}-${formatMonthDay(em, ed)}`;
 	}
 
 	// Data state
