@@ -6,11 +6,13 @@ import { fileURLToPath } from 'node:url';
 type DrillResult = {
 	passed: boolean;
 	skipped: boolean;
+	status: 'passed' | 'failed' | 'skipped';
 	durationMs: number;
 	exitCode: number | null;
 	reportPath: string | null;
 	reportVerdict: boolean | null;
 	reconciliationError: string | null;
+	skipReason: string | null;
 };
 
 export type WitnessRunDecision = {
@@ -49,11 +51,13 @@ function runDrill(name: string, command: string): DrillResult {
 		return {
 			passed: true,
 			skipped: false,
+			status: 'passed',
 			durationMs: Date.now() - start,
 			exitCode: 0,
 			reportPath: null,
 			reportVerdict: null,
-			reconciliationError: null
+			reconciliationError: null,
+			skipReason: null
 		};
 	} catch (err: any) {
 		const exitCode: number | null =
@@ -62,13 +66,32 @@ function runDrill(name: string, command: string): DrillResult {
 		return {
 			passed: false,
 			skipped: false,
+			status: 'failed',
 			durationMs: Date.now() - start,
 			exitCode,
 			reportPath: null,
 			reportVerdict: null,
-			reconciliationError: null
+			reconciliationError: null,
+			skipReason: null
 		};
 	}
+}
+
+export function buildSkippedWitnessResult(params: {
+	reason: string;
+	expectedReportPath: string;
+}): DrillResult {
+	return {
+		passed: false,
+		skipped: true,
+		status: 'skipped',
+		durationMs: 0,
+		exitCode: 0,
+		reportPath: params.expectedReportPath,
+		reportVerdict: null,
+		reconciliationError: `Witness skipped: ${params.reason}. Missing required witness artifact (${params.expectedReportPath}).`,
+		skipReason: params.reason
+	};
 }
 
 function reconcileReportVerdict(
@@ -89,6 +112,7 @@ function reconcileReportVerdict(
 		return {
 			...result,
 			passed: false,
+			status: 'failed',
 			reportPath,
 			reconciliationError
 		};
@@ -103,6 +127,7 @@ function reconcileReportVerdict(
 			return {
 				...result,
 				passed: false,
+				status: 'failed',
 				reportPath,
 				reconciliationError
 			};
@@ -114,6 +139,7 @@ function reconcileReportVerdict(
 			return {
 				...result,
 				passed: false,
+				status: 'failed',
 				reportPath,
 				reportVerdict,
 				reconciliationError
@@ -133,6 +159,7 @@ function reconcileReportVerdict(
 		return {
 			...result,
 			passed: false,
+			status: 'failed',
 			reportPath,
 			reconciliationError
 		};
@@ -232,19 +259,9 @@ async function main(): Promise<void> {
 		);
 	} else {
 		const reason = witnessDecision.reason ?? 'witness run skipped';
-		const skippedCountsAsPass = !strictAuditMode;
+		const expectedReportPath = relative(process.cwd(), join(logDir, 'witness-ui-report.json'));
 		console.log(`\n=== Skipping Witness UI (${reason}) ===\n`);
-		results.witnessUI = {
-			passed: skippedCountsAsPass,
-			skipped: true,
-			durationMs: 0,
-			exitCode: 0,
-			reportPath: null,
-			reportVerdict: null,
-			reconciliationError: skippedCountsAsPass
-				? null
-				: `Witness skipped in strict audit mode: ${reason}`
-		};
+		results.witnessUI = buildSkippedWitnessResult({ reason, expectedReportPath });
 	}
 
 	const allPassed = Object.values(results).every((r) => r.passed);
