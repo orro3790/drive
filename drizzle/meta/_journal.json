@@ -92,6 +92,13 @@
       "when": 1771058446111,
       "tag": "0012_misty_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1771586511979,
+      "tag": "0013_tan_shard",
+      "breakpoints": true
     }
   ]
 }
