@@ -16,6 +16,7 @@ import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { sendNotification } from '$lib/server/services/notifications';
 import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
 import { requireManagerWithOrg } from '$lib/server/org-scope';
+import * as m from '$lib/paraglide/messages.js';
 import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
 import { and, desc, eq } from 'drizzle-orm';
 
@@ -433,7 +434,11 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 				assignment.routeStartTime
 			);
 			await sendNotification(assignment.userId, 'shift_cancelled', {
-				customBody: `Your shift on ${assignment.routeName} for ${shiftContext} has been cancelled by a manager.`,
+				renderBody: (locale) =>
+					m.notif_shift_cancelled_body(
+						{ routeName: assignment.routeName, shiftContext },
+						{ locale }
+					),
 				data: {
 					assignmentId,
 					routeName: assignment.routeName,

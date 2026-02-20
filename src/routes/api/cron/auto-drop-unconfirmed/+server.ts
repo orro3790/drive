@@ -26,6 +26,7 @@ import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { calculateConfirmationWindow } from '$lib/server/services/assignmentLifecycle';
 import { verifyCronAuth } from '$lib/server/cron/auth';
 import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
+import * as m from '$lib/paraglide/messages.js';
 
 export const GET: RequestHandler = async ({ request }) => {
 	const authError = verifyCronAuth(request);
@@ -158,7 +159,11 @@ export const GET: RequestHandler = async ({ request }) => {
 							candidate.routeStartTime
 						);
 						await sendNotification(originalUserId, 'shift_auto_dropped', {
-							customBody: `Your shift on ${candidate.routeName} for ${shiftContext} was dropped because it wasn't confirmed in time.`,
+							renderBody: (locale) =>
+								m.notif_shift_auto_dropped_body(
+									{ routeName: candidate.routeName, shiftContext },
+									{ locale }
+								),
 							organizationId,
 							data: {
 								assignmentId: candidate.id,

@@ -26,6 +26,7 @@ import {
 import { sendNotification } from '$lib/server/services/notifications';
 import { bidSubmissionSchema } from '$lib/schemas/api/bidding';
 import logger from '$lib/server/logger';
+import * as m from '$lib/paraglide/messages.js';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { requireDriverWithOrg } from '$lib/server/org-scope';
 import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
@@ -190,7 +191,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 				window.routeStartTime
 			);
 			await sendNotification(driverId, 'bid_won', {
-				customBody: `You won ${window.routeName} for ${shiftContext}`,
+				renderBody: (locale) =>
+					m.notif_bid_won_body({ routeName: window.routeName, shiftContext }, { locale }),
 				data: {
 					assignmentId,
 					bidWindowId: window.id,

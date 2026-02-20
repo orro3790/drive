@@ -29,6 +29,7 @@ import {
 	formatNotificationRouteStartTime,
 	formatNotificationShiftContext
 } from '$lib/utils/notifications/shiftContext';
+import * as m from '$lib/paraglide/messages.js';
 import { createAuditLog, type AuditActor } from '$lib/server/services/audit';
 import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
 import { addHours, differenceInMonths } from 'date-fns';
@@ -818,8 +819,6 @@ export async function resolveBidWindow(
 
 		const shiftContext = formatNotificationShiftContext(assignment.date, assignment.routeStartTime);
 		const routeStartTimeLabel = formatNotificationRouteStartTime(assignment.routeStartTime);
-		const winnerBody = `You won ${assignment.routeName} for ${shiftContext}`;
-		const loserBody = `${assignment.routeName} at ${routeStartTimeLabel} was assigned to another driver`;
 		const notificationData = {
 			assignmentId: assignment.id,
 			bidWindowId,
@@ -830,7 +829,8 @@ export async function resolveBidWindow(
 
 		try {
 			await sendNotification(transactionResult.winnerId, 'bid_won', {
-				customBody: winnerBody,
+				renderBody: (locale) =>
+					m.notif_bid_won_body({ routeName: assignment.routeName, shiftContext }, { locale }),
 				data: notificationData,
 				organizationId: assignmentOrganizationId
 			});
@@ -842,7 +842,11 @@ export async function resolveBidWindow(
 		if (loserIds.length > 0) {
 			try {
 				await sendBulkNotifications(loserIds, 'bid_lost', {
-					customBody: loserBody,
+					renderBody: (locale) =>
+						m.notif_bid_lost_body(
+							{ routeName: assignment.routeName, shiftTime: routeStartTimeLabel },
+							{ locale }
+						),
 					data: notificationData,
 					organizationId: assignmentOrganizationId
 				});

@@ -24,6 +24,7 @@ import logger from '$lib/server/logger';
 import { sendNotification } from '$lib/server/services/notifications';
 import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { verifyCronAuth } from '$lib/server/cron/auth';
+import * as m from '$lib/paraglide/messages.js';
 
 export const GET: RequestHandler = async ({ request }) => {
 	const authError = verifyCronAuth(request);
@@ -117,7 +118,11 @@ export const GET: RequestHandler = async ({ request }) => {
 
 				try {
 					await sendNotification(assignment.userId, 'confirmation_reminder', {
-						customBody: `Your shift on ${assignment.date} at ${assignment.routeName} needs confirmation within 24 hours.`,
+						renderBody: (locale) =>
+							m.notif_confirmation_reminder_body(
+								{ date: assignment.date, routeName: assignment.routeName },
+								{ locale }
+							),
 						organizationId,
 						data: {
 							assignmentId: assignment.assignmentId,
