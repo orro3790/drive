@@ -154,14 +154,17 @@ export const GET: RequestHandler = async ({ request }) => {
 
 					// Notify the original driver
 					try {
-						const shiftContext = formatNotificationShiftContext(
-							candidate.date,
-							candidate.routeStartTime
-						);
 						await sendNotification(originalUserId, 'shift_auto_dropped', {
 							renderBody: (locale) =>
 								m.notif_shift_auto_dropped_body(
-									{ routeName: candidate.routeName, shiftContext },
+									{
+										routeName: candidate.routeName,
+										shiftContext: formatNotificationShiftContext(
+											candidate.date,
+											candidate.routeStartTime,
+											locale
+										)
+									},
 									{ locale }
 								),
 							organizationId,

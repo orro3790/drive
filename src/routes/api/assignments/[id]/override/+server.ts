@@ -429,14 +429,17 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 		// Notify the displaced driver that their shift was cancelled
 		if (assignment.userId) {
-			const shiftContext = formatNotificationShiftContext(
-				assignment.date,
-				assignment.routeStartTime
-			);
 			await sendNotification(assignment.userId, 'shift_cancelled', {
 				renderBody: (locale) =>
 					m.notif_shift_cancelled_body(
-						{ routeName: assignment.routeName, shiftContext },
+						{
+							routeName: assignment.routeName,
+							shiftContext: formatNotificationShiftContext(
+								assignment.date,
+								assignment.routeStartTime,
+								locale
+							)
+						},
 						{ locale }
 					),
 				data: {

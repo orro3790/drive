@@ -186,13 +186,19 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		}
 
 		try {
-			const shiftContext = formatNotificationShiftContext(
-				window.assignmentDate,
-				window.routeStartTime
-			);
 			await sendNotification(driverId, 'bid_won', {
 				renderBody: (locale) =>
-					m.notif_bid_won_body({ routeName: window.routeName, shiftContext }, { locale }),
+					m.notif_bid_won_body(
+						{
+							routeName: window.routeName,
+							shiftContext: formatNotificationShiftContext(
+								window.assignmentDate,
+								window.routeStartTime,
+								locale
+							)
+						},
+						{ locale }
+					),
 				data: {
 					assignmentId,
 					bidWindowId: window.id,

@@ -840,8 +840,6 @@ export async function resolveBidWindow(
 			continue;
 		}
 
-		const shiftContext = formatNotificationShiftContext(assignment.date, assignment.routeStartTime);
-		const routeStartTimeLabel = formatNotificationRouteStartTime(assignment.routeStartTime);
 		const notificationData = {
 			assignmentId: assignment.id,
 			bidWindowId,
@@ -853,7 +851,17 @@ export async function resolveBidWindow(
 		try {
 			await sendNotification(transactionResult.winnerId, 'bid_won', {
 				renderBody: (locale) =>
-					m.notif_bid_won_body({ routeName: assignment.routeName, shiftContext }, { locale }),
+					m.notif_bid_won_body(
+						{
+							routeName: assignment.routeName,
+							shiftContext: formatNotificationShiftContext(
+								assignment.date,
+								assignment.routeStartTime,
+								locale
+							)
+						},
+						{ locale }
+					),
 				data: notificationData,
 				organizationId: assignmentOrganizationId
 			});
@@ -867,7 +875,10 @@ export async function resolveBidWindow(
 				await sendBulkNotifications(loserIds, 'bid_lost', {
 					renderBody: (locale) =>
 						m.notif_bid_lost_body(
-							{ routeName: assignment.routeName, shiftTime: routeStartTimeLabel },
+							{
+								routeName: assignment.routeName,
+								shiftTime: formatNotificationRouteStartTime(assignment.routeStartTime, locale)
+							},
 							{ locale }
 						),
 					data: notificationData,

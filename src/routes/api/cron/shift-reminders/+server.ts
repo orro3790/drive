@@ -159,14 +159,17 @@ export const GET: RequestHandler = async ({ request }) => {
 				}
 
 				try {
-					const shiftContext = formatNotificationShiftContext(today, assignment.routeStartTime);
 					await sendNotification(assignment.userId, 'shift_reminder', {
 						renderBody: (locale) =>
 							m.notif_shift_reminder_body(
 								{
 									routeName: assignment.routeName,
 									warehouseName: assignment.warehouseName,
-									shiftContext
+									shiftContext: formatNotificationShiftContext(
+										today,
+										assignment.routeStartTime,
+										locale
+									)
 								},
 								{ locale }
 							),

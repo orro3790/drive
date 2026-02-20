@@ -223,11 +223,19 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		routeStartTime: window.routeStartTime,
 		assignmentDate: window.assignmentDate
 	};
-	const shiftContext = formatNotificationShiftContext(window.assignmentDate, window.routeStartTime);
-
 	await sendNotification(driver.id, 'assignment_confirmed', {
 		renderBody: (locale) =>
-			m.notif_assignment_confirmed_body({ routeName: window.routeName, shiftContext }, { locale }),
+			m.notif_assignment_confirmed_body(
+				{
+					routeName: window.routeName,
+					shiftContext: formatNotificationShiftContext(
+						window.assignmentDate,
+						window.routeStartTime,
+						locale
+					)
+				},
+				{ locale }
+			),
 		data: notificationData,
 		organizationId
 	});
@@ -238,7 +246,14 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
 			renderBody: (locale) =>
 				m.notif_assignment_confirmed_manager_body(
-					{ routeName: window.routeName, shiftContext },
+					{
+						routeName: window.routeName,
+						shiftContext: formatNotificationShiftContext(
+							window.assignmentDate,
+							window.routeStartTime,
+							locale
+						)
+					},
 					{ locale }
 				),
 			data: notificationData,

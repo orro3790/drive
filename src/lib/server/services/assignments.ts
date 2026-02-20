@@ -223,12 +223,17 @@ export async function manualAssignDriverToAssignment(params: {
 	if (transactionResult.bidWindowId) {
 		notificationData.bidWindowId = transactionResult.bidWindowId;
 	}
-	const shiftContext = formatNotificationShiftContext(assignment.date, assignment.routeStartTime);
-
 	await sendNotification(driver.id, 'assignment_confirmed', {
 		renderBody: (locale) =>
 			m.notif_assignment_confirmed_body(
-				{ routeName: assignment.routeName, shiftContext },
+				{
+					routeName: assignment.routeName,
+					shiftContext: formatNotificationShiftContext(
+						assignment.date,
+						assignment.routeStartTime,
+						locale
+					)
+				},
 				{ locale }
 			),
 		data: notificationData,
@@ -242,7 +247,14 @@ export async function manualAssignDriverToAssignment(params: {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
 			renderBody: (locale) =>
 				m.notif_assignment_confirmed_manager_body(
-					{ routeName: assignment.routeName, shiftContext },
+					{
+						routeName: assignment.routeName,
+						shiftContext: formatNotificationShiftContext(
+							assignment.date,
+							assignment.routeStartTime,
+							locale
+						)
+					},
 					{ locale }
 				),
 			data: notificationData,
