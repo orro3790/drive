@@ -163,21 +163,27 @@ async function getMessaging(): Promise<Messaging | null> {
 
 	if (!firebaseApp) {
 		try {
-			const { initializeApp, getApps, cert } = await import('firebase-admin/app');
+			const { initializeApp, getApp, cert } = await import('firebase-admin/app');
 
-			// Check if already initialized
-			const apps = getApps();
-			if (apps.length > 0) {
-				firebaseApp = apps[0];
-			} else {
-				firebaseApp = initializeApp({
-					credential: cert({
-						projectId: FIREBASE_PROJECT_ID,
-						clientEmail: FIREBASE_CLIENT_EMAIL,
-						// Private key comes with escaped newlines, need to unescape
-						privateKey: FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-					})
-				});
+			// Use a named app to survive Vite HMR. When HMR resets this module's
+			// `firebaseApp` variable to null, the firebase-admin internal registry
+			// still holds the app under this name — so we recover it cleanly.
+			const appName = `drive-fcm-${FIREBASE_PROJECT_ID}`;
+			try {
+				firebaseApp = getApp(appName);
+			} catch {
+				// App doesn't exist yet — create it
+				firebaseApp = initializeApp(
+					{
+						credential: cert({
+							projectId: FIREBASE_PROJECT_ID,
+							clientEmail: FIREBASE_CLIENT_EMAIL,
+							// Private key comes with escaped newlines, need to unescape
+							privateKey: FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+						})
+					},
+					appName
+				);
 			}
 
 			logger.info('Firebase Admin SDK initialized');

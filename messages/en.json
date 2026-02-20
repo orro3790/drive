@@ -8,6 +8,7 @@
 	"common_off": "Off",
 	"common_home": "Home",
 	"common_breadcrumb_aria_label": "Breadcrumb",
+	"common_today": "Today",
 
 	"auth_phone_label": "Phone",
 	"auth_phone_placeholder": "Enter phone number",
@@ -119,6 +120,9 @@
 	"notifications_cta_view_dashboard": "View Dashboard",
 	"notifications_cta_view_preferences": "View Preferences",
 	"notifications_cta_view": "View",
+	"notification_permission_title": "Enable Notifications",
+	"notification_permission_description": "Get instant updates about new shift assignments, bid windows, and important alerts.",
+	"notification_permission_enable_tooltip": "Enable notifications",
 
 	"date_picker_clear": "Clear",
 	"date_picker_placeholder_single": "Select date",

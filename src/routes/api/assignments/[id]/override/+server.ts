@@ -13,6 +13,8 @@ import { manualAssignDriverToAssignment } from '$lib/server/services/assignments
 import { createBidWindow } from '$lib/server/services/bidding';
 import { getEmergencyBonusPercent } from '$lib/server/services/dispatchSettings';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
+import { sendNotification } from '$lib/server/services/notifications';
+import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
 import { requireManagerWithOrg } from '$lib/server/org-scope';
 import { getTorontoDateTimeInstant } from '$lib/server/time/toronto';
 import { and, desc, eq } from 'drizzle-orm';
@@ -423,6 +425,23 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			routeId: assignment.routeId,
 			bidWindowClosesAt: null
 		});
+
+		// Notify the displaced driver that their shift was cancelled
+		if (assignment.userId) {
+			const shiftContext = formatNotificationShiftContext(
+				assignment.date,
+				assignment.routeStartTime
+			);
+			await sendNotification(assignment.userId, 'shift_cancelled', {
+				customBody: `Your shift on ${assignment.routeName} for ${shiftContext} has been cancelled by a manager.`,
+				data: {
+					assignmentId,
+					routeName: assignment.routeName,
+					assignmentDate: assignment.date
+				},
+				organizationId
+			});
+		}
 
 		return json({
 			action: parsed.data.action,
