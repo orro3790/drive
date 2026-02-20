@@ -21,6 +21,7 @@ import {
 import type { App } from 'firebase-admin/app';
 import type { Messaging } from 'firebase-admin/messaging';
 import * as m from '$lib/paraglide/messages.js';
+import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
 import type { Locale } from '$lib/paraglide/runtime.js';
 
 const TORONTO_TZ = 'America/Toronto';
@@ -598,26 +599,12 @@ export interface ManagerAlertDetails {
 	routeStartTime?: string;
 }
 
-function formatManagerAlertWhen(date: string, routeStartTime?: string): string {
-	let dateLabel = date;
-
-	try {
-		dateLabel = format(toZonedTime(parseISO(date), TORONTO_TZ), 'EEE, MMM d');
-	} catch {
-		dateLabel = date;
-	}
-
-	if (!routeStartTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(routeStartTime)) {
-		return dateLabel;
-	}
-
-	const [hourText, minuteText] = routeStartTime.split(':');
-	const hour = Number(hourText);
-	const minute = Number(minuteText);
-	const period = hour >= 12 ? 'PM' : 'AM';
-	const hour12 = hour % 12 || 12;
-
-	return `${dateLabel} ${hour12}:${String(minute).padStart(2, '0')} ${period} ET`;
+function formatManagerAlertWhen(
+	date: string,
+	routeStartTime?: string,
+	locale: string = 'en'
+): string {
+	return formatNotificationShiftContext(date, routeStartTime ?? null, locale);
 }
 
 /**
@@ -646,11 +633,12 @@ export async function sendManagerAlert(
 		return false;
 	}
 
-	const when = details.date ? formatManagerAlertWhen(details.date, details.routeStartTime) : '';
-
 	await sendNotification(managerId, alertType, {
 		renderBody: (locale) => {
 			const opt = { locale };
+			const when = details.date
+				? formatManagerAlertWhen(details.date, details.routeStartTime, locale)
+				: '';
 			switch (alertType) {
 				case 'route_unfilled':
 					return m.notif_route_unfilled_body({ routeName: details.routeName ?? '', when }, opt);
@@ -764,8 +752,6 @@ export async function notifyAvailableDriversForEmergency(
 		}
 	}
 
-	const dateLabel = format(toZonedTime(parseISO(date), TORONTO_TZ), 'EEE, MMM d');
-	const bonusText = payBonusPercent > 0 ? ` +${payBonusPercent}% bonus.` : '';
 	const notificationData = {
 		assignmentId,
 		routeName,
@@ -778,6 +764,11 @@ export async function notifyAvailableDriversForEmergency(
 	const notificationRecords = eligibleDriverIds.map((driverId) => {
 		const locale = driverLocaleMap.get(driverId) ?? ('en' as Locale);
 		const opt = { locale };
+		const dateLabel = formatNotificationShiftContext(date, null, locale);
+		const bonusText =
+			payBonusPercent > 0
+				? m.notif_pay_bonus_suffix({ percent: String(payBonusPercent) }, opt)
+				: '';
 		return {
 			organizationId,
 			userId: driverId,
@@ -811,6 +802,11 @@ export async function notifyAvailableDriversForEmergency(
 
 					const locale = driverLocaleMap.get(driverId) ?? ('en' as Locale);
 					const opt = { locale };
+					const pushDateLabel = formatNotificationShiftContext(date, null, locale);
+					const pushBonusText =
+						payBonusPercent > 0
+							? m.notif_pay_bonus_suffix({ percent: String(payBonusPercent) }, opt)
+							: '';
 
 					try {
 						await messaging.send({
@@ -818,7 +814,12 @@ export async function notifyAvailableDriversForEmergency(
 							notification: {
 								title: m.notif_emergency_route_available_title({}, opt),
 								body: m.notif_emergency_route_available_body(
-									{ routeName, warehouseName, date: dateLabel, bonusText },
+									{
+										routeName,
+										warehouseName,
+										date: pushDateLabel,
+										bonusText: pushBonusText
+									},
 									opt
 								)
 							},

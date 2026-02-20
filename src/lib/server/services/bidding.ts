@@ -473,7 +473,6 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 		}
 	}
 
-	const formattedDate = assignmentDate;
 	const isEmergency = mode === 'emergency';
 	const isInstant = mode === 'instant' || isEmergency;
 
@@ -481,20 +480,23 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 		? ('emergency_route_available' as const)
 		: ('bid_open' as const);
 
-	const formattedCloseTime = closesAt.toLocaleTimeString('en-US', {
-		hour: 'numeric',
-		minute: '2-digit',
-		timeZone: dispatchPolicy.timezone.toronto
-	});
-	const bonusText = payBonusPercent > 0 ? ` +${payBonusPercent}% bonus.` : '';
-
 	function renderBodyForDriver(locale: Locale): string {
 		const opt = { locale };
+		const formattedDate = formatNotificationShiftContext(assignmentDate, null, locale);
+		const bonusText =
+			payBonusPercent > 0
+				? m.notif_pay_bonus_suffix({ percent: String(payBonusPercent) }, opt)
+				: '';
 		if (isEmergency) {
 			return m.notif_emergency_route_body({ routeName, date: formattedDate, bonusText }, opt);
 		} else if (isInstant) {
 			return m.notif_bid_open_instant_body({ routeName, date: formattedDate }, opt);
 		} else {
+			const formattedCloseTime = closesAt.toLocaleTimeString(locale, {
+				hour: 'numeric',
+				minute: '2-digit',
+				timeZone: dispatchPolicy.timezone.toronto
+			});
 			return m.notif_bid_open_body(
 				{ routeName, date: formattedDate, closeTime: formattedCloseTime },
 				opt

@@ -26,9 +26,9 @@ export const PATCH: RequestHandler = async ({ locals, request }) => {
 		throw error(400, 'Missing locale field');
 	}
 
-	const { locale } = body as { locale: string };
+	const { locale } = body as { locale: unknown };
 
-	if (!locales.includes(locale as (typeof locales)[number])) {
+	if (typeof locale !== 'string' || !locales.includes(locale as (typeof locales)[number])) {
 		throw error(400, 'Invalid locale');
 	}
 
