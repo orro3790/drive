@@ -277,6 +277,10 @@ See `dispatchPolicy.health` for driver health gamification parameters (score wei
 
 ## Development Notes
 
+### Git Workflow
+
+**All PRs target `develop`.** Never create a PR with `--base main`. The only PRs targeting `main` are deploy merges from `develop`. This applies to every agent, every bead, every label — no exceptions.
+
 ### Time Zone
 
 All operations in Toronto/Eastern time. Server time = local time.
