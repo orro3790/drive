@@ -11,6 +11,7 @@
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
+	import { getLocale } from '$lib/paraglide/runtime.js';
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
@@ -358,16 +359,20 @@
 	}
 
 	function formatDateChipLabel(dateStr: string): string {
-		if (!dateStr) return 'Today';
+		if (!dateStr) return m.common_today();
 		const today = toLocalYmd();
-		if (dateStr === today) return 'Today';
+		if (dateStr === today) return m.common_today();
 		const [y, mo, d] = dateStr.split('-').map(Number);
 		const date = new Date(y, mo - 1, d);
 		const nowYear = new Date().getFullYear();
 		if (y !== nowYear) {
-			return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+			return date.toLocaleDateString(getLocale(), {
+				month: 'short',
+				day: 'numeric',
+				year: 'numeric'
+			});
 		}
-		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+		return date.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' });
 	}
 
 	function formatTimestamp(isoString: string): string {
@@ -387,20 +392,17 @@
 
 		if (diffMins < 0) return m.manager_dashboard_bid_closed();
 
-		let timeLabel = '';
 		if (diffMins < 60) {
-			timeLabel = `${diffMins}m`;
+			return m.bid_windows_countdown_minutes({ count: diffMins });
 		} else {
 			const diffHours = Math.round(diffMins / 60);
 			if (diffHours < 24) {
-				timeLabel = `${diffHours}h`;
+				return m.bid_windows_countdown_hours({ count: diffHours });
 			} else {
 				const diffDays = Math.round(diffHours / 24);
-				timeLabel = `${diffDays}d`;
+				return m.bid_windows_countdown_days({ count: diffDays });
 			}
 		}
-
-		return m.manager_dashboard_bid_closes({ time: timeLabel });
 	}
 
 	function syncSelectedRoute(route: RouteWithWarehouse) {

@@ -216,12 +216,12 @@ export const scheduleStore = {
 			});
 
 			if (!res.ok) {
-				throw new Error('Failed to confirm shift');
+				throw new Error(m.shift_confirm_error());
 			}
 
 			const parsed = confirmShiftResponseSchema.safeParse(await res.json().catch(() => ({})));
 			if (!parsed.success) {
-				throw new Error('Failed to confirm shift');
+				throw new Error(m.shift_confirm_error());
 			}
 
 			state.assignments = state.assignments.map((item) =>
@@ -230,10 +230,10 @@ export const scheduleStore = {
 					: item
 			);
 
-			toastStore.success('Shift confirmed!');
+			toastStore.success(m.shift_confirm_success());
 			return true;
 		} catch (err) {
-			toastStore.error('Failed to confirm shift');
+			toastStore.error(err instanceof Error ? err.message : m.shift_confirm_error());
 			return false;
 		} finally {
 			state.isConfirming = false;

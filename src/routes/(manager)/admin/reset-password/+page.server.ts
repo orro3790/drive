@@ -38,15 +38,24 @@ export const actions: Actions = {
 
 		// Validation
 		if (!email) {
-			return fail(400, { error: 'Email is required', email });
+			return fail(400, {
+				errorCode: 'admin_reset_password_error_email_required',
+				email
+			});
 		}
 
 		if (!newPassword || newPassword.length < 8) {
-			return fail(400, { error: 'Password must be at least 8 characters', email });
+			return fail(400, {
+				errorCode: 'admin_reset_password_error_password_short',
+				email
+			});
 		}
 
 		if (newPassword !== confirmPassword) {
-			return fail(400, { error: 'Passwords do not match', email });
+			return fail(400, {
+				errorCode: 'admin_reset_password_error_password_mismatch',
+				email
+			});
 		}
 
 		try {
@@ -60,7 +69,10 @@ export const actions: Actions = {
 				.limit(1);
 
 			if (!targetUser) {
-				return fail(404, { error: 'No user found with that email', email });
+				return fail(404, {
+					errorCode: 'admin_reset_password_error_user_not_found',
+					email
+				});
 			}
 
 			// Find their credential account
@@ -77,7 +89,7 @@ export const actions: Actions = {
 
 			if (!credentialAccount) {
 				return fail(400, {
-					error: 'User does not have a password-based account (may use OAuth)',
+					errorCode: 'admin_reset_password_error_no_password_account',
 					email
 				});
 			}
@@ -93,16 +105,25 @@ export const actions: Actions = {
 
 			if (!authResponse.ok) {
 				if (authResponse.status === 401 || authResponse.status === 403) {
-					return fail(403, { error: 'Access denied', email });
+					return fail(403, {
+						errorCode: 'admin_reset_password_error_access_denied',
+						email
+					});
 				}
 
 				const authMessage = await readAuthErrorMessage(authResponse);
 				if (authMessage === 'PASSWORD_TOO_SHORT') {
-					return fail(400, { error: 'Password must be at least 8 characters', email });
+					return fail(400, {
+						errorCode: 'admin_reset_password_error_password_short',
+						email
+					});
 				}
 
 				if (authMessage === 'PASSWORD_TOO_LONG') {
-					return fail(400, { error: 'Password is too long', email });
+					return fail(400, {
+						errorCode: 'admin_reset_password_error_password_long',
+						email
+					});
 				}
 
 				logger.error(
@@ -115,7 +136,10 @@ export const actions: Actions = {
 					'Admin password reset failed via Better Auth'
 				);
 
-				return fail(500, { error: 'Failed to reset password. Please try again.', email });
+				return fail(500, {
+					errorCode: 'admin_reset_password_error_reset_failed',
+					email
+				});
 			}
 
 			logger.info(
@@ -129,7 +153,10 @@ export const actions: Actions = {
 				{ email, error: err instanceof Error ? err.message : 'unknown' },
 				'Admin password reset failed'
 			);
-			return fail(500, { error: 'Failed to reset password. Please try again.', email });
+			return fail(500, {
+				errorCode: 'admin_reset_password_error_reset_failed',
+				email
+			});
 		}
 	}
 };

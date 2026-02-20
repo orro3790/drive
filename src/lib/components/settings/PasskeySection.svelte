@@ -157,7 +157,9 @@ Allows users to add, view, and remove passkeys.
 								<div class="passkey-item">
 									<Icon><Key /></Icon>
 									<div class="passkey-info">
-										<span class="passkey-name">{passkey.name || 'Passkey'}</span>
+										<span class="passkey-name"
+											>{passkey.name || m.settings_passkey_name_fallback()}</span
+										>
 										{#if passkey.createdAt}
 											<span class="passkey-date">
 												{m.settings_passkey_registered({ date: formatDate(passkey.createdAt) })}
