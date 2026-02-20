@@ -8,6 +8,18 @@ on:
       - main
 
 jobs:
+  branch_policy:
+    name: branch-policy
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce develop-only merges to main
+        run: |
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "::error::PRs to main must come from develop. Retarget this PR to develop with: gh pr edit ${{ github.event.number }} --base develop"
+            exit 1
+          fi
+
   lint:
     name: lint
     runs-on: ubuntu-latest
