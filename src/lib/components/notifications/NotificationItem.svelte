@@ -49,7 +49,9 @@
 		const routeStartTime = notification.data?.routeStartTime;
 		return formatNotificationShiftContext(assignmentDate, routeStartTime, getLocale());
 	});
-	const timeLabel = $derived.by(() => formatRelativeTime(notification.createdAt) || '');
+	const timeLabel = $derived.by(
+		() => formatRelativeTime(notification.createdAt, getLocale()) || ''
+	);
 
 	const isFromToday = $derived.by(() => {
 		const created = new Date(notification.createdAt);

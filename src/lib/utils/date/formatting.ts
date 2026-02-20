@@ -59,7 +59,10 @@ export function formatUiDateTime(date: Date | string | null | undefined): string
  * @param date - Date object or ISO string
  * @returns Relative time string (e.g., "2m ago", "Yesterday")
  */
-export function formatRelativeTime(date: Date | string | null | undefined): string {
+export function formatRelativeTime(
+	date: Date | string | null | undefined,
+	locale: string = 'en'
+): string {
 	if (!date) return '';
 
 	const d = typeof date === 'string' ? new Date(date) : date;
@@ -69,14 +72,17 @@ export function formatRelativeTime(date: Date | string | null | undefined): stri
 	const now = new Date();
 	const minutes = differenceInMinutes(now, d);
 
-	if (minutes < 1) return 'just now';
-	if (minutes < 60) return `${minutes}m ago`;
+	const narrow = new Intl.RelativeTimeFormat(locale, { numeric: 'always', style: 'narrow' });
+	const auto = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' });
+
+	if (minutes < 1) return auto.format(0, 'second');
+	if (minutes < 60) return narrow.format(-minutes, 'minute');
 
 	const hours = differenceInHours(now, d);
-	if (hours < 24) return `${hours}h ago`;
-	if (isYesterday(d)) return 'Yesterday';
+	if (hours < 24) return narrow.format(-hours, 'hour');
+	if (isYesterday(d)) return auto.format(-1, 'day');
 
-	return format(d, 'MMM d');
+	return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(d);
 }
 
 /**
