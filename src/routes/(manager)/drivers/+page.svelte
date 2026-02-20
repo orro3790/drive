@@ -223,12 +223,12 @@
 	}));
 
 	const weeklyCapOptions: SelectOption[] = [
-		{ value: '1', label: '1 day' },
-		{ value: '2', label: '2 days' },
-		{ value: '3', label: '3 days' },
-		{ value: '4', label: '4 days' },
-		{ value: '5', label: '5 days' },
-		{ value: '6', label: '6 days' }
+		{ value: '1', label: m.drivers_weekly_cap_option({ count: 1 }) },
+		{ value: '2', label: m.drivers_weekly_cap_option({ count: 2 }) },
+		{ value: '3', label: m.drivers_weekly_cap_option({ count: 3 }) },
+		{ value: '4', label: m.drivers_weekly_cap_option({ count: 4 }) },
+		{ value: '5', label: m.drivers_weekly_cap_option({ count: 5 }) },
+		{ value: '6', label: m.drivers_weekly_cap_option({ count: 6 }) }
 	];
 
 	const selectedDriver = $derived.by(
@@ -648,7 +648,7 @@
 					<span class="dt-with-tooltip">{m.drivers_detail_weekly_cap()}</span>
 				</Tooltip>
 			</dt>
-			<dd>{driver.weeklyCap} days</dd>
+			<dd>{m.drivers_weekly_cap_days({ count: driver.weeklyCap })}</dd>
 		</div>
 		<div class="detail-row">
 			<dt>

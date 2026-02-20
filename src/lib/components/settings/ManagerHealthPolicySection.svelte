@@ -45,7 +45,7 @@
 	}
 
 	function validationErrorMessage() {
-		return 'Value must be a whole number between 0 and 100.';
+		return m.settings_manager_health_validation_error();
 	}
 
 	async function loadSettings() {
@@ -202,16 +202,16 @@
 <section aria-labelledby="manager-health-policy-section" class="manager-health-policy-stack">
 	<div class="settings-card">
 		<SettingsGroupTitle
-			title="Driver health"
-			desc="Tune attendance and completion thresholds used by automated health checks."
+			title={m.settings_manager_health_title()}
+			desc={m.settings_manager_health_description()}
 			id="manager-health-policy-section"
 		/>
-		<p class="caution-note">Modify with caution, these are sensible defaults.</p>
+		<p class="caution-note">{m.settings_manager_health_caution_note()}</p>
 		<SettingsGrid>
 			<SettingsRow ariaDisabled={isLoading || isSaving}>
 				{#snippet label()}
-					<div class="title">Attendance threshold (%)</div>
-					<div class="desc">Used to determine reward eligibility for reliability performance.</div>
+					<div class="title">{m.settings_manager_health_attendance_title()}</div>
+					<div class="desc">{m.settings_manager_health_attendance_description()}</div>
 				{/snippet}
 				{#snippet control()}
 					<div class="health-control-row" class:readonly={!canEditDriverHealthSettings}>
@@ -225,8 +225,8 @@
 								inputmode="numeric"
 								min={0}
 								max={100}
-								placeholder="95"
-								ariaLabel="Attendance threshold percent"
+								placeholder={m.settings_manager_health_attendance_placeholder()}
+								ariaLabel={m.settings_manager_health_attendance_aria_label()}
 								disabled={isLoading || isSaving}
 								hasError={Boolean(attendanceFieldError)}
 								onInput={(value) => {
@@ -252,8 +252,8 @@
 
 			<SettingsRow ariaDisabled={isLoading || isSaving}>
 				{#snippet label()}
-					<div class="title">Completion threshold (%)</div>
-					<div class="desc">Drivers below this level receive corrective completion warnings.</div>
+					<div class="title">{m.settings_manager_health_completion_title()}</div>
+					<div class="desc">{m.settings_manager_health_completion_description()}</div>
 				{/snippet}
 				{#snippet control()}
 					<div class="health-control-row" class:readonly={!canEditDriverHealthSettings}>
@@ -267,8 +267,8 @@
 								inputmode="numeric"
 								min={0}
 								max={100}
-								placeholder="98"
-								ariaLabel="Completion threshold percent"
+								placeholder={m.settings_manager_health_completion_placeholder()}
+								ariaLabel={m.settings_manager_health_completion_aria_label()}
 								disabled={isLoading || isSaving}
 								hasError={Boolean(completionFieldError)}
 								onInput={(value) => {
