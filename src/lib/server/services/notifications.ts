@@ -20,6 +20,8 @@ import {
 } from '$env/static/private';
 import type { App } from 'firebase-admin/app';
 import type { Messaging } from 'firebase-admin/messaging';
+import * as m from '$lib/paraglide/messages.js';
+import type { Locale } from '$lib/paraglide/runtime.js';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -152,6 +154,130 @@ const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: st
 };
 
 /**
+ * Get localized default notification text for a given type and locale.
+ * Used as fallback when callers don't provide renderTitle/renderBody.
+ */
+function getDefaultNotificationText(
+	type: NotificationType,
+	locale: Locale
+): { title: string; body: string } {
+	const opt = { locale };
+	switch (type) {
+		case 'shift_reminder':
+			return {
+				title: m.notif_shift_reminder_title({}, opt),
+				body: m.notif_shift_reminder_body(
+					{ routeName: '', warehouseName: '', shiftContext: '' },
+					opt
+				)
+			};
+		case 'bid_open':
+			return {
+				title: m.notif_bid_open_title({}, opt),
+				body: m.notif_bid_open_body({ routeName: '', date: '', closeTime: '' }, opt)
+			};
+		case 'bid_won':
+			return {
+				title: m.notif_bid_won_title({}, opt),
+				body: m.notif_bid_won_body({ routeName: '', shiftContext: '' }, opt)
+			};
+		case 'bid_lost':
+			return {
+				title: m.notif_bid_lost_title({}, opt),
+				body: m.notif_bid_lost_body({ routeName: '', shiftTime: '' }, opt)
+			};
+		case 'shift_cancelled':
+			return {
+				title: m.notif_shift_cancelled_title({}, opt),
+				body: m.notif_shift_cancelled_body({ routeName: '', shiftContext: '' }, opt)
+			};
+		case 'warning':
+			return {
+				title: m.notif_warning_title({}, opt),
+				body: m.notif_warning_body({}, opt)
+			};
+		case 'manual':
+			return {
+				title: m.notif_manual_title({}, opt),
+				body: m.notif_manual_body({}, opt)
+			};
+		case 'schedule_locked':
+			return {
+				title: m.notif_schedule_locked_title({}, opt),
+				body: m.notif_schedule_locked_body({}, opt)
+			};
+		case 'assignment_confirmed':
+			return {
+				title: m.notif_assignment_confirmed_title({}, opt),
+				body: m.notif_assignment_confirmed_body({ routeName: '', shiftContext: '' }, opt)
+			};
+		case 'route_unfilled':
+			return {
+				title: m.notif_route_unfilled_title({}, opt),
+				body: m.notif_route_unfilled_body({ routeName: '', when: '' }, opt)
+			};
+		case 'route_cancelled':
+			return {
+				title: m.notif_route_cancelled_title({}, opt),
+				body: m.notif_route_cancelled_body({}, opt)
+			};
+		case 'driver_no_show':
+			return {
+				title: m.notif_driver_no_show_title({}, opt),
+				body: m.notif_driver_no_show_body({ driverName: '', when: '' }, opt)
+			};
+		case 'confirmation_reminder':
+			return {
+				title: m.notif_confirmation_reminder_title({}, opt),
+				body: m.notif_confirmation_reminder_body({ date: '', routeName: '' }, opt)
+			};
+		case 'shift_auto_dropped':
+			return {
+				title: m.notif_shift_auto_dropped_title({}, opt),
+				body: m.notif_shift_auto_dropped_body({ routeName: '', shiftContext: '' }, opt)
+			};
+		case 'emergency_route_available':
+			return {
+				title: m.notif_emergency_route_available_title({}, opt),
+				body: m.notif_emergency_route_available_body(
+					{ routeName: '', warehouseName: '', date: '', bonusText: '' },
+					opt
+				)
+			};
+		case 'streak_advanced':
+			return {
+				title: m.notif_streak_advanced_title({}, opt),
+				body: m.notif_streak_advanced_body({ newStars: '', maxStars: '' }, opt)
+			};
+		case 'streak_reset':
+			return {
+				title: m.notif_streak_reset_title({}, opt),
+				body: m.notif_streak_reset_body({ reason: '' }, opt)
+			};
+		case 'bonus_eligible':
+			return {
+				title: m.notif_bonus_eligible_title({}, opt),
+				body: m.notif_bonus_eligible_body({ maxStars: '', bonusPercent: '' }, opt)
+			};
+		case 'corrective_warning':
+			return {
+				title: m.notif_corrective_warning_title({}, opt),
+				body: m.notif_corrective_warning_body({ threshold: '' }, opt)
+			};
+		case 'return_exception':
+			return {
+				title: m.notif_return_exception_title({}, opt),
+				body: m.notif_return_exception_body({ routeName: '', when: '' }, opt)
+			};
+		case 'stale_shift_reminder':
+			return {
+				title: m.notif_stale_shift_reminder_title({}, opt),
+				body: m.notif_stale_shift_reminder_body({ date: '' }, opt)
+			};
+	}
+}
+
+/**
  * Initialize Firebase Admin SDK lazily.
  * Returns the messaging instance or null if credentials are missing.
  */
@@ -203,10 +329,14 @@ async function getMessaging(): Promise<Messaging | null> {
 export interface SendNotificationOptions {
 	/** Additional data payload for the notification */
 	data?: Record<string, string>;
-	/** Custom title (overrides template) */
+	/** Custom title (overrides template) — deprecated, use renderTitle */
 	customTitle?: string;
-	/** Custom body (overrides template) */
+	/** Custom body (overrides template) — deprecated, use renderBody */
 	customBody?: string;
+	/** Locale-aware title renderer (takes precedence over customTitle) */
+	renderTitle?: (locale: Locale) => string;
+	/** Locale-aware body renderer (takes precedence over customBody) */
+	renderBody?: (locale: Locale) => string;
 	/** Organization scope for recipient verification */
 	organizationId?: string;
 }
@@ -354,13 +484,14 @@ export async function sendNotification(
 		pushSent: false
 	};
 
-	const template = NOTIFICATION_TEMPLATES[type];
-	const title = options.customTitle || template.title;
-	const body = options.customBody || template.body;
 	const pushData = sanitizePushData(options.data);
 
 	const [recipient] = await db
-		.select({ fcmToken: user.fcmToken, organizationId: user.organizationId })
+		.select({
+			fcmToken: user.fcmToken,
+			organizationId: user.organizationId,
+			preferredLocale: user.preferredLocale
+		})
 		.from(user)
 		.where(eq(user.id, userId))
 		.limit(1);
@@ -374,6 +505,11 @@ export async function sendNotification(
 		log.warn({ userId }, 'Recipient org mismatch, skipping notification');
 		return result;
 	}
+
+	const locale = (recipient.preferredLocale ?? 'en') as Locale;
+	const defaultText = getDefaultNotificationText(type, locale);
+	const title = options.renderTitle?.(locale) ?? options.customTitle ?? defaultText.title;
+	const body = options.renderBody?.(locale) ?? options.customBody ?? defaultText.body;
 
 	const notificationOrganizationId = options.organizationId ?? recipient.organizationId ?? null;
 
