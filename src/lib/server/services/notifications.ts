@@ -64,96 +64,6 @@ export type ManagerAlertType =
 	| 'return_exception';
 
 /**
- * Title and body templates for each notification type.
- */
-const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; body: string }> = {
-	shift_reminder: {
-		title: 'Shift Reminder',
-		body: 'Your shift starts today. Check the app for details.'
-	},
-	bid_open: {
-		title: 'Shift Available',
-		body: 'A shift is available for bidding. Place your bid now!'
-	},
-	bid_won: {
-		title: 'Bid Won',
-		body: "You've won the bid. You are now assigned this shift."
-	},
-	bid_lost: {
-		title: 'Bid Not Won',
-		body: 'Another driver was selected for this shift. No changes to your schedule.'
-	},
-	shift_cancelled: {
-		title: 'Shift Cancelled',
-		body: 'Your shift has been removed from your schedule.'
-	},
-	warning: {
-		title: 'Account Warning',
-		body: 'Your attendance has dropped below the required threshold. Please review your account.'
-	},
-	manual: {
-		title: 'Message from Manager',
-		body: 'You have a new message. Check the app for details.'
-	},
-	schedule_locked: {
-		title: 'Preferences Locked',
-		body: 'Your preferences for next week have been locked. Schedule generation is in progress.'
-	},
-	assignment_confirmed: {
-		title: 'Shift Assigned',
-		body: 'You are now assigned a new shift. Check your schedule for details.'
-	},
-	route_unfilled: {
-		title: 'Route Unfilled',
-		body: 'A route at your warehouse has no driver assigned.'
-	},
-	route_cancelled: {
-		title: 'Route Cancelled',
-		body: 'This route has been cancelled and removed from affected schedules.'
-	},
-	driver_no_show: {
-		title: 'Driver No-Show',
-		body: 'A driver did not show up for their assigned shift.'
-	},
-	confirmation_reminder: {
-		title: 'Confirm Your Shift',
-		body: 'Your upcoming shift needs confirmation within 24 hours.'
-	},
-	shift_auto_dropped: {
-		title: 'Shift Dropped',
-		body: 'Your shift was not confirmed in time and has been removed from your schedule.'
-	},
-	emergency_route_available: {
-		title: 'Shift Available',
-		body: 'An urgent route is available with a bonus. First to accept gets it.'
-	},
-	streak_advanced: {
-		title: 'Streak Milestone',
-		body: 'Your weekly streak advanced! Keep up the great work.'
-	},
-	streak_reset: {
-		title: 'Streak Reset',
-		body: 'Your weekly streak has been reset due to a reliability event.'
-	},
-	bonus_eligible: {
-		title: 'Bonus Eligible',
-		body: 'Congratulations! You reached 4 stars and qualify for a +10% bonus preview.'
-	},
-	corrective_warning: {
-		title: 'Completion Rate Warning',
-		body: 'Your completion rate has dropped below 98%. Improve within 7 days to avoid further impact.'
-	},
-	return_exception: {
-		title: 'Return Exception Filed',
-		body: 'A driver filed return exceptions on A route.'
-	},
-	stale_shift_reminder: {
-		title: 'Incomplete Shift',
-		body: 'You have an incomplete shift. Please close it out to start new shifts.'
-	}
-};
-
-/**
  * Get localized default notification text for a given type and locale.
  * Used as fallback when callers don't provide renderTitle/renderBody.
  */
@@ -329,13 +239,9 @@ async function getMessaging(): Promise<Messaging | null> {
 export interface SendNotificationOptions {
 	/** Additional data payload for the notification */
 	data?: Record<string, string>;
-	/** Custom title (overrides template) — deprecated, use renderTitle */
-	customTitle?: string;
-	/** Custom body (overrides template) — deprecated, use renderBody */
-	customBody?: string;
-	/** Locale-aware title renderer (takes precedence over customTitle) */
+	/** Locale-aware title renderer */
 	renderTitle?: (locale: Locale) => string;
-	/** Locale-aware body renderer (takes precedence over customBody) */
+	/** Locale-aware body renderer */
 	renderBody?: (locale: Locale) => string;
 	/** Organization scope for recipient verification */
 	organizationId?: string;
@@ -508,8 +414,8 @@ export async function sendNotification(
 
 	const locale = (recipient.preferredLocale ?? 'en') as Locale;
 	const defaultText = getDefaultNotificationText(type, locale);
-	const title = options.renderTitle?.(locale) ?? options.customTitle ?? defaultText.title;
-	const body = options.renderBody?.(locale) ?? options.customBody ?? defaultText.body;
+	const title = options.renderTitle?.(locale) ?? defaultText.title;
+	const body = options.renderBody?.(locale) ?? defaultText.body;
 
 	const notificationOrganizationId = options.organizationId ?? recipient.organizationId ?? null;
 
