@@ -7,6 +7,7 @@
 	"common_on": "켜기",
 	"common_off": "끄기",
 	"common_home": "홈",
+	"common_breadcrumb_aria_label": "이동 경로",
 
 	"auth_phone_label": "전화번호",
 	"auth_phone_placeholder": "전화번호 입력",
@@ -335,6 +336,8 @@
 	"schedule_status_unfilled": "미배정",
 	"schedule_cancel_button": "배정 취소",
 	"schedule_cancel_modal_title": "배정 취소",
+	"schedule_cancel_modal_copy": "이 근무를 취소하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+	"schedule_cancel_modal_late_penalty": "늦은 취소: 건강 점수 -{points}점. 반복되면 배정 접근 및 보너스 자격에 영향을 줄 수 있습니다.",
 	"schedule_cancel_reason_label": "취소 사유",
 	"schedule_cancel_reason_placeholder": "사유를 선택하세요",
 	"schedule_cancel_reason_required": "취소 사유를 선택하세요.",
@@ -518,6 +521,7 @@
 
 	"shift_complete_button": "근무 완료",
 	"shift_complete_modal_title": "근무 완료",
+	"shift_complete_modal_confirm_copy": "{returns}건 반품 및 {delivered}건 배달로 근무 완료를 확인하시겠습니까?",
 	"shift_complete_returned_label": "반품 수량은?",
 	"shift_complete_returned_placeholder": "반품 수량 입력",
 	"shift_complete_returned_required": "반품 수량은 필수입니다.",
@@ -590,6 +594,7 @@
 	"dashboard_health_tier_label": "티어 {tier}",
 	"dashboard_health_score_label": "건강 점수",
 	"dashboard_health_stars_label": "별",
+	"dashboard_health_stars_aria_label": "{total}개 중 {stars}개 별",
 	"dashboard_health_streak_label": "{count}주 연속",
 	"dashboard_health_elite_marker": "보너스 기준선",
 	"dashboard_health_contributions_label": "점수 상세",
@@ -943,6 +948,9 @@
 	"history_empty_title": "과거 근무 없음",
 	"history_empty_message": "완료된 근무가 여기에 표시됩니다.",
 	"history_load_error": "근무 이력을 불러오지 못했습니다.",
+	"history_parcel_stat_delivered": "{count}건 배달",
+	"history_parcel_stat_returned": "{count}건 반품",
+	"history_parcel_stat_excepted": "{count}건 예외",
 	"history_load_more": "더 보기",
 	"dashboard_coming_up_section": "예정된 근무"
 }
