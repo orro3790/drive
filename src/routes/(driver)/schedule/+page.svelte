@@ -534,10 +534,12 @@
 {#if cancelTarget}
 	<Modal title={m.schedule_cancel_modal_title()} onClose={closeCancelModal}>
 		<div class="confirm-modal-copy-stack">
-			<p class="confirm-modal-copy">{m.schedule_cancel_modal_body()}</p>
+			<p class="confirm-modal-copy">{m.schedule_cancel_modal_copy()}</p>
 			{#if cancelTarget.isLateCancel}
 				<p class="confirm-modal-penalty">
-					{m.schedule_cancel_late_penalty({ points: String(lateCancelPenaltyPoints) })}
+					{m.schedule_cancel_modal_late_penalty({
+						points: String(lateCancelPenaltyPoints)
+					})}
 				</p>
 			{/if}
 			<div class="confirm-modal-actions">

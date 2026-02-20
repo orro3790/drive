@@ -622,7 +622,7 @@
 										{/if}
 									{:else if isTodayShiftInProgress}
 										<Chip
-											label={m.manager_attention_in_progress()}
+											label={m.route_progress_started()}
 											variant="status"
 											status="warning"
 											size="xs"
@@ -1270,10 +1270,12 @@
 {#if cancelTarget}
 	<Modal title={m.schedule_cancel_modal_title()} onClose={closeCancelModal}>
 		<div class="confirm-modal-copy-stack">
-			<p class="confirm-modal-copy">{m.schedule_cancel_modal_body()}</p>
+			<p class="confirm-modal-copy">{m.schedule_cancel_modal_copy()}</p>
 			{#if cancelTarget.isLateCancel}
 				<p class="confirm-modal-penalty">
-					{m.schedule_cancel_late_penalty({ points: String(lateCancelPenaltyPoints) })}
+					{m.schedule_cancel_modal_late_penalty({
+						points: String(lateCancelPenaltyPoints)
+					})}
 				</p>
 			{/if}
 			<div class="confirm-modal-actions">
@@ -1297,9 +1299,9 @@
 	<Modal title={m.shift_complete_modal_title()} onClose={closeCompleteConfirm}>
 		<div class="confirm-modal-copy-stack">
 			<p class="confirm-modal-copy">
-				{m.shift_complete_confirm_summary({
-					returned: String(completeConfirmTarget.parcelsReturned),
-					excepted: String(completeConfirmTarget.exceptedReturns)
+				{m.shift_complete_modal_confirm_copy({
+					returns: String(completeConfirmTarget.parcelsReturned),
+					delivered: String(completeConfirmTarget.parcelsDelivered)
 				})}
 			</p>
 			<div class="confirm-modal-actions">

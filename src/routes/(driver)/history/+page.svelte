@@ -58,7 +58,7 @@
 		try {
 			const res = await fetch(`/api/history?offset=${offset}&limit=${LIMIT}`);
 			if (!res.ok) {
-				throw new Error('history-load-failed');
+				throw new Error('Failed to load history');
 			}
 
 			const data = await res.json();
@@ -69,8 +69,8 @@
 			}
 			hasMore = data.pagination.hasMore;
 			offset = data.pagination.offset + data.history.length;
-		} catch {
-			error = m.history_load_error();
+		} catch (err) {
+			error = err instanceof Error ? err.message : m.history_load_error();
 		} finally {
 			isLoading = false;
 			isLoadingMore = false;
@@ -157,20 +157,23 @@
 								<div class="parcel-summary">
 									{#if item.shift.parcelsDelivered !== null}
 										<span class="parcel-stat delivered">
-											{item.shift.parcelsDelivered}
-											{m.drivers_shift_history_header_parcels_delivered()}
+											{m.history_parcel_stat_delivered({
+												count: String(item.shift.parcelsDelivered)
+											})}
 										</span>
 									{/if}
 									{#if item.shift.parcelsReturned !== null && item.shift.parcelsReturned > 0}
 										<span class="parcel-stat returned">
-											{item.shift.parcelsReturned}
-											{m.drivers_shift_history_header_parcels_returned()}
+											{m.history_parcel_stat_returned({
+												count: String(item.shift.parcelsReturned)
+											})}
 										</span>
 									{/if}
 									{#if item.shift.exceptedReturns > 0}
 										<span class="parcel-stat excepted">
-											{item.shift.exceptedReturns}
-											{m.drivers_shift_history_header_exceptions()}
+											{m.history_parcel_stat_excepted({
+												count: String(item.shift.exceptedReturns)
+											})}
 										</span>
 									{/if}
 								</div>

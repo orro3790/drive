@@ -45,6 +45,7 @@ Both drills produce reports under `logs/nightly/YYYY-MM-DD/`.
 - When a shift is within 24 hours, the system can open a bid window in "instant" mode (for example after certain cancellations).
 - We verify the window mode/state in the database.
 - We do **not** currently prove (in these drills) the full "first bidder immediately wins" path end-to-end.
+- That race path is now covered by the integration adversarial suite (`ADV-001` through `ADV-003`) under `tests/integration/adversarial/`.
 
 ### Driver lifecycle actions (driver side)
 

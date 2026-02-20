@@ -1,5 +1,57 @@
 # Changelog
 
+## [1.4.1](https://github.com/orro3790/drive/compare/v1.4.0...v1.4.1) (2026-02-17)
+
+
+### Bug Fixes
+
+* **android:** native edge-to-edge inset handling ([5e19b64](https://github.com/orro3790/drive/commit/5e19b641e5395ef7bb9da2de80a629a7c8af740f))
+* **android:** native edge-to-edge inset handling ([#156](https://github.com/orro3790/drive/issues/156)) ([7f18849](https://github.com/orro3790/drive/commit/7f18849a8563dfff416829c54d6fac42453f14b8))
+* **android:** proper edge-to-edge safe area handling ([fca3f61](https://github.com/orro3790/drive/commit/fca3f61ff857f689ae1db7c3ac4bfc48e71a7440))
+* **mobile:** environment-aware Capacitor sync ([5aa4d54](https://github.com/orro3790/drive/commit/5aa4d54e9720e40c9fa7b53f1a42c83dd40418cc))
+
+## [1.4.0](https://github.com/orro3790/drive/compare/v1.3.0...v1.4.0) (2026-02-16)
+
+
+### Features
+
+* **routes:** add suspend/resume overrides and harden auth redirects ([01f238d](https://github.com/orro3790/drive/commit/01f238db2dd312eab4f5233c2c502a877fa686ae))
+
+
+### Bug Fixes
+
+* **driver-dashboard:** apply optimistic shift completion with rollback ([533b7b2](https://github.com/orro3790/drive/commit/533b7b2ae47deea1ec31db78d60c973a127e2152))
+* **mobile-ui:** add native scroll spacer above nav bar ([10dfc1c](https://github.com/orro3790/drive/commit/10dfc1c6ad651cc5c5ebdc607eb3acf3d34845b7))
+* **mobile-ui:** add safe-area padding to driver/manager layouts + improve notification card ([355fcf4](https://github.com/orro3790/drive/commit/355fcf40253d0c3f14767f29b1a5f7b9dacc71ee))
+* **mobile-ui:** apply safe-area padding unconditionally like sidebar ([52aab28](https://github.com/orro3790/drive/commit/52aab284fbfe8a291b02d4090e03db80c1168dd5))
+* **mobile-ui:** compute native viewport insets at runtime ([2e8ffed](https://github.com/orro3790/drive/commit/2e8ffed0ad9db76fbefae414d482d989feaf4de0))
+* **mobile-ui:** enforce bottom gutter on small screens ([77c2532](https://github.com/orro3790/drive/commit/77c253292994e2bd0304acc050e05765d4b95cc2))
+* **mobile-ui:** prevent Android nav bar overlap at page bottom ([c438086](https://github.com/orro3790/drive/commit/c438086467fb5533b17ee7c94b1f856ef81459fb))
+* **mobile-ui:** use padding instead of spacer for Android nav bar insets ([6564591](https://github.com/orro3790/drive/commit/656459153bed903efaf97bd181c1e2cc283ee07e))
+* **notifications:** harden FCM token ownership and registration flow ([c071508](https://github.com/orro3790/drive/commit/c071508506d1828152d8c7897b218ef53a1544fd))
+* **notifications:** preserve cached token across logout ([0ea221a](https://github.com/orro3790/drive/commit/0ea221afcc04b2ebd72fbaba570978cb504878b2))
+
+## [1.3.0](https://github.com/orro3790/drive/compare/v1.2.2...v1.3.0) (2026-02-16)
+
+
+### Features
+
+* **driver:** show route start time across shifts and bids ([a009d00](https://github.com/orro3790/drive/commit/a009d006ac327ae240d0bf40d4146ae772d67e60))
+* **driver:** show route start time across shifts and bids ([f545656](https://github.com/orro3790/drive/commit/f54565647263537aa62a921518c1a9decb650d40))
+* **notifications:** include route start time in shift reminders ([c2831d2](https://github.com/orro3790/drive/commit/c2831d24792142a1fb78ebd1dc6301507588b769))
+* **notifications:** include shift start time in reminder push ([989a573](https://github.com/orro3790/drive/commit/989a573458ef343ca4b60ede597456f8fce9c57f))
+
+
+### Bug Fixes
+
+* **auth:** add download icon and align link typography ([66a89fa](https://github.com/orro3790/drive/commit/66a89fa58ef998045a31927cb428ecbb3808e8be))
+* **auth:** add download icon and align link typography ([cbb69b4](https://github.com/orro3790/drive/commit/cbb69b4286467a66c90df0ab60f7e5b9ab942690))
+* **auth:** simplify sign-in UI and restore SystemBars insets ([50722c7](https://github.com/orro3790/drive/commit/50722c7d15937cebdfbe2faeb396f87d233254cc))
+* **auth:** simplify sign-in UI and restore SystemBars insets ([29847b9](https://github.com/orro3790/drive/commit/29847b9fc1e0111d9cc5e726ba3e03e1f2e04a76))
+* **driver-ui:** prevent shift time wrapping on mobile ([d799907](https://github.com/orro3790/drive/commit/d7999076ba957b02880f217f643561637bfaa583))
+* **driver-ui:** prevent shift time wrapping on mobile ([4489b5a](https://github.com/orro3790/drive/commit/4489b5a1549777db0f15f156689cab2bc2043c1d))
+* **notifications:** harden push delivery and realtime completion updates ([33a36d9](https://github.com/orro3790/drive/commit/33a36d958460b7393d55a7506e30029a355fef2d))
+
 ## [1.2.2](https://github.com/orro3790/drive/compare/v1.2.1...v1.2.2) (2026-02-16)
 
 
