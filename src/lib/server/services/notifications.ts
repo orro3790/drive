@@ -740,23 +740,22 @@ export async function sendManagerAlert(
 		return false;
 	}
 
-	const template = NOTIFICATION_TEMPLATES[alertType];
-
-	// Customize body with details
-	let body = template.body;
-	if (details.routeName) {
-		body = body.replace('A route', `Route ${details.routeName}`);
-		body = body.replace('A driver', details.driverName ?? 'A driver');
-	}
-	if (details.driverName && !details.routeName) {
-		body = body.replace('A driver', details.driverName);
-	}
-	if (details.date) {
-		body += ` (${formatManagerAlertWhen(details.date, details.routeStartTime)})`;
-	}
+	const when = details.date ? formatManagerAlertWhen(details.date, details.routeStartTime) : '';
 
 	await sendNotification(managerId, alertType, {
-		customBody: body,
+		renderBody: (locale) => {
+			const opt = { locale };
+			switch (alertType) {
+				case 'route_unfilled':
+					return m.notif_route_unfilled_body({ routeName: details.routeName ?? '', when }, opt);
+				case 'route_cancelled':
+					return m.notif_route_cancelled_body({}, opt);
+				case 'driver_no_show':
+					return m.notif_driver_no_show_body({ driverName: details.driverName ?? '', when }, opt);
+				case 'return_exception':
+					return m.notif_return_exception_body({ routeName: details.routeName ?? '', when }, opt);
+			}
+		},
 		data: { routeId, ...details },
 		organizationId
 	});
@@ -820,7 +819,7 @@ export async function notifyAvailableDriversForEmergency(
 
 	// Get all non-flagged drivers who are NOT on an active shift today
 	const drivers = await db
-		.select({ id: user.id })
+		.select({ id: user.id, preferredLocale: user.preferredLocale })
 		.from(user)
 		.where(
 			and(
@@ -851,25 +850,40 @@ export async function notifyAvailableDriversForEmergency(
 		return 0;
 	}
 
+	// Build locale map from eligible drivers
+	const driverLocaleMap = new Map<string, Locale>();
+	for (const driver of drivers) {
+		if (eligibleDriverIds.includes(driver.id)) {
+			driverLocaleMap.set(driver.id, (driver.preferredLocale ?? 'en') as Locale);
+		}
+	}
+
 	const dateLabel = format(toZonedTime(parseISO(date), TORONTO_TZ), 'EEE, MMM d');
 	const bonusText = payBonusPercent > 0 ? ` +${payBonusPercent}% bonus.` : '';
-	const body = `${routeName} at ${warehouseName} needs a driver on ${dateLabel}.${bonusText} First to accept gets it.`;
+	const notificationData = {
+		assignmentId,
+		routeName,
+		warehouseName,
+		date,
+		payBonusPercent: String(payBonusPercent),
+		mode: 'emergency'
+	};
 
-	const notificationRecords = eligibleDriverIds.map((driverId) => ({
-		organizationId,
-		userId: driverId,
-		type: 'emergency_route_available' as const,
-		title: 'Shift Available',
-		body,
-		data: {
-			assignmentId,
-			routeName,
-			warehouseName,
-			date,
-			payBonusPercent: String(payBonusPercent),
-			mode: 'emergency'
-		}
-	}));
+	const notificationRecords = eligibleDriverIds.map((driverId) => {
+		const locale = driverLocaleMap.get(driverId) ?? ('en' as Locale);
+		const opt = { locale };
+		return {
+			organizationId,
+			userId: driverId,
+			type: 'emergency_route_available' as const,
+			title: m.notif_emergency_route_available_title({}, opt),
+			body: m.notif_emergency_route_available_body(
+				{ routeName, warehouseName, date: dateLabel, bonusText },
+				opt
+			),
+			data: notificationData
+		};
+	});
 
 	// Create in-app notification records
 	await db.insert(notifications).values(notificationRecords);
@@ -889,18 +903,20 @@ export async function notifyAvailableDriversForEmergency(
 
 					if (!userData?.fcmToken) return;
 
+					const locale = driverLocaleMap.get(driverId) ?? ('en' as Locale);
+					const opt = { locale };
+
 					try {
 						await messaging.send({
 							token: userData.fcmToken,
-							notification: { title: 'Shift Available', body },
-							data: {
-								assignmentId,
-								routeName,
-								warehouseName,
-								date,
-								payBonusPercent: String(payBonusPercent),
-								mode: 'emergency'
+							notification: {
+								title: m.notif_emergency_route_available_title({}, opt),
+								body: m.notif_emergency_route_available_body(
+									{ routeName, warehouseName, date: dateLabel, bonusText },
+									opt
+								)
 							},
+							data: notificationData,
 							android: {
 								priority: 'high' as const,
 								notification: { channelId: 'drive_notifications' }

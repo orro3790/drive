@@ -30,6 +30,7 @@ import {
 	formatNotificationShiftContext
 } from '$lib/utils/notifications/shiftContext';
 import * as m from '$lib/paraglide/messages.js';
+import type { Locale } from '$lib/paraglide/runtime.js';
 import { createAuditLog, type AuditActor } from '$lib/server/services/audit';
 import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm';
 import { addHours, differenceInMonths } from 'date-fns';
@@ -434,7 +435,7 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 	}
 
 	const drivers = await db
-		.select({ id: user.id })
+		.select({ id: user.id, preferredLocale: user.preferredLocale })
 		.from(user)
 		.where(
 			and(
@@ -464,6 +465,14 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 		return 0;
 	}
 
+	// Build locale map from eligible drivers
+	const driverLocaleMap = new Map<string, Locale>();
+	for (const driver of drivers) {
+		if (eligibleDriverIds.includes(driver.id)) {
+			driverLocaleMap.set(driver.id, (driver.preferredLocale ?? 'en') as Locale);
+		}
+	}
+
 	const formattedDate = assignmentDate;
 	const isEmergency = mode === 'emergency';
 	const isInstant = mode === 'instant' || isEmergency;
@@ -472,31 +481,45 @@ async function notifyEligibleDrivers(params: NotifyEligibleDriversParams): Promi
 		? ('emergency_route_available' as const)
 		: ('bid_open' as const);
 
-	let body: string;
-	if (isEmergency) {
-		const bonusText = payBonusPercent > 0 ? ` +${payBonusPercent}% bonus.` : '';
-		body = `${routeName} on ${formattedDate} needs a driver urgently.${bonusText} First to accept gets it.`;
-	} else if (isInstant) {
-		body = `${routeName} on ${formattedDate} is available. First to accept gets it.`;
-	} else {
-		const formattedCloseTime = closesAt.toLocaleTimeString('en-US', {
-			hour: 'numeric',
-			minute: '2-digit',
-			timeZone: dispatchPolicy.timezone.toronto
-		});
-		body = `${routeName} on ${formattedDate} is open for bidding. Window closes at ${formattedCloseTime}.`;
+	const formattedCloseTime = closesAt.toLocaleTimeString('en-US', {
+		hour: 'numeric',
+		minute: '2-digit',
+		timeZone: dispatchPolicy.timezone.toronto
+	});
+	const bonusText = payBonusPercent > 0 ? ` +${payBonusPercent}% bonus.` : '';
+
+	function renderBodyForDriver(locale: Locale): string {
+		const opt = { locale };
+		if (isEmergency) {
+			return m.notif_emergency_route_body({ routeName, date: formattedDate, bonusText }, opt);
+		} else if (isInstant) {
+			return m.notif_bid_open_instant_body({ routeName, date: formattedDate }, opt);
+		} else {
+			return m.notif_bid_open_body(
+				{ routeName, date: formattedDate, closeTime: formattedCloseTime },
+				opt
+			);
+		}
 	}
 
-	const title = isEmergency ? 'Priority Route Available' : 'New Shift Available';
+	function renderTitleForDriver(locale: Locale): string {
+		const opt = { locale };
+		return isEmergency
+			? m.notif_emergency_route_available_title({}, opt)
+			: m.notif_bid_open_title({}, opt);
+	}
 
-	const notificationRecords = eligibleDriverIds.map((driverId) => ({
-		organizationId,
-		userId: driverId,
-		type: notificationType,
-		title,
-		body,
-		data: { assignmentId, routeName, closesAt: closesAt.toISOString(), mode }
-	}));
+	const notificationRecords = eligibleDriverIds.map((driverId) => {
+		const locale = driverLocaleMap.get(driverId) ?? ('en' as Locale);
+		return {
+			organizationId,
+			userId: driverId,
+			type: notificationType,
+			title: renderTitleForDriver(locale),
+			body: renderBodyForDriver(locale),
+			data: { assignmentId, routeName, closesAt: closesAt.toISOString(), mode }
+		};
+	});
 
 	await db.insert(notifications).values(notificationRecords);
 
