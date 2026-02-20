@@ -7,6 +7,7 @@
 	"common_on": "On",
 	"common_off": "Off",
 	"common_home": "Home",
+	"common_breadcrumb_aria_label": "Breadcrumb",
 
 	"auth_phone_label": "Phone",
 	"auth_phone_placeholder": "Enter phone number",
@@ -335,6 +336,8 @@
 	"schedule_status_unfilled": "Unfilled",
 	"schedule_cancel_button": "Cancel assignment",
 	"schedule_cancel_modal_title": "Cancel assignment",
+	"schedule_cancel_modal_copy": "Cancel this shift? This action cannot be undone.",
+	"schedule_cancel_modal_late_penalty": "Late cancellation: -{points} health points. Repeated penalties may reduce shift access and bonus eligibility.",
 	"schedule_cancel_reason_label": "Reason for cancellation",
 	"schedule_cancel_reason_placeholder": "Select a reason",
 	"schedule_cancel_reason_required": "Select a cancellation reason.",
@@ -518,6 +521,7 @@
 
 	"shift_complete_button": "Complete Shift",
 	"shift_complete_modal_title": "Complete Shift",
+	"shift_complete_modal_confirm_copy": "Confirm shift completion with {returns} returns and {delivered} delivered parcels?",
 	"shift_complete_returned_label": "How many returns?",
 	"shift_complete_returned_placeholder": "Enter returned count",
 	"shift_complete_returned_required": "Return count is required.",
@@ -590,6 +594,7 @@
 	"dashboard_health_tier_label": "Tier {tier}",
 	"dashboard_health_score_label": "Health Score",
 	"dashboard_health_stars_label": "Stars",
+	"dashboard_health_stars_aria_label": "{stars} of {total} stars",
 	"dashboard_health_streak_label": "{count} week streak",
 	"dashboard_health_elite_marker": "Bonus threshold",
 	"dashboard_health_contributions_label": "Point Breakdown",
@@ -943,6 +948,9 @@
 	"history_empty_title": "No past shifts",
 	"history_empty_message": "Completed shifts will appear here.",
 	"history_load_error": "Failed to load shift history.",
+	"history_parcel_stat_delivered": "{count} delivered",
+	"history_parcel_stat_returned": "{count} returned",
+	"history_parcel_stat_excepted": "{count} excepted",
 	"history_load_more": "Load more",
 	"dashboard_coming_up_section": "Coming Up"
 }

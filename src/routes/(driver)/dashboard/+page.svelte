@@ -621,7 +621,12 @@
 											</Button>
 										{/if}
 									{:else if isTodayShiftInProgress}
-										<Chip label="In Progress" variant="status" status="warning" size="xs" />
+										<Chip
+											label={m.route_progress_started()}
+											variant="status"
+											status="warning"
+											size="xs"
+										/>
 									{:else if todayShift.status === 'completed'}
 										<Chip
 											label={statusLabels[todayShift.status]}
@@ -1265,11 +1270,12 @@
 {#if cancelTarget}
 	<Modal title={m.schedule_cancel_modal_title()} onClose={closeCancelModal}>
 		<div class="confirm-modal-copy-stack">
-			<p class="confirm-modal-copy">Cancel this shift? This action cannot be undone.</p>
+			<p class="confirm-modal-copy">{m.schedule_cancel_modal_copy()}</p>
 			{#if cancelTarget.isLateCancel}
 				<p class="confirm-modal-penalty">
-					Late cancellation: -{lateCancelPenaltyPoints} health points. Repeated penalties may reduce shift
-					access and bonus eligibility.
+					{m.schedule_cancel_modal_late_penalty({
+						points: String(lateCancelPenaltyPoints)
+					})}
 				</p>
 			{/if}
 			<div class="confirm-modal-actions">
@@ -1293,8 +1299,10 @@
 	<Modal title={m.shift_complete_modal_title()} onClose={closeCompleteConfirm}>
 		<div class="confirm-modal-copy-stack">
 			<p class="confirm-modal-copy">
-				Confirm shift completion with {completeConfirmTarget.parcelsReturned} returns and {completeConfirmTarget.parcelsDelivered}
-				delivered parcels?
+				{m.shift_complete_modal_confirm_copy({
+					returns: String(completeConfirmTarget.parcelsReturned),
+					delivered: String(completeConfirmTarget.parcelsDelivered)
+				})}
 			</p>
 			<div class="confirm-modal-actions">
 				<Button variant="ghost" size="compact" onclick={closeCompleteConfirm}>

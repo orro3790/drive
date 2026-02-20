@@ -225,7 +225,7 @@ Displays breadcrumb navigation, page title, optional sidebar toggle, mobile hamb
 		{/if}
 
 		{#if hasBreadcrumbs}
-			<nav class="breadcrumb" aria-label="Breadcrumb">
+			<nav class="breadcrumb" aria-label={m.common_breadcrumb_aria_label()}>
 				<ol>
 					{#each parents as crumb, i (i)}
 						<li class="crumb parent">

@@ -157,17 +157,23 @@
 								<div class="parcel-summary">
 									{#if item.shift.parcelsDelivered !== null}
 										<span class="parcel-stat delivered">
-											{item.shift.parcelsDelivered} delivered
+											{m.history_parcel_stat_delivered({
+												count: String(item.shift.parcelsDelivered)
+											})}
 										</span>
 									{/if}
 									{#if item.shift.parcelsReturned !== null && item.shift.parcelsReturned > 0}
 										<span class="parcel-stat returned">
-											{item.shift.parcelsReturned} returned
+											{m.history_parcel_stat_returned({
+												count: String(item.shift.parcelsReturned)
+											})}
 										</span>
 									{/if}
 									{#if item.shift.exceptedReturns > 0}
 										<span class="parcel-stat excepted">
-											{item.shift.exceptedReturns} excepted
+											{m.history_parcel_stat_excepted({
+												count: String(item.shift.exceptedReturns)
+											})}
 										</span>
 									{/if}
 								</div>
