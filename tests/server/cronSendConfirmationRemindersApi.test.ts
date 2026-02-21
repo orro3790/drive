@@ -23,7 +23,7 @@ type SendNotificationMock = ReturnType<
 			userId: string,
 			notificationType: string,
 			options: {
-				customBody: string;
+				renderBody: (locale: string) => string;
 				organizationId: string;
 				data: {
 					assignmentId: string;
@@ -67,7 +67,7 @@ beforeEach(async () => {
 			string,
 			string,
 			{
-				customBody: string;
+				renderBody: (locale: string) => string;
 				organizationId: string;
 				data: {
 					assignmentId: string;
@@ -219,7 +219,7 @@ describe('LC-05 cron decision logic: GET /api/cron/send-confirmation-reminders',
 
 		expect(sendNotificationMock).toHaveBeenCalledTimes(2);
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(1, 'driver-1', 'confirmation_reminder', {
-			customBody: 'Your shift on 2026-03-05 at Route A needs confirmation within 24 hours.',
+			renderBody: expect.any(Function),
 			organizationId: 'org-1',
 			data: {
 				assignmentId: 'assignment-1',

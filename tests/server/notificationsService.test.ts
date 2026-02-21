@@ -62,6 +62,9 @@ beforeAll(async () => {
 
 	vi.doMock('firebase-admin/app', () => ({
 		initializeApp: initializeAppMock,
+		getApp: vi.fn(() => {
+			throw new Error('app not found');
+		}),
 		getApps: getAppsMock,
 		cert: vi.fn((value: unknown) => value)
 	}));
@@ -78,8 +81,10 @@ beforeAll(async () => {
 				warn: vi.fn(),
 				error: vi.fn()
 			})),
+			info: vi.fn(),
+			debug: vi.fn(),
 			warn: vi.fn(),
-			info: vi.fn()
+			error: vi.fn()
 		},
 		toSafeErrorMessage: vi.fn((_error: unknown) => 'error')
 	}));
@@ -89,24 +94,57 @@ beforeAll(async () => {
 	}));
 
 	vi.doMock('$lib/server/services/scheduling', () => ({
-		getWeekStart: vi.fn((date: Date) => date),
+		getWeekStartForDateString: vi.fn((date: string) => date),
 		canDriverTakeAssignment: vi.fn(async () => true)
 	}));
 
-	// Mock Paraglide messages — return key names as placeholder strings
-	vi.doMock('$lib/paraglide/messages.js', () => {
-		return new Proxy(
-			{},
-			{
-				get: (_target, prop) => {
-					if (typeof prop === 'string') {
-						return (_inputs?: Record<string, unknown>) => `[${prop}]`;
-					}
-					return undefined;
-				}
-			}
-		);
-	});
+	// Mock Paraglide messages — explicit function stubs (Proxy causes vitest import deadlock)
+	const msgFn = (_inputs?: Record<string, unknown>) => '[mock]';
+	vi.doMock('$lib/paraglide/messages.js', () => ({
+		notif_shift_reminder_title: msgFn,
+		notif_shift_reminder_body: msgFn,
+		notif_bid_open_title: msgFn,
+		notif_bid_open_body: msgFn,
+		notif_bid_won_title: msgFn,
+		notif_bid_won_body: msgFn,
+		notif_bid_lost_title: msgFn,
+		notif_bid_lost_body: msgFn,
+		notif_shift_cancelled_title: msgFn,
+		notif_shift_cancelled_body: msgFn,
+		notif_warning_title: msgFn,
+		notif_warning_body: msgFn,
+		notif_manual_title: msgFn,
+		notif_manual_body: msgFn,
+		notif_schedule_locked_title: msgFn,
+		notif_schedule_locked_body: msgFn,
+		notif_assignment_confirmed_title: msgFn,
+		notif_assignment_confirmed_body: msgFn,
+		notif_route_unfilled_title: msgFn,
+		notif_route_unfilled_body: msgFn,
+		notif_route_cancelled_title: msgFn,
+		notif_route_cancelled_body: msgFn,
+		notif_driver_no_show_title: msgFn,
+		notif_driver_no_show_body: msgFn,
+		notif_confirmation_reminder_title: msgFn,
+		notif_confirmation_reminder_body: msgFn,
+		notif_shift_auto_dropped_title: msgFn,
+		notif_shift_auto_dropped_body: msgFn,
+		notif_emergency_route_available_title: msgFn,
+		notif_emergency_route_available_body: msgFn,
+		notif_streak_advanced_title: msgFn,
+		notif_streak_advanced_body: msgFn,
+		notif_streak_reset_title: msgFn,
+		notif_streak_reset_body: msgFn,
+		notif_bonus_eligible_title: msgFn,
+		notif_bonus_eligible_body: msgFn,
+		notif_corrective_warning_title: msgFn,
+		notif_corrective_warning_body: msgFn,
+		notif_return_exception_title: msgFn,
+		notif_return_exception_body: msgFn,
+		notif_stale_shift_reminder_title: msgFn,
+		notif_stale_shift_reminder_body: msgFn,
+		notif_pay_bonus_suffix: msgFn
+	}));
 
 	vi.doMock('$lib/paraglide/runtime.js', () => ({
 		locales: ['en', 'zh', 'zh-Hant', 'ko'],

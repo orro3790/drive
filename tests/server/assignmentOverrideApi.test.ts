@@ -140,6 +140,10 @@ const getEmergencyBonusPercentMock = vi.fn(async () => 20);
 const createAuditLogMock = vi.fn(async () => undefined);
 const broadcastAssignmentUpdatedMock = vi.fn();
 const broadcastBidWindowClosedMock = vi.fn();
+const sendNotificationMock = vi.fn(async () => ({
+	inAppCreated: true,
+	pushSent: false
+}));
 
 function createManagerUser(id = 'manager-1'): App.Locals['user'] {
 	return {
@@ -182,8 +186,10 @@ beforeEach(async () => {
 	createAuditLogMock.mockReset();
 	broadcastAssignmentUpdatedMock.mockReset();
 	broadcastBidWindowClosedMock.mockReset();
+	sendNotificationMock.mockReset();
 
 	canManagerAccessWarehouseMock.mockResolvedValue(true);
+	sendNotificationMock.mockResolvedValue({ inAppCreated: true, pushSent: false });
 	getEmergencyBonusPercentMock.mockResolvedValue(20);
 
 	vi.doMock('$lib/server/db', () => ({
@@ -233,6 +239,10 @@ beforeEach(async () => {
 		broadcastBidWindowClosed: broadcastBidWindowClosedMock
 	}));
 
+	vi.doMock('$lib/server/services/notifications', () => ({
+		sendNotification: sendNotificationMock
+	}));
+
 	({ POST } = await import('../../src/routes/api/assignments/[id]/override/+server'));
 }, 20_000);
 
@@ -247,6 +257,7 @@ afterEach(() => {
 	vi.doUnmock('$lib/server/services/dispatchSettings');
 	vi.doUnmock('$lib/server/services/audit');
 	vi.doUnmock('$lib/server/realtime/managerSse');
+	vi.doUnmock('$lib/server/services/notifications');
 	vi.clearAllMocks();
 });
 
