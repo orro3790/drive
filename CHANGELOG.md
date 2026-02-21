@@ -1,5 +1,64 @@
 # Changelog
 
+## [1.5.0](https://github.com/orro3790/drive/compare/v1.4.1...v1.5.0) (2026-02-21)
+
+
+### Features
+
+* **driver:** add shift history views and mobile refresh polish ([f4c4466](https://github.com/orro3790/drive/commit/f4c4466bab7fd2ce8279a25e2722b4e4c57b7c79))
+* **i18n:** add locale persistence endpoint and wire language selector ([f6e5de9](https://github.com/orro3790/drive/commit/f6e5de9e30d720a0644cd91983d691a6e994e657))
+* **i18n:** migrate all customBody callers to renderBody ([49a71d7](https://github.com/orro3790/drive/commit/49a71d7812fe40a9fbbe637c28386af02f6ff13b))
+* **i18n:** refactor sendManagerAlert and bulk notification paths ([edd273d](https://github.com/orro3790/drive/commit/edd273d010e4cab854d7dd7e08063328a4efe626))
+* **i18n:** remove NOTIFICATION_TEMPLATES and customBody/customTitle ([44273b9](https://github.com/orro3790/drive/commit/44273b9951ea356cd9b0e2e632be5d0b1d8f12b0))
+* manager shift edit, passkey UX, auth dark mode ([3c8b056](https://github.com/orro3790/drive/commit/3c8b056c1fd3bf6832eb38407e40ad26906fd518))
+* **notifications:** add locale-aware rendering to sendNotification ([f6a1d7f](https://github.com/orro3790/drive/commit/f6a1d7fa2c603e0ea9889cee692bd178688adbc3))
+
+
+### Bug Fixes
+
+* **api:** guard malformed JSON in write endpoints ([#170](https://github.com/orro3790/drive/issues/170)) ([461a699](https://github.com/orro3790/drive/commit/461a699d3d8f7ef2d63ac48d44729c8a451a905a))
+* **api:** standardize error envelope to { message } pattern ([#191](https://github.com/orro3790/drive/issues/191)) ([9c0d829](https://github.com/orro3790/drive/commit/9c0d8291ee265a3e143aa86e8bfe539175ed8351))
+* **api:** validate UUID path params for dynamic routes ([#171](https://github.com/orro3790/drive/issues/171)) ([3394d0f](https://github.com/orro3790/drive/commit/3394d0fb62ed210608039a7de8b44941a5d2dcb0))
+* **auth:** block revoked join signups before user creation ([#165](https://github.com/orro3790/drive/issues/165)) ([4a0c459](https://github.com/orro3790/drive/commit/4a0c45974c4110cbacbeb539e83d32b308ec4c02))
+* **auth:** fail closed on join-signup finalize races ([#160](https://github.com/orro3790/drive/issues/160)) ([fcedba4](https://github.com/orro3790/drive/commit/fcedba4a3e3618bdbeb1bdda93ff7cd226f0a87e))
+* **auth:** roll back create-signup users when finalize fails ([#162](https://github.com/orro3790/drive/issues/162)) ([b6986ae](https://github.com/orro3790/drive/commit/b6986ae353b86963f363b3f947d54f85dea15b51))
+* **bidding:** keep durable bid-window creates successful when fanout fails ([#163](https://github.com/orro3790/drive/issues/163)) ([98320d5](https://github.com/orro3790/drive/commit/98320d5b1dddde68682050e6f15f916c7254a79e))
+* **bidding:** make createBidWindow durable on insert failures ([#158](https://github.com/orro3790/drive/issues/158)) ([815245b](https://github.com/orro3790/drive/commit/815245b2103fc47df13f85e07f4917b1c2e264d6))
+* **cancellation:** use route start time for late-cancel cutoff ([#167](https://github.com/orro3790/drive/issues/167)) ([fab2e31](https://github.com/orro3790/drive/commit/fab2e31ab85fd41a706d977ee7026fac574dbed0))
+* **cron:** align auto-drop DST cutoff with confirmation deadline ([af9cba9](https://github.com/orro3790/drive/commit/af9cba98d2fd2bef5affb9dfe44512c6deb30b8e))
+* **dashboard:** block concurrent complete-shift mutations ([#172](https://github.com/orro3790/drive/issues/172)) ([2436e84](https://github.com/orro3790/drive/commit/2436e84c56ecfba52126c537e4e9933364f419e7))
+* **dashboard:** guard complete-shift rollback by mutation version ([#169](https://github.com/orro3790/drive/issues/169)) ([02def30](https://github.com/orro3790/drive/commit/02def301a3a554d1ba9f4d55d18f2b73fbfd9e5d))
+* **driver:** include remaining schedule action-circle styles ([55f9d94](https://github.com/orro3790/drive/commit/55f9d94af3f2af76806151264bb487f59909979b))
+* **driver:** reconcile remaining schedule page changes ([da1a1ab](https://github.com/orro3790/drive/commit/da1a1ab1b8353d2b62c4bf239d1bf3821f5902b9))
+* **i18n:** add Korean locale, fix typography/dark mode, i18n hardcoded strings ([95a04e4](https://github.com/orro3790/drive/commit/95a04e429286a4e4aa96e0dff68cc15752d5f8b6))
+* **i18n:** add missing admin reset-password and weekly cap message keys ([#198](https://github.com/orro3790/drive/issues/198)) ([3ca5a32](https://github.com/orro3790/drive/commit/3ca5a32cc2436890c509e843f16b4d3a43ab7f05))
+* **i18n:** add missing zh locale keys ([#195](https://github.com/orro3790/drive/issues/195)) ([dd3c16e](https://github.com/orro3790/drive/commit/dd3c16e8796680abe73bb14ca3413cefd04be403))
+* **i18n:** audit driver and manager route copy coverage ([#194](https://github.com/orro3790/drive/issues/194)) ([87c3cb5](https://github.com/orro3790/drive/commit/87c3cb54399875935a403883a27348f7db8dd7ce))
+* **i18n:** localize driver route/component hardcoded copy ([#197](https://github.com/orro3790/drive/issues/197)) ([89beb79](https://github.com/orro3790/drive/commit/89beb79ee9e45b4a1b17ff9a7d1483f102e0f890))
+* **i18n:** localize relative time labels in notification cards ([8c75ea9](https://github.com/orro3790/drive/commit/8c75ea93b9f574cc60fb8afbe8c4ca2aaf33ebe6))
+* **i18n:** localize shift date/time formatting in notifications ([d6758ef](https://github.com/orro3790/drive/commit/d6758efe40bce77f8bb2a6a15c4057917af2f97b))
+* **i18n:** resolve code review findings for notification localization ([f17f9c8](https://github.com/orro3790/drive/commit/f17f9c81480ed029dcffe09d938b9f569fe5ae57))
+* **nightly:** add operational alerting for full nightly failures ([#184](https://github.com/orro3790/drive/issues/184)) ([b0a577a](https://github.com/orro3790/drive/commit/b0a577ac64e6b59125c715ada082fc7036783503))
+* **nightly:** enforce witness gating and deterministic readiness ([#175](https://github.com/orro3790/drive/issues/175)) ([3fe597c](https://github.com/orro3790/drive/commit/3fe597cb280d00bee0d75d626b6ab658f4912f2b))
+* **nightly:** fail orchestrator when witness run is skipped ([#187](https://github.com/orro3790/drive/issues/187)) ([bd0834c](https://github.com/orro3790/drive/commit/bd0834c12f96b5fb3b38518cfa47a958bfe0a33f))
+* **nightly:** propagate upstream cron failure into witness verdict ([#183](https://github.com/orro3790/drive/issues/183)) ([4fe4190](https://github.com/orro3790/drive/commit/4fe41901f03812a4a256ffb5b015a506793ebf4a))
+* **nightly:** validate drill report verdicts in orchestrator ([#174](https://github.com/orro3790/drive/issues/174)) ([1535c39](https://github.com/orro3790/drive/commit/1535c39103bccbc0136a17fc391d6d659e81bb90))
+* **notifications:** classify FCM push failures and clear invalid tokens ([#168](https://github.com/orro3790/drive/issues/168)) ([91d250e](https://github.com/orro3790/drive/commit/91d250e6bc9c2141e1de8c76ba305df61b6d23f8))
+* **notifications:** include route timing in cancellation alerts ([#186](https://github.com/orro3790/drive/issues/186)) ([b9fb4c7](https://github.com/orro3790/drive/commit/b9fb4c7e67b304247e6f98c33832812935706381))
+* **notifications:** include shift date-time context in shift alerts ([#182](https://github.com/orro3790/drive/issues/182)) ([3ae69ea](https://github.com/orro3790/drive/commit/3ae69ea7e71078847759743ffe8a33b2f302949d))
+* **notifications:** resolve FCM SenderId mismatch and wire shift_cancelled dispatch ([dca51ef](https://github.com/orro3790/drive/commit/dca51ef52eb4d0d31e318004072a21d9350ca3be))
+* **preferences:** block writes after cycle lock deadline ([#166](https://github.com/orro3790/drive/issues/166)) ([a785075](https://github.com/orro3790/drive/commit/a78507543d827f49457d08251f91f3ee1fb6e529))
+* **preferences:** enforce atomic lock-safe writes ([#161](https://github.com/orro3790/drive/issues/161)) ([b815d35](https://github.com/orro3790/drive/commit/b815d3582e20cb89f1c776d94258c77f2ddcc45e))
+* **preferences:** enforce current-cycle lock boundary ([#159](https://github.com/orro3790/drive/issues/159)) ([ffc219c](https://github.com/orro3790/drive/commit/ffc219ca315f7889a306926387cb079f1dff1e94))
+* reconcile PRs [#173](https://github.com/orro3790/drive/issues/173) and [#185](https://github.com/orro3790/drive/issues/185) from main into develop ([1b50fc8](https://github.com/orro3790/drive/commit/1b50fc8668d4419874ba6dfe41dc8a3e1906b8f2))
+* **reliability:** harden cancellation retry and cron isolation ([4143ee4](https://github.com/orro3790/drive/commit/4143ee438ee4fec70c35c943cfb0c7df981b0a5c))
+* **schedule:** preserve minutes in route start-time labels ([#181](https://github.com/orro3790/drive/issues/181)) ([d9056ed](https://github.com/orro3790/drive/commit/d9056ed8ee7c1e04f624c0e48fbf96f925d42084))
+* **scheduling:** pin assignment week-start checks to Toronto date-only math ([#164](https://github.com/orro3790/drive/issues/164)) ([893bea2](https://github.com/orro3790/drive/commit/893bea254139d2b900c0141b854508780c3a1983))
+* **scheduling:** unify DST deadline enforcement model ([417d72d](https://github.com/orro3790/drive/commit/417d72def7f1174b50708e339152b7a82fac4e56))
+* **schema:** add missing i18n migration and remove stale Leap artifact ([c2ee038](https://github.com/orro3790/drive/commit/c2ee038cb8477397ce3ded1d19aab9bd79b88624))
+* **tests:** align test mocks with i18n notification refactor ([84fc10b](https://github.com/orro3790/drive/commit/84fc10baf6467f4ec0ceb9a5fd67c7aae0270121))
+* **ui:** add 44px coarse-pointer touch targets to auth toggles and checkbox ([3edf61c](https://github.com/orro3790/drive/commit/3edf61cac81b64eaca1f7458a1b6cf27b91a50ce))
+
 ## [1.4.1](https://github.com/orro3790/drive/compare/v1.4.0...v1.4.1) (2026-02-17)
 
 
