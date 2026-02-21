@@ -61,7 +61,7 @@ let sendNotificationMock: ReturnType<
 			userId: string,
 			type: 'shift_reminder',
 			payload: {
-				customBody: string;
+				renderBody: (locale: string) => string;
 				organizationId: string;
 				data: {
 					assignmentId: string;
@@ -251,7 +251,7 @@ describe('GET /api/cron/shift-reminders contract', () => {
 
 		expect(sendNotificationMock).toHaveBeenCalledTimes(2);
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(1, 'driver-1', 'shift_reminder', {
-			customBody: 'Your shift on route Route A at Warehouse A starts Mon, Feb 9 at 9:00 AM.',
+			renderBody: expect.any(Function),
 			organizationId: 'org-1',
 			data: {
 				assignmentId: 'assignment-1',
@@ -264,7 +264,7 @@ describe('GET /api/cron/shift-reminders contract', () => {
 			}
 		});
 		expect(sendNotificationMock).toHaveBeenNthCalledWith(2, 'driver-3', 'shift_reminder', {
-			customBody: 'Your shift on route Route C at Warehouse C starts Mon, Feb 9 at 9:00 AM.',
+			renderBody: expect.any(Function),
 			organizationId: 'org-1',
 			data: {
 				assignmentId: 'assignment-3',
