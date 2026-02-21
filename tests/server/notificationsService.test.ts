@@ -93,6 +93,28 @@ beforeAll(async () => {
 		canDriverTakeAssignment: vi.fn(async () => true)
 	}));
 
+	// Mock Paraglide messages — return key names as placeholder strings
+	vi.doMock('$lib/paraglide/messages.js', () => {
+		return new Proxy(
+			{},
+			{
+				get: (_target, prop) => {
+					if (typeof prop === 'string') {
+						return (_inputs?: Record<string, unknown>) => `[${prop}]`;
+					}
+					return undefined;
+				}
+			}
+		);
+	});
+
+	vi.doMock('$lib/paraglide/runtime.js', () => ({
+		locales: ['en', 'zh', 'zh-Hant', 'ko'],
+		getLocale: vi.fn(() => 'en'),
+		setLocale: vi.fn(),
+		isLocale: vi.fn((l: string) => ['en', 'zh', 'zh-Hant', 'ko'].includes(l))
+	}));
+
 	({ sendNotification } =
 		(await import('../../src/lib/server/services/notifications')) as NotificationsModule);
 });
@@ -124,7 +146,7 @@ afterAll(() => {
 
 describe('notification service org scoping', () => {
 	it('creates same-org in-app notifications', async () => {
-		setSelectResults([[{ fcmToken: null, organizationId: 'org-a' }]]);
+		setSelectResults([[{ fcmToken: null, organizationId: 'org-a', preferredLocale: 'en' }]]);
 
 		const result = await sendNotification('driver-1', 'manual', {
 			organizationId: 'org-a',
@@ -138,7 +160,7 @@ describe('notification service org scoping', () => {
 	});
 
 	it('persists shift metadata and includes shift context in push payload', async () => {
-		setSelectResults([[{ fcmToken: 'token-1', organizationId: 'org-a' }]]);
+		setSelectResults([[{ fcmToken: 'token-1', organizationId: 'org-a', preferredLocale: 'en' }]]);
 		const shiftData = {
 			assignmentId: 'assignment-1',
 			assignmentDate: '2026-02-10',
@@ -148,7 +170,7 @@ describe('notification service org scoping', () => {
 
 		const result = await sendNotification('driver-shift', 'shift_reminder', {
 			organizationId: 'org-a',
-			customBody: shiftBody,
+			renderBody: () => shiftBody,
 			data: shiftData
 		});
 
@@ -170,7 +192,7 @@ describe('notification service org scoping', () => {
 	});
 
 	it('skips cross-org notifications when recipient org mismatches', async () => {
-		setSelectResults([[{ fcmToken: null, organizationId: 'org-b' }]]);
+		setSelectResults([[{ fcmToken: null, organizationId: 'org-b', preferredLocale: 'en' }]]);
 
 		const result = await sendNotification('driver-2', 'manual', {
 			organizationId: 'org-a'
@@ -181,7 +203,9 @@ describe('notification service org scoping', () => {
 	});
 
 	it('classifies retryable FCM failures as transient without token cleanup', async () => {
-		setSelectResults([[{ fcmToken: 'token-transient', organizationId: 'org-a' }]]);
+		setSelectResults([
+			[{ fcmToken: 'token-transient', organizationId: 'org-a', preferredLocale: 'en' }]
+		]);
 		messagingSendMock.mockRejectedValueOnce({
 			code: 'messaging/server-unavailable',
 			message: 'temporary outage'
@@ -203,7 +227,9 @@ describe('notification service org scoping', () => {
 	});
 
 	it('classifies invalid-token failures as terminal and clears stored token', async () => {
-		setSelectResults([[{ fcmToken: 'token-dead', organizationId: 'org-a' }]]);
+		setSelectResults([
+			[{ fcmToken: 'token-dead', organizationId: 'org-a', preferredLocale: 'en' }]
+		]);
 		messagingSendMock.mockRejectedValueOnce({
 			code: 'messaging/registration-token-not-registered',
 			message: 'token no longer valid'

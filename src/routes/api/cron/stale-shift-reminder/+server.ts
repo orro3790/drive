@@ -21,6 +21,7 @@ import {
 import logger from '$lib/server/logger';
 import { sendNotification } from '$lib/server/services/notifications';
 import { verifyCronAuth } from '$lib/server/cron/auth';
+import * as m from '$lib/paraglide/messages.js';
 
 export const GET: RequestHandler = async ({ request }) => {
 	const authError = verifyCronAuth(request);
@@ -113,7 +114,8 @@ export const GET: RequestHandler = async ({ request }) => {
 
 				try {
 					await sendNotification(staleShift.userId, 'stale_shift_reminder', {
-						customBody: `You have an incomplete shift from ${staleShift.date}. Please close it out to start new shifts.`,
+						renderBody: (locale) =>
+							m.notif_stale_shift_reminder_body({ date: staleShift.date }, { locale }),
 						organizationId,
 						data: {
 							assignmentId: staleShift.assignmentId,

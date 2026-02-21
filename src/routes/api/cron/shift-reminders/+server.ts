@@ -24,6 +24,7 @@ import logger from '$lib/server/logger';
 import { sendNotification } from '$lib/server/services/notifications';
 import { verifyCronAuth } from '$lib/server/cron/auth';
 import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
+import * as m from '$lib/paraglide/messages.js';
 
 const TORONTO_TZ = 'America/Toronto';
 
@@ -158,9 +159,20 @@ export const GET: RequestHandler = async ({ request }) => {
 				}
 
 				try {
-					const shiftContext = formatNotificationShiftContext(today, assignment.routeStartTime);
 					await sendNotification(assignment.userId, 'shift_reminder', {
-						customBody: `Your shift on route ${assignment.routeName} at ${assignment.warehouseName} starts ${shiftContext}.`,
+						renderBody: (locale) =>
+							m.notif_shift_reminder_body(
+								{
+									routeName: assignment.routeName,
+									warehouseName: assignment.warehouseName,
+									shiftContext: formatNotificationShiftContext(
+										today,
+										assignment.routeStartTime,
+										locale
+									)
+								},
+								{ locale }
+							),
 						organizationId,
 						data: {
 							assignmentId: assignment.assignmentId,

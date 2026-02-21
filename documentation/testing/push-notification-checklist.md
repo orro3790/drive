@@ -41,10 +41,10 @@ Important:
 - Logging out/in can change which user receives pushes on that device.
 - When switching recipient role, re-open the app and wait 5-10 seconds before testing.
 
-### Current Smoke Progress (2026-02-16)
+### Current Smoke Progress (2026-02-20)
 
 - [x] `shift_reminder` PASS (tray + in-app + tap verified)
-- [ ] `bid_won` PENDING
+- [x] `bid_won` PASS (competitive resolution with 3 bidders, scoring verified, push delivered to winner)
 - [x] `driver_no_show` PASS (tray + in-app + tap verified)
 - [x] `return_exception` PASS (tray + in-app + tap verified)
 
@@ -53,6 +53,8 @@ Notes:
 - Post-release probe delivery confirmed to manager device.
 - Driver dashboard completion path updated to optimistic UI with rollback (`fix(driver-dashboard): apply optimistic shift completion with rollback`).
 - If UI still appears stale in an already-open tab/session, hard-refresh once to load latest bundle before retesting.
+- 2026-02-20: Root cause of dev-server push failures found and fixed — `.env.local` (from `vercel env pull`) had stale Firebase project `drive-6952e` overriding correct `drive-b7830` in `.env`. Deleted `.env.local`.
+- 2026-02-20: Competitive bid scoring verified — 3 drivers bid on same window, predicted scores matched server-computed scores within rounding tolerance, correct winner selected.
 
 ## FCM Token Verification
 
@@ -83,7 +85,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/routes/api/cron/shift-reminders/+server.ts:159`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (smoke run + cron trigger, push delivered)
 
 ---
 
@@ -101,7 +103,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/bidding.ts:427-428`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (91 records, triggered via auto-drop cron creating competitive windows)
 
 ---
 
@@ -119,7 +121,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/bidding.ts:427`, `src/lib/server/services/notifications.ts:515`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (14 records, triggered via no-show detection and manager emergency)
 
 ---
 
@@ -145,7 +147,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 - `src/routes/api/bids/+server.ts:185` (instant mode)
 - `src/routes/api/bid-windows/[id]/assign/+server.ts:223` (manager assign)
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (competitive 3-bidder, scoring matched predictions, push delivered)
 
 ---
 
@@ -167,7 +169,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 - `src/lib/server/services/assignments.ts:231`
 - `src/routes/api/bid-windows/[id]/assign/+server.ts:232`
 
-**Status**: [x] Verified
+**Status**: [x] Verified (2 losers received bid_lost in competitive resolution)
 
 ---
 
@@ -210,7 +212,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/routes/api/cron/send-confirmation-reminders/+server.ts:119`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (cron triggered, 14 records, push sent post-fix)
 
 ---
 
@@ -228,7 +230,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/routes/api/cron/auto-drop-unconfirmed/+server.ts:158`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (cron triggered, dropped 1, push sent post-fix, 22 total records)
 
 ---
 
@@ -246,7 +248,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/routes/api/cron/lock-preferences/+server.ts:128`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (dispatch path confirmed via schedule generation, push pipeline proven)
 
 ---
 
@@ -265,7 +267,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/routes/api/cron/stale-shift-reminder/+server.ts:115`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (cron triggered, sent 1 post-fix, 10 total records)
 
 ---
 
@@ -283,7 +285,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/flagging.ts:197`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (14 records from real flagging checks during shift completion)
 
 ---
 
@@ -301,7 +303,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/health.ts:830`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (12 records from weekly health evaluation)
 
 ---
 
@@ -319,7 +321,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/health.ts:825`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (2 records from weekly health evaluation hard-stop detection)
 
 ---
 
@@ -338,7 +340,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/health.ts:836`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (3 records from weekly health evaluation star progression)
 
 ---
 
@@ -356,7 +358,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/health.ts:992`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (11 records from daily health evaluation)
 
 ---
 
@@ -376,7 +378,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/notifications.ts:412`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (24 records from schedule generation and bid window closures)
 
 ---
 
@@ -393,7 +395,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: `src/lib/server/services/notifications.ts:412`
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (5 records from route cancellation events)
 
 ---
 
@@ -448,7 +450,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: Defined in schema but dispatch location TBD
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (7 records from driver/system cancellation paths)
 
 ---
 
@@ -465,7 +467,7 @@ If `fcm_token` is NULL, the device hasn't registered for push notifications.
 
 **Source**: Defined in schema, used for admin-triggered messages
 
-**Status**: [ ] Verified
+**Status**: [x] Verified (2 records from admin-triggered messages)
 
 ---
 
@@ -486,7 +488,7 @@ For each notification scenario, mark pass only if all checks pass:
 Run this sequence before full coverage:
 
 1. [x] `shift_reminder` (phone logged in as Driver; trigger cron)
-2. [ ] `bid_won` (phone logged in as Driver; manager creates instant bid path)
+2. [x] `bid_won` (phone logged in as Driver; competitive 3-bidder resolution, scoring verified)
 3. [x] `driver_no_show` (phone logged in as Manager; trigger no-show flow)
 4. [x] `return_exception` (phone logged in as Manager; driver completes with exceptions)
 

@@ -30,6 +30,7 @@ import { dispatchPolicy } from '$lib/config/dispatchPolicy';
 import { createAuditLog } from '$lib/server/services/audit';
 import { getDriverHealthPolicyThresholds } from '$lib/server/services/dispatchSettings';
 import { sendNotification } from '$lib/server/services/notifications';
+import * as m from '$lib/paraglide/messages.js';
 import type { HealthContributions } from '$lib/schemas/health';
 import { addDaysToDateString, toTorontoDateString } from '$lib/server/time/toronto';
 
@@ -823,18 +824,32 @@ async function persistWeeklyEval(result: WeeklyEvalResult, organizationId: strin
 	// Send notifications
 	if (result.hardStopReset && result.previousStars > 0) {
 		await sendNotification(result.userId, 'streak_reset', {
-			customBody: `Your streak has been reset to 0 stars. ${result.reasons[0]}`,
+			renderBody: (locale) => m.notif_streak_reset_body({ reason: result.reasons[0] }, { locale }),
 			organizationId
 		});
 	} else if (result.qualified && result.newStars > result.previousStars) {
 		await sendNotification(result.userId, 'streak_advanced', {
-			customBody: `Great work! You earned star ${result.newStars} of ${dispatchPolicy.health.maxStars}.`,
+			renderBody: (locale) =>
+				m.notif_streak_advanced_body(
+					{
+						newStars: String(result.newStars),
+						maxStars: String(dispatchPolicy.health.maxStars)
+					},
+					{ locale }
+				),
 			organizationId
 		});
 
 		if (result.newStars === dispatchPolicy.health.maxStars) {
 			await sendNotification(result.userId, 'bonus_eligible', {
-				customBody: `Congratulations! You reached ${dispatchPolicy.health.maxStars} stars and qualify for a +${dispatchPolicy.health.simulationBonus.fourStarBonusPercent}% bonus preview.`,
+				renderBody: (locale) =>
+					m.notif_bonus_eligible_body(
+						{
+							maxStars: String(dispatchPolicy.health.maxStars),
+							bonusPercent: String(dispatchPolicy.health.simulationBonus.fourStarBonusPercent)
+						},
+						{ locale }
+					),
 				organizationId
 			});
 		}
@@ -990,7 +1005,11 @@ export async function runDailyHealthEvaluation(
 
 							if (!recentWarning) {
 								await sendNotification(driver.id, 'corrective_warning', {
-									customBody: `Your completion rate has dropped below ${correctiveCompletionThresholdPercent}%. Improve within 7 days to avoid further impact.`,
+									renderBody: (locale) =>
+										m.notif_corrective_warning_body(
+											{ threshold: String(correctiveCompletionThresholdPercent) },
+											{ locale }
+										),
 									organizationId: orgId
 								});
 								correctiveWarnings++;

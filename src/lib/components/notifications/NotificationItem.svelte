@@ -5,6 +5,7 @@
 	import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
 	import { goto } from '$app/navigation';
 	import * as m from '$lib/paraglide/messages.js';
+	import { getLocale } from '$lib/paraglide/runtime.js';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import IconCircle from '$lib/components/primitives/IconCircle.svelte';
 	import IconBase from '$lib/components/primitives/Icon.svelte';
@@ -46,9 +47,11 @@
 	const shiftContextLabel = $derived.by(() => {
 		const assignmentDate = notification.data?.assignmentDate ?? notification.data?.date;
 		const routeStartTime = notification.data?.routeStartTime;
-		return formatNotificationShiftContext(assignmentDate, routeStartTime);
+		return formatNotificationShiftContext(assignmentDate, routeStartTime, getLocale());
 	});
-	const timeLabel = $derived.by(() => formatRelativeTime(notification.createdAt) || '');
+	const timeLabel = $derived.by(
+		() => formatRelativeTime(notification.createdAt, getLocale()) || ''
+	);
 
 	const isFromToday = $derived.by(() => {
 		const created = new Date(notification.createdAt);

@@ -579,7 +579,30 @@
 {/snippet}
 
 {#snippet driverDetailList(driver: Driver)}
-	<HealthCard healthUrl={`/api/drivers/${driver.id}/health`} />
+	<HealthCard healthUrl={`/api/drivers/${driver.id}/health`} context="manager" />
+
+	{#if driver.isFlagged || !driver.assignmentPoolEligible}
+		<div class="manager-notice">
+			<p class="manager-notice-text">
+				{#if !driver.assignmentPoolEligible}
+					{m.drivers_manager_hard_stop_notice()}
+				{:else if driver.flagWarningDate}
+					{m.drivers_manager_flagged_notice({ date: formatDate(driver.flagWarningDate) })}
+				{:else}
+					{m.drivers_manager_flagged_notice_no_date()}
+				{/if}
+			</p>
+			{#if !driver.assignmentPoolEligible}
+				<Button variant="secondary" size="small" onclick={(e) => openReinstateConfirm(driver, e)}>
+					{m.drivers_reinstate_button()}
+				</Button>
+			{:else}
+				<Button variant="secondary" size="small" onclick={(e) => openUnflagConfirm(driver, e)}>
+					{m.drivers_unflag_button()}
+				</Button>
+			{/if}
+		</div>
+	{/if}
 
 	<dl class="detail-list">
 		<div class="detail-row">
@@ -593,6 +616,14 @@
 		<div class="detail-row">
 			<dt>{m.drivers_detail_phone()}</dt>
 			<dd>{driver.phone || m.drivers_detail_no_phone()}</dd>
+		</div>
+		<div class="detail-row">
+			<dt>{m.drivers_detail_shift_history()}</dt>
+			<dd>
+				<Button variant="secondary" size="small" onclick={() => openDriverTab(driver)}>
+					{m.drivers_detail_view_history()}
+				</Button>
+			</dd>
 		</div>
 		<div class="detail-row">
 			<dt>
@@ -660,14 +691,6 @@
 				{@render healthIndicator(driver.healthState)}
 			</dd>
 		</div>
-		{#if driver.flagWarningDate}
-			<div class="detail-row">
-				<dt></dt>
-				<dd class="warning-date">
-					{m.drivers_flag_warning_date({ date: formatDate(driver.flagWarningDate) })}
-				</dd>
-			</div>
-		{/if}
 		<div class="detail-row">
 			<dt>
 				<Tooltip tooltip={m.drivers_detail_tooltip_member_since()} delay={250} focusable={false}>
@@ -680,7 +703,7 @@
 {/snippet}
 
 {#snippet driverDetailEditList(driver: Driver)}
-	<HealthCard healthUrl={`/api/drivers/${driver.id}/health`} />
+	<HealthCard healthUrl={`/api/drivers/${driver.id}/health`} context="manager" />
 
 	<dl class="detail-list">
 		<div class="detail-row">
@@ -767,14 +790,6 @@
 				{@render healthIndicator(driver.healthState)}
 			</dd>
 		</div>
-		{#if driver.flagWarningDate}
-			<div class="detail-row">
-				<dt></dt>
-				<dd class="warning-date">
-					{m.drivers_flag_warning_date({ date: formatDate(driver.flagWarningDate) })}
-				</dd>
-			</div>
-		{/if}
 		<div class="detail-row">
 			<dt>
 				<Tooltip tooltip={m.drivers_detail_tooltip_member_since()} delay={250} focusable={false}>
@@ -789,9 +804,6 @@
 {#snippet driverDetailView(driver: Driver)}
 	<div class="detail-content">
 		{@render driverDetailList(driver)}
-		<Button variant="secondary" size="small" fill onclick={() => openDriverTab(driver)}>
-			{m.drivers_view_route_history()}
-		</Button>
 	</div>
 {/snippet}
 
@@ -799,19 +811,6 @@
 	<div class="detail-content">
 		{@render driverDetailEditList(driver)}
 	</div>
-{/snippet}
-
-{#snippet driverDetailActions(driver: Driver)}
-	{#if !driver.assignmentPoolEligible}
-		<Button variant="secondary" size="small" fill onclick={(e) => openReinstateConfirm(driver, e)}>
-			{m.drivers_reinstate_button()}
-		</Button>
-	{/if}
-	{#if driver.isFlagged}
-		<Button variant="secondary" size="small" fill onclick={(e) => openUnflagConfirm(driver, e)}>
-			{m.drivers_unflag_button()}
-		</Button>
-	{/if}
 {/snippet}
 
 {#snippet mobileDetail(driver: Driver)}
@@ -831,22 +830,9 @@
 					{m.common_save()}
 				</Button>
 			{:else}
-				<Button variant="secondary" fill onclick={() => openDriverTab(driver)}>
-					{m.drivers_view_route_history()}
-				</Button>
 				<Button fill onclick={() => startEditing(driver)}>
 					{m.common_edit()}
 				</Button>
-				{#if !driver.assignmentPoolEligible}
-					<Button variant="secondary" fill onclick={(e) => openReinstateConfirm(driver, e)}>
-						{m.drivers_reinstate_button()}
-					</Button>
-				{/if}
-				{#if driver.isFlagged}
-					<Button variant="secondary" fill onclick={(e) => openUnflagConfirm(driver, e)}>
-						{m.drivers_unflag_button()}
-					</Button>
-				{/if}
 			{/if}
 		</div>
 	</div>
@@ -924,10 +910,6 @@
 		onSave={handleSave}
 		viewContent={driverDetailView}
 		editContent={driverDetailEdit}
-		viewActions={selectedDriver &&
-		(selectedDriver.isFlagged || !selectedDriver.assignmentPoolEligible)
-			? driverDetailActions
-			: undefined}
 		{tableContent}
 		storageKey="drivers"
 	/>
@@ -1182,9 +1164,19 @@
 		color: var(--status-error);
 	}
 
-	.warning-date {
-		font-size: var(--font-size-xs);
-		color: var(--status-warning);
+	.manager-notice {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-3);
+		padding: var(--spacing-3) 0;
+	}
+
+	.manager-notice-text {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--text-muted);
+		line-height: 1.4;
 	}
 
 	.detail-actions {

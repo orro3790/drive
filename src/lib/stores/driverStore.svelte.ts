@@ -179,9 +179,11 @@ export const driverStore = {
 		const mutationKey = `driver:${id}`;
 		const mutationVersion = nextMutationVersion(mutationKey);
 
-		// Optimistic update
+		// Optimistic update — also clear flag when reinstating
 		state.drivers = state.drivers.map((d) =>
-			d.id === id ? { ...d, assignmentPoolEligible: true } : d
+			d.id === id
+				? { ...d, assignmentPoolEligible: true, isFlagged: false, flagWarningDate: null }
+				: d
 		);
 
 		this._reinstateInDb(id, original, mutationKey, mutationVersion);
@@ -258,7 +260,7 @@ export const driverStore = {
 			const res = await fetch(`/api/drivers/${id}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ reinstate: true })
+				body: JSON.stringify({ reinstate: true, unflag: true })
 			});
 
 			if (!res.ok) {

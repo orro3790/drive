@@ -53,6 +53,12 @@ Displays and updates user's account info, password, and preferences.
 	function handleLanguageChange(newLocale: string | number) {
 		if (newLocale === currentLocale) return;
 		setLocale(newLocale as Locale);
+		// Persist locale server-side for notification language (fire-and-forget)
+		fetch('/api/users/locale', {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ locale: newLocale })
+		}).catch(() => {});
 	}
 
 	type AccountField = 'name' | 'email' | 'phone';

@@ -46,12 +46,14 @@
 
 {#if shouldShow}
 	<div class="notification-card">
-		<div class="icon">
-			<Icon size="medium"><BellRinging /></Icon>
-		</div>
-		<div class="content">
-			<h3>{m.notification_permission_title()}</h3>
-			<p>{m.notification_permission_description()}</p>
+		<div class="top-row">
+			<div class="icon">
+				<Icon size="medium"><BellRinging /></Icon>
+			</div>
+			<div class="content">
+				<h3>{m.notification_permission_title()}</h3>
+				<p>{m.notification_permission_description()}</p>
+			</div>
 		</div>
 		<div class="actions">
 			<IconButton tooltip={m.toast_dismiss_tooltip()} onclick={handleDismiss}>
@@ -71,11 +73,17 @@
 <style>
 	.notification-card {
 		display: flex;
-		align-items: flex-start;
-		gap: var(--spacing-3);
+		flex-direction: column;
+		gap: var(--spacing-2);
 		background: var(--surface-primary);
 		border-bottom: 1px solid var(--border-muted);
 		padding: var(--spacing-3);
+	}
+
+	.top-row {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--spacing-3);
 	}
 
 	.icon {
@@ -105,6 +113,6 @@
 	.actions {
 		display: flex;
 		gap: var(--spacing-1);
-		flex-shrink: 0;
+		align-self: flex-end;
 	}
 </style>

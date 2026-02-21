@@ -5,6 +5,7 @@ import { createAuditLog } from '$lib/server/services/audit';
 import { canManagerAccessWarehouse } from '$lib/server/services/managers';
 import { sendBulkNotifications, sendNotification } from '$lib/server/services/notifications';
 import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
+import * as m from '$lib/paraglide/messages.js';
 import {
 	getDriverWeeklyAssignmentCount,
 	getWeekStartForDateString
@@ -222,10 +223,19 @@ export async function manualAssignDriverToAssignment(params: {
 	if (transactionResult.bidWindowId) {
 		notificationData.bidWindowId = transactionResult.bidWindowId;
 	}
-	const shiftContext = formatNotificationShiftContext(assignment.date, assignment.routeStartTime);
-
 	await sendNotification(driver.id, 'assignment_confirmed', {
-		customBody: `You were assigned ${assignment.routeName} for ${shiftContext}.`,
+		renderBody: (locale) =>
+			m.notif_assignment_confirmed_body(
+				{
+					routeName: assignment.routeName,
+					shiftContext: formatNotificationShiftContext(
+						assignment.date,
+						assignment.routeStartTime,
+						locale
+					)
+				},
+				{ locale }
+			),
 		data: notificationData,
 		organizationId: assignmentOrganizationId
 	});
@@ -235,7 +245,18 @@ export async function manualAssignDriverToAssignment(params: {
 		.map((bid) => bid.userId);
 	if (loserIds.length > 0) {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
-			customBody: `${assignment.routeName} for ${shiftContext} was assigned by a manager.`,
+			renderBody: (locale) =>
+				m.notif_assignment_confirmed_manager_body(
+					{
+						routeName: assignment.routeName,
+						shiftContext: formatNotificationShiftContext(
+							assignment.date,
+							assignment.routeStartTime,
+							locale
+						)
+					},
+					{ locale }
+				),
 			data: notificationData,
 			organizationId: assignmentOrganizationId
 		});

@@ -24,7 +24,10 @@
 		deriveThresholdFlags
 	} from '$lib/components/driver/healthCardState';
 
-	let { healthUrl = '/api/driver-health' }: { healthUrl?: string } = $props();
+	let {
+		healthUrl = '/api/driver-health',
+		context = 'driver'
+	}: { healthUrl?: string; context?: 'driver' | 'manager' } = $props();
 
 	let health = $state<HealthResponse | null>(null);
 	let isLoading = $state(true);
@@ -356,7 +359,7 @@
 			</div>
 		{/if}
 
-		{#if health.hardStop.triggered}
+		{#if health.hardStop.triggered && context === 'driver'}
 			<NoticeBanner variant="warning" align="start">
 				<p class="hard-stop-title">{m.dashboard_health_hard_stop_title()}</p>
 				<p class="hard-stop-message">{m.dashboard_health_hard_stop_message()}</p>

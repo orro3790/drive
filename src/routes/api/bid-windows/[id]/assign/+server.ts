@@ -17,6 +17,7 @@ import { bidWindowIdParamsSchema } from '$lib/schemas/api/bidding';
 import { createAuditLog } from '$lib/server/services/audit';
 import { requireManagerWithOrg } from '$lib/server/org-scope';
 import { formatNotificationShiftContext } from '$lib/utils/notifications/shiftContext';
+import * as m from '$lib/paraglide/messages.js';
 import {
 	broadcastAssignmentUpdated,
 	broadcastBidWindowClosed
@@ -222,10 +223,19 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 		routeStartTime: window.routeStartTime,
 		assignmentDate: window.assignmentDate
 	};
-	const shiftContext = formatNotificationShiftContext(window.assignmentDate, window.routeStartTime);
-
 	await sendNotification(driver.id, 'assignment_confirmed', {
-		customBody: `You were assigned ${window.routeName} for ${shiftContext}.`,
+		renderBody: (locale) =>
+			m.notif_assignment_confirmed_body(
+				{
+					routeName: window.routeName,
+					shiftContext: formatNotificationShiftContext(
+						window.assignmentDate,
+						window.routeStartTime,
+						locale
+					)
+				},
+				{ locale }
+			),
 		data: notificationData,
 		organizationId
 	});
@@ -234,7 +244,18 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	if (loserIds.length > 0) {
 		await sendBulkNotifications(loserIds, 'bid_lost', {
-			customBody: `${window.routeName} for ${shiftContext} was assigned by a manager.`,
+			renderBody: (locale) =>
+				m.notif_assignment_confirmed_manager_body(
+					{
+						routeName: window.routeName,
+						shiftContext: formatNotificationShiftContext(
+							window.assignmentDate,
+							window.routeStartTime,
+							locale
+						)
+					},
+					{ locale }
+				),
 			data: notificationData,
 			organizationId
 		});

@@ -1,5 +1,20 @@
 <script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
+	import { applyTheme, getStoredTheme } from '$lib/utils/theme';
+
 	let { children } = $props();
+
+	onMount(() => {
+		// Force dark mode on auth pages without persisting to localStorage
+		document.documentElement.setAttribute('data-theme', 'dark');
+		document.documentElement.style.removeProperty('color-scheme');
+	});
+
+	onDestroy(() => {
+		// Restore the user's stored preference when leaving auth pages
+		const stored = getStoredTheme();
+		applyTheme(stored ?? 'dark');
+	});
 </script>
 
 <div class="auth-shell">

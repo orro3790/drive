@@ -17,7 +17,6 @@ Allows users to add, view, and remove passkeys.
 	import Modal from '$lib/components/primitives/Modal.svelte';
 	import Key from '$lib/components/icons/Key.svelte';
 	import Trash from '$lib/components/icons/Trash.svelte';
-	import Add from '$lib/components/icons/Add.svelte';
 
 	interface Passkey {
 		id: string;
@@ -78,7 +77,9 @@ Allows users to add, view, and remove passkeys.
 
 		isAdding = true;
 		try {
-			const { error } = await authClient.passkey.addPasskey();
+			const { error } = await authClient.passkey.addPasskey({
+				authenticatorAttachment: 'cross-platform'
+			});
 			if (error) {
 				throw error;
 			}
@@ -192,7 +193,7 @@ Allows users to add, view, and remove passkeys.
 						isLoading={isAdding}
 						disabled={isAdding}
 					>
-						<Icon><Add /></Icon>
+						<Icon><Key /></Icon>
 						{m.settings_passkey_add_button()}
 					</Button>
 				</div>
@@ -237,8 +238,7 @@ Allows users to add, view, and remove passkeys.
 	}
 
 	.passkey-empty {
-		padding: var(--spacing-4);
-		text-align: center;
+		padding: var(--spacing-4) 0;
 	}
 
 	.passkey-empty-title {

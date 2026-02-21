@@ -1,6 +1,6 @@
 ---
 name: mobile-debug
-description: Mobile app debugging workflow with ADB screenshots and rapid iteration. Use when debugging UI/UX on Android with the user.
+description: "Take screenshots of the Android phone, debug mobile UI/UX with ADB. TRIGGERS: user mentions 'screenshot', 'phone screen', 'take a picture', 'what does it look like', 'mobile debug', or asks to see the Android device display."
 ---
 
 # Mobile Debug Workflow
@@ -15,7 +15,7 @@ Debug the Android app in tandem with the user. Take screenshots automatically to
 
 ## Screenshot Workflow
 
-**ALWAYS use the screenshot script** — raw adb piping corrupts images on Windows.
+**ALWAYS use the screenshot script** — raw adb commands corrupt or fail on Windows.
 
 ### Take Screenshot
 
@@ -39,7 +39,17 @@ pnpm mobile:screenshot before-fix.png
 pnpm mobile:screenshot after-fix.png
 ```
 
-**NEVER** use raw `adb exec-out screencap` or pipe `adb shell screencap` directly — it corrupts on Windows.
+### Why Not Raw ADB?
+
+Three compounding issues make raw `adb screencap` unreliable in this environment:
+
+1. **Binary corruption**: `adb exec-out screencap -p > file.png` corrupts binary data due to MSYS line-ending conversion.
+2. **MSYS path mangling**: Git Bash converts `/sdcard/...` to `C:/Program Files/Git/sdcard/...`. Must use `MSYS_NO_PATHCONV=1` prefix if calling adb directly.
+3. **Foldable display warning**: Samsung Flip/Fold devices warn about multiple displays. Safe to ignore — defaults to main display.
+
+The `pnpm mobile:screenshot` script handles all three by using Node.js `execSync` (bypasses MSYS) with a two-step capture (screencap on device → `adb pull`).
+
+**NEVER** use raw `adb exec-out screencap` or pipe `adb shell screencap` directly from bash.
 
 ## Development Modes
 

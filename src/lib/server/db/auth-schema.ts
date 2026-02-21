@@ -36,6 +36,7 @@ export const user = pgTable(
 		isFlagged: boolean('is_flagged').notNull().default(false),
 		flagWarningDate: timestamp('flag_warning_date', { withTimezone: true }),
 		fcmToken: text('fcm_token'),
+		preferredLocale: text('preferred_locale').notNull().default('en'),
 		// Runtime and DB migration now enforce one user -> one organization.
 		organizationId: uuid('organization_id').notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
