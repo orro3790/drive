@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.6.0](https://github.com/orro3790/drive/compare/v1.5.0...v1.6.0) (2026-02-22)
+
+
+### Features
+
+* driver day demand bars with weekly cap enforcement ([#200](https://github.com/orro3790/drive/issues/200)) ([08de79f](https://github.com/orro3790/drive/commit/08de79ffb6742d212f3ddd72eeaba113c9b8fa23))
+
+
+### Bug Fixes
+
+* **android:** reset versionCode placeholder to match CI sed pattern ([18f5c7f](https://github.com/orro3790/drive/commit/18f5c7fa8f5825fc2ce938fdf6df78743b24c55a))
+* **tests:** update preferences test for removed lock mechanism ([7a69987](https://github.com/orro3790/drive/commit/7a6998793f7bc206129406b580314fb08a5be27b))
+
 ## [1.5.0](https://github.com/orro3790/drive/compare/v1.4.1...v1.5.0) (2026-02-21)
 
 
