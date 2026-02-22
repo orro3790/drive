@@ -9,7 +9,6 @@
 	"common_home": "Home",
 	"common_breadcrumb_aria_label": "Breadcrumb",
 	"common_today": "Today",
-
 	"auth_phone_label": "Phone",
 	"auth_phone_placeholder": "Enter phone number",
 	"auth_brand_eyebrow": "Drive Ops",
@@ -52,7 +51,6 @@
 	"auth_organization_code_placeholder": "Shared by your organization owner",
 	"auth_sign_up_error_org_name_required": "Enter your organization name.",
 	"auth_sign_up_error_org_code_required": "Enter a valid organization code.",
-
 	"auth_forgot_password_title": "Forgot password?",
 	"auth_forgot_password_subtitle": "Enter your email and we will send you a reset link.",
 	"auth_forgot_password_button": "Send Reset Link",
@@ -69,7 +67,6 @@
 	"auth_reset_password_redirecting": "Redirecting to sign in...",
 	"auth_reset_password_min_length": "Password must be at least 8 characters.",
 	"auth_password_new_placeholder": "Enter your new password",
-
 	"admin_reset_password_title": "Reset User Password",
 	"admin_reset_password_subtitle": "Enter the user's email and set a new password for them.",
 	"admin_reset_password_button": "Reset Password",
@@ -85,7 +82,6 @@
 	"admin_reset_password_error_password_long": "Password is too long.",
 	"admin_reset_password_error_reset_failed": "Failed to reset password. Please try again.",
 	"admin_reset_password_reset_another_user": "Reset Another User",
-
 	"sidebar_close": "Close sidebar",
 	"sidebar_open": "Open sidebar",
 	"sidebar_collapse": "Collapse",
@@ -94,7 +90,6 @@
 	"sidebar_logout": "Log out",
 	"sidebar_logging_out": "Logging out...",
 	"sidebar_toggle_language": "Toggle language",
-
 	"nav_dashboard": "Dashboard",
 	"nav_schedule": "Schedule",
 	"nav_settings": "Settings",
@@ -123,7 +118,6 @@
 	"notification_permission_title": "Enable Notifications",
 	"notification_permission_description": "Get instant updates about new shift assignments, bid windows, and important alerts.",
 	"notification_permission_enable_tooltip": "Enable notifications",
-
 	"date_picker_clear": "Clear",
 	"date_picker_placeholder_single": "Select date",
 	"date_picker_placeholder_range": "Select date range",
@@ -137,7 +131,6 @@
 	"date_picker_day_th": "Th",
 	"date_picker_day_fr": "Fr",
 	"date_picker_day_sa": "Sa",
-
 	"select_placeholder": "Select...",
 	"select_search_placeholder": "Search...",
 	"select_no_results": "No results found",
@@ -145,7 +138,6 @@
 	"select_loading_options": "Loading options...",
 	"select_loading_results": "Loading...",
 	"select_errors_more": "+{count} more",
-
 	"table_loading": "Loading",
 	"table_loading_message": "Loading data...",
 	"table_no_data": "No data",
@@ -155,7 +147,6 @@
 	"table_columns_label": "Columns",
 	"table_columns_no_hideable": "No columns to hide",
 	"table_columns_reset_sizes": "Reset column sizes",
-
 	"table_header_sort_by": "Sort by {column}",
 	"table_header_select_all": "Select all",
 	"table_header_resize_label": "Resize column",
@@ -163,13 +154,11 @@
 	"table_header_pin_right": "Pin right",
 	"table_header_unpin": "Unpin",
 	"table_header_pinned": "Pinned",
-
 	"table_row_select": "Select row",
 	"table_row_expand": "Expand row",
 	"table_row_collapse": "Collapse row",
 	"table_row_cannot_be_selected": "Row cannot be selected",
 	"table_row_selection_disabled": "Selection disabled",
-
 	"table_footer_aria_label": "Table pagination",
 	"table_footer_showing_range": "{start}-{end}",
 	"table_footer_of_results": "of {total}",
@@ -180,7 +169,6 @@
 	"table_footer_previous_page": "Previous page",
 	"table_footer_next_page": "Next page",
 	"table_footer_last_page": "Last page",
-
 	"table_filter_label": "Filter",
 	"table_filter_title": "Filters",
 	"table_filter_aria_label": "Filter table",
@@ -195,7 +183,6 @@
 	"table_filter_range_min_aria_label": "Minimum value",
 	"table_filter_range_max_aria_label": "Maximum value",
 	"table_filter_range_clear": "Clear range",
-
 	"table_export_csv": "Export CSV",
 	"table_export_csv_aria_label": "Export table to CSV",
 	"table_export_no_selection": "No rows selected",
@@ -205,26 +192,21 @@
 	"table_export_scope_page": "Current page",
 	"table_export_scope_selected": "Selected rows",
 	"table_export_large_dataset_warning": "Large dataset - export may take a moment",
-
 	"table_mobile_detail_title": "Details",
 	"table_wide_mode_maximize": "Maximize table",
 	"table_wide_mode_restore": "Show side panel",
-
 	"toast_dismiss_tooltip": "Dismiss",
 	"toast_title_success": "Success",
 	"toast_title_error": "Error",
 	"toast_title_warning": "Warning",
 	"toast_title_info": "Info",
-
 	"tooltip_aria_show": "Show tooltip",
-
 	"analytics_title": "Analytics",
 	"explorer_title": "Explorer",
 	"pipeline_title": "Pipeline",
 	"empty": "",
 	"selected": "Selected",
 	"desc": "Description",
-
 	"common_save": "Save",
 	"common_delete": "Delete",
 	"common_edit": "Edit",
@@ -232,10 +214,8 @@
 	"common_name": "Name",
 	"common_address": "Address",
 	"common_actions": "Actions",
-
 	"manager_access_denied": "Access denied",
 	"manager_access_denied_message": "You must be a manager to access this page.",
-
 	"warehouse_page_title": "Warehouses",
 	"warehouse_page_description": "Manage warehouse locations for route assignment.",
 	"warehouse_create_button": "Add Warehouse",
@@ -267,7 +247,6 @@
 	"warehouse_detail_manager_count": "Managers",
 	"warehouse_filter_name_label": "Name",
 	"warehouse_filter_name_placeholder": "Search by name...",
-
 	"route_page_title": "Routes",
 	"route_page_description": "Manage routes and track daily coverage status.",
 	"route_create_button": "Add Route",
@@ -330,7 +309,6 @@
 	"manager_attention_completed": "Completed",
 	"route_empty_state": "No routes yet",
 	"route_empty_state_message": "Add your first route to get started.",
-
 	"schedule_page_title": "Schedule",
 	"schedule_page_description": "Review this week and next week assignments.",
 	"schedule_loading_label": "Loading schedule...",
@@ -374,7 +352,6 @@
 	"schedule_cancel_reason_weather_conditions": "Weather conditions",
 	"schedule_cancel_reason_personal_emergency": "Personal emergency",
 	"schedule_cancel_reason_other": "Other",
-
 	"preferences_page_title": "Preferences",
 	"preferences_page_description": "Set your preferred work days and routes.",
 	"preferences_days_section": "Preferred Work Days",
@@ -415,7 +392,6 @@
 	"preferences_remove_route_label": "Remove {route}",
 	"preferences_demand_label": "Driver demand per day",
 	"preferences_demand_count": "{count} drivers want {day}",
-
 	"settings_page_title": "Settings",
 	"settings_page_description": "Manage your account and preferences.",
 	"settings_group_personal": "Personal",
@@ -519,13 +495,11 @@
 	"settings_dispatch_load_error": "Unable to load dispatch settings.",
 	"settings_dispatch_save_success": "Dispatch settings updated.",
 	"settings_dispatch_save_error": "Unable to update dispatch settings.",
-
 	"shift_arrive_button": "I'm On Site",
 	"shift_arrive_success": "Arrival recorded.",
 	"shift_arrive_error": "Unable to record arrival.",
 	"shift_arrive_deadline_passed": "Arrival deadline passed",
 	"shift_arrive_arrived_at": "Arrived at {time}",
-
 	"shift_start_button": "Submit",
 	"shift_start_modal_title": "Parcel Inventory",
 	"shift_start_parcels_label": "Number of parcels",
@@ -534,9 +508,7 @@
 	"shift_start_confirm_button": "Submit",
 	"shift_start_success": "Inventory recorded.",
 	"shift_start_error": "Unable to record inventory.",
-
 	"shift_delivering_status": "Delivering {count} parcels",
-
 	"shift_complete_button": "Complete Shift",
 	"shift_complete_modal_title": "Complete Shift",
 	"shift_complete_modal_confirm_copy": "Confirm shift completion with {returns} returns and {delivered} delivered parcels?",
@@ -551,16 +523,13 @@
 	"shift_complete_summary_returning": "Returning: {count} parcels",
 	"shift_complete_summary_delivered": "Delivered: {count} parcels",
 	"shift_complete_summary_excepted": "Excepted: {count} parcels",
-
 	"shift_edit_button": "Edit",
 	"shift_edit_success": "Shift updated.",
 	"shift_edit_error": "Unable to update shift.",
 	"shift_edit_window_remaining": "Editable for {minutes} more minutes",
 	"shift_edit_window_expired": "Edit window expired",
 	"shift_edit_contact_manager": "Contact manager to edit",
-
 	"nav_bids": "Open Shifts",
-
 	"bids_page_title": "Open Shifts",
 	"bids_page_description": "View available shifts and place bids.",
 	"bids_loading_label": "Loading shifts...",
@@ -585,21 +554,17 @@
 	"bids_status_won": "Won",
 	"bids_status_lost": "Lost",
 	"bids_submitted_at": "Submitted {time}",
-
 	"dashboard_page_title": "Dashboard",
 	"dashboard_page_description": "Your daily overview and upcoming shifts.",
 	"dashboard_loading_label": "Loading dashboard...",
 	"dashboard_load_error": "Failed to load dashboard.",
-
 	"dashboard_today_section": "Today's Shift",
 	"dashboard_today_no_shift": "No shift today",
 	"dashboard_today_no_shift_message": "Check your schedule for upcoming assignments.",
-
 	"dashboard_week_section_this": "This Week",
 	"dashboard_week_section_next": "Next Week",
 	"dashboard_week_days_assigned": "{count} days scheduled",
 	"dashboard_week_no_shifts": "No shifts scheduled",
-
 	"dashboard_metrics_section": "Your Metrics",
 	"dashboard_metrics_attendance": "Attendance",
 	"dashboard_metrics_completion": "Completion",
@@ -607,7 +572,6 @@
 	"dashboard_metrics_completed_shifts": "Completed",
 	"dashboard_metrics_show": "Show details",
 	"dashboard_metrics_hide": "Hide details",
-
 	"dashboard_health_section": "Your Health",
 	"dashboard_health_tier_label": "Tier {tier}",
 	"dashboard_health_score_label": "Health Score",
@@ -635,20 +599,16 @@
 	"dashboard_health_onboarding_message": "Complete your first shifts to start building your health score and earn stars.",
 	"dashboard_health_loading": "Loading health data",
 	"dashboard_health_load_error": "Failed to load health data",
-
 	"dashboard_bids_section": "Pending Bids",
 	"dashboard_bids_empty": "No pending bids",
 	"dashboard_bids_empty_message": "Visit Open Shifts to see available shifts.",
 	"dashboard_bids_view_all": "View all bids",
-
 	"dashboard_confirm_section": "Needs Confirmation",
 	"dashboard_confirm_deadline": "Confirm within {deadline}",
 	"dashboard_confirm_overdue": "Confirm by {deadline} (late)",
 	"dashboard_confirm_button": "Confirm",
-
 	"dashboard_new_driver_title": "Welcome to Drive!",
 	"dashboard_new_driver_message": "Your first scheduled shifts will appear in approximately 2 weeks. In the meantime, you can place bids on available shifts to start working sooner.",
-
 	"manager_dashboard_page_title": "Routes Overview",
 	"manager_dashboard_page_description": "Monitor route coverage and assignment status.",
 	"manager_dashboard_driver_header": "Driver",
@@ -697,7 +657,6 @@
 	"manager_emergency_reopen_confirm": "Send Emergency Notification",
 	"manager_emergency_reopen_success": "Emergency notification sent to {count} drivers.",
 	"manager_emergency_reopen_error": "Failed to create emergency route.",
-
 	"drivers_page_title": "Drivers",
 	"drivers_page_description": "View and manage driver settings and metrics.",
 	"drivers_empty_state": "No drivers yet",
@@ -709,7 +668,6 @@
 	"drivers_unflag_error": "Failed to unflag driver.",
 	"drivers_reinstated_success": "Driver reinstated to assignment pool.",
 	"drivers_reinstate_error": "Failed to reinstate driver.",
-
 	"drivers_header_email": "Email",
 	"drivers_header_phone": "Phone",
 	"drivers_header_attendance": "Attendance",
@@ -723,7 +681,6 @@
 	"drivers_tooltip_avg_parcels": "Shows average parcels delivered with delta in parentheses (driver minus global average).",
 	"drivers_tooltip_health": "Health precedence: Flagged -> At Risk (below threshold) -> Watch (within +5%) -> Healthy -> High Performer.",
 	"drivers_avg_parcels_no_cohort": "No cohort",
-
 	"drivers_flag_flagged": "Flagged",
 	"drivers_flag_warning": "Warning",
 	"drivers_flag_good": "Good",
@@ -733,7 +690,6 @@
 	"drivers_health_watch": "Watch",
 	"drivers_health_healthy": "Healthy",
 	"drivers_health_high_performer": "High Performer",
-
 	"drivers_edit_title": "Edit Driver",
 	"drivers_cap_label": "Weekly Cap",
 	"drivers_cap_description": "Maximum days per week (1-6)",
@@ -745,7 +701,6 @@
 	"drivers_reinstate_button": "Reinstate",
 	"drivers_reinstate_confirm_title": "Reinstate Driver",
 	"drivers_reinstate_confirm_message": "Restore this driver to the assignment pool? They will be able to receive scheduled shifts and bid on open shifts again. If they no-show or accumulate late cancellations again, they will be automatically re-suspended.",
-
 	"drivers_detail_title": "Driver Details",
 	"drivers_detail_email": "Email",
 	"drivers_detail_phone": "Phone",
@@ -769,11 +724,9 @@
 	"drivers_detail_tooltip_member_since": "Date the driver joined the platform",
 	"drivers_detail_shift_history": "Shift History",
 	"drivers_detail_view_history": "View",
-
 	"drivers_manager_flagged_notice": "This driver was flagged on {date} for performance review.",
 	"drivers_manager_flagged_notice_no_date": "This driver is flagged for performance review.",
 	"drivers_manager_hard_stop_notice": "This driver has been removed from the assignment pool due to a hard-stop event.",
-
 	"drivers_view_route_history": "View Route History",
 	"drivers_close_tab": "Close tab",
 	"drivers_shift_history_empty": "No shift history",
@@ -792,7 +745,6 @@
 	"drivers_shift_history_header_completed": "Completed",
 	"drivers_shift_history_status_completed": "Completed",
 	"drivers_shift_history_status_cancelled": "Cancelled",
-
 	"shift_detail_title": "Shift Details",
 	"shift_detail_date": "Date",
 	"shift_detail_route": "Route",
@@ -805,13 +757,11 @@
 	"shift_detail_exception_notes": "Exception Notes",
 	"shift_detail_arrived_at": "Arrived At",
 	"shift_detail_completed_at": "Completed At",
-	"shift_edit_button": "Edit",
 	"shift_edit_error_returned_exceeds_start": "Returned cannot exceed starting parcels.",
 	"shift_edit_error_excepted_exceeds_returned": "Excepted returns cannot exceed total returns.",
 	"shift_edit_error_notes_required": "Notes are required when filing return exceptions.",
 	"shift_edit_save_success": "Shift updated successfully.",
 	"shift_edit_save_error": "Failed to update shift.",
-
 	"bid_windows_tab": "Bid Windows",
 	"bid_windows_load_error": "Failed to load bid windows.",
 	"bid_windows_empty_title": "No bid windows",
@@ -852,9 +802,7 @@
 	"bid_windows_assign_error": "Failed to assign driver.",
 	"bid_windows_close_success": "Bid window closed.",
 	"bid_windows_close_error": "Failed to close bid window.",
-
 	"nav_whitelist": "Whitelist",
-
 	"whitelist_page_title": "Whitelist",
 	"whitelist_page_description": "Manage driver signup approvals.",
 	"whitelist_empty_state": "No whitelist entries",
@@ -898,7 +846,6 @@
 	"whitelist_restore_success": "Entry restored.",
 	"whitelist_restore_error": "Failed to restore entry.",
 	"whitelist_restore_conflict": "Another active entry exists for this email.",
-
 	"drivers_filter_name_label": "Name",
 	"drivers_filter_name_placeholder": "Search by name...",
 	"drivers_filter_email_label": "Email",
@@ -911,9 +858,7 @@
 	"drivers_filter_pool_eligible_all": "All",
 	"common_yes": "Yes",
 	"common_no": "No",
-
 	"nav_weekly_reports": "Reports",
-
 	"weekly_reports_page_title": "Weekly Reports",
 	"weekly_reports_header_week": "Week",
 	"weekly_reports_header_start_date": "Start Date",
@@ -936,7 +881,6 @@
 	"weekly_reports_detail_exception_notes": "Exception Notes",
 	"weekly_reports_detail_completed": "Completed",
 	"weekly_reports_close_tab": "Close tab",
-
 	"weekly_reports_filter_date_from_label": "From",
 	"weekly_reports_filter_date_from_placeholder": "Start date (YYYY-MM-DD)",
 	"weekly_reports_filter_date_to_label": "To",
@@ -947,7 +891,6 @@
 	"weekly_reports_filter_route_placeholder": "Filter by route name...",
 	"weekly_reports_filter_warehouse_label": "Warehouse",
 	"weekly_reports_filter_warehouse_placeholder": "Filter by warehouse name...",
-
 	"app_update_required_title": "Update Required",
 	"app_update_required_message": "Your app version is no longer supported. Please download the latest version to continue.",
 	"app_update_your_version": "Your version: {version}",
@@ -956,14 +899,12 @@
 	"app_connection_required_title": "Connection Required",
 	"app_connection_required_message": "Unable to connect to the server. Check your internet connection and try again.",
 	"app_connection_retry_button": "Retry",
-
 	"download_page_title": "Download Drive",
 	"download_page_subtitle": "Get the Drive app for Android",
 	"download_page_version": "Version {version}",
 	"download_page_button": "Download APK",
 	"download_page_instructions_short": "After downloading, open the file and follow the prompts to install. You may need to allow installation from unknown sources.",
 	"download_page_back": "Back to sign in",
-
 	"settings_passkey_section": "Passkeys",
 	"settings_passkey_description": "Use biometrics or security keys for passwordless sign-in.",
 	"settings_passkey_add_button": "Add Passkey",
@@ -980,13 +921,11 @@
 	"settings_passkey_registered": "Registered {date}",
 	"settings_passkey_name_placeholder": "My Phone",
 	"settings_passkey_name_label": "Passkey name",
-
 	"auth_passkey_button": "Sign in with Passkey",
 	"auth_passkey_signing_in": "Authenticating...",
 	"auth_passkey_error": "Passkey authentication failed.",
 	"auth_passkey_not_supported": "Passkeys are not supported on this device.",
 	"auth_passkey_or_divider": "or",
-
 	"nav_history": "History",
 	"history_page_title": "Shift History",
 	"history_page_description": "Your past completed shifts.",
@@ -998,7 +937,6 @@
 	"history_parcel_stat_excepted": "{count} excepted",
 	"history_load_more": "Load more",
 	"dashboard_coming_up_section": "Coming Up",
-
 	"notif_shift_reminder_title": "Shift Reminder",
 	"notif_shift_reminder_body": "Your shift on route {routeName} at {warehouseName} starts {shiftContext}.",
 	"notif_bid_open_title": "New Shift Available",
@@ -1044,5 +982,25 @@
 	"notif_return_exception_title": "Return Exception Filed",
 	"notif_return_exception_body": "A driver filed return exceptions on {routeName}. ({when})",
 	"notif_stale_shift_reminder_title": "Incomplete Shift",
-	"notif_stale_shift_reminder_body": "You have an incomplete shift from {date}. Please close it out to start new shifts."
+	"notif_stale_shift_reminder_body": "You have an incomplete shift from {date}. Please close it out to start new shifts.",
+	"warehouse_load_error": "Failed to load warehouses.",
+	"shift_confirm_success": "Shift confirmed!",
+	"shift_confirm_error": "Failed to confirm shift.",
+	"settings_manager_health_title": "Driver Health",
+	"settings_manager_health_description": "Adjust attendance and completion thresholds used for automatic health checks.",
+	"settings_manager_health_caution_note": "These are recommended defaults — adjust with care.",
+	"settings_manager_health_attendance_title": "Attendance threshold (%)",
+	"settings_manager_health_attendance_description": "Used to determine eligibility for reliability performance rewards.",
+	"settings_manager_health_attendance_placeholder": "95",
+	"settings_manager_health_attendance_aria_label": "Attendance threshold percentage",
+	"settings_manager_health_completion_title": "Completion threshold (%)",
+	"settings_manager_health_completion_description": "Drivers below this level will receive a completion improvement warning.",
+	"settings_manager_health_completion_placeholder": "98",
+	"settings_manager_health_completion_aria_label": "Completion threshold percentage",
+	"settings_manager_health_validation_error": "Enter a whole number between 0 and 100.",
+	"settings_passkey_name_fallback": "Passkey",
+	"common_breadcrumb": "Breadcrumb",
+	"schedule_cancel_modal_body": "Are you sure you want to cancel this assignment?",
+	"schedule_cancel_late_penalty": "Late cancellation penalty: -{points} points.",
+	"shift_complete_confirm_summary": "Complete this shift with {returned} returned and {excepted} excepted parcels."
 }
