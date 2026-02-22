@@ -106,13 +106,13 @@ html[data-android-native='true'] {
 	--font-weight-medium: 500; /* section headers, modal headers, titles, notice banners */
 	--font-weight-bold: 700; /* page titles (--font-size-xl), low-visibility special chars */
 
-	/* Font Sizes — Major Second Scale (root html is 16px) */
-	--font-size-xs: 0.75rem; /* 12px — sparingly; pair with font-weight-bold */
-	--font-size-sm: 0.889rem; /* ~14px — pills, badges, labels, secondary meta */
-	--font-size-base: 1rem; /* 16px — body text, paragraph copy */
-	--font-size-md: 1.26rem; /* ~20px — subsection headers */
-	--font-size-lg: 1.602rem; /* ~26px — section headers */
-	--font-size-xl: 2.027rem; /* ~32px — page titles */
+	/* Font Sizes — Major Second Scale (root html is 14px) */
+	--font-size-xs: 0.75rem; /* ~10px — used very sparingly; pair with font-size-bold */
+	--font-size-sm: 0.889rem; /* ~12px — pills, badges, labels; pair with --letter-spacing-sm */
+	--font-size-base: 1rem; /* 14px — body text */
+	--font-size-md: 1.26rem; /* ~18px — subsection headers */
+	--font-size-lg: 1.602rem; /* ~22px — section headers */
+	--font-size-xl: 2.027rem; /* ~28px — page titles */
 
 	--letter-spacing-sm: 0.02rem; /* always pair with --font-size-sm */
 
@@ -133,20 +133,21 @@ html[data-android-native='true'] {
 	--spacing-6: 2.5rem; /* 35px */
 	--spacing-7: 3rem; /* 42px */
 	--spacing-8: 4rem; /* 56px — for outer gutters, page-level spacing */
+
 	/*═══════════════════════════════════════════════════════════════════════════
 	  RESPONSIVE BREAKPOINTS (Reference)
-	  
+
 	  @media queries — for viewport-level layout (page chrome, sidebars):
 	    Mobile:   max-width: 767px   (phones, below tablet)
 	    Tablet:   min-width: 768px   (tablets and up)
 	    Desktop:  min-width: 1024px  (laptops and up)
 	    Wide:     min-width: 1280px  (large displays)
-	  
+
 	  @container queries — for component-level layout (cards, tables, panels):
 	    Use when a component should respond to its own container size, not viewport.
 	    Add `container-type: inline-size` to the container element, then use
 	    `@container (max-width: Npx)` to style children based on available space.
-	  
+
 	  Note: Use 767px for max-width to avoid overlap with 768px min-width.
 	  ═══════════════════════════════════════════════════════════════════════════*/
 
@@ -162,8 +163,8 @@ html[data-android-native='true'] {
 	--border-width-thin: 1px;
 	--border-width-medium: 2px;
 
-	--shadow-base: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-	--shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+	--shadow-base: none;
+	--shadow-lg: none;
 
 	/*═══════════════════════════════════════════════════════════════════════════
 	  COLOR SYSTEM — READ BEFORE USING
@@ -234,7 +235,7 @@ html[data-android-native='true'] {
 
 	--text-normal: #dcddde; /* primary body text */
 	--text-muted: #999; /* secondary/helper text */
-	--text-faint: #666; /* disabled text, placeholders */
+	--text-faint: #4a4a4a; /* disabled text, placeholders, decorative icons */
 	--text-accent: #7f6df2; /* links, emphasized text */
 	--text-accent-hover: #8875ff; /* link hover */
 	--text-on-accent: #ffffff; /* text on accent-colored backgrounds */
@@ -269,7 +270,11 @@ html[data-android-native='true'] {
 	/* Borders */
 	--border-primary: #333; /* standard borders */
 	--border-muted: #2a2a2a; /* subtle dividers */
-	--border-focus: var(--interactive-accent); /* focus ring color */
+	--border-focus: color-mix(
+		in srgb,
+		var(--interactive-accent) 50%,
+		transparent
+	); /* focus ring color */
 
 	/* Form inputs */
 	--form-background: rgba(0, 0, 0, 0.3);
@@ -381,7 +386,7 @@ ol {
 html {
 	height: 100%;
 	overflow: hidden; /* All layouts handle their own scrolling via .content */
-	font-size: 16px; /* sets the root font size for rem calculations */
+	font-size: 14px; /* sets the root font size for rem calculations */
 	font-weight: 400;
 }
 
@@ -393,7 +398,40 @@ body {
 	overflow: hidden; /* All layouts handle their own scrolling via .content */
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
-	min-height: 100vh;
+	height: 100vh;
+}
+
+/* Thin, auto-hiding scrollbars */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: transparent transparent;
+}
+
+*:hover {
+	scrollbar-color: var(--border-primary) transparent;
+}
+
+/* Webkit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: transparent;
+	border-radius: 3px;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+	background: var(--border-primary);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--text-muted);
 }
 
 /* Links */
@@ -456,7 +494,7 @@ textarea::selection,
 /* Focus Outline */
 :focus-visible {
 	outline: none;
-	box-shadow: inset 0 0 0 var(--border-width-thin) var(--interactive-accent);
+	box-shadow: inset 0 0 0 var(--border-width-thin) var(--border-focus);
 	border-radius: var(--radius-base);
 	transition: none; /* Prevent choppy transition animation */
 }
@@ -475,41 +513,6 @@ textarea::selection,
 	box-shadow: none;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar {
-	width: var(--spacing-2);
-	height: var(--spacing-2);
-}
-
-::-webkit-scrollbar-track {
-	background-color: var(--surface-secondary);
-}
-
-::-webkit-scrollbar-thumb {
-	background-color: var(--text-faint);
-	border-radius: var(--radius-full);
-}
-
-::-webkit-scrollbar-thumb:hover {
-	background-color: var(--text-muted);
-}
-
-::-webkit-scrollbar-corner {
-	background-color: var(--surface-secondary);
-}
-
-/* Thin scrollbars on mobile — visual position indicators, not click targets */
-@media (max-width: 900px) {
-	::-webkit-scrollbar {
-		width: 3px;
-		height: 3px;
-	}
-
-	::-webkit-scrollbar-track {
-		background-color: transparent;
-	}
-}
-
 html[data-theme='dark'] {
 	/* NOTE: Removed color-scheme: dark - it was causing Android WebView to apply
 	   system-level dark mode styling to the status bar and navigation bar,
@@ -524,58 +527,54 @@ html[data-theme='dark'] {
 html[data-theme='light'] {
 	color-scheme: light;
 
-	/* Surface — warm neutrals, no blue cast */
-	--surface-primary: #ffffff; /* cards, modals */
-	--surface-secondary: #f7f8f9; /* subtle contrast panels */
-	--surface-inset: #f1f2f4; /* page canvas — light, warm */
+	/* Surface — flat hierarchy, Linear-inspired airiness */
+	--surface-primary: #ffffff;
+	--surface-secondary: #f9fafb; /* Barely off-white for panels/sidebars */
+	--surface-inset: #f3f4f6; /* Gentle page canvas, not heavy */
 
-	/* Interactive — neutral grays, clear but not heavy */
-	--interactive-normal: #eff0f3; /* chip/tag bg, resting state */
-	--interactive-hover: #e5e6ea; /* hover state */
-	--interactive-accent: #6d5bd0; /* primary action purple */
+	/* Interactive — whisper-subtle hover states */
+	--interactive-normal: #f2f3f5;
+	--interactive-hover: rgba(0, 0, 0, 0.04);
+	--interactive-accent: #6d5bd0; /* Darker than dark mode (#7f6df2) for contrast */
 	--interactive-accent-hover: #5b4abf;
-	--interactive-accent-muted: #ece8fd; /* selected states, badges */
+	--interactive-accent-muted: #e0dcfc;
 	--interactive-accent-rgb: 109, 91, 208;
 
-	/* Text — WCAG AA on all surfaces, warm charcoal */
-	--text-normal: #1c1e24; /* primary body text */
-	--text-muted: #6b7280; /* secondary text — neutral gray */
-	--text-faint: #9ca3af; /* placeholders, disabled */
+	/* Text — WCAG AA compliant on all surfaces */
+	--text-normal: #3b3f46; /* Soft charcoal, Linear-weight */
+	--text-muted: #5c6b7f; /* Cool gray for secondary text */
+	--text-faint: #9ca8b8; /* decorative icons, disabled text, placeholders */
 	--text-accent: #6d5bd0;
 	--text-accent-hover: #5b4abf;
 
-	/* Status — punchy, legible on light backgrounds */
-	--status-error: #dc2626;
-	--status-error-hover: #b91c1c;
-	--status-error-background: rgba(220, 38, 38, 0.07);
-	--status-error-background-hover: rgba(220, 38, 38, 0.11);
+	/* Status */
+	--status-error: #dc2626; /* Red-600 */
+	--status-error-hover: #b91c1c; /* Red-700 */
+	--status-error-background: rgba(220, 38, 38, 0.08);
+	--status-error-background-hover: rgba(220, 38, 38, 0.12);
 
-	--status-success: #16a34a;
-	--status-success-hover: #15803d;
-	--status-success-background: rgba(22, 163, 74, 0.07);
+	--status-success: #16a34a; /* Green-600 */
+	--status-success-hover: #15803d; /* Green-700 */
+	--status-success-background: rgba(22, 163, 74, 0.08);
 
-	--status-warning: #ea580c;
-	--status-warning-hover: #c2410c;
-	--status-warning-background: rgba(234, 88, 12, 0.07);
+	--status-warning: #ea580c; /* Orange-600 */
+	--status-warning-hover: #c2410c; /* Orange-700 */
+	--status-warning-background: rgba(234, 88, 12, 0.08);
 
-	--status-info: #2563eb;
-	--status-info-background: rgba(37, 99, 235, 0.07);
+	--status-info: #2563eb; /* Blue-600 */
+	--status-info-background: rgba(37, 99, 235, 0.08);
 
 	/* Status borders for callouts/toasts */
-	--status-success-border: rgba(22, 163, 74, 0.18);
-	--status-error-border: rgba(220, 38, 38, 0.18);
-	--status-warning-border: rgba(234, 88, 12, 0.18);
+	--status-success-border: rgba(22, 163, 74, 0.2);
+	--status-error-border: rgba(220, 38, 38, 0.2);
+	--status-warning-border: rgba(234, 88, 12, 0.2);
 
-	/* Borders & Forms — subtle, warm */
-	--border-primary: #e0e2e6; /* card borders, dividers */
-	--border-muted: #ebedf0; /* very subtle separators */
+	/* Borders & Forms — soft, not heavy */
+	--border-primary: #e2e5ea; /* Softer to match lighter surfaces */
+	--border-muted: #ebedf0; /* Barely-there dividers */
 	--form-background: #ffffff;
-	--form-background-hover: #fafbfc;
+	--form-background-hover: #fcfcfc;
 	--overlay-backdrop: rgba(0, 0, 0, 0.4);
-
-	/* Softer shadows for light theme */
-	--shadow-base: 0 1px 3px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
-	--shadow-lg: 0 4px 12px rgb(0 0 0 / 0.08), 0 2px 4px rgb(0 0 0 / 0.04);
 }
 
 /* Hide number input spinners globally */
@@ -622,27 +621,28 @@ button:disabled,
 	height: 100%;
 	display: flex;
 	flex-direction: column;
-	min-height: 100%;
+	min-height: 0;
 	border-radius: inherit;
 	background: transparent;
 }
 
 .page-stage {
-	flex: 1 0 auto;
+	flex: 1;
 	display: flex;
 	flex-direction: column;
-	min-height: 100%;
+	min-height: 0;
 	padding: var(--spacing-3) 0 var(--spacing-3) var(--spacing-3);
 	gap: var(--spacing-3);
 	background: var(--surface-inset);
 	border-radius: inherit;
-	overflow: visible;
+	overflow: hidden;
 }
 
 @media (max-width: 767px) {
 	.page-stage {
 		padding: var(--spacing-3) 0 var(--spacing-3) var(--spacing-3);
 		gap: var(--spacing-3);
+		background: var(--surface-primary);
 	}
 
 	.page-content {
@@ -660,7 +660,6 @@ button:disabled,
 .page-card {
 	background: var(--surface-primary);
 	border-radius: var(--radius-lg);
-	box-shadow: var(--shadow-base);
 	display: flex;
 	flex-direction: column;
 	min-height: 0;

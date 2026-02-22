@@ -74,7 +74,7 @@
 		cursor: pointer;
 		transition:
 			background-color 0.15s ease,
-			width 0.15s ease-out;
+			color 0.15s ease;
 		text-decoration: none;
 	}
 
@@ -100,28 +100,27 @@
 		pointer-events: none;
 	}
 
-	/* Override IconButton's default text-muted color to inherit from nav-item */
+	/* Icons inherit the soft/dark color shift from nav-item */
 	.nav-item :global(.icon-button) {
 		color: inherit;
 	}
 
 	.nav-item:hover {
-		background-color: color-mix(in srgb, var(--text-normal) 6%, transparent);
+		background-color: var(--interactive-hover);
 		color: var(--text-normal);
 	}
 
 	.nav-item.selected {
-		background-color: var(--interactive-accent);
-		color: var(--text-on-accent);
+		background-color: var(--interactive-hover);
+		color: var(--text-normal);
 	}
 
 	.nav-item.selected:hover {
-		background-color: var(--interactive-accent-hover);
+		background-color: var(--interactive-hover);
 	}
 
-	/* Ensure icon inherits color or is specifically styled if needed */
 	.nav-item.selected :global(.icon) {
-		color: var(--text-on-accent);
+		color: var(--text-normal);
 	}
 
 	.nav-text {

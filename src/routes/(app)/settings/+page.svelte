@@ -123,6 +123,7 @@
 	.settings-stage {
 		padding: 0;
 		gap: 0;
+		overflow: auto;
 	}
 
 	.settings-content-shell {
