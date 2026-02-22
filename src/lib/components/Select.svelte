@@ -207,18 +207,20 @@ The select border turns red when errors are present.
 		// Calculate vertical position - check if there's room below
 		const spaceBelow = viewportHeight - triggerRect.bottom - 8;
 		const spaceAbove = triggerRect.top - 8;
-		const dropdownHeight = Math.min(dropdownRect.height, 280);
+		const maxDropdown = 280;
+		const dropdownHeight = Math.min(dropdownRect.height, maxDropdown);
 
 		let top: number;
+		let constrainedHeight: number;
 		if (spaceBelow >= dropdownHeight || spaceBelow >= spaceAbove) {
-			// Position below
 			top = triggerRect.bottom + 4;
+			constrainedHeight = Math.min(maxDropdown, spaceBelow);
 		} else {
-			// Position above
-			top = triggerRect.top - dropdownHeight - 4;
+			constrainedHeight = Math.min(maxDropdown, spaceAbove);
+			top = triggerRect.top - constrainedHeight - 4;
 		}
 
-		dropdownStyle = `top: ${top}px; left: ${left}px; min-width: ${triggerRect.width}px;`;
+		dropdownStyle = `top: ${top}px; left: ${left}px; min-width: ${triggerRect.width}px; max-height: ${constrainedHeight}px;`;
 	}
 
 	$effect(() => {
@@ -231,7 +233,10 @@ The select border turns red when errors are present.
 		});
 
 		const onResize = debounce(() => updateDropdownPosition(), 100);
-		const onScroll = debounce(() => updateDropdownPosition(), 50);
+		const onScroll = (e: Event) => {
+			if (dropdownPanelElement?.contains(e.target as Node)) return;
+			updateDropdownPosition();
+		};
 		window.addEventListener('resize', onResize);
 		window.addEventListener('scroll', onScroll, true);
 		return () => {
@@ -294,11 +299,13 @@ The select border turns red when errors are present.
 		</button>
 
 		{#if isOpen}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="dropdown-panel"
 				class:auto-size={fitContent}
 				style={dropdownStyle}
 				bind:this={dropdownPanelElement}
+				onwheel={(e) => e.stopPropagation()}
 			>
 				<ul
 					class="options-list"
@@ -492,8 +499,8 @@ The select border turns red when errors are present.
 		border-radius: var(--radius-base);
 		box-shadow: var(--shadow-base);
 		padding: var(--spacing-1);
-		max-height: 280px;
 		overflow-y: auto;
+		overscroll-behavior: contain;
 	}
 
 	.dropdown-panel.auto-size {

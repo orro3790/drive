@@ -8,7 +8,7 @@
 -->
 <script lang="ts">
 	import * as m from '$lib/paraglide/messages.js';
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import Tooltip from '$lib/components/primitives/Tooltip.svelte';
 	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
 	import StarEmpty from '$lib/components/icons/StarEmpty.svelte';
@@ -174,8 +174,9 @@
 		}
 	}
 
-	onMount(() => {
-		loadHealth();
+	$effect(() => {
+		healthUrl; // dependency — re-fetch when URL changes
+		untrack(() => loadHealth());
 	});
 </script>
 

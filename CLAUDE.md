@@ -5,6 +5,55 @@ Driver Operations Platform for delivery logistics.
 **App Name**: Drive
 **Repo**: `orro3790/drive`
 
+## Strategic Context
+
+### What Drive Really Is
+
+Drive is **not scheduling software**. It is an **operations automation platform that replaces human broker labor** in last-mile delivery.
+
+In the Canadian last-mile delivery industry, the typical structure is:
+
+> **Delivery company → Brokers → Drivers**
+
+Brokers (dispatchers/managers) are paid ~$2.00/parcel. They pay drivers $1.30-$1.50/parcel and keep $0.50-$0.70 for their coordination work: scheduling, no-show replacement, daily dispatch, and performance management. This is largely manual — phone calls, group chats, spreadsheets.
+
+**Drive automates 60-70% of what brokers do**, enabling fewer managers to handle more drivers. A company currently employing 10 brokers to manage 200 drivers can reduce to 4 managers handling 50 drivers each with Drive handling scheduling, confirmations, vacancy filling, and performance tracking.
+
+### Revenue Model
+
+**Per-parcel usage-based pricing** — not SaaS subscriptions.
+
+|                                  | Per parcel                      |
+| -------------------------------- | ------------------------------- |
+| Company pays broker (current)    | $2.00                           |
+| Company pays driver (with Drive) | $1.30-$1.50                     |
+| Company pays Drive               | ~$0.30 (split among 3 partners) |
+| **Company saves**                | **$0.20-$0.40/parcel**          |
+
+At 50,000 parcels/day, this means ~$330K/month in Drive revenue and $220-440K/month in savings for the customer. **Drive pays for itself on day one** — the customer pays less than before while getting better operational reliability.
+
+There is a prospective first customer delivering 50,000 parcels/day willing to pilot.
+
+### Competitive Positioning
+
+**Drive's competitor is the broker, not other software.** Generic scheduling tools (Deputy, Workforce.com) sell $5-9/user/month subscriptions. Route optimization platforms (Bringg, Onfleet) focus on delivery routing. Neither targets the broker-replacement arbitrage.
+
+Drive's unique combination that no single competitor offers:
+
+1. **Mandatory confirmation workflow** with auto-drop → auto-reopen
+2. **3-mode bidding cascade** (competitive → instant → emergency) that auto-transitions based on time-to-shift
+3. **Health scoring with gamified stars/streaks** for driver retention
+4. **Full shift lifecycle** as one coherent flow: schedule → confirm → arrive → start → complete → edit window
+
+The per-parcel pricing model is itself a differentiator — revenue scales with customer volume, making it an easy yes for the customer ("you only pay when parcels move").
+
+### What It Is NOT
+
+- A marketplace or job board (not competing with hiring platforms)
+- A routing/navigation engine (Drive manages the workforce, not the route)
+- An HR or payroll system
+- Generic employee scheduling software
+
 ## Project Status: Ready for Implementation
 
 Tech stack interview **completed**. Specifications documented in `documentation/specs/`. Ready to begin implementation.
@@ -25,17 +74,17 @@ Tech stack interview **completed**. Specifications documented in `documentation/
 
 ## Domain Context
 
-**What we're building**: Event-driven operations automation platform for delivery logistics.
+**What we're building**: Event-driven operations automation platform that replaces manual broker coordination in last-mile delivery logistics.
 
 **Core capabilities**:
 
 - Automatic driver-to-route scheduling (2-week lookahead, Sunday lock)
-- Bidding-based replacement system (not FCFS)
-- Performance tracking with reliability-based flagging
-- Driver health gamification with score/star progression system
+- Bidding-based vacancy filling with 3-mode cascade (competitive/instant/emergency)
+- Mandatory shift confirmation with auto-drop and auto-reopen
+- Driver health scoring with gamified star/streak progression for retention
+- No-show auto-detection with automatic emergency bid window
 - Mobile-first driver app + manager dashboard
-
-**What it is NOT**: A marketplace, HR system, routing/navigation engine, or payroll system.
+- Per-parcel economics: every feature exists to reduce the per-parcel management cost
 
 ## Key Documents
 
