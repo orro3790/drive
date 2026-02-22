@@ -184,7 +184,7 @@
 		color: var(--status-info);
 	}
 	:global([data-theme='dark']) .chip[data-status='info'] {
-		background: color-mix(in srgb, var(--status-info) 20%, transparent);
+		background: color-mix(in srgb, var(--status-info) 15%, transparent);
 		color: var(--status-info-light, #93c5fd);
 	}
 
@@ -193,7 +193,7 @@
 		color: var(--status-success);
 	}
 	:global([data-theme='dark']) .chip[data-status='success'] {
-		background: color-mix(in srgb, var(--status-success) 20%, transparent);
+		background: color-mix(in srgb, var(--status-success) 15%, transparent);
 		color: var(--status-success-light, #86efac);
 	}
 
@@ -202,7 +202,7 @@
 		color: var(--status-warning);
 	}
 	:global([data-theme='dark']) .chip[data-status='warning'] {
-		background: color-mix(in srgb, var(--status-warning) 20%, transparent);
+		background: color-mix(in srgb, var(--status-warning) 15%, transparent);
 		color: var(--status-warning-light, var(--status-warning));
 	}
 
@@ -211,7 +211,7 @@
 		color: var(--status-error);
 	}
 	:global([data-theme='dark']) .chip[data-status='error'] {
-		background: color-mix(in srgb, var(--status-error) 20%, transparent);
+		background: color-mix(in srgb, var(--status-error) 15%, transparent);
 		color: var(--status-error-light, #fca5a5);
 	}
 
@@ -233,7 +233,7 @@
 	}
 	:global([data-theme='dark']) .chip[data-status='new'],
 	:global([data-theme='dark']) .chip[data-status='good'] {
-		background: color-mix(in srgb, var(--status-success) 20%, transparent);
+		background: color-mix(in srgb, var(--status-success) 15%, transparent);
 		color: var(--status-success-light, #86efac);
 	}
 
@@ -242,7 +242,7 @@
 		color: var(--status-warning);
 	}
 	:global([data-theme='dark']) .chip[data-status='fair'] {
-		background: color-mix(in srgb, var(--status-warning) 20%, transparent);
+		background: color-mix(in srgb, var(--status-warning) 15%, transparent);
 		color: var(--status-warning-light, var(--status-warning));
 	}
 
@@ -251,7 +251,7 @@
 		color: var(--status-error);
 	}
 	:global([data-theme='dark']) .chip[data-status='poor'] {
-		background: color-mix(in srgb, var(--status-error) 20%, transparent);
+		background: color-mix(in srgb, var(--status-error) 15%, transparent);
 		color: var(--status-error-light, #fca5a5);
 	}
 

@@ -64,7 +64,7 @@ export const driverUpdateSchema = z
 	});
 
 export const driverIdParamsSchema = z.object({
-	id: z.string().uuid()
+	id: z.string().min(1)
 });
 
 export type DriverUpdate = z.infer<typeof driverUpdateSchema>;

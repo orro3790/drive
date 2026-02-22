@@ -38,6 +38,7 @@
 	import DatePicker from '$lib/components/DatePicker.svelte';
 	import ConfirmationDialog from '$lib/components/ConfirmationDialog.svelte';
 	import Drawer from '$lib/components/primitives/Drawer.svelte';
+	import Toggle from '$lib/components/primitives/Toggle.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Filter from '$lib/components/icons/Filter.svelte';
 	import Reset from '$lib/components/icons/Reset.svelte';
@@ -257,11 +258,11 @@
 		suspended: m.route_status_suspended()
 	};
 
-	const statusChip: Record<RouteStatus, 'success' | 'error' | 'info' | 'warning'> = {
-		assigned: 'success',
+	const statusChip: Record<RouteStatus, 'success' | 'error' | 'info' | 'warning' | 'neutral'> = {
+		assigned: 'neutral',
 		unfilled: 'error',
-		bidding: 'info',
-		suspended: 'warning'
+		bidding: 'neutral',
+		suspended: 'neutral'
 	};
 
 	const progressLabels: Record<ShiftProgress, string> = {
@@ -277,12 +278,12 @@
 	const progressChip: Record<ShiftProgress, 'warning' | 'neutral' | 'info' | 'success' | 'error'> =
 		{
 			unconfirmed: 'warning',
-			confirmed: 'success',
-			arrived: 'info',
-			started: 'info',
-			completed: 'success',
+			confirmed: 'neutral',
+			arrived: 'neutral',
+			started: 'neutral',
+			completed: 'neutral',
 			no_show: 'error',
-			cancelled: 'error'
+			cancelled: 'neutral'
 		};
 
 	const progressFilterOptions: SelectOption[] = [
@@ -1168,6 +1169,26 @@
 				<dd>{formatTimestamp(route.completedAt)}</dd>
 			</div>
 		{/if}
+		{#if getRouteSuspendAction(route)}
+			<div class="detail-row">
+				<dt>{m.route_status_suspended()}</dt>
+				<dd>
+					<Toggle
+						checked={route.status === 'suspended'}
+						disabled={isRouteOverriding(route)}
+						variant="warning"
+						onchange={async (checked) => {
+							if (!route.assignmentId) return;
+							if (checked) {
+								await routeStore.suspendRoute(route.assignmentId);
+							} else {
+								await routeStore.resumeRoute(route.assignmentId);
+							}
+						}}
+					/>
+				</dd>
+			</div>
+		{/if}
 	</dl>
 
 	{#if !route.assignmentId}
@@ -1241,13 +1262,13 @@
 
 {#snippet routeFooterActions(route: RouteWithWarehouse)}
 	{@const bidOverrideAction = getRouteBidOverrideAction(route)}
-	{@const suspendAction = getRouteSuspendAction(route)}
 	{@const canAssign = canManualAssignRoute(route)}
-	{#if bidOverrideAction || suspendAction || canAssign}
+	{#if bidOverrideAction || canAssign}
 		<div class="route-footer-actions">
 			{#if bidOverrideAction}
 				<Button
 					fill
+					size="small"
 					variant="ghost"
 					onclick={(e) => openOverrideConfirm(route, bidOverrideAction, e)}
 					disabled={isRouteAssigning(route) || isRouteOverriding(route)}
@@ -1256,24 +1277,13 @@
 					{getOverrideActionLabel(bidOverrideAction)}
 				</Button>
 			{/if}
-			{#if suspendAction}
-				<Button
-					fill
-					variant={suspendAction === 'suspend_route' ? 'danger' : 'secondary'}
-					onclick={(e) => openOverrideConfirm(route, suspendAction, e)}
-					disabled={isRouteAssigning(route) || isRouteOverriding(route)}
-					isLoading={isRouteOverriding(route)}
-				>
-					{getOverrideActionLabel(suspendAction)}
-				</Button>
-			{/if}
 			{#if canAssign}
 				<Button
 					fill
+					size="small"
 					onclick={() => openRouteAssignModal(route)}
 					disabled={isRouteAssigning(route) || isRouteOverriding(route)}
 					isLoading={isRouteAssigning(route)}
-					style={bidOverrideAction || suspendAction ? 'margin-left:auto;' : undefined}
 				>
 					{getAssignButtonLabel(route)}
 				</Button>
