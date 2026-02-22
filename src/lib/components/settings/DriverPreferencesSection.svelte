@@ -6,7 +6,6 @@ DriverPreferencesSection - Preference controls for driver settings.
 	import { onMount } from 'svelte';
 	import * as m from '$lib/paraglide/messages.js';
 	import SettingsRow from './SettingsRow.svelte';
-	import NoticeBanner from '$lib/components/primitives/NoticeBanner.svelte';
 	import Button from '$lib/components/primitives/Button.svelte';
 	import Chip from '$lib/components/primitives/Chip.svelte';
 	import Combobox from '$lib/components/Combobox.svelte';
@@ -17,10 +16,10 @@ DriverPreferencesSection - Preference controls for driver settings.
 	import Minus from '$lib/components/icons/Minus.svelte';
 	import RouteIcon from '$lib/components/icons/Route.svelte';
 	import WarehouseIcon from '$lib/components/icons/Warehouse.svelte';
+	import DayDemandBars from './DayDemandBars.svelte';
 	import { preferencesStore, type RouteDetail } from '$lib/stores/preferencesStore.svelte';
 	import type { SelectOption } from '$lib/schemas/ui/select';
 	import { toastStore } from '$lib/stores/app-shell/toastStore.svelte';
-	import { formatUiDateTime } from '$lib/utils/date/formatting';
 
 	let routeResetKey = $state(0);
 	let routeSelection = $state<string | number | undefined>(undefined);
@@ -42,7 +41,32 @@ DriverPreferencesSection - Preference controls for driver settings.
 	const selectedRouteCount = $derived(selectedRouteIds.length);
 	const remainingRouteCount = $derived(Math.max(0, 3 - selectedRouteCount));
 	const hasAllRoutePreferences = $derived(selectedRouteCount >= 3);
-	const isLocked = $derived(preferencesStore.isLocked);
+	const hasDayCounts = $derived(Object.keys(preferencesStore.dayCounts).length > 0);
+	const weeklyCap = $derived(preferencesStore.weeklyCap);
+	const dayCapReached = $derived(preferredDays.length >= weeklyCap);
+	const selectedDayNames = $derived(
+		preferredDays
+			.slice()
+			.sort((a, b) => a - b)
+			.map((d) => dayOptions.find((o) => o.value === d)?.short ?? '')
+			.filter(Boolean)
+	);
+	const daysStatusText = $derived.by(() => {
+		const current = String(preferredDays.length);
+		const max = String(weeklyCap);
+		if (dayCapReached) {
+			return m.preferences_days_status_complete({
+				current,
+				max,
+				days: selectedDayNames.join(', ')
+			});
+		}
+		return m.preferences_days_status_remaining({
+			remaining: String(Math.max(0, weeklyCap - preferredDays.length)),
+			current,
+			max
+		});
+	});
 	const isLoading = $derived(preferencesStore.isLoading);
 	const isSaving = $derived(preferencesStore.isSaving);
 	const routeLimitReached = $derived(selectedRouteIds.length >= 3);
@@ -59,20 +83,6 @@ DriverPreferencesSection - Preference controls for driver settings.
 			current: String(selectedRouteCount),
 			max: '3'
 		});
-	});
-
-	const lockStatus = $derived.by(() => {
-		if (preferencesStore.isLocked && preferencesStore.lockedUntil) {
-			return m.preferences_locked_until({
-				date: formatUiDateTime(preferencesStore.lockedUntil)
-			});
-		}
-		if (preferencesStore.lockDeadline) {
-			return m.preferences_lock_countdown({
-				time: formatUiDateTime(preferencesStore.lockDeadline)
-			});
-		}
-		return '';
 	});
 
 	const routeDataSource = {
@@ -123,10 +133,6 @@ DriverPreferencesSection - Preference controls for driver settings.
 	});
 
 	function handleRouteSelect(option: SelectOption) {
-		if (isLocked) {
-			return;
-		}
-
 		if (routeLimitReached) {
 			toastStore.error(m.preferences_routes_max());
 			routeSelection = undefined;
@@ -159,7 +165,6 @@ DriverPreferencesSection - Preference controls for driver settings.
 	}
 
 	function removeRoute(routeId: string) {
-		if (isLocked) return;
 		const nextIds = selectedRouteIds.filter((id) => id !== routeId);
 		const nextDetails = selectedRoutes.filter((route) => route.id !== routeId);
 		preferencesStore.updateRoutes(nextIds, nextDetails);
@@ -182,7 +187,7 @@ DriverPreferencesSection - Preference controls for driver settings.
 	<SettingsRow ariaDisabled={true}>
 		{#snippet label()}
 			<div class="title">{m.preferences_days_section()}</div>
-			<div class="desc">{lockStatus || m.preferences_days_description()}</div>
+			<div class="desc">{m.preferences_days_description()}</div>
 		{/snippet}
 		{#snippet control()}
 			<div class="preferences-loading" aria-live="polite">
@@ -192,26 +197,26 @@ DriverPreferencesSection - Preference controls for driver settings.
 		{/snippet}
 	</SettingsRow>
 {:else}
-	<SettingsRow ariaDisabled={isLocked || isSaving}>
+	<SettingsRow ariaDisabled={isSaving}>
 		{#snippet label()}
 			<div class="title">{m.preferences_days_section()}</div>
-			<div class="desc">{lockStatus || m.preferences_days_description()}</div>
+			<div class="desc">{m.preferences_days_description()}</div>
+			<div class="desc days-desc" class:days-desc-success={dayCapReached}>
+				{#if dayCapReached}
+					<Icon size="small" color="var(--status-success)"><CircleCheckFill /></Icon>
+				{/if}
+				<span>{daysStatusText}</span>
+			</div>
 		{/snippet}
 		{#snippet children()}
 			<div class="preferences-row-stack">
-				{#if isLocked}
-					<NoticeBanner variant="warning">
-						<div class="lock-banner">
-							<span>{m.preferences_locked_message()}</span>
-							{#if preferencesStore.lockedUntil}
-								<span>
-									{m.preferences_locked_until({
-										date: formatUiDateTime(preferencesStore.lockedUntil)
-									})}
-								</span>
-							{/if}
-						</div>
-					</NoticeBanner>
+				{#if hasDayCounts}
+					<DayDemandBars
+						dayCounts={preferencesStore.dayCounts}
+						dayLabels={dayOptions.map((d) => d.short)}
+						selectedDays={preferredDays}
+						capReached={dayCapReached}
+					/>
 				{/if}
 
 				<div class="days-grid">
@@ -221,10 +226,9 @@ DriverPreferencesSection - Preference controls for driver settings.
 							type="button"
 							variant="ghost"
 							size="compact"
-							class={`day-toggle ${isSelected ? 'day-toggle-active' : 'day-toggle-inactive'}`}
+							class={`day-toggle ${isSelected ? 'day-toggle-active' : 'day-toggle-inactive'}${!isSelected && dayCapReached ? ' day-toggle-dimmed' : ''}`}
 							aria-label={day.full}
 							aria-pressed={isSelected}
-							disabled={isLocked || isSaving}
 							onclick={() => preferencesStore.toggleDay(day.value)}
 						>
 							{day.short}
@@ -235,7 +239,7 @@ DriverPreferencesSection - Preference controls for driver settings.
 		{/snippet}
 	</SettingsRow>
 
-	<SettingsRow ariaDisabled={isLocked || isSaving}>
+	<SettingsRow ariaDisabled={isSaving}>
 		{#snippet label()}
 			<div class="title">{m.preferences_routes_section()}</div>
 			<div class="desc routes-desc" class:routes-desc-success={hasAllRoutePreferences}>
@@ -254,7 +258,7 @@ DriverPreferencesSection - Preference controls for driver settings.
 						placeholder={m.preferences_routes_placeholder()}
 						searchPlaceholder={m.preferences_routes_placeholder()}
 						aria-label={m.preferences_routes_aria_label()}
-						disabled={isLocked || isSaving}
+						disabled={isSaving}
 						onSelect={handleRouteSelect}
 						size="base"
 					/>
@@ -289,7 +293,7 @@ DriverPreferencesSection - Preference controls for driver settings.
 									aria-label={m.preferences_remove_route_label({ route: route.name })}
 									noBackground
 									onclick={() => removeRoute(route.id)}
-									disabled={isLocked || isSaving}
+									disabled={isSaving}
 								>
 									<Icon><Minus /></Icon>
 								</IconButton>
@@ -307,12 +311,19 @@ DriverPreferencesSection - Preference controls for driver settings.
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-3);
+		padding-top: var(--spacing-3);
 	}
 
-	.lock-banner {
-		display: flex;
-		flex-direction: column;
+	.desc.days-desc {
+		display: inline-flex;
+		align-items: center;
 		gap: var(--spacing-1);
+		letter-spacing: normal;
+	}
+
+	.desc.days-desc.days-desc-success {
+		color: var(--status-success);
+		font-weight: var(--font-weight-medium);
 	}
 
 	.desc.routes-desc {
@@ -337,14 +348,13 @@ DriverPreferencesSection - Preference controls for driver settings.
 	}
 
 	.days-grid {
-		display: flex;
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: repeat(7, 1fr);
 		gap: var(--spacing-2);
 	}
 
 	.days-grid :global(.day-toggle) {
-		width: auto;
-		flex: 0 0 auto;
+		width: 100%;
 		justify-content: center;
 		font-size: var(--font-size-xs);
 		font-weight: var(--font-weight-medium);
@@ -354,25 +364,33 @@ DriverPreferencesSection - Preference controls for driver settings.
 		border: none;
 		min-height: 28px;
 		padding: 2px var(--spacing-2);
+		transition:
+			background-color 0.25s ease,
+			color 0.25s ease,
+			opacity 0.25s ease;
 	}
 
 	.days-grid :global(.day-toggle-inactive) {
-		background: var(--interactive-normal);
+		background-color: var(--interactive-normal);
 		color: var(--text-normal);
 	}
 
 	.days-grid :global(.day-toggle-inactive:hover:not(:disabled)) {
-		background: var(--interactive-hover);
+		background-color: var(--interactive-hover);
 		color: var(--text-normal);
 	}
 
+	.days-grid :global(.day-toggle-dimmed) {
+		opacity: 0.35;
+	}
+
 	.days-grid :global(.day-toggle-active) {
-		background: color-mix(in srgb, var(--status-success) 15%, transparent);
+		background-color: color-mix(in srgb, var(--status-success) 15%, transparent);
 		color: var(--status-success);
 	}
 
 	.days-grid :global(.day-toggle-active:hover:not(:disabled)) {
-		background: color-mix(in srgb, var(--status-success) 20%, transparent);
+		background-color: color-mix(in srgb, var(--status-success) 20%, transparent);
 		color: var(--status-success);
 	}
 
@@ -432,6 +450,10 @@ DriverPreferencesSection - Preference controls for driver settings.
 	@media (max-width: 767px) {
 		.days-grid {
 			gap: var(--spacing-1);
+		}
+
+		.days-grid :global(.day-toggle) {
+			padding: 2px var(--spacing-1);
 		}
 	}
 </style>
