@@ -45,13 +45,22 @@ export const preferencesUpdateSchema = z.object({
 export type PreferencesUpdate = z.infer<typeof preferencesUpdateSchema>;
 
 /**
+ * Day demand counts schema — maps day-of-week string keys ("0"-"6") to driver counts.
+ * JSON object keys are always strings, so callers convert with Number(key) when needed.
+ */
+export const dayCountsSchema = z.record(z.string(), z.number().int().nonnegative());
+export type DayCounts = z.infer<typeof dayCountsSchema>;
+
+/**
  * API response schema with lock status
  */
 export const preferencesResponseSchema = z.object({
 	preferences: preferencesWithDetailsSchema.nullable(),
 	isLocked: z.boolean(),
 	lockDeadline: z.coerce.date().nullable(),
-	lockedUntil: z.coerce.date().nullable()
+	lockedUntil: z.coerce.date().nullable(),
+	dayCounts: dayCountsSchema.optional().default({}),
+	weeklyCap: z.number().int().positive().optional().default(4)
 });
 
 export type PreferencesResponse = z.infer<typeof preferencesResponseSchema>;

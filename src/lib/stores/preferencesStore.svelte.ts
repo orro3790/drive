@@ -3,6 +3,9 @@
  *
  * Manages driver preferences state with optimistic UI updates.
  * Handles preferred days and routes selection.
+ *
+ * Preferences are always editable — the scheduling algorithm takes a
+ * snapshot of whatever is selected at the weekly lock deadline.
  */
 
 import { preferencesResponseSchema, type PreferencesUpdate } from '$lib/schemas/preferences';
@@ -28,17 +31,15 @@ export type PreferencesData = {
 
 const state = $state<{
 	preferences: PreferencesData | null;
-	isLocked: boolean;
-	lockDeadline: Date | null;
-	lockedUntil: Date | null;
+	dayCounts: Record<string, number>;
+	weeklyCap: number;
 	isLoading: boolean;
 	isSaving: boolean;
 	error: string | null;
 }>({
 	preferences: null,
-	isLocked: false,
-	lockDeadline: null,
-	lockedUntil: null,
+	dayCounts: {},
+	weeklyCap: 4,
 	isLoading: false,
 	isSaving: false,
 	error: null
@@ -60,14 +61,11 @@ export const preferencesStore = {
 	get preferences() {
 		return state.preferences;
 	},
-	get isLocked() {
-		return state.isLocked;
+	get dayCounts() {
+		return state.dayCounts;
 	},
-	get lockDeadline() {
-		return state.lockDeadline;
-	},
-	get lockedUntil() {
-		return state.lockedUntil;
+	get weeklyCap() {
+		return state.weeklyCap;
 	},
 	get isLoading() {
 		return state.isLoading;
@@ -98,9 +96,8 @@ export const preferencesStore = {
 			}
 
 			state.preferences = parsed.data.preferences;
-			state.isLocked = parsed.data.isLocked;
-			state.lockDeadline = parsed.data.lockDeadline;
-			state.lockedUntil = parsed.data.lockedUntil;
+			state.dayCounts = parsed.data.dayCounts ?? {};
+			state.weeklyCap = parsed.data.weeklyCap ?? 4;
 		} catch (err) {
 			state.error = err instanceof Error ? err.message : 'Unknown error';
 			toastStore.error(m.preferences_load_error());
@@ -114,11 +111,6 @@ export const preferencesStore = {
 	 */
 	async save(data: PreferencesUpdate, routeDetails?: RouteDetail[]) {
 		if (!ensureOnlineForWrite()) {
-			return;
-		}
-
-		if (state.isLocked) {
-			toastStore.error(m.preferences_locked_error());
 			return;
 		}
 
@@ -147,12 +139,6 @@ export const preferencesStore = {
 			});
 
 			if (!res.ok) {
-				if (res.status === 423) {
-					if (isLatestMutationVersion(mutationKey, mutationVersion)) {
-						state.isLocked = true;
-					}
-					throw new Error('locked');
-				}
 				throw new Error('Failed to save preferences');
 			}
 
@@ -166,9 +152,6 @@ export const preferencesStore = {
 			}
 
 			state.preferences = parsed.data.preferences;
-			state.isLocked = parsed.data.isLocked;
-			state.lockDeadline = parsed.data.lockDeadline;
-			state.lockedUntil = parsed.data.lockedUntil;
 
 			toastStore.success(m.preferences_saved_success());
 		} catch (err) {
@@ -178,12 +161,7 @@ export const preferencesStore = {
 
 			// Rollback
 			state.preferences = original;
-
-			if (err instanceof Error && err.message === 'locked') {
-				toastStore.error(m.preferences_locked_error());
-			} else {
-				toastStore.error(m.preferences_save_error());
-			}
+			toastStore.error(m.preferences_save_error());
 		} finally {
 			if (isLatestMutationVersion(mutationKey, mutationVersion)) {
 				state.isSaving = false;
@@ -196,7 +174,14 @@ export const preferencesStore = {
 	 */
 	toggleDay(day: number, routeDetails?: RouteDetail[]) {
 		const currentDays = state.preferences?.preferredDays ?? [];
-		const newDays = currentDays.includes(day)
+		const isRemoving = currentDays.includes(day);
+
+		if (!isRemoving && currentDays.length >= state.weeklyCap) {
+			toastStore.error(m.preferences_days_max({ max: String(state.weeklyCap) }));
+			return;
+		}
+
+		const newDays = isRemoving
 			? currentDays.filter((d) => d !== day)
 			: [...currentDays, day].sort((a, b) => a - b);
 

@@ -2,7 +2,7 @@
  * Driver Preferences API
  *
  * GET  /api/preferences - Get current user's preferences
- * PUT  /api/preferences - Update preferences (if not locked)
+ * PUT  /api/preferences - Update preferences
  */
 
 import { json, error } from '@sveltejs/kit';
@@ -10,35 +10,43 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { driverPreferences, routes, warehouses } from '$lib/server/db/schema';
 import { preferencesUpdateSchema } from '$lib/schemas/preferences';
+import type { DayCounts } from '$lib/schemas/preferences';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { requireDriverWithOrg } from '$lib/server/org-scope';
-import {
-	getCurrentPreferenceLockDeadline,
-	getNextPreferenceLockDeadline,
-	isCurrentPreferenceCycleLocked
-} from '$lib/server/time/preferenceLock';
-
-/**
- * Check if preferences are locked for the active cycle.
- */
-function isPreferencesLocked(lockedAt: Date | null, referenceInstant: Date): boolean {
-	return isCurrentPreferenceCycleLocked(lockedAt, referenceInstant);
-}
 
 export const GET: RequestHandler = async ({ locals }) => {
-	const { user } = requireDriverWithOrg(locals);
+	const { user, organizationId } = requireDriverWithOrg(locals);
 
 	const userId = user.id;
 
-	// Get existing preferences
-	const [preferences] = await db
-		.select()
-		.from(driverPreferences)
-		.where(eq(driverPreferences.userId, userId));
+	// Get existing preferences and day demand counts in parallel
+	const [preferencesResult, demandResult] = await Promise.all([
+		db.select().from(driverPreferences).where(eq(driverPreferences.userId, userId)),
+		db.execute<{ day_value: string; driver_count: number }>(sql`
+			SELECT day_value::text, COUNT(DISTINCT dp.user_id)::int AS driver_count
+			FROM driver_preferences dp
+			JOIN "user" u ON dp.user_id = u.id
+			CROSS JOIN LATERAL unnest(dp.preferred_days) AS day_value
+			WHERE u.organization_id = ${organizationId}
+			  AND u.role = 'driver'
+			GROUP BY day_value
+			ORDER BY day_value
+		`)
+	]);
 
-	const now = new Date();
-	const lockDeadline = getNextPreferenceLockDeadline(now);
-	const isLocked = isPreferencesLocked(preferences?.lockedAt ?? null, now);
+	const [preferences] = preferencesResult;
+
+	// Build dayCounts record from raw rows
+	// db.execute() returns QueryResult with .rows for neon-serverless/node-postgres
+	const dayCounts: DayCounts = {};
+	const rows = Array.isArray(demandResult)
+		? demandResult
+		: (demandResult as { rows: { day_value: string; driver_count: number }[] }).rows;
+	if (rows) {
+		for (const row of rows) {
+			dayCounts[row.day_value] = row.driver_count;
+		}
+	}
 
 	// Get route details for preferred routes
 	let preferredRoutesWithDetails: Array<{
@@ -68,9 +76,11 @@ export const GET: RequestHandler = async ({ locals }) => {
 					preferredRoutesDetails: preferredRoutesWithDetails
 				}
 			: null,
-		isLocked,
-		lockDeadline,
-		lockedUntil: isLocked ? preferences?.lockedAt : null
+		isLocked: false,
+		lockDeadline: null,
+		lockedUntil: null,
+		dayCounts,
+		weeklyCap: user.weeklyCap ?? 4
 	});
 };
 
@@ -93,11 +103,6 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 
 	const { preferredDays, preferredRoutes } = result.data;
 	const now = new Date();
-	const currentLockDeadline = getCurrentPreferenceLockDeadline(now);
-
-	if (now >= currentLockDeadline) {
-		throw error(423, 'Preferences are locked for current scheduling cycle');
-	}
 
 	// Validate that all route IDs exist
 	if (preferredRoutes.length > 0) {
@@ -125,13 +130,12 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 				preferredDays,
 				preferredRoutes,
 				updatedAt: now
-			},
-			where: sql`${driverPreferences.lockedAt} is null or ${driverPreferences.lockedAt} < ${currentLockDeadline}`
+			}
 		})
 		.returning();
 
 	if (!updated) {
-		throw error(423, 'Preferences are locked for current scheduling cycle');
+		throw error(500, 'Failed to save preferences');
 	}
 
 	let preferredRoutesWithDetails: Array<{
@@ -154,15 +158,13 @@ export const PUT: RequestHandler = async ({ locals, request }) => {
 		preferredRoutesWithDetails = routeRows;
 	}
 
-	const lockDeadline = getNextPreferenceLockDeadline(now);
-
 	return json({
 		preferences: {
 			...updated,
 			preferredRoutesDetails: preferredRoutesWithDetails
 		},
 		isLocked: false,
-		lockDeadline,
+		lockDeadline: null,
 		lockedUntil: null
 	});
 };
