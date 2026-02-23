@@ -2064,7 +2064,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-4);
-		padding: var(--spacing-4);
 	}
 
 	.filter-field {
