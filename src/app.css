@@ -434,6 +434,17 @@ body {
 	background: var(--text-muted);
 }
 
+/* Hide scrollbar on touch devices — users swipe to scroll */
+@media (pointer: coarse), (hover: none) {
+	* {
+		scrollbar-width: none;
+	}
+
+	::-webkit-scrollbar {
+		display: none;
+	}
+}
+
 /* Links */
 a {
 	color: var(--interactive-accent);
