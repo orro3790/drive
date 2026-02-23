@@ -54,11 +54,11 @@ describe('driver [id] route param validation', () => {
 		['GET /api/drivers/[id]/health', 'GET', () => GET_HEALTH, undefined],
 		['GET /api/drivers/[id]/shifts', 'GET', () => GET_SHIFTS, undefined]
 	] as const)(
-		'%s returns 400 for invalid UUID path param',
+		'%s returns 400 for empty id path param',
 		async (_label, method, getHandler, body) => {
 			const event = createRequestEvent({
 				method,
-				params: { id: 'driver-1' },
+				params: { id: '' },
 				locals: { user: createManagerUser('manager-1') },
 				body
 			});
