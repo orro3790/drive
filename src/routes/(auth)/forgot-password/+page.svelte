@@ -161,4 +161,14 @@
 		color: var(--interactive-accent-hover);
 		text-decoration: underline;
 	}
+
+	@media (max-width: 600px) {
+		.auth-card {
+			padding: 0;
+			background: transparent;
+			border: none;
+			box-shadow: none;
+			border-radius: 0;
+		}
+	}
 </style>

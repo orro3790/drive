@@ -344,6 +344,14 @@
 
 	@media (pointer: coarse), (hover: none) {
 		.icon-toggle {
+			position: relative;
+		}
+
+		/* Expand touch target without inflating layout */
+		.icon-toggle::before {
+			content: '';
+			position: absolute;
+			inset: -10px;
 			min-width: 44px;
 			min-height: 44px;
 		}

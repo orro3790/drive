@@ -266,4 +266,14 @@
 	.icon-toggle:focus-visible {
 		box-shadow: 0 0 0 2px var(--interactive-accent);
 	}
+
+	@media (max-width: 600px) {
+		.auth-card {
+			padding: 0;
+			background: transparent;
+			border: none;
+			box-shadow: none;
+			border-radius: 0;
+		}
+	}
 </style>
