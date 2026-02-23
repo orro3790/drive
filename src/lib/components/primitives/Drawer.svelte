@@ -239,6 +239,7 @@
 
 		.drawer-body {
 			overscroll-behavior: contain;
+			padding-bottom: calc(var(--spacing-3) + var(--safe-area-bottom));
 		}
 	}
 </style>
