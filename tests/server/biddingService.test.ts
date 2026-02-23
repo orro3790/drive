@@ -131,6 +131,8 @@ beforeAll(async () => {
 }, 20_000);
 
 beforeEach(() => {
+	// Freeze time so assignment dates in tests are always in the future
+	freezeTime('2026-02-15T12:00:00.000Z');
 	setSelectResults([]);
 	selectMock.mockClear();
 	insertMock.mockClear();
@@ -404,8 +406,11 @@ describe('bidding service boundaries', () => {
 		]);
 	});
 
-	it('returns route-assigned conflict when instant assignment transaction fails', async () => {
-		transactionMock.mockRejectedValueOnce(new Error('serialization_conflict'));
+	it('returns route-assigned conflict when instant assignment transaction fails with serialization error', async () => {
+		const serializationError = Object.assign(new Error('serialization failure'), {
+			code: '40001'
+		});
+		transactionMock.mockRejectedValueOnce(serializationError);
 
 		await expect(instantAssign('assignment-3', 'driver-3', 'window-3')).resolves.toEqual({
 			instantlyAssigned: false,
