@@ -411,12 +411,30 @@
 
 	@media (pointer: coarse), (hover: none) {
 		.icon-toggle {
+			position: relative;
+		}
+
+		/* Expand touch target without inflating layout */
+		.icon-toggle::before {
+			content: '';
+			position: absolute;
+			inset: -10px;
 			min-width: 44px;
 			min-height: 44px;
 		}
 
 		.mode-option {
 			min-height: 44px;
+		}
+	}
+
+	@media (max-width: 600px) {
+		.auth-card {
+			padding: 0;
+			background: transparent;
+			border: none;
+			box-shadow: none;
+			border-radius: 0;
 		}
 	}
 </style>
