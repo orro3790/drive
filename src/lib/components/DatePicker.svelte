@@ -622,7 +622,7 @@
 		border-radius: var(--radius-base);
 		color: var(--text-normal);
 		font-size: var(--font-size-base);
-		height: var(--spacing-5); /* 28px - standard input height */
+		height: 36px; /* Match Select component default height */
 		box-sizing: border-box;
 		transition:
 			background-color var(--transition-duration-200) var(--transition-ease),

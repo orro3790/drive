@@ -1609,10 +1609,11 @@
 				/>
 			</div>
 			<div class="filter-actions">
-				<Button variant="secondary" onclick={resetFilters} fill>
+				<Button variant="secondary" size="small" onclick={resetFilters} fill>
 					{m.table_filter_clear_all()}
 				</Button>
 				<Button
+					size="small"
 					onclick={() => {
 						applyFilters();
 						showFilterDrawer = false;
