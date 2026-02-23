@@ -171,6 +171,17 @@
 		}
 	}
 
+	@keyframes slideUp {
+		from {
+			opacity: 0;
+			transform: translateY(100%);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
 	.drawer-header {
 		display: flex;
 		justify-content: space-between;
@@ -209,5 +220,25 @@
 		flex: 1;
 		overflow-y: auto;
 		padding: var(--spacing-3);
+	}
+
+	@media (max-width: 767px) {
+		.drawer-backdrop {
+			align-items: flex-end;
+			justify-content: center;
+		}
+
+		.drawer-container {
+			width: 100% !important;
+			max-width: 100%;
+			max-height: 85vh;
+			height: auto;
+			border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+			animation: slideUp 200ms ease-out;
+		}
+
+		.drawer-body {
+			overscroll-behavior: contain;
+		}
 	}
 </style>
