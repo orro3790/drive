@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.1](https://github.com/orro3790/drive/compare/v1.6.0...v1.6.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* driver health reactivity, routes UI cleanup, and housekeeping ([8feab3b](https://github.com/orro3790/drive/commit/8feab3b6c1d6560d29734579fdbe622bc9bdcee6))
+* **i18n:** add 20 missing keys to en.json and zh.json ([ba7d4b2](https://github.com/orro3790/drive/commit/ba7d4b22732fcf95759239083bb1ef905249641c))
+* **tests:** freeze time in bidding tests so assignment dates stay in the future ([3b03627](https://github.com/orro3790/drive/commit/3b0362776d5cc71d515b609816507c5ed9a96f73))
+* **tests:** update driver ID param test for non-UUID ID format ([7c99d05](https://github.com/orro3790/drive/commit/7c99d05aec1283d8a29212a864d166ebd0e98c1a))
+
 ## [1.6.0](https://github.com/orro3790/drive/compare/v1.5.0...v1.6.0) (2026-02-22)
 
 
