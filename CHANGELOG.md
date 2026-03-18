@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.7.0](https://github.com/orro3790/drive/compare/v1.6.1...v1.7.0) (2026-03-18)
+
+
+### Features
+
+* **seed:** add curated demo profile ([a7876bf](https://github.com/orro3790/drive/commit/a7876bf25d7754dc191b7ab8135ad44a9cd0ad61))
+* **ui:** responsive Drawer — bottom sheet on mobile, fix double padding ([d04597f](https://github.com/orro3790/drive/commit/d04597f12352dc1b69cb2f3b465f543b7e3d8e89))
+
+
+### Bug Fixes
+
+* **auth:** consistent mobile layout across all auth pages ([355c2df](https://github.com/orro3790/drive/commit/355c2dfd458288ea19ac82d091868d7fe9cbf6e7))
+* **i18n:** localize Korean notification times ([c4c6713](https://github.com/orro3790/drive/commit/c4c671397b0adb54da1cfc1ae4bc90df8871decc))
+* **ui:** add safe-area bottom padding to mobile Drawer bottom sheet ([6d198f2](https://github.com/orro3790/drive/commit/6d198f2b4046a779e2df548710c61191aabe43c1))
+* **ui:** clarify health bonus messaging ([19d060e](https://github.com/orro3790/drive/commit/19d060e6bb7f185fd6774817881eade79ef39818))
+* **ui:** hide scrollbar on touch devices, remove filter-form padding ([69fb3c2](https://github.com/orro3790/drive/commit/69fb3c2ab258434c8b6f0e728954209e387572b8))
+* **ui:** match DatePicker height to Select, shrink filter buttons ([598acc2](https://github.com/orro3790/drive/commit/598acc291ed21a8b7a79129de4f04aeb0516785b))
+
 ## [1.6.1](https://github.com/orro3790/drive/compare/v1.6.0...v1.6.1) (2026-02-23)
 
 
