@@ -5,6 +5,7 @@
  */
 
 import type { GeneratedUser } from './users';
+import type { DemoOrgFixture } from '../demo-fixtures';
 import { random, randomInt } from '../utils/runtime';
 
 export interface GeneratedPreference {
@@ -13,14 +14,45 @@ export interface GeneratedPreference {
 	preferredRoutes: string[]; // Route UUIDs
 }
 
+export interface PreferenceGeneratorOptions {
+	demoFixture?: DemoOrgFixture;
+	routeIdByKey?: Map<string, string>;
+}
+
 /**
  * Generate preferences for drivers.
  * Each driver gets 3-6 preferred days and 1-3 preferred routes.
  */
 export function generatePreferences(
 	drivers: GeneratedUser[],
-	routeIds: string[]
+	routeIds: string[],
+	options: PreferenceGeneratorOptions = {}
 ): GeneratedPreference[] {
+	if (options.demoFixture && options.routeIdByKey) {
+		return drivers
+			.filter((driver) => driver.role === 'driver')
+			.map((driver) => {
+				const fixture = options.demoFixture?.drivers.find(
+					(candidate) => candidate.email === driver.email
+				);
+				if (!fixture) {
+					throw new Error(`Missing demo preference fixture for ${driver.email}`);
+				}
+
+				return {
+					userId: driver.id,
+					preferredDays: [...fixture.preferredDays].sort((a, b) => a - b),
+					preferredRoutes: fixture.preferredRouteKeys.map((routeKey) => {
+						const routeId = options.routeIdByKey?.get(routeKey);
+						if (!routeId) {
+							throw new Error(`Missing demo route ID for ${routeKey}`);
+						}
+						return routeId;
+					})
+				};
+			});
+	}
+
 	const preferences: GeneratedPreference[] = [];
 
 	for (const driver of drivers) {

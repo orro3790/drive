@@ -13,7 +13,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { config } from 'dotenv';
 import { faker } from '@faker-js/faker';
 
@@ -103,73 +103,94 @@ async function createSeedOrganization(slug: string, name: string): Promise<strin
 
 async function clearData(): Promise<Map<string, string>> {
 	console.log('Clearing existing data...');
+	const existingSeedOrgs = await db
+		.select({ id: organizations.id, slug: organizations.slug })
+		.from(organizations)
+		.where(inArray(organizations.slug, SEED_ORG_SLUGS));
+	const existingOrgIds = existingSeedOrgs.map((org) => org.id);
 
-	// Delete in reverse dependency order
-	await db.delete(auditLogs);
-	await db.delete(driverHealthSnapshots);
-	await db.delete(driverHealthState);
-	await db.delete(notifications);
-	await db.delete(bids);
-	await db.delete(bidWindows);
-	await db.delete(routeCompletions);
-	await db.delete(shifts);
-	await db.delete(assignments);
-	await db.delete(driverMetrics);
-	await db.delete(driverPreferences);
-	await db.delete(warehouseManagers);
-	await db.delete(routes);
-	await db.delete(warehouses);
+	if (existingOrgIds.length > 0) {
+		const seedWarehouses = await db
+			.select({ id: warehouses.id })
+			.from(warehouses)
+			.where(inArray(warehouses.organizationId, existingOrgIds));
+		const warehouseIds = seedWarehouses.map((warehouse) => warehouse.id);
 
-	// Delete seeded driver accounts
-	const seededUsers = await db.select({ id: user.id }).from(user).where(eq(user.role, 'driver'));
+		const seedRoutes = warehouseIds.length
+			? await db
+					.select({ id: routes.id })
+					.from(routes)
+					.where(inArray(routes.warehouseId, warehouseIds))
+			: [];
+		const routeIds = seedRoutes.map((route) => route.id);
 
-	if (seededUsers.length > 0) {
-		const userIds = seededUsers.map((u) => u.id);
-		await db.delete(account).where(inArray(account.userId, userIds));
-		await db.delete(user).where(inArray(user.id, userIds));
+		const seedUsers = await db
+			.select({ id: user.id })
+			.from(user)
+			.where(inArray(user.organizationId, existingOrgIds));
+		const userIds = seedUsers.map((seedUser) => seedUser.id);
+
+		const seedAssignments = warehouseIds.length
+			? await db
+					.select({ id: assignments.id })
+					.from(assignments)
+					.where(inArray(assignments.warehouseId, warehouseIds))
+			: [];
+		const assignmentIds = seedAssignments.map((assignment) => assignment.id);
+
+		if (userIds.length > 0) {
+			await db.delete(auditLogs).where(inArray(auditLogs.actorId, userIds));
+			await db.delete(driverHealthSnapshots).where(inArray(driverHealthSnapshots.userId, userIds));
+			await db.delete(driverHealthState).where(inArray(driverHealthState.userId, userIds));
+			await db.delete(driverMetrics).where(inArray(driverMetrics.userId, userIds));
+			await db.delete(driverPreferences).where(inArray(driverPreferences.userId, userIds));
+		}
+
+		if (existingOrgIds.length > 0) {
+			await db.delete(auditLogs).where(inArray(auditLogs.organizationId, existingOrgIds));
+			await db
+				.delete(signupOnboarding)
+				.where(inArray(signupOnboarding.organizationId, existingOrgIds));
+			await db.delete(notifications).where(inArray(notifications.organizationId, existingOrgIds));
+		}
+
+		if (assignmentIds.length > 0) {
+			await db.delete(bids).where(inArray(bids.assignmentId, assignmentIds));
+			await db.delete(bidWindows).where(inArray(bidWindows.assignmentId, assignmentIds));
+			await db.delete(shifts).where(inArray(shifts.assignmentId, assignmentIds));
+			await db.delete(assignments).where(inArray(assignments.id, assignmentIds));
+		}
+
+		if (routeIds.length > 0) {
+			await db.delete(routeCompletions).where(inArray(routeCompletions.routeId, routeIds));
+			await db.delete(routes).where(inArray(routes.id, routeIds));
+		}
+
+		if (warehouseIds.length > 0) {
+			await db
+				.delete(warehouseManagers)
+				.where(inArray(warehouseManagers.warehouseId, warehouseIds));
+			await db.delete(warehouses).where(inArray(warehouses.id, warehouseIds));
+		}
+
+		if (userIds.length > 0) {
+			await db.delete(account).where(inArray(account.userId, userIds));
+			await db.delete(user).where(inArray(user.id, userIds));
+		}
+
+		await db
+			.delete(organizationDispatchSettings)
+			.where(inArray(organizationDispatchSettings.organizationId, existingOrgIds));
+		await db.delete(organizations).where(inArray(organizations.id, existingOrgIds));
 	}
 
-	// Delete seeded managers (test domains)
-	const testManagers = await db.select({ id: user.id, email: user.email }).from(user);
-	const seedManagerIds = testManagers
-		.filter(
-			(u) => u.email.includes('@drivermanager.test') || u.email.includes('@hamiltonmanager.test')
-		)
-		.map((u) => u.id);
-
-	if (seedManagerIds.length > 0) {
-		await db.delete(account).where(inArray(account.userId, seedManagerIds));
-		await db.delete(user).where(inArray(user.id, seedManagerIds));
-	}
-
-	// Delete signup_onboarding entries
-	await db.delete(signupOnboarding);
-
-	// Create seed orgs
+	// Create seed orgs fresh after scoped cleanup
 	console.log('\n   Creating seed organizations...');
 	const orgIds = new Map<string, string>();
-
-	// Delete old orgs first — create new ones, reassign remaining users
-	// We need to create at least one org before deleting old ones so remaining users can be reassigned
 	const orgAId = await createSeedOrganization('seed-org-a', 'Toronto Metro Logistics');
 	const orgBId = await createSeedOrganization('seed-org-b', 'Hamilton Delivery Co');
 	orgIds.set('seed-org-a', orgAId);
 	orgIds.set('seed-org-b', orgBId);
-
-	// Point any remaining users (e.g. real test user) to org-a
-	const remainingUsers = await db.select({ id: user.id }).from(user);
-	if (remainingUsers.length > 0) {
-		await db.update(user).set({ organizationId: orgAId, updatedAt: new Date() });
-		console.log(`   Reassigned ${remainingUsers.length} remaining user(s) to org-a`);
-	}
-
-	// Delete old organizations that aren't our seed orgs
-	await db.execute(
-		sql`DELETE FROM organization_dispatch_settings WHERE organization_id NOT IN (${sql.raw(`'${orgAId}', '${orgBId}'`)})`
-	);
-	await db.execute(
-		sql`DELETE FROM organizations WHERE id NOT IN (${sql.raw(`'${orgAId}', '${orgBId}'`)})`
-	);
 
 	console.log('Data cleared.');
 	return orgIds;
@@ -178,6 +199,7 @@ async function clearData(): Promise<Map<string, string>> {
 async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boolean): Promise<void> {
 	const seedConfig = orgConfig.config;
 	const label = orgConfig.slug;
+	const demoFixture = orgConfig.demoFixture;
 
 	console.log(`\n${'='.repeat(50)}`);
 	console.log(`Seeding ${orgConfig.name} (${label})`);
@@ -188,18 +210,40 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 
 	// 1. Generate warehouses
 	console.log('\n1. Creating warehouses...');
-	const warehouseData = generateWarehouses(seedConfig, orgConfig.warehouseOffset);
+	const warehouseData = demoFixture
+		? demoFixture.warehouses.map((warehouse) => ({
+				name: warehouse.name,
+				address: warehouse.address
+			}))
+		: generateWarehouses(seedConfig, orgConfig.warehouseOffset);
 	const insertedWarehouses = await db
 		.insert(warehouses)
 		.values(warehouseData.map((w) => ({ name: w.name, address: w.address, organizationId: orgId })))
 		.returning({ id: warehouses.id, name: warehouses.name });
 	console.log(`   Created ${insertedWarehouses.length} warehouses`);
 	const warehouseNameById = new Map(insertedWarehouses.map((w) => [w.id, w.name]));
+	const warehouseIdByKey = new Map<string, string>();
+	if (demoFixture) {
+		demoFixture.warehouses.forEach((warehouse, index) => {
+			const inserted = insertedWarehouses[index];
+			if (inserted) {
+				warehouseIdByKey.set(warehouse.key, inserted.id);
+			}
+		});
+	}
 
 	// 2. Generate routes
 	console.log('\n2. Creating routes...');
 	const warehouseNames = insertedWarehouses.map((w) => w.name);
-	const routeData = generateRoutes(seedConfig, warehouseNames);
+	const routeData = demoFixture
+		? demoFixture.routes.map((route) => ({
+				name: route.name,
+				warehouseIndex: demoFixture.warehouses.findIndex(
+					(warehouse) => warehouse.key === route.warehouseKey
+				),
+				startTime: route.startTime
+			}))
+		: generateRoutes(seedConfig, warehouseNames);
 	const insertedRoutes = await db
 		.insert(routes)
 		.values(
@@ -226,13 +270,23 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 	// Build warehouse and start time lookups by route
 	const warehouseIdByRoute = new Map(insertedRoutes.map((r) => [r.id, r.warehouseId]));
 	const routeStartTimeById = new Map(insertedRoutes.map((r) => [r.id, r.startTime]));
+	const routeIdByKey = new Map<string, string>();
+	if (demoFixture) {
+		demoFixture.routes.forEach((route, index) => {
+			const inserted = insertedRoutes[index];
+			if (inserted) {
+				routeIdByKey.set(route.key, inserted.id);
+			}
+		});
+	}
 
 	// 3. Generate users
 	console.log('\n3. Creating users...');
 	const userData = await generateUsers(seedConfig, {
 		driverEmailDomain: orgConfig.driverEmailDomain,
 		managerEmailDomain: orgConfig.managerEmailDomain,
-		idPrefix: isPrimary ? '' : 'orgb'
+		idPrefix: isPrimary ? '' : 'orgb',
+		demoFixture
 	});
 	await db.insert(user).values(
 		userData.users.map((u) => ({
@@ -262,32 +316,80 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 	);
 	const drivers = userData.users.filter((u) => u.role === 'driver');
 	const managers = userData.users.filter((u) => u.role === 'manager');
+	const managerByEmail = new Map(managers.map((manager) => [manager.email, manager]));
 	console.log(`   Created ${drivers.length} drivers, ${managers.length} managers`);
+
+	const ownerManagerEmail = demoFixture
+		? demoFixture.managers.find((manager) => manager.key === demoFixture.ownerManagerKey)?.email
+		: managers[0]?.email;
+	if (ownerManagerEmail) {
+		const ownerManager = managerByEmail.get(ownerManagerEmail);
+		if (ownerManager) {
+			await db
+				.update(organizations)
+				.set({ ownerUserId: ownerManager.id, updatedAt: getSeedNow() })
+				.where(eq(organizations.id, orgId));
+		}
+	}
 
 	// 3b. Assign managers to warehouses
 	console.log('\n3b. Assigning managers to warehouses...');
 	const warehouseManagerAssignments: { warehouseId: string; userId: string }[] = [];
 	let testUserForNotifications: GeneratedUser | null = null;
+	const warehouseManagerUserIdsByWarehouseId = new Map<string, string[]>();
 
-	// Assign each seeded manager to 1-2 warehouses
-	managers.forEach((manager, idx) => {
-		const primaryWarehouseIdx = idx % insertedWarehouses.length;
-		warehouseManagerAssignments.push({
-			warehouseId: insertedWarehouses[primaryWarehouseIdx].id,
-			userId: manager.id
-		});
-
-		if (idx % 3 === 0 && insertedWarehouses.length > 1) {
-			const secondaryIdx = (primaryWarehouseIdx + 1) % insertedWarehouses.length;
+	if (demoFixture) {
+		for (const warehouse of demoFixture.warehouses) {
+			const warehouseId = warehouseIdByKey.get(warehouse.key);
+			if (!warehouseId) {
+				throw new Error(`Missing warehouse ID for demo key ${warehouse.key}`);
+			}
+			for (const managerKey of warehouse.managerKeys) {
+				const managerEmail = demoFixture.managers.find(
+					(manager) => manager.key === managerKey
+				)?.email;
+				const manager = managerEmail ? managerByEmail.get(managerEmail) : null;
+				if (!manager) {
+					throw new Error(`Missing seeded manager for ${managerKey}`);
+				}
+				warehouseManagerAssignments.push({ warehouseId, userId: manager.id });
+				warehouseManagerUserIdsByWarehouseId.set(warehouseId, [
+					...(warehouseManagerUserIdsByWarehouseId.get(warehouseId) ?? []),
+					manager.id
+				]);
+			}
+		}
+	} else {
+		// Assign each seeded manager to 1-2 warehouses
+		managers.forEach((manager, idx) => {
+			const primaryWarehouseIdx = idx % insertedWarehouses.length;
 			warehouseManagerAssignments.push({
-				warehouseId: insertedWarehouses[secondaryIdx].id,
+				warehouseId: insertedWarehouses[primaryWarehouseIdx].id,
 				userId: manager.id
 			});
-		}
-	});
+
+			warehouseManagerUserIdsByWarehouseId.set(insertedWarehouses[primaryWarehouseIdx].id, [
+				...(warehouseManagerUserIdsByWarehouseId.get(insertedWarehouses[primaryWarehouseIdx].id) ??
+					[]),
+				manager.id
+			]);
+
+			if (idx % 3 === 0 && insertedWarehouses.length > 1) {
+				const secondaryIdx = (primaryWarehouseIdx + 1) % insertedWarehouses.length;
+				warehouseManagerAssignments.push({
+					warehouseId: insertedWarehouses[secondaryIdx].id,
+					userId: manager.id
+				});
+				warehouseManagerUserIdsByWarehouseId.set(insertedWarehouses[secondaryIdx].id, [
+					...(warehouseManagerUserIdsByWarehouseId.get(insertedWarehouses[secondaryIdx].id) ?? []),
+					manager.id
+				]);
+			}
+		});
+	}
 
 	// For primary org, add the test user to all warehouses
-	if (isPrimary) {
+	if (isPrimary && !demoFixture) {
 		const testUserEmail = process.env.TEST_USER_EMAIL;
 		if (testUserEmail) {
 			const [testUser] = await db
@@ -342,8 +444,34 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 
 	// 3c. Assign a primary manager to each route (for manager alert verification)
 	console.log('\n3c. Assigning primary managers to routes...');
-	if (managers.length > 0) {
+	const routeManagerIdByRouteId = new Map<string, string>();
+	if (demoFixture) {
+		for (let index = 0; index < demoFixture.routes.length; index++) {
+			const routeFixture = demoFixture.routes[index];
+			const insertedRoute = insertedRoutes[index];
+			const managerEmail = demoFixture.managers.find(
+				(manager) => manager.key === routeFixture.managerKey
+			)?.email;
+			const manager = managerEmail ? managerByEmail.get(managerEmail) : null;
+			if (!insertedRoute || !manager) {
+				throw new Error(`Missing route manager mapping for ${routeFixture.key}`);
+			}
+			routeManagerIdByRouteId.set(insertedRoute.id, manager.id);
+		}
+		if (routeManagerIdByRouteId.size > 0) {
+			for (const [routeId, managerId] of routeManagerIdByRouteId.entries()) {
+				await db
+					.update(routes)
+					.set({ managerId, updatedAt: getSeedNow() })
+					.where(eq(routes.id, routeId));
+			}
+			console.log(`   Assigned named managers to ${routeManagerIdByRouteId.size} routes`);
+		} else {
+			console.log('   No demo route managers mapped');
+		}
+	} else if (managers.length > 0) {
 		const primaryManagerId = managers[0].id;
+		insertedRoutes.forEach((route) => routeManagerIdByRouteId.set(route.id, primaryManagerId));
 		await db
 			.update(routes)
 			.set({ managerId: primaryManagerId, updatedAt: getSeedNow() })
@@ -361,7 +489,10 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 	// 4. Generate preferences
 	console.log('\n4. Creating preferences...');
 	const routeIds = insertedRoutes.map((r) => r.id);
-	const prefsData = generatePreferences(drivers, routeIds);
+	const prefsData = generatePreferences(drivers, routeIds, {
+		demoFixture,
+		routeIdByKey
+	});
 	await db.insert(driverPreferences).values(
 		prefsData.map((p) => ({
 			userId: p.userId,
@@ -380,7 +511,8 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 		prefsData,
 		routeIds,
 		warehouseIdByRoute,
-		routeStartTimeById
+		routeStartTimeById,
+		{ demoFixture, routeIdByKey }
 	);
 
 	const insertedAssignments = await db
@@ -489,7 +621,8 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 		drivers,
 		assignmentData.assignments,
 		assignmentData.shifts,
-		metricsData
+		metricsData,
+		{ demoFixture }
 	);
 
 	if (healthData.snapshots.length > 0) {
@@ -552,7 +685,9 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 		{
 			healthStates: healthData.states,
 			routeCompletions: completionsData,
-			preferences: prefsData
+			preferences: prefsData,
+			demoFixture,
+			routeIdByKey
 		}
 	);
 	const bidWindowIdsByAssignmentId = new Map<string, string>();
@@ -636,7 +771,10 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 		healthStates: healthData.states,
 		personas: assignmentData.personas,
 		noShowIndices: assignmentData.noShowIndices,
-		assignmentIdByIndex
+		assignmentIdByIndex,
+		demoFixture,
+		routeManagerIdByRouteId,
+		warehouseManagerUserIdsByWarehouseId
 	});
 	if (notificationData.length > 0) {
 		await db.insert(notifications).values(
@@ -664,8 +802,17 @@ async function seedOrg(orgConfig: OrgSeedConfig, orgId: string, isPrimary: boole
 
 async function main() {
 	const args = process.argv.slice(2);
-	const isStaging = args.includes('--staging');
-	const deterministic = args.includes('--deterministic');
+	const profileArg = args.find((arg) => arg.startsWith('--profile='));
+	const profileFromEquals = profileArg ? profileArg.split('=')[1] : null;
+	const profileFromNext = (() => {
+		const profileIndex = args.indexOf('--profile');
+		if (profileIndex === -1) return null;
+		return args[profileIndex + 1] ?? null;
+	})();
+	const profile = (profileFromEquals ??
+		profileFromNext ??
+		(args.includes('--staging') ? 'staging' : 'dev')) as 'dev' | 'staging' | 'demo';
+	const deterministic = args.includes('--deterministic') || profile === 'demo';
 
 	const seedArg = args.find((arg) => arg.startsWith('--seed='));
 	const seedFromEquals = seedArg ? Number(seedArg.split('=')[1]) : null;
@@ -698,14 +845,14 @@ async function main() {
 		faker.setDefaultRefDate(new Date(`${anchorDate}T12:00:00.000Z`));
 	}
 
-	const orgConfigs = getOrgConfigs(isStaging, {
+	const orgConfigs = getOrgConfigs(profile, {
 		deterministic,
 		seed: seedValue ?? null,
 		anchorDate: anchorDate ?? null
 	});
 
 	console.log(`\n🌱 Drive Seed Script`);
-	console.log(`Mode: ${isStaging ? 'STAGING' : 'DEV'}`);
+	console.log(`Mode: ${profile.toUpperCase()}`);
 	console.log(`Organizations: ${orgConfigs.length}`);
 	if (deterministic) {
 		console.log(`Deterministic mode: ON${seedValue !== null ? ` (seed=${seedValue})` : ''}`);

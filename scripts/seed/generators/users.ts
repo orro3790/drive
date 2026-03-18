@@ -8,7 +8,8 @@
 
 import { faker } from '@faker-js/faker';
 import { nanoid } from 'nanoid';
-import type { SeedConfig } from '../config';
+import { isDemoConfig, type SeedConfig } from '../config';
+import type { DemoOrgFixture } from '../demo-fixtures';
 import { hashPassword } from '../utils/password';
 import {
 	getSeedNow,
@@ -48,6 +49,7 @@ export interface UserGeneratorOptions {
 	driverEmailDomain?: string;
 	managerEmailDomain?: string;
 	idPrefix?: string;
+	demoFixture?: DemoOrgFixture;
 }
 
 // Default password for all seeded users
@@ -97,6 +99,83 @@ export async function generateUsers(
 		SEED_PASSWORD,
 		deterministic ? `seed-${config.seed ?? getSeedValue()}` : undefined
 	);
+
+	if (isDemoConfig(config) && options.demoFixture) {
+		const fixture = options.demoFixture;
+		const managerOffset = 0;
+		for (let i = 0; i < fixture.managers.length; i++) {
+			const manager = fixture.managers[i];
+			const stablePrefix = options.idPrefix ? `${options.idPrefix}_manager` : 'manager';
+			const id = deterministic ? stableId(stablePrefix, i) : nanoid(21);
+			const createdAt = deterministic
+				? createdAtDate(managerOffset + i)
+				: faker.date.past({ years: 1 });
+
+			users.push({
+				id,
+				name: manager.name,
+				email: manager.email,
+				phone: deterministic
+					? stablePhone(managerOffset + i)
+					: faker.phone.number({ style: 'national' }),
+				role: 'manager',
+				weeklyCap: manager.weeklyCap,
+				isFlagged: false,
+				flagWarningDate: null,
+				createdAt
+			});
+
+			accounts.push({
+				id: deterministic ? stableId(`${stablePrefix}_acct`, i) : nanoid(21),
+				userId: id,
+				accountId: manager.email,
+				providerId: 'credential',
+				password: hashedPassword,
+				createdAt
+			});
+		}
+
+		for (let i = 0; i < fixture.drivers.length; i++) {
+			const driver = fixture.drivers[i];
+			const stablePrefix = options.idPrefix ? `${options.idPrefix}_driver` : 'driver';
+			const id = deterministic ? stableId(stablePrefix, i) : nanoid(21);
+			const createdAt = deterministic
+				? createdAtDate(fixture.managers.length + i)
+				: faker.date.past({ years: 1 });
+			const flagWarningDate = driver.flagWarningDaysAgo
+				? (() => {
+						const warningDate = new Date(getSeedNow());
+						warningDate.setUTCDate(warningDate.getUTCDate() - driver.flagWarningDaysAgo);
+						return warningDate;
+					})()
+				: null;
+
+			users.push({
+				id,
+				name: driver.name,
+				email: driver.email,
+				phone: deterministic
+					? stablePhone(fixture.managers.length + i)
+					: faker.phone.number({ style: 'national' }),
+				role: 'driver',
+				weeklyCap: driver.weeklyCap,
+				isFlagged: driver.isFlagged,
+				flagWarningDate,
+				createdAt
+			});
+
+			accounts.push({
+				id: deterministic ? stableId(`${stablePrefix}_acct`, i) : nanoid(21),
+				userId: id,
+				accountId: driver.email,
+				providerId: 'credential',
+				password: hashedPassword,
+				createdAt
+			});
+		}
+
+		return { users, accounts };
+	}
 
 	// Generate managers
 	for (let i = 0; i < config.managers; i++) {

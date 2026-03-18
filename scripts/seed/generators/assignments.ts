@@ -16,11 +16,14 @@
  */
 
 import type { SeedConfig } from '../config';
+import { isDemoConfig } from '../config';
+import type { DemoDriverFixture, DemoOrgFixture } from '../demo-fixtures';
 import type { GeneratedUser } from './users';
 import type { GeneratedPreference } from './preferences';
 import { dispatchPolicy, parseRouteStartTime } from '../../../src/lib/config/dispatchPolicy';
 import {
 	getWeekRange,
+	getWeekStart,
 	getWeekDates,
 	isPastDate,
 	isFutureDate,
@@ -30,6 +33,7 @@ import {
 	getTorontoToday
 } from '../utils/dates';
 import { getSeedNow, random, randomInt } from '../utils/runtime';
+import { addDays, subDays } from 'date-fns';
 
 export interface GeneratedAssignment {
 	routeId: string;
@@ -66,6 +70,11 @@ export interface GeneratedAssignmentsResult {
 	personas: DriverPersonas;
 	/** Assignment indices that represent no-shows (for bidding generator) */
 	noShowIndices: number[];
+}
+
+export interface AssignmentGeneratorOptions {
+	demoFixture?: DemoOrgFixture;
+	routeIdByKey?: Map<string, string>;
 }
 
 // --- Driver Personas ---
@@ -162,8 +171,20 @@ export function generateAssignments(
 	preferences: GeneratedPreference[],
 	routeIds: string[],
 	warehouseIdByRoute: Map<string, string>,
-	routeStartTimeById?: Map<string, string>
+	routeStartTimeById?: Map<string, string>,
+	options: AssignmentGeneratorOptions = {}
 ): GeneratedAssignmentsResult {
+	if (isDemoConfig(config) && options.demoFixture && options.routeIdByKey) {
+		return generateDemoAssignments(
+			config,
+			drivers,
+			warehouseIdByRoute,
+			routeStartTimeById ?? new Map(),
+			options.demoFixture,
+			options.routeIdByKey
+		);
+	}
+
 	const assignments: GeneratedAssignment[] = [];
 	const shiftsList: GeneratedShift[] = [];
 	const personas = partitionDriverPersonas(drivers);
@@ -807,4 +828,468 @@ function guaranteeFutureConfirmations(
 			}
 		}
 	}
+}
+
+function generateDemoAssignments(
+	config: SeedConfig,
+	drivers: GeneratedUser[],
+	warehouseIdByRoute: Map<string, string>,
+	routeStartTimeById: Map<string, string>,
+	fixture: DemoOrgFixture,
+	routeIdByKey: Map<string, string>
+): GeneratedAssignmentsResult {
+	const assignments: GeneratedAssignment[] = [];
+	const shifts: GeneratedShift[] = [];
+	const noShowIndices: number[] = [];
+	const driversByEmail = new Map(
+		drivers.filter((driver) => driver.role === 'driver').map((driver) => [driver.email, driver])
+	);
+	const personas = buildDemoPersonas(drivers, fixture);
+	const today = getTorontoToday();
+	const todayString = toTorontoDateString(today);
+	const currentWeekStart = getWeekStart(today);
+	const pastWeekStarts = getWeekRange(config.pastWeeks, 0).filter(
+		(weekStart) => toTorontoDateString(weekStart) < toTorontoDateString(currentWeekStart)
+	);
+
+	for (const driverFixture of fixture.drivers) {
+		const driver = driversByEmail.get(driverFixture.email);
+		if (!driver) {
+			throw new Error(`Missing seeded demo driver for ${driverFixture.email}`);
+		}
+
+		const routeIds = driverFixture.preferredRouteKeys.map((routeKey) => {
+			const routeId = routeIdByKey.get(routeKey);
+			if (!routeId) {
+				throw new Error(`Missing demo route ID for ${routeKey}`);
+			}
+			return routeId;
+		});
+
+		const qualifyingWeeks = new Set(driverFixture.qualifyingWeekIndexes);
+		const qualifyingShiftTotal = driverFixture.qualifyingWeekIndexes.reduce(
+			(total, weekIndex) => total + (driverFixture.weeklyCompletedPlan[weekIndex] ?? 0),
+			0
+		);
+		let extraHighDeliveryRemaining = Math.max(
+			driverFixture.highDeliveryCount - qualifyingShiftTotal,
+			0
+		);
+		let completedCounter = 0;
+		let bidWinsRemaining = driverFixture.bidWins;
+		const usedDates = new Set<string>();
+
+		for (let weekIndex = 0; weekIndex < driverFixture.weeklyCompletedPlan.length; weekIndex++) {
+			const completedInWeek = driverFixture.weeklyCompletedPlan[weekIndex] ?? 0;
+			if (completedInWeek === 0) {
+				continue;
+			}
+
+			const weekStart = pastWeekStarts[weekIndex];
+			if (!weekStart) {
+				throw new Error(`Demo fixture ${driverFixture.key} exceeds configured past week budget`);
+			}
+
+			const preferredDates = getWeekDates(weekStart)
+				.filter((entry) => driverFixture.preferredDays.includes(entry.dayOfWeek))
+				.slice(0, completedInWeek);
+
+			if (preferredDates.length < completedInWeek) {
+				throw new Error(
+					`Demo fixture ${driverFixture.key} requested ${completedInWeek} completed shifts in week ${weekIndex}`
+				);
+			}
+
+			let lowCompletionInserted = false;
+			for (let localIndex = 0; localIndex < preferredDates.length; localIndex++) {
+				const dateString = preferredDates[localIndex].dateString;
+				usedDates.add(dateString);
+				const routeId = routeIds[(completedCounter + localIndex) % routeIds.length];
+				const warehouseId = warehouseIdByRoute.get(routeId);
+				if (!warehouseId) {
+					throw new Error(`Missing warehouse mapping for demo route ${routeId}`);
+				}
+
+				const assignmentIndex = assignments.length;
+				const confirmedAt = createDemoConfirmedAt(dateString, 4 + (localIndex % 2));
+				assignments.push({
+					routeId,
+					userId: driver.id,
+					warehouseId,
+					date: dateString,
+					status: 'completed',
+					assignedBy: bidWinsRemaining > 0 ? 'bid' : 'algorithm',
+					assignedAt: confirmedAt,
+					confirmedAt,
+					cancelType: null
+				});
+
+				if (bidWinsRemaining > 0) {
+					bidWinsRemaining--;
+				}
+
+				const isQualifyingWeek = qualifyingWeeks.has(weekIndex);
+				let deliveryRate = 0.94;
+				if (isQualifyingWeek) {
+					deliveryRate = 0.98;
+				} else if (!lowCompletionInserted) {
+					deliveryRate = 0.9;
+					lowCompletionInserted = true;
+				} else if (extraHighDeliveryRemaining > 0) {
+					deliveryRate = 0.97;
+					extraHighDeliveryRemaining--;
+				}
+
+				shifts.push(
+					createDemoCompletedShift(
+						assignmentIndex,
+						dateString,
+						routeStartTimeById.get(routeId) ?? null,
+						{
+							onTime: completedCounter < driverFixture.arrivedOnTimeCount,
+							deliveryRate,
+							editable: false
+						}
+					)
+				);
+				completedCounter++;
+			}
+		}
+
+		for (const dateString of pickRecentPreferredDates(
+			driverFixture.preferredDays,
+			driverFixture.earlyCancellations,
+			usedDates,
+			7
+		)) {
+			pushDemoCancelledAssignment(
+				assignments,
+				shifts,
+				driver.id,
+				routeIds[0],
+				warehouseIdByRoute,
+				dateString,
+				false
+			);
+			usedDates.add(dateString);
+		}
+
+		for (const dateString of pickRecentPreferredDates(
+			driverFixture.preferredDays,
+			driverFixture.lateCancellations,
+			usedDates,
+			10
+		)) {
+			pushDemoCancelledAssignment(
+				assignments,
+				shifts,
+				driver.id,
+				routeIds[routeIds.length - 1],
+				warehouseIdByRoute,
+				dateString,
+				true
+			);
+			usedDates.add(dateString);
+		}
+
+		for (const dateString of pickRecentPreferredDates(
+			driverFixture.preferredDays,
+			driverFixture.noShows,
+			usedDates,
+			8
+		)) {
+			const routeId = routeIds[0];
+			const warehouseId = warehouseIdByRoute.get(routeId);
+			if (!warehouseId) {
+				throw new Error(`Missing warehouse mapping for demo route ${routeId}`);
+			}
+			assignments.push({
+				routeId,
+				userId: driver.id,
+				warehouseId,
+				date: dateString,
+				status: 'scheduled',
+				assignedBy: 'algorithm',
+				assignedAt: createDemoConfirmedAt(dateString, 5),
+				confirmedAt: createDemoConfirmedAt(dateString, 3),
+				cancelType: null
+			});
+			noShowIndices.push(assignments.length - 1);
+			usedDates.add(dateString);
+		}
+
+		if (driverFixture.todayState) {
+			const routeId = routeIds[Math.min(1, routeIds.length - 1)];
+			const warehouseId = warehouseIdByRoute.get(routeId);
+			if (!warehouseId) {
+				throw new Error(`Missing warehouse mapping for demo route ${routeId}`);
+			}
+
+			const status = todayStageToAssignmentStatus(driverFixture.todayState);
+			const assignmentIndex = assignments.length;
+			assignments.push({
+				routeId,
+				userId: driver.id,
+				warehouseId,
+				date: todayString,
+				status,
+				assignedBy: 'algorithm',
+				assignedAt: createDemoConfirmedAt(todayString, 2),
+				confirmedAt:
+					driverFixture.todayState === 'confirmed_arrivable' ||
+					driverFixture.todayState === 'arrived_startable' ||
+					driverFixture.todayState === 'started_completable' ||
+					driverFixture.todayState === 'completed_editable' ||
+					driverFixture.todayState === 'completed_locked'
+						? createDemoConfirmedAt(todayString, 2)
+						: null,
+				cancelType: null
+			});
+
+			if (status === 'active' || status === 'completed') {
+				shifts.push(
+					createShiftForStatus(
+						assignmentIndex,
+						todayString,
+						status,
+						driverFixture.todayState,
+						'good',
+						routeStartTimeById.get(routeId) ?? null
+					)
+				);
+			}
+		}
+
+		const futureDateCursor = pickFuturePreferredDates(
+			driverFixture.preferredDays,
+			driverFixture.futureConfirmed + driverFixture.futureUnconfirmed,
+			usedDates
+		);
+		for (let index = 0; index < driverFixture.futureConfirmed; index++) {
+			pushDemoScheduledAssignment(
+				assignments,
+				driver.id,
+				routeIds[index % routeIds.length],
+				warehouseIdByRoute,
+				futureDateCursor[index],
+				true
+			);
+		}
+		for (let index = 0; index < driverFixture.futureUnconfirmed; index++) {
+			pushDemoScheduledAssignment(
+				assignments,
+				driver.id,
+				routeIds[(driverFixture.futureConfirmed + index) % routeIds.length],
+				warehouseIdByRoute,
+				futureDateCursor[driverFixture.futureConfirmed + index],
+				false
+			);
+		}
+	}
+
+	for (const extraAssignment of fixture.extraAssignments) {
+		const routeId = routeIdByKey.get(extraAssignment.routeKey);
+		if (!routeId) {
+			throw new Error(`Missing extra demo route ${extraAssignment.routeKey}`);
+		}
+		const warehouseId = warehouseIdByRoute.get(routeId);
+		if (!warehouseId) {
+			throw new Error(`Missing warehouse mapping for demo route ${routeId}`);
+		}
+		const date = toTorontoDateString(addDays(today, extraAssignment.daysFromToday));
+		assignments.push({
+			routeId,
+			userId: null,
+			warehouseId,
+			date,
+			status: extraAssignment.status,
+			assignedBy: null,
+			assignedAt: null,
+			confirmedAt: null,
+			cancelType: null
+		});
+	}
+
+	return { assignments, shifts, personas, noShowIndices };
+}
+
+function buildDemoPersonas(drivers: GeneratedUser[], fixture: DemoOrgFixture): DriverPersonas {
+	const exemplary = fixture.drivers
+		.filter(
+			(driver) =>
+				driver.storyGroup === 'green' &&
+				['driver001', 'driver002', 'driver003'].includes(driver.key)
+		)
+		.map((driver) => drivers.find((candidate) => candidate.email === driver.email)?.id)
+		.filter((value): value is string => Boolean(value));
+	const good = fixture.drivers
+		.filter(
+			(driver) =>
+				driver.storyGroup !== 'red' && !['driver001', 'driver002', 'driver003'].includes(driver.key)
+		)
+		.map((driver) => drivers.find((candidate) => candidate.email === driver.email)?.id)
+		.filter((value): value is string => Boolean(value));
+	const unreliable = fixture.drivers
+		.filter((driver) => driver.storyGroup === 'red')
+		.map((driver) => drivers.find((candidate) => candidate.email === driver.email)?.id)
+		.filter((value): value is string => Boolean(value));
+	const personaMap = new Map<string, PersonaType>();
+	for (const driverId of exemplary) personaMap.set(driverId, 'exemplary');
+	for (const driverId of good) personaMap.set(driverId, 'good');
+	for (const driverId of unreliable) personaMap.set(driverId, 'unreliable');
+
+	return {
+		exemplary,
+		good,
+		unreliable,
+		new: [],
+		getPersona(userId: string): PersonaType {
+			return personaMap.get(userId) ?? 'good';
+		}
+	};
+}
+
+function createDemoConfirmedAt(dateString: string, daysBeforeShift: number): Date {
+	const assignmentDate = new Date(`${dateString}T12:00:00`);
+	assignmentDate.setDate(assignmentDate.getDate() - daysBeforeShift);
+	return randomTimeOnDate(toTorontoDateString(assignmentDate), 8, 18);
+}
+
+function createDemoCompletedShift(
+	assignmentIndex: number,
+	dateString: string,
+	routeStartTime: string | null,
+	options: { onTime: boolean; deliveryRate: number; editable: boolean }
+): GeneratedShift {
+	const { hours: startHour } = parseRouteStartTime(routeStartTime);
+	const [year, month, day] = dateString.split('-').map(Number);
+	const arrivedHour = options.onTime
+		? Math.max(5, dispatchPolicy.shifts.arrivalDeadlineHourLocal - 1)
+		: dispatchPolicy.shifts.arrivalDeadlineHourLocal + 1;
+	const parcelsStart = 160 + (assignmentIndex % 25);
+	const parcelsDelivered = Math.max(1, Math.round(parcelsStart * options.deliveryRate));
+	const parcelsReturned = Math.max(0, parcelsStart - parcelsDelivered);
+	const completedAt = new Date(Date.UTC(year, month - 1, day, Math.min(startHour + 6, 18), 15));
+	const editableUntil = new Date(
+		completedAt.getTime() + dispatchPolicy.shifts.completionEditWindowHours * 60 * 60 * 1000
+	);
+
+	return {
+		assignmentIndex,
+		arrivedAt: new Date(Date.UTC(year, month - 1, day, arrivedHour, 10)),
+		parcelsStart,
+		parcelsDelivered,
+		parcelsReturned,
+		startedAt: new Date(Date.UTC(year, month - 1, day, Math.min(startHour + 1, 12), 0)),
+		completedAt,
+		editableUntil: options.editable ? editableUntil : editableUntil,
+		exceptedReturns: 0,
+		exceptionNotes: null,
+		cancelledAt: null,
+		cancelReason: null,
+		cancelNotes: null
+	};
+}
+
+function pickRecentPreferredDates(
+	preferredDays: number[],
+	count: number,
+	usedDates: Set<string>,
+	startDaysAgo: number
+): string[] {
+	const results: string[] = [];
+	let cursor = subDays(getTorontoToday(), startDaysAgo);
+	while (results.length < count) {
+		const dateString = toTorontoDateString(cursor);
+		if (preferredDays.includes(cursor.getUTCDay()) && !usedDates.has(dateString)) {
+			results.push(dateString);
+		}
+		cursor = subDays(cursor, 1);
+	}
+	return results;
+}
+
+function pickFuturePreferredDates(
+	preferredDays: number[],
+	count: number,
+	usedDates: Set<string>
+): string[] {
+	const results: string[] = [];
+	let cursor = addDays(getTorontoToday(), 1);
+	while (results.length < count) {
+		const dateString = toTorontoDateString(cursor);
+		if (preferredDays.includes(cursor.getUTCDay()) && !usedDates.has(dateString)) {
+			results.push(dateString);
+			usedDates.add(dateString);
+		}
+		cursor = addDays(cursor, 1);
+	}
+	return results;
+}
+
+function pushDemoCancelledAssignment(
+	assignments: GeneratedAssignment[],
+	shifts: GeneratedShift[],
+	userId: string,
+	routeId: string,
+	warehouseIdByRoute: Map<string, string>,
+	dateString: string,
+	isLate: boolean
+): void {
+	const warehouseId = warehouseIdByRoute.get(routeId);
+	if (!warehouseId) {
+		throw new Error(`Missing warehouse mapping for demo route ${routeId}`);
+	}
+	const assignmentIndex = assignments.length;
+	assignments.push({
+		routeId,
+		userId,
+		warehouseId,
+		date: dateString,
+		status: 'cancelled',
+		assignedBy: 'algorithm',
+		assignedAt: createDemoConfirmedAt(dateString, isLate ? 3 : 2),
+		confirmedAt: isLate ? createDemoConfirmedAt(dateString, 3) : null,
+		cancelType: isLate ? 'late' : 'driver'
+	});
+	shifts.push({
+		assignmentIndex,
+		arrivedAt: null,
+		parcelsStart: null,
+		parcelsDelivered: null,
+		parcelsReturned: null,
+		startedAt: null,
+		completedAt: null,
+		editableUntil: null,
+		exceptedReturns: 0,
+		exceptionNotes: null,
+		cancelledAt: randomTimeOnDate(dateString, 5, 11),
+		cancelReason: isLate ? 'traffic_accident' : 'personal_emergency',
+		cancelNotes: null
+	});
+}
+
+function pushDemoScheduledAssignment(
+	assignments: GeneratedAssignment[],
+	userId: string,
+	routeId: string,
+	warehouseIdByRoute: Map<string, string>,
+	dateString: string,
+	isConfirmed: boolean
+): void {
+	const warehouseId = warehouseIdByRoute.get(routeId);
+	if (!warehouseId) {
+		throw new Error(`Missing warehouse mapping for demo route ${routeId}`);
+	}
+	assignments.push({
+		routeId,
+		userId,
+		warehouseId,
+		date: dateString,
+		status: 'scheduled',
+		assignedBy: 'algorithm',
+		assignedAt: isConfirmed ? createDemoConfirmedAt(dateString, 4) : getSeedNow(),
+		confirmedAt: isConfirmed ? createDemoConfirmedAt(dateString, 4) : null,
+		cancelType: null
+	});
 }
