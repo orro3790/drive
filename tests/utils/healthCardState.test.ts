@@ -89,7 +89,7 @@ describe('healthCardState UI mapping', () => {
 		expect(deriveHealthScoreColor(health)).toBe('var(--status-error)');
 	});
 
-	it('maps threshold-reaching non-milestone responses to healthy charging state', () => {
+	it('maps non-milestone responses to healthy charging state even after score tier threshold', () => {
 		const health = createHealthResponse({
 			tier: 'II',
 			score: 100,
@@ -109,10 +109,10 @@ describe('healthCardState UI mapping', () => {
 		});
 	});
 
-	it('maps four-star bonus previews to milestone state', () => {
+	it('maps four-star bonus eligibility to milestone state without requiring score threshold', () => {
 		const health = createHealthResponse({
-			tier: 'II',
-			score: 120,
+			tier: 'I',
+			score: 70,
 			stars: 4,
 			simulation: {
 				bonusEligible: true,
@@ -127,7 +127,7 @@ describe('healthCardState UI mapping', () => {
 
 		expect(deriveHealthCardState(health)).toBe('milestone');
 		expect(deriveThresholdFlags(health)).toEqual({
-			isPastThreshold: true,
+			isPastThreshold: false,
 			isBuffActive: true,
 			isCharging: false
 		});

@@ -69,6 +69,7 @@
 				})
 			: ''
 	);
+	const starsExplainerText = $derived(health ? m.dashboard_health_stars_explainer() : '');
 
 	type ContributionRow = {
 		label: string;
@@ -312,6 +313,8 @@
 					</span>
 				</div>
 			{/if}
+
+			<p class="health-explainer">{starsExplainerText}</p>
 		</div>
 
 		<!-- Expandable contributions breakdown -->
@@ -609,6 +612,13 @@
 
 	.charging-label {
 		font-size: var(--font-size-xs);
+		color: var(--text-muted);
+	}
+
+	.health-explainer {
+		margin: var(--spacing-2) 0 0;
+		font-size: var(--font-size-xs);
+		line-height: 1.4;
 		color: var(--text-muted);
 	}
 

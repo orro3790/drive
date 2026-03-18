@@ -7,6 +7,7 @@
 
 import type { GeneratedUser } from './users';
 import type { GeneratedAssignment, GeneratedShift } from './assignments';
+import { isPastDate } from '../utils/dates';
 
 export interface GeneratedMetric {
 	userId: string;
@@ -24,6 +25,15 @@ export interface GeneratedMetric {
 	arrivedOnTimeCount: number;
 	highDeliveryCount: number;
 	urgentPickups: number;
+}
+
+function isNoShow(assignment: GeneratedAssignment, shift: GeneratedShift | undefined): boolean {
+	return (
+		isPastDate(assignment.date) &&
+		assignment.status === 'scheduled' &&
+		assignment.confirmedAt !== null &&
+		(!shift || !shift.arrivedAt)
+	);
 }
 
 /**
@@ -69,8 +79,12 @@ export function generateMetrics(
 			(d) => d.assignment.status === 'completed'
 		).length;
 
-		// totalShifts: same as completedShifts
-		const totalShifts = completedShifts;
+		const noShows = driverAssignments.filter(({ assignment, index }) =>
+			isNoShow(assignment, shiftByAssignmentIndex.get(index))
+		).length;
+
+		// totalShifts aligns to the production metrics service: all assigned shifts.
+		const totalShifts = totalAssigned;
 
 		// attendanceRate: completedShifts / totalAssigned
 		const attendanceRate =
@@ -120,7 +134,7 @@ export function generateMetrics(
 			if (assignment.status !== 'completed' && assignment.status !== 'active') continue;
 			const shift = shiftByAssignmentIndex.get(index);
 			if (shift?.arrivedAt) {
-				const hours = shift.arrivedAt.getHours();
+				const hours = shift.arrivedAt.getUTCHours();
 				if (hours < 9) {
 					arrivedOnTimeCount++;
 				}
@@ -150,7 +164,7 @@ export function generateMetrics(
 			confirmedShifts,
 			autoDroppedShifts,
 			lateCancellations,
-			noShows: 0,
+			noShows,
 			bidPickups,
 			arrivedOnTimeCount,
 			highDeliveryCount,

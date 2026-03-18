@@ -8,6 +8,7 @@
 
 import { format, parseISO, subDays, subHours, subMinutes } from 'date-fns';
 import type { NotificationType } from '../../../src/lib/schemas/api/notifications';
+import type { DemoOrgFixture } from '../demo-fixtures';
 import type { GeneratedAssignment, GeneratedShift, DriverPersonas } from './assignments';
 import type { GeneratedUser } from './users';
 import type { GeneratedBidWindow, GeneratedBid } from './bidding';
@@ -42,6 +43,9 @@ export interface NotificationContext {
 	noShowIndices: number[];
 	/** Map from assignment array index to real assignment UUID */
 	assignmentIdByIndex: Map<number, string>;
+	demoFixture?: DemoOrgFixture;
+	routeManagerIdByRouteId?: Map<string, string>;
+	warehouseManagerUserIdsByWarehouseId?: Map<string, string[]>;
 }
 
 /**
@@ -52,6 +56,10 @@ export function generateNotifications(
 	routes: RouteInfo[],
 	context: NotificationContext
 ): GeneratedNotification[] {
+	if (context.demoFixture && context.routeManagerIdByRouteId) {
+		return generateDemoNotifications(users, routes, context, context.demoFixture);
+	}
+
 	const notifications: GeneratedNotification[] = [];
 	const now = getSeedNow();
 
@@ -441,6 +449,783 @@ export function generateNotifications(
 				notifications.push(fallbackNotif);
 				generatedTypes.add(type);
 			}
+		}
+	}
+
+	return notifications;
+}
+
+function generateDemoNotifications(
+	users: GeneratedUser[],
+	routes: RouteInfo[],
+	context: NotificationContext,
+	fixture: DemoOrgFixture
+): GeneratedNotification[] {
+	const notifications: GeneratedNotification[] = [];
+	const now = getSeedNow();
+	const routeById = new Map(routes.map((route) => [route.id, route]));
+	const userByEmail = new Map(users.map((user) => [user.email, user]));
+	const budgetByUserId = new Map<string, { maxTotal: number; maxUnread: number }>();
+	const countsByUserId = new Map<string, { total: number; unread: number }>();
+	const seenAssignmentKeys = new Set<string>();
+	const assignmentIdByIndex = context.assignmentIdByIndex;
+	const bidWindowByStory = new Map(
+		context.bidWindows
+			.filter((window) => window.storyKey)
+			.map((window) => [window.storyKey as string, window])
+	);
+
+	for (const driverFixture of fixture.drivers) {
+		const user = userByEmail.get(driverFixture.email);
+		if (!user) {
+			throw new Error(`Missing demo notification user ${driverFixture.email}`);
+		}
+		budgetByUserId.set(user.id, {
+			maxTotal: driverFixture.notificationBudget.maxTotal,
+			maxUnread: driverFixture.notificationBudget.maxUnread
+		});
+	}
+
+	for (const manager of fixture.managers) {
+		const user = userByEmail.get(manager.email);
+		if (!user) {
+			throw new Error(`Missing demo notification manager ${manager.email}`);
+		}
+		budgetByUserId.set(user.id, { maxTotal: 6, maxUnread: 6 });
+	}
+
+	function getUserId(key: string): string {
+		const manager = fixture.managers.find((candidate) => candidate.key === key);
+		if (manager) {
+			const user = userByEmail.get(manager.email);
+			if (!user) throw new Error(`Missing demo manager ${manager.email}`);
+			return user.id;
+		}
+		const driver = fixture.drivers.find((candidate) => candidate.key === key);
+		if (!driver) throw new Error(`Missing demo fixture user ${key}`);
+		const user = userByEmail.get(driver.email);
+		if (!user) throw new Error(`Missing demo driver ${driver.email}`);
+		return user.id;
+	}
+
+	function describeAssignment(index: number | null): {
+		data: Record<string, string> | null;
+		routeName: string;
+		dateLabel: string;
+		warehouseName: string;
+	} {
+		if (index === null) {
+			return {
+				data: null,
+				routeName: 'Route',
+				dateLabel: format(now, 'MMM d'),
+				warehouseName: 'Warehouse'
+			};
+		}
+		const assignment = context.assignments[index];
+		const route = routeById.get(assignment.routeId) ?? routes[0];
+		const assignmentId = assignmentIdByIndex.get(index);
+		const data: Record<string, string> = {
+			routeName: route?.name ?? 'Route',
+			warehouseName: route?.warehouseName ?? 'Warehouse',
+			date: format(parseISO(assignment.date), 'MMM d')
+		};
+		if (assignmentId) {
+			data.assignmentId = assignmentId;
+		}
+		return {
+			data,
+			routeName: route?.name ?? 'Route',
+			dateLabel: data.date,
+			warehouseName: route?.warehouseName ?? 'Warehouse'
+		};
+	}
+
+	function addNotification(
+		userId: string,
+		type: NotificationType,
+		assignmentIndex: number | null,
+		read: boolean,
+		createdAt: Date,
+		title: string,
+		body: string
+	): void {
+		const assignmentId =
+			assignmentIndex === null
+				? 'none'
+				: (assignmentIdByIndex.get(assignmentIndex) ?? `idx-${assignmentIndex}`);
+		const dedupeKey = `${userId}:${type}:${assignmentId}`;
+		if (seenAssignmentKeys.has(dedupeKey)) {
+			return;
+		}
+		const budget = budgetByUserId.get(userId) ?? { maxTotal: 6, maxUnread: 6 };
+		const current = countsByUserId.get(userId) ?? { total: 0, unread: 0 };
+		if (current.total >= budget.maxTotal) {
+			throw new Error(`Notification cap exceeded for ${userId}`);
+		}
+		if (!read && current.unread >= budget.maxUnread) {
+			throw new Error(`Unread notification cap exceeded for ${userId}`);
+		}
+		const described = describeAssignment(assignmentIndex);
+		notifications.push({
+			userId,
+			type,
+			title,
+			body,
+			data: described.data,
+			read,
+			createdAt
+		});
+		seenAssignmentKeys.add(dedupeKey);
+		countsByUserId.set(userId, {
+			total: current.total + 1,
+			unread: current.unread + (read ? 0 : 1)
+		});
+	}
+
+	function findAssignmentIndex(
+		userId: string,
+		predicate: (assignment: GeneratedAssignment) => boolean
+	): number {
+		const index = context.assignments.findIndex(
+			(assignment) => assignment.userId === userId && predicate(assignment)
+		);
+		if (index === -1) {
+			throw new Error(`Missing demo assignment for ${userId}`);
+		}
+		return index;
+	}
+
+	if (fixture.slug === 'seed-org-b') {
+		for (const driverFixture of fixture.drivers) {
+			const userId = getUserId(driverFixture.key);
+			const futureConfirmed = context.assignments.findIndex(
+				(assignment) =>
+					assignment.userId === userId &&
+					isFutureDate(assignment.date) &&
+					assignment.confirmedAt !== null
+			);
+			const futureUnconfirmed = context.assignments.findIndex(
+				(assignment) =>
+					assignment.userId === userId &&
+					isFutureDate(assignment.date) &&
+					assignment.confirmedAt === null
+			);
+			if (futureConfirmed !== -1) {
+				addNotification(
+					userId,
+					'assignment_confirmed',
+					futureConfirmed,
+					true,
+					subDays(now, 2),
+					'Shift Assigned',
+					'Your next Hamilton-area route is already confirmed.'
+				);
+			}
+			if (futureUnconfirmed !== -1) {
+				addNotification(
+					userId,
+					'confirmation_reminder',
+					futureUnconfirmed,
+					false,
+					subHours(now, 10),
+					'Confirm Your Shift',
+					'One future secondary-org shift is still waiting for confirmation.'
+				);
+			}
+		}
+
+		const managerId = getUserId(fixture.ownerManagerKey);
+		if (
+			context.assignments.some(
+				(assignment) => assignment.userId === null && isFutureDate(assignment.date)
+			)
+		) {
+			const unfilledIndex = context.assignments.findIndex(
+				(assignment) => assignment.userId === null && isFutureDate(assignment.date)
+			);
+			addNotification(
+				managerId,
+				'route_unfilled',
+				unfilledIndex,
+				false,
+				subHours(now, 4),
+				'Route Unfilled',
+				'A secondary-org route is open for a basic multi-tenant sanity check.'
+			);
+		}
+
+		return notifications;
+	}
+
+	const driver1 = getUserId('driver001');
+	const driver2 = getUserId('driver002');
+	const driver3 = getUserId('driver003');
+	const driver4 = getUserId('driver004');
+	const driver5 = getUserId('driver005');
+	const driver6 = getUserId('driver006');
+	const driver7 = getUserId('driver007');
+	const driver8 = getUserId('driver008');
+	const driver9 = getUserId('driver009');
+	const driver10 = getUserId('driver010');
+	const manager1 = getUserId('manager001');
+	const manager2 = getUserId('manager002');
+
+	const driver1Bid = findAssignmentIndex(driver1, (assignment) => assignment.assignedBy === 'bid');
+	const driver1Today = findAssignmentIndex(driver1, (assignment) => isToday(assignment.date));
+	const driver1Future = findAssignmentIndex(
+		driver1,
+		(assignment) => isFutureDate(assignment.date) && assignment.confirmedAt !== null
+	);
+	const driver2Today = findAssignmentIndex(driver2, (assignment) => isToday(assignment.date));
+	const driver3Today = findAssignmentIndex(driver3, (assignment) => isToday(assignment.date));
+	const driver4Today = findAssignmentIndex(driver4, (assignment) => isToday(assignment.date));
+	const driver5Today = findAssignmentIndex(driver5, (assignment) => isToday(assignment.date));
+	const driver5FutureUnconfirmed = findAssignmentIndex(
+		driver5,
+		(assignment) => isFutureDate(assignment.date) && assignment.confirmedAt === null
+	);
+	const driver6FutureConfirmed = findAssignmentIndex(
+		driver6,
+		(assignment) => isFutureDate(assignment.date) && assignment.confirmedAt !== null
+	);
+	const driver7FutureConfirmed = findAssignmentIndex(
+		driver7,
+		(assignment) => isFutureDate(assignment.date) && assignment.confirmedAt !== null
+	);
+	const driver7FutureUnconfirmed = findAssignmentIndex(
+		driver7,
+		(assignment) => isFutureDate(assignment.date) && assignment.confirmedAt === null
+	);
+	const driver8FutureUnconfirmed = findAssignmentIndex(
+		driver8,
+		(assignment) => isFutureDate(assignment.date) && assignment.confirmedAt === null
+	);
+	const driver7Cancel = findAssignmentIndex(
+		driver7,
+		(assignment) => assignment.cancelType === 'driver'
+	);
+	const driver9NoShow = context.noShowIndices.find(
+		(index) => context.assignments[index]?.userId === driver9
+	);
+	if (driver9NoShow === undefined) {
+		throw new Error('Missing demo no-show assignment for driver009');
+	}
+	const driver10LateCancels = context.assignments
+		.map((assignment, index) => ({ assignment, index }))
+		.filter((item) => item.assignment.userId === driver10 && item.assignment.cancelType === 'late')
+		.map((item) => item.index);
+	if (driver10LateCancels.length < 2) {
+		throw new Error('Missing late cancellations for driver010');
+	}
+	const competitiveOpenIndex = (() => {
+		const window = bidWindowByStory.get('competitive-open');
+		if (!window) throw new Error('Missing competitive demo bid window');
+		return window.assignmentIndex;
+	})();
+	const instantOpenIndex = (() => {
+		const window = bidWindowByStory.get('instant-open');
+		if (!window) throw new Error('Missing instant demo bid window');
+		return window.assignmentIndex;
+	})();
+
+	addNotification(
+		driver1,
+		'bid_won',
+		driver1Bid,
+		true,
+		subDays(now, 9),
+		'Bid Won',
+		"You've won the rebalance route and kept your streak moving."
+	);
+	addNotification(
+		driver1,
+		'assignment_confirmed',
+		driver1Future,
+		true,
+		subDays(now, 4),
+		'Shift Assigned',
+		'Two future shifts are locked in for your strongest route lane.'
+	);
+	addNotification(
+		driver1,
+		'shift_reminder',
+		driver1Today,
+		false,
+		subHours(now, 2),
+		'Shift Reminder',
+		'Your confirmed route is ready for arrival check-in this morning.'
+	);
+	addNotification(
+		driver1,
+		'streak_advanced',
+		driver1Bid,
+		true,
+		subDays(now, 7),
+		'Streak Milestone',
+		'Another perfect week kept your streak climbing.'
+	);
+	addNotification(
+		driver1,
+		'bonus_eligible',
+		driver1Bid,
+		false,
+		subDays(now, 1),
+		'Bonus Eligible',
+		'You are still in the top reward tier heading into this week.'
+	);
+
+	addNotification(
+		driver2,
+		'assignment_confirmed',
+		driver2Today,
+		true,
+		subDays(now, 3),
+		'Shift Assigned',
+		"Today's route is confirmed and ready for scan start."
+	);
+	addNotification(
+		driver2,
+		'shift_reminder',
+		driver2Today,
+		false,
+		subHours(now, 3),
+		'Shift Reminder',
+		'You are on the board today with a strong parcel lane.'
+	);
+	addNotification(
+		driver2,
+		'bid_won',
+		driver9NoShow,
+		true,
+		subDays(now, 5),
+		'Bid Won',
+		'You stepped in on an urgent route and kept service moving.'
+	);
+	addNotification(
+		driver2,
+		'streak_advanced',
+		driver2Today,
+		true,
+		subDays(now, 8),
+		'Streak Milestone',
+		'Your steady run of clean weeks continues.'
+	);
+	addNotification(
+		driver2,
+		'bonus_eligible',
+		driver2Today,
+		false,
+		subDays(now, 1),
+		'Bonus Eligible',
+		'You remain bonus-eligible going into the next schedule cycle.'
+	);
+
+	addNotification(
+		driver3,
+		'assignment_confirmed',
+		driver3Today,
+		true,
+		subDays(now, 2),
+		'Shift Assigned',
+		"Today's route is confirmed and already underway."
+	);
+	addNotification(
+		driver3,
+		'bid_open',
+		competitiveOpenIndex,
+		false,
+		subHours(now, 5),
+		'Shift Available',
+		'A strong-fit route is open for competitive bidding later this week.'
+	);
+	addNotification(
+		driver3,
+		'shift_reminder',
+		driver3Today,
+		false,
+		subHours(now, 4),
+		'Shift Reminder',
+		'You are already on route and ready to complete the run.'
+	);
+	addNotification(
+		driver3,
+		'streak_advanced',
+		driver3Today,
+		true,
+		subDays(now, 6),
+		'Streak Milestone',
+		'Three standout weeks keep you near the top cohort.'
+	);
+
+	addNotification(
+		driver4,
+		'assignment_confirmed',
+		driver4Today,
+		true,
+		subDays(now, 2),
+		'Shift Assigned',
+		"Today's route was completed cleanly and is still editable."
+	);
+	addNotification(
+		driver4,
+		'shift_reminder',
+		driver4Today,
+		true,
+		subHours(now, 6),
+		'Shift Reminder',
+		'You had a polished shift this morning with an active edit window.'
+	);
+	addNotification(
+		driver4,
+		'manual',
+		driver4Today,
+		false,
+		subMinutes(now, 45),
+		'Dispatcher Note',
+		'Use this shift as the live edit-window walkthrough example.'
+	);
+	addNotification(
+		driver4,
+		'schedule_locked',
+		driver4Today,
+		true,
+		subDays(now, 7),
+		'Preferences Locked',
+		'Next week preferences are locked and ready for review.'
+	);
+
+	addNotification(
+		driver5,
+		'assignment_confirmed',
+		driver5Today,
+		true,
+		subDays(now, 2),
+		'Shift Assigned',
+		"Today's route is complete and locked into history."
+	);
+	addNotification(
+		driver5,
+		'confirmation_reminder',
+		driver5FutureUnconfirmed,
+		false,
+		subHours(now, 8),
+		'Confirm Your Shift',
+		'One future shift still needs confirmation before the deadline.'
+	);
+	addNotification(
+		driver5,
+		'bid_lost',
+		instantOpenIndex,
+		true,
+		subDays(now, 4),
+		'Bid Not Won',
+		'Another driver took the late-breaking route before you could claim it.'
+	);
+	addNotification(
+		driver5,
+		'schedule_locked',
+		driver5Today,
+		true,
+		subDays(now, 7),
+		'Preferences Locked',
+		'Your preferred routes are locked for the upcoming week.'
+	);
+
+	addNotification(
+		driver6,
+		'corrective_warning',
+		driver6FutureConfirmed,
+		false,
+		subDays(now, 1),
+		'Performance Warning',
+		'Completion slipped enough to put you in the watch band.'
+	);
+	addNotification(
+		driver6,
+		'bid_open',
+		competitiveOpenIndex,
+		false,
+		subHours(now, 5),
+		'Shift Available',
+		'A competitive recovery route is open if you want extra work.'
+	);
+	addNotification(
+		driver6,
+		'emergency_route_available',
+		driver9NoShow,
+		false,
+		subDays(now, 5),
+		'Urgent Route Available',
+		'An emergency route opened after a same-day no-show.'
+	);
+	addNotification(
+		driver6,
+		'assignment_confirmed',
+		driver6FutureConfirmed,
+		true,
+		subDays(now, 3),
+		'Shift Assigned',
+		'You still have a confirmed shift on the books this week.'
+	);
+	addNotification(
+		driver6,
+		'schedule_locked',
+		driver6FutureConfirmed,
+		true,
+		subDays(now, 7),
+		'Preferences Locked',
+		'Upcoming route preferences are locked.'
+	);
+
+	addNotification(
+		driver7,
+		'assignment_confirmed',
+		driver7FutureConfirmed,
+		true,
+		subDays(now, 3),
+		'Shift Assigned',
+		'You have one confirmed shift and one pending confirmation this week.'
+	);
+	addNotification(
+		driver7,
+		'confirmation_reminder',
+		driver7FutureUnconfirmed,
+		false,
+		subHours(now, 7),
+		'Confirm Your Shift',
+		'One scheduled route is still waiting for confirmation.'
+	);
+	addNotification(
+		driver7,
+		'bid_open',
+		instantOpenIndex,
+		false,
+		subHours(now, 2),
+		'Shift Available',
+		'A late route has moved into instant pickup mode.'
+	);
+	addNotification(
+		driver7,
+		'shift_cancelled',
+		driver7Cancel,
+		true,
+		subDays(now, 6),
+		'Shift Cancelled',
+		'A prior driver-initiated cancellation is still in your history.'
+	);
+	addNotification(
+		driver7,
+		'schedule_locked',
+		driver7FutureConfirmed,
+		true,
+		subDays(now, 7),
+		'Preferences Locked',
+		'Preferences are locked ahead of the next schedule publish.'
+	);
+
+	addNotification(
+		driver8,
+		'warning',
+		driver8FutureUnconfirmed,
+		false,
+		subDays(now, 1),
+		'Account Warning',
+		'Dispatch flagged your account for a closer manager review.'
+	);
+	addNotification(
+		driver8,
+		'corrective_warning',
+		driver8FutureUnconfirmed,
+		false,
+		subHours(now, 12),
+		'Performance Warning',
+		'Mixed recent results are keeping you below bonus range.'
+	);
+	addNotification(
+		driver8,
+		'confirmation_reminder',
+		driver8FutureUnconfirmed,
+		false,
+		subHours(now, 6),
+		'Confirm Your Shift',
+		'Your next shift is still waiting for confirmation.'
+	);
+	addNotification(
+		driver8,
+		'assignment_confirmed',
+		driver8FutureUnconfirmed,
+		true,
+		subDays(now, 4),
+		'Shift Assigned',
+		'You still have steady route access despite the watch status.'
+	);
+
+	addNotification(
+		driver9,
+		'assignment_confirmed',
+		driver9NoShow,
+		true,
+		subDays(now, 6),
+		'Shift Assigned',
+		'This missed route is the key event in the hard-stop story.'
+	);
+	addNotification(
+		driver9,
+		'shift_reminder',
+		driver9NoShow,
+		true,
+		subDays(now, 5),
+		'Shift Reminder',
+		'A reminder was sent before the missed shift.'
+	);
+	addNotification(
+		driver9,
+		'warning',
+		driver9NoShow,
+		false,
+		subDays(now, 4),
+		'Account Warning',
+		'Dispatch removed you from the assignment pool after the no-show.'
+	);
+	addNotification(
+		driver9,
+		'streak_reset',
+		driver9NoShow,
+		false,
+		subDays(now, 4),
+		'Streak Reset',
+		'The no-show reset your streak and score.'
+	);
+	addNotification(
+		driver9,
+		'manual',
+		driver9NoShow,
+		false,
+		subDays(now, 3),
+		'Manager Message',
+		'Please meet with dispatch before taking another route.'
+	);
+	addNotification(
+		driver9,
+		'stale_shift_reminder',
+		driver9NoShow,
+		true,
+		subDays(now, 2),
+		'Incomplete Shift',
+		'This missed shift is still the active hard-stop example.'
+	);
+
+	addNotification(
+		driver10,
+		'shift_cancelled',
+		driver10LateCancels[0],
+		true,
+		subDays(now, 12),
+		'Shift Cancelled',
+		'One late cancellation is still within the rolling window.'
+	);
+	addNotification(
+		driver10,
+		'shift_cancelled',
+		driver10LateCancels[1],
+		true,
+		subDays(now, 4),
+		'Shift Cancelled',
+		'A second late cancellation triggered manager intervention.'
+	);
+	addNotification(
+		driver10,
+		'warning',
+		driver10LateCancels[1],
+		false,
+		subDays(now, 3),
+		'Account Warning',
+		'Two late cancellations pushed you into a hard-stop state.'
+	);
+	addNotification(
+		driver10,
+		'streak_reset',
+		driver10LateCancels[1],
+		false,
+		subDays(now, 3),
+		'Streak Reset',
+		'Your reliability streak reset after repeated late drops.'
+	);
+	addNotification(
+		driver10,
+		'manual',
+		driver10LateCancels[1],
+		true,
+		subDays(now, 2),
+		'Manager Message',
+		'Manager follow-up is required before new assignments resume.'
+	);
+	addNotification(
+		driver10,
+		'assignment_confirmed',
+		driver10LateCancels[0],
+		true,
+		subDays(now, 15),
+		'Shift Assigned',
+		'These cancelled assignments started as confirmed shifts.'
+	);
+
+	addNotification(
+		manager1,
+		'driver_no_show',
+		driver9NoShow,
+		false,
+		subDays(now, 5),
+		'Driver No-Show',
+		'Driver 009 missed a route you own and dispatch had to intervene.'
+	);
+	addNotification(
+		manager1,
+		'route_unfilled',
+		competitiveOpenIndex,
+		false,
+		subHours(now, 5),
+		'Route Unfilled',
+		'A manager-owned route is open in competitive bidding.'
+	);
+	addNotification(
+		manager1,
+		'route_cancelled',
+		driver7Cancel,
+		true,
+		subDays(now, 6),
+		'Route Cancelled',
+		'A route on your roster was dropped by the assigned driver.'
+	);
+
+	addNotification(
+		manager2,
+		'route_unfilled',
+		instantOpenIndex,
+		false,
+		subHours(now, 2),
+		'Route Unfilled',
+		'A same-day route is sitting in instant mode on your board.'
+	);
+	addNotification(
+		manager2,
+		'route_cancelled',
+		driver10LateCancels[1],
+		true,
+		subDays(now, 4),
+		'Route Cancelled',
+		'A late cancellation hit one of your east-side routes.'
+	);
+
+	for (const driverFixture of fixture.drivers) {
+		const userId = getUserId(driverFixture.key);
+		const totals = countsByUserId.get(userId) ?? { total: 0, unread: 0 };
+		if (totals.total > driverFixture.notificationBudget.maxTotal) {
+			throw new Error(`Notification cap exceeded for ${driverFixture.email}`);
+		}
+		if (totals.unread > driverFixture.notificationBudget.maxUnread) {
+			throw new Error(`Unread notification cap exceeded for ${driverFixture.email}`);
 		}
 	}
 

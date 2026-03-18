@@ -58,11 +58,11 @@ export function deriveThresholdFlags(health: HealthResponse | null): {
 	}
 
 	const isPastThreshold = health.score >= health.tierThreshold;
-	const isBuffActive = isPastThreshold && health.simulation.bonusEligible;
+	const isBuffActive = health.simulation.bonusEligible;
 
 	return {
 		isPastThreshold,
 		isBuffActive,
-		isCharging: isPastThreshold && !isBuffActive
+		isCharging: !isBuffActive
 	};
 }

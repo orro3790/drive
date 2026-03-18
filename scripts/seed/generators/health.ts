@@ -13,9 +13,11 @@
 import type { GeneratedUser } from './users';
 import type { GeneratedAssignment, GeneratedShift } from './assignments';
 import type { GeneratedMetric } from './metrics';
+import type { DemoOrgFixture } from '../demo-fixtures';
 import type { HealthContributions } from '../../../src/lib/schemas/health';
 import { dispatchPolicy } from '../../../src/lib/config/dispatchPolicy';
 import { isPastDate, isToday, getWeekStart, toTorontoDateString } from '../utils/dates';
+import { getSeedNow } from '../utils/runtime';
 import { addDays, subDays } from 'date-fns';
 
 export interface GeneratedHealthSnapshot {
@@ -48,6 +50,10 @@ export interface GeneratedHealthResult {
 	states: GeneratedHealthState[];
 }
 
+export interface HealthGeneratorOptions {
+	demoFixture?: DemoOrgFixture;
+}
+
 /**
  * Detect no-show: past + scheduled + confirmed + no shift arrival.
  * This is the state before the no-show detection cron cancels them.
@@ -68,7 +74,8 @@ export function generateHealth(
 	drivers: GeneratedUser[],
 	assignments: GeneratedAssignment[],
 	shifts: GeneratedShift[],
-	metrics: GeneratedMetric[]
+	metrics: GeneratedMetric[],
+	options: HealthGeneratorOptions = {}
 ): GeneratedHealthResult {
 	const { health } = dispatchPolicy;
 	const pts = health.points;
@@ -156,7 +163,7 @@ export function generateHealth(
 
 				// Arrived on time
 				if (shift?.arrivedAt) {
-					const hours = shift.arrivedAt.getHours();
+					const hours = shift.arrivedAt.getUTCHours();
 					if (hours < 9) {
 						arrivedOnTime++;
 					}
@@ -364,7 +371,7 @@ export function generateHealth(
 		states.push({
 			userId: driver.id,
 			currentScore: anyHardStop
-				? Math.min(latestSnapshot?.score ?? 0, health.tierThreshold - 1)
+				? Math.min(latestSnapshot?.score ?? 0, 49)
 				: (latestSnapshot?.score ?? 0),
 			streakWeeks,
 			stars,
@@ -372,9 +379,59 @@ export function generateHealth(
 			assignmentPoolEligible: !anyHardStop,
 			requiresManagerIntervention: anyHardStop,
 			nextMilestoneStars: Math.min(stars + 1, health.maxStars),
-			lastScoreResetAt: anyHardStop ? new Date() : null
+			lastScoreResetAt: anyHardStop ? getSeedNow() : null
 		});
 	}
 
+	if (options.demoFixture) {
+		assertDemoHealthContract(drivers, states, options.demoFixture);
+	}
+
 	return { snapshots, states };
+}
+
+function assertDemoHealthContract(
+	drivers: GeneratedUser[],
+	states: GeneratedHealthState[],
+	fixture: DemoOrgFixture
+): void {
+	const driverByEmail = new Map(
+		drivers.filter((driver) => driver.role === 'driver').map((driver) => [driver.email, driver])
+	);
+	const stateByUserId = new Map(states.map((state) => [state.userId, state]));
+
+	for (const driverFixture of fixture.drivers) {
+		const driver = driverByEmail.get(driverFixture.email);
+		if (!driver) {
+			throw new Error(`Missing health driver ${driverFixture.email}`);
+		}
+		const state = stateByUserId.get(driver.id);
+		if (!state) {
+			throw new Error(`Missing health state for ${driverFixture.email}`);
+		}
+
+		if (state.assignmentPoolEligible !== driverFixture.assignmentPoolEligible) {
+			throw new Error(`Unexpected pool eligibility for ${driverFixture.email}`);
+		}
+		if (state.requiresManagerIntervention !== driverFixture.requiresManagerIntervention) {
+			throw new Error(`Unexpected intervention flag for ${driverFixture.email}`);
+		}
+		if (state.stars !== driverFixture.expectedStars) {
+			throw new Error(`Unexpected stars for ${driverFixture.email}: ${state.stars}`);
+		}
+		if (
+			state.currentScore < driverFixture.scoreRange[0] ||
+			state.currentScore > driverFixture.scoreRange[1]
+		) {
+			throw new Error(`Unexpected score for ${driverFixture.email}: ${state.currentScore}`);
+		}
+	}
+
+	if (fixture.slug === 'seed-org-a') {
+		const hardStops = fixture.drivers.filter((driver) => !driver.assignmentPoolEligible).length;
+		const actualHardStops = states.filter((state) => !state.assignmentPoolEligible).length;
+		if (actualHardStops !== hardStops) {
+			throw new Error(`Expected ${hardStops} hard-stop drivers, found ${actualHardStops}`);
+		}
+	}
 }

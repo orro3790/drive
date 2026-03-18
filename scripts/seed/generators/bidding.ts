@@ -9,14 +9,21 @@
  * - Bid scores use the real formula from dispatchPolicy
  */
 
-import { addHours, subDays, subHours } from 'date-fns';
+import { addDays, addHours, subDays, subHours } from 'date-fns';
+import type { DemoBidWindowFixture, DemoOrgFixture } from '../demo-fixtures';
 import type { GeneratedAssignment } from './assignments';
 import type { GeneratedUser } from './users';
 import type { GeneratedPreference } from './preferences';
 import type { GeneratedHealthState } from './health';
 import type { GeneratedRouteCompletion } from './route-completions';
 import { dispatchPolicy, calculateBidScoreParts } from '../../../src/lib/config/dispatchPolicy';
-import { isPastDate, isFutureDate, randomTimeOnDate } from '../utils/dates';
+import {
+	getTorontoToday,
+	isPastDate,
+	isFutureDate,
+	randomTimeOnDate,
+	toTorontoDateString
+} from '../utils/dates';
 import { random, randomInt, getSeedNow } from '../utils/runtime';
 
 export interface GeneratedBidWindow {
@@ -28,6 +35,8 @@ export interface GeneratedBidWindow {
 	mode: 'competitive' | 'instant' | 'emergency';
 	trigger: string | null;
 	payBonusPercent: number;
+	recipientUserIds?: string[];
+	storyKey?: string;
 }
 
 export interface GeneratedBid {
@@ -49,6 +58,8 @@ export interface BiddingContext {
 	healthStates: GeneratedHealthState[];
 	routeCompletions: GeneratedRouteCompletion[];
 	preferences: GeneratedPreference[];
+	demoFixture?: DemoOrgFixture;
+	routeIdByKey?: Map<string, string>;
 }
 
 /**
@@ -60,6 +71,16 @@ export function generateBidding(
 	noShowIndices: number[] = [],
 	context?: BiddingContext
 ): GeneratedBiddingResult {
+	if (context?.demoFixture && context.routeIdByKey) {
+		return generateDemoBidding(
+			assignments,
+			drivers,
+			context,
+			context.demoFixture,
+			context.routeIdByKey
+		);
+	}
+
 	const bidWindows: GeneratedBidWindow[] = [];
 	const bids: GeneratedBid[] = [];
 
@@ -383,4 +404,229 @@ function selectRandomDrivers(drivers: GeneratedUser[], count: number): Generated
 function randomBidTime(opensAt: Date, closesAt: Date): Date {
 	const range = closesAt.getTime() - opensAt.getTime();
 	return new Date(opensAt.getTime() + random() * range);
+}
+
+function generateDemoBidding(
+	assignments: GeneratedAssignment[],
+	drivers: GeneratedUser[],
+	context: BiddingContext,
+	fixture: DemoOrgFixture,
+	routeIdByKey: Map<string, string>
+): GeneratedBiddingResult {
+	const bidWindows: GeneratedBidWindow[] = [];
+	const bids: GeneratedBid[] = [];
+	const driversByEmail = new Map(
+		drivers.filter((driver) => driver.role === 'driver').map((driver) => [driver.email, driver])
+	);
+	const healthByUser = new Map((context.healthStates ?? []).map((state) => [state.userId, state]));
+	const completionsByUserRoute = new Map(
+		(context.routeCompletions ?? []).map((completion) => [
+			`${completion.userId}:${completion.routeId}`,
+			completion.completionCount
+		])
+	);
+	const prefByUser = new Map(
+		(context.preferences ?? []).map((preference) => [preference.userId, preference])
+	);
+	const tenureByUser = new Map<string, number>();
+	for (const driver of drivers) {
+		const months =
+			(getSeedNow().getTime() - driver.createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30);
+		tenureByUser.set(driver.id, Math.max(0, months));
+	}
+
+	for (const bidFixture of fixture.bidWindows) {
+		const assignmentIndex = resolveDemoBidAssignmentIndex(
+			assignments,
+			fixture,
+			bidFixture,
+			driversByEmail,
+			routeIdByKey
+		);
+		const assignment = assignments[assignmentIndex];
+		const recipientUserIds = bidFixture.recipientDriverKeys.map((driverKey) => {
+			const driverFixture = fixture.drivers.find((driver) => driver.key === driverKey);
+			const driver = driverFixture ? driversByEmail.get(driverFixture.email) : null;
+			if (!driver) {
+				throw new Error(`Missing demo bid recipient ${driverKey}`);
+			}
+			return driver.id;
+		});
+		const winnerUserId = bidFixture.winnerDriverKey
+			? (() => {
+					const driverFixture = fixture.drivers.find(
+						(driver) => driver.key === bidFixture.winnerDriverKey
+					);
+					const driver = driverFixture ? driversByEmail.get(driverFixture.email) : null;
+					if (!driver) {
+						throw new Error(`Missing demo bid winner ${bidFixture.winnerDriverKey}`);
+					}
+					return driver.id;
+				})()
+			: null;
+
+		const opensAt = createDemoBidOpensAt(assignment.date, bidFixture.mode, bidFixture.status);
+		const closesAt = createDemoBidClosesAt(
+			assignment.date,
+			bidFixture.mode,
+			bidFixture.status,
+			opensAt
+		);
+
+		bidWindows.push({
+			assignmentIndex,
+			opensAt,
+			closesAt,
+			status: bidFixture.status,
+			winnerId: winnerUserId,
+			mode: bidFixture.mode,
+			trigger: bidFixture.trigger ?? null,
+			payBonusPercent: bidFixture.payBonusPercent ?? 0,
+			recipientUserIds,
+			storyKey: bidFixture.key
+		});
+
+		const bidderIds =
+			bidFixture.status === 'open' && bidFixture.pendingBidDriverKeys
+				? bidFixture.pendingBidDriverKeys.map((driverKey) => {
+						const driverFixture = fixture.drivers.find((driver) => driver.key === driverKey);
+						const driver = driverFixture ? driversByEmail.get(driverFixture.email) : null;
+						if (!driver) {
+							throw new Error(`Missing demo pending bidder ${driverKey}`);
+						}
+						return driver.id;
+					})
+				: recipientUserIds;
+
+		for (const bidderId of bidderIds) {
+			const status =
+				bidFixture.status === 'open' ? 'pending' : bidderId === winnerUserId ? 'won' : 'lost';
+			bids.push({
+				assignmentIndex,
+				userId: bidderId,
+				score: computeDriverBidScore(
+					bidderId,
+					assignment.routeId,
+					healthByUser,
+					completionsByUserRoute,
+					prefByUser,
+					tenureByUser,
+					true
+				),
+				status,
+				bidAt:
+					bidFixture.status === 'open'
+						? new Date(opensAt.getTime() + Math.min(2, bids.length + 1) * 30 * 60 * 1000)
+						: randomBidTime(opensAt, closesAt),
+				windowClosesAt: closesAt,
+				resolvedAt: bidFixture.status === 'open' ? null : closesAt
+			});
+		}
+	}
+
+	return { bidWindows, bids };
+}
+
+function resolveDemoBidAssignmentIndex(
+	assignments: GeneratedAssignment[],
+	fixture: DemoOrgFixture,
+	bidFixture: DemoBidWindowFixture,
+	driversByEmail: Map<string, GeneratedUser>,
+	routeIdByKey: Map<string, string>
+): number {
+	const ref = bidFixture.assignmentRef;
+	switch (ref.kind) {
+		case 'driverBidWin': {
+			const driverFixture = fixture.drivers.find((driver) => driver.key === ref.driverKey);
+			const driver = driverFixture ? driversByEmail.get(driverFixture.email) : null;
+			if (!driver) {
+				throw new Error(`Missing demo bid-win driver ${ref.driverKey}`);
+			}
+			const assignmentIndex = assignments.findIndex(
+				(assignment) =>
+					assignment.userId === driver.id &&
+					assignment.assignedBy === 'bid' &&
+					assignment.status === 'completed'
+			);
+			if (assignmentIndex === -1) {
+				throw new Error(`Missing demo bid-win assignment for ${ref.driverKey}`);
+			}
+			return assignmentIndex;
+		}
+		case 'driverNoShow': {
+			const driverFixture = fixture.drivers.find((driver) => driver.key === ref.driverKey);
+			const driver = driverFixture ? driversByEmail.get(driverFixture.email) : null;
+			if (!driver) {
+				throw new Error(`Missing demo no-show driver ${ref.driverKey}`);
+			}
+			const assignmentIndex = assignments.findIndex(
+				(assignment) =>
+					assignment.userId === driver.id &&
+					assignment.status === 'scheduled' &&
+					assignment.confirmedAt !== null &&
+					isPastDate(assignment.date)
+			);
+			if (assignmentIndex === -1) {
+				throw new Error(`Missing demo no-show assignment for ${ref.driverKey}`);
+			}
+			return assignmentIndex;
+		}
+		case 'extraAssignment': {
+			const extraAssignment = fixture.extraAssignments.find(
+				(candidate) => candidate.key === ref.assignmentKey
+			);
+			if (!extraAssignment) {
+				throw new Error(`Missing demo extra assignment ${ref.assignmentKey}`);
+			}
+			const routeId = routeIdByKey.get(extraAssignment.routeKey);
+			if (!routeId) {
+				throw new Error(`Missing demo route ID for ${extraAssignment.routeKey}`);
+			}
+			const targetDate = toTorontoDateString(
+				addDays(getTorontoToday(), extraAssignment.daysFromToday)
+			);
+			const assignmentIndex = assignments.findIndex(
+				(assignment) =>
+					assignment.routeId === routeId &&
+					assignment.userId === null &&
+					assignment.status === extraAssignment.status &&
+					assignment.date === targetDate
+			);
+			if (assignmentIndex === -1) {
+				throw new Error(`Missing demo extra assignment row for ${extraAssignment.key}`);
+			}
+			return assignmentIndex;
+		}
+	}
+}
+
+function createDemoBidOpensAt(
+	assignmentDate: string,
+	mode: GeneratedBidWindow['mode'],
+	status: GeneratedBidWindow['status']
+): Date {
+	if (status === 'open') {
+		return mode === 'instant' ? subHours(getSeedNow(), 2) : subHours(getSeedNow(), 6);
+	}
+	if (mode === 'emergency') {
+		return randomTimeOnDate(assignmentDate, 9, 10);
+	}
+	return randomTimeOnDate(assignmentDate, 6, 8);
+}
+
+function createDemoBidClosesAt(
+	assignmentDate: string,
+	mode: GeneratedBidWindow['mode'],
+	status: GeneratedBidWindow['status'],
+	opensAt: Date
+): Date {
+	if (status === 'open') {
+		return mode === 'instant'
+			? addHours(opensAt, 10)
+			: subHours(new Date(`${assignmentDate}T07:00:00Z`), 12);
+	}
+	if (mode === 'emergency') {
+		return randomTimeOnDate(assignmentDate, 12, 14);
+	}
+	return addHours(opensAt, 4);
 }
